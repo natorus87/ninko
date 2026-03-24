@@ -1,3 +1,5 @@
+name: ninko
+
 services:
   # ─── ChromaDB (Semantic Memory) ────────────────
   chromadb:

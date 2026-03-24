@@ -45,7 +45,7 @@ COPY frontend/ /app/frontend/
 
 # Create non-root user
 RUN groupadd -r ninko && useradd -r -g ninko -d /app -s /bin/bash ninko && \
-    chown -R ninko:kumio /app
+    chown -R ninko:ninko /app
 
 USER ninko
 
