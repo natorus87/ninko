@@ -1,116 +1,116 @@
 # Ninko Module: Template (🧩)
 
-Dieses Verzeichnis dient als strukturierte Vorlage für die Entwicklung brandneuer Ninko Module.
-Kopiere einfach den Ordner `_template` und benenne ihn um.
+This directory serves as a structured template for developing new Ninko modules.
+Simply copy the `_template` folder and rename it.
 
 ---
 
-## Erste Schritte
+## Getting Started
 
-1. Ordner `_template` → umbenennen (z.B. `nextcloud`)
-2. In allen Dateien `template` / `_template` → durch neuen Namen ersetzen
-3. `manifest.py` → alle Parameter anpassen (`name`, `display_name`, `routing_keywords`, `api_prefix`)
-4. `required_secrets` im Manifest definieren
-5. **Alle unten stehenden Integrationsschritte durchführen** (⚠️ Ohne diese Schritte funktioniert das Modul nicht!)
+1. Rename folder `_template` (e.g. to `nextcloud`)
+2. Replace `template` / `_template` with the new name in all files
+3. `manifest.py` → adjust all parameters (`name`, `display_name`, `routing_keywords`, `api_prefix`)
+4. Define `required_secrets` in the manifest
+5. **Complete all integration steps below** (⚠️ Without these steps the module will not work!)
 
 ---
 
-## Pflicht-Dateien pro Modul
+## Required Files per Module
 
 ```
 backend/modules/<name>/
 ├── __init__.py        # Exports: module_manifest, agent, router
-├── manifest.py        # ModuleManifest mit Metadaten
-├── agent.py           # BaseAgent Subclass mit Tools
-├── tools.py           # @tool Funktionen (LangChain)
+├── manifest.py        # ModuleManifest with metadata
+├── agent.py           # BaseAgent subclass with tools
+├── tools.py           # @tool functions (LangChain)
 ├── routes.py          # FastAPI APIRouter (optional)
 └── frontend/
-    ├── tab.html       # Dashboard-Tab HTML (mit <style>-Block für cl-select)
-    └── tab.js         # Dashboard-Tab JavaScript (globales Objekt, kein ES-Modul)
+    ├── tab.html       # Dashboard tab HTML (with <style> block for cl-select)
+    └── tab.js         # Dashboard tab JavaScript (global object, no ES modules)
 ```
 
 ---
 
-## ⚠️ Integrationsschritte (PFLICHT nach Modul-Erstellung)
+## ⚠️ Integration Steps (REQUIRED after module creation)
 
-Das Modul-System hat mehrere **hardcoded Stellen** in Core-Dateien, die manuell ergänzt werden müssen:
+The module system has several **hardcoded locations** in core files that must be updated manually:
 
-### 1. `frontend/app.js` — ACTION_FIELDS (Verbindungs-Formular)
+### 1. `frontend/app.js` — ACTION_FIELDS (connection form)
 
-Damit das Modul ein Verbindungsformular in den Einstellungen bekommt, trage es in `ACTION_FIELDS` ein:
+To give the module a connection form in Settings, add it to `ACTION_FIELDS`:
 
 ```js
-// frontend/app.js, Zeile ~1490 (ACTION_FIELDS Objekt)
-meinmodul: [
+// frontend/app.js, line ~1490 (ACTION_FIELDS object)
+mymodule: [
     { key: 'url', label: 'Server URL', placeholder: 'https://example.com' },
-    { key: 'api_key', label: 'API-Key', placeholder: '••••••', type: 'password', isSecret: true },
+    { key: 'api_key', label: 'API Key', placeholder: '••••••', type: 'password', isSecret: true },
 ],
 ```
 
-### 2. `frontend/app.js` — getTabObject() (Tab-Initialisierung)
+### 2. `frontend/app.js` — getTabObject() (tab initialization)
 
-Damit `MeinModulTab.init()` aufgerufen wird, trage das globale JS-Objekt in die Map ein:
+For `MyModuleTab.init()` to be called, register the global JS object in the map:
 
 ```js
-// frontend/app.js, Zeile ~330 (getTabObject Funktion)
-'meinmodul': typeof MeinModulTab !== 'undefined' ? MeinModulTab : null,
+// frontend/app.js, line ~330 (getTabObject function)
+'mymodule': typeof MyModuleTab !== 'undefined' ? MyModuleTab : null,
 ```
 
-### 3. `docker-compose.yml` — Env-Var aktivieren
+### 3. `docker-compose.yml` — enable env var
 
 ```yaml
 environment:
-    NINKO_MODULE_MEINMODUL: "true"
+    NINKO_MODULE_MYMODULE: "true"
 ```
 
-### 4. `k8s/backend/deployment.yaml` — Env-Var aktivieren
+### 4. `k8s/backend/deployment.yaml` — enable env var
 
 ```yaml
-- name: NINKO_MODULE_MEINMODUL
+- name: NINKO_MODULE_MYMODULE
   value: "true"
 ```
 
-### 5. `backend/api/routes_settings.py` — Secret & Env-Registrierung
+### 5. `backend/api/routes_settings.py` — secret & env registration
 
-**Secret-Keys** (für Vault-Speicherung):
+**Secret keys** (for Vault storage):
 ```python
-# _get_secret_keys(), Zeile ~250
-"meinmodul": ["MEINMODUL_API_KEY"],
+# _get_secret_keys(), line ~250
+"mymodule": ["MYMODULE_API_KEY"],
 ```
 
-**Env-Connection-Mappings** (Fallback-Env-Variablen):
+**Env connection mappings** (fallback env variables):
 ```python
-# _get_env_connection(), Zeile ~230
-"meinmodul": ["MEINMODUL_URL"],
+# _get_env_connection(), line ~230
+"mymodule": ["MYMODULE_URL"],
 ```
 
-### 6. `backend/agents/base_agent.py` — _TOOL_LABELS (Status-Spinner)
+### 6. `backend/agents/base_agent.py` — _TOOL_LABELS (status spinner)
 
-Damit der Chat-Spinner die richtigen Texte zeigt wenn ein Tool läuft:
+For the chat spinner to show the correct text while a tool is running:
 
 ```python
-# _TOOL_LABELS Dict, nach den letzten Einträgen einfügen:
-"beispiel_tool": ("Führe Beispiel aus",  "Running example"),
-"lade_daten":    ("Lade Daten",          "Loading data"),
+# _TOOL_LABELS dict, append after the last entries:
+"example_tool":  ("Führe Beispiel aus",  "Running example"),
+"load_data":     ("Lade Daten",          "Loading data"),
 ```
 
 ---
 
-## Architektur-Prinzipien
+## Architecture Principles
 
-- **Keine direkten Cross-Module Aufrufe**: Module sollten absolut unabhängig voneinander existieren. Kommuniziere über Redis PubSub, Semantic Memory, oder den Orchestrator (über Chat).
-- **Werkzeuge (Tools)**: Der LLM Agent kann beliebig viele `@tool`-Funktionen aus `tools.py` nutzen. **Die Docstrings sind überlebenswichtig** — das LLM liest sie und entscheidet welches Tool es aufruft.
-- **Connection Manager**: Tools rufen `_get_api_client(connection_id)` auf, um Config aus Redis + Vault zu laden. Fallback auf Env-Variablen wenn kein UI-Connection existiert.
+- **No direct cross-module calls**: Modules must be completely independent of each other. Communicate via Redis PubSub, Semantic Memory, or the Orchestrator (via chat).
+- **Tools**: The LLM agent can use any number of `@tool` functions from `tools.py`. **Docstrings are critical** — the LLM reads them to decide which tool to call.
+- **Connection Manager**: Tools call `_get_api_client(connection_id)` to load config from Redis + Vault. Falls back to env variables if no UI connection exists.
 
 ---
 
-## Mehrsprachigkeit (DE/EN)
+## Multilingual Support (DE/EN)
 
-Das System unterstützt DE und EN über die `LANGUAGE`-Env-Variable.
+The system supports DE and EN via the `LANGUAGE` env variable.
 
-### System-Prompt (`agent.py`)
+### System Prompt (`agent.py`)
 
-Nutze `_t(de, en)` aus `base_agent.py` für den System-Prompt:
+Use `_t(de, en)` from `base_agent.py` for the system prompt:
 
 ```python
 from agents.base_agent import BaseAgent, _t
@@ -121,99 +121,99 @@ SYSTEM_PROMPT = _t(
 )
 ```
 
-**NICHT** `"Antworte immer auf Deutsch"` ins System-Prompt schreiben — `base_agent.py` injiziert die Sprachanweisung automatisch aus `LANGUAGE`.
+**Never** write `"Antworte immer auf Deutsch"` into the system prompt — `base_agent.py` injects language instructions automatically from the `LANGUAGE` env var.
 
-### Tool-Docstrings (`tools.py`)
+### Tool Docstrings (`tools.py`)
 
-Tool-Docstrings werden vom LLM zur Tool-Auswahl gelesen. Empfehlung: Beide Sprachen im Docstring angeben:
+Tool docstrings are read by the LLM to select the right tool. Recommended: include both languages in the docstring:
 
 ```python
 @tool
-async def beispiel_tool(parameter: str, connection_id: str = "") -> str:
+async def example_tool(parameter: str, connection_id: str = "") -> str:
     """
     Führt eine Beispielaktion aus. Nutze dieses Tool wenn der User nach X fragt.
     Runs an example action. Use this tool when the user asks about X.
     """
 ```
 
-### Status-Labels (`base_agent._TOOL_LABELS`)
+### Status Labels (`base_agent._TOOL_LABELS`)
 
-Für den Lade-Spinner im Chat müssen Tool-Namen in `_TOOL_LABELS` als `(DE, EN)` Tuple eingetragen werden (siehe Integrationsschritt 6).
+Tool names must be registered in `_TOOL_LABELS` as `(DE, EN)` tuples for the loading spinner in chat (see integration step 6).
 
 ---
 
 ## Dashboard UI (Frontend)
 
-### Kein nativer `<select>`
+### No native `<select>`
 
-Native `<select>`-Elemente ignorieren CSS-Variablen im Dark-Theme. Stattdessen `cl-select` div-Pattern verwenden — Vorlage ist in `tab.html` und `tab.js` enthalten.
+Native `<select>` elements ignore CSS variables in dark mode. Use the `cl-select` div pattern instead — the template is included in `tab.html` and `tab.js`.
 
-### Kein ES-Modul-Syntax
+### No ES module syntax
 
-**Niemals `import` oder `export`** in `tab.js` — die Datei wird per `<script>`-Tag ohne `type="module"` geladen.
+**Never use `import` or `export`** in `tab.js` — the file is loaded via a `<script>` tag without `type="module"`.
 
-### Tab-Objekt-Pattern
+### Tab object pattern
 
-Es gibt zwei Varianten abhängig davon, ob das Modul ein **Core-Modul** (ins Image gebacken) oder ein **Plugin** (per ZIP installiert) ist.
+There are two variants depending on whether the module is a **core module** (baked into the image) or a **plugin** (installed via ZIP).
 
-#### Core-Modul (in `backend/modules/`)
+#### Core module (in `backend/modules/`)
 
-Definiere ein globales Objekt und trage es in `app.js:getTabObject()` ein (Integrationsschritt 2):
+Define a global object and register it in `app.js:getTabObject()` (integration step 2):
 
 ```js
-// tab.js — globales Objekt
-const MeinModulTab = {
+// tab.js — global object
+const MyModuleTab = {
     async init() { /* ... */ },
     async refresh() { /* ... */ },
     destroy() { /* ... */ },
 };
 ```
 
-#### Plugin (per ZIP installiert, in `backend/plugins/`)
+#### Plugin (installed via ZIP, in `backend/plugins/`)
 
-Plugins können `getTabObject()` nicht editieren. Stattdessen im globalen Plugin-Tab-Registry registrieren:
+Plugins cannot edit `getTabObject()`. Register via the global plugin tab registry instead:
 
 ```js
-// tab.js — Plugin-Registrierung via Ninko._pluginTabs
-const MeinPluginTab = {
+// tab.js — plugin registration via Ninko._pluginTabs
+const MyPluginTab = {
     async init() { /* ... */ },
     async refresh() { /* ... */ },
     destroy() { /* ... */ },
 };
 
-// Am Ende der tab.js eintragen — Ninko ruft dann init() beim Tab-Wechsel auf:
+// Add at the end of tab.js — Ninko will call init() when the tab is activated:
 if (typeof Ninko !== 'undefined') {
-    Ninko._pluginTabs['mein_plugin'] = MeinPluginTab;
+    Ninko._pluginTabs['my_plugin'] = MyPluginTab;
 }
 ```
 
-Der Tab-ID muss mit dem `dashboard_tab.id` im Manifest übereinstimmen.
+The tab ID must match the `dashboard_tab.id` in the manifest.
 
-### Event-Delegation
+### Event delegation
 
-Kein `onclick` in HTML-Strings. Stattdessen `data-action` + Listener im Tab-Objekt:
+No `onclick` in HTML strings. Use `data-action` attributes with a listener in the tab object:
 
 ```html
-<button data-action="meinmodul-refresh">Aktualisieren</button>
+<button data-action="mymodule-refresh">Refresh</button>
 ```
 
 ```js
 _setupEvents() {
-    document.getElementById('meinmodul-tab-content')
+    document.getElementById('mymodule-tab-content')
         ?.addEventListener('click', (e) => {
             const action = e.target.closest('[data-action]')?.dataset.action;
-            if (action === 'meinmodul-refresh') this.refresh();
+            if (action === 'mymodule-refresh') this.refresh();
         });
 },
 ```
 
 ### Icons
 
-- Modul-Tab-Icon im Manifest: **Emoji** (z.B. `"🧩"`)
-- Aktions-Buttons in der UI: **Inline SVG mit `currentColor`** oder Emoji
-- Kein FontAwesome, keine externen Icon-Libraries
+- Module tab icon in manifest: **emoji** (e.g. `"🧩"`)
+- Action buttons in the UI: **inline SVG with `currentColor`** or emoji
+- No FontAwesome, no external icon libraries
 
-### `connection_id` bei jedem API-Call
+### `connection_id` on every API call
 
 ```js
 const res = await fetch(`${this.API_PREFIX}/status${this.getQueryParams()}`);
@@ -221,15 +221,15 @@ const res = await fetch(`${this.API_PREFIX}/status${this.getQueryParams()}`);
 
 ---
 
-## `invoke()` Tuple-Return
+## `invoke()` Tuple Return
 
-`BaseAgent.invoke()` gibt `tuple[str, bool]` zurück. Alle Aufrufer müssen entpacken:
+`BaseAgent.invoke()` returns `tuple[str, bool]`. All callers must unpack:
 
 ```python
-# Richtig:
+# Correct:
 response, _ = await agent.invoke(message, session_id)
 
-# Falsch (ValueError: too many values to unpack):
+# Wrong (ValueError: too many values to unpack):
 response = await agent.invoke(message, session_id)
 ```
 
@@ -238,17 +238,17 @@ response = await agent.invoke(message, session_id)
 ## Deployment
 
 ```bash
-# 1. Bauen & lokal starten
+# 1. Build & start locally
 docker compose build backend
 docker compose up -d --no-deps backend
 
-# 2. Auf Docker Hub
+# 2. Push to Docker Hub
 docker tag ninko-backend:latest natorus87/ninko-backend:latest
 docker push natorus87/ninko-backend:latest
 
-# 3. Kubernetes Rollout
+# 3. Kubernetes rollout
 kubectl rollout restart deployment/ninko-backend -n ninko
 kubectl rollout status deployment/ninko-backend -n ninko --timeout=120s
 ```
 
-> **WICHTIG**: Jede Änderung an Python ODER Frontend-Dateien erfordert einen kompletten Build-Zyklus. Frontend-Dateien sind ins Docker-Image gebacken — `docker restart` reicht NICHT.
+> **IMPORTANT**: Every change to Python OR frontend files requires a full build cycle. Frontend files are baked into the Docker image — `docker restart` is NOT sufficient.
