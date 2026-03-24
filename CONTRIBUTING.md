@@ -1,43 +1,43 @@
 # Contributing to Kumio
 
-## Neues Modul beitragen
+## Adding a new module
 
-Die einfachste Form des Beitrags ist ein neues Modul. Jedes Modul ist vollständig eigenständig unter `backend/modules/<name>/` — der Core-Code wird nicht angefasst.
+The easiest way to contribute is a new module. Every module lives entirely under `backend/modules/<name>/` — the core code is never touched.
 
-Aufbau: `manifest.py`, `agent.py`, `tools.py`, `routes.py`, `frontend/tab.html`, `frontend/tab.js`, `__init__.py`.
+Structure: `manifest.py`, `agent.py`, `tools.py`, `routes.py`, `frontend/tab.html`, `frontend/tab.js`, `__init__.py`.
 
-Details und Beispiel: [README.md → Eigenes Modul entwickeln](README.md#eigenes-modul-entwickeln)
+Details and example: [README.md → Building a Module](README.md#building-a-module)
 
-## Bugs melden
+## Reporting bugs
 
-Bitte ein [Issue](../../issues/new) öffnen mit:
-- Kumio-Version (`/health` oder `VERSION`-Datei)
-- LLM-Backend und Modell
-- Reproduktionsschritte
-- Erwartetes vs. tatsächliches Verhalten
-- Relevante Logs (Einstellungen → Logs im Dashboard)
+Please open an [issue](../../issues/new) including:
+- Kumio version (from `VERSION` or `/health`)
+- LLM backend and model
+- Steps to reproduce
+- Expected vs. actual behavior
+- Relevant logs (Dashboard → Settings → Logs)
 
-## Pull Requests
+## Pull requests
 
-1. Fork erstellen
-2. Feature-Branch anlegen: `git checkout -b feature/mein-feature`
-3. Änderungen committen
-4. Tests ausführen: `python backend/test_services.py`
-5. PR öffnen mit Beschreibung der Änderung
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/my-feature`
+3. Commit your changes
+4. Run tests: `python backend/test_services.py`
+5. Open a PR with a description of your changes
 
-## Entwicklungsumgebung
+## Development setup
 
 ```bash
 cp .env.example .env
-# SQLITE_SECRETS_KEY setzen
+# Set SQLITE_SECRETS_KEY
 docker compose up -d
 ```
 
-Backend-Logs live: `docker logs -f kumio-backend`
+Live backend logs: `docker logs -f kumio-backend`
 
-## Stil-Regeln
+## Code style
 
-- Python: PEP 8, Typ-Annotationen für neue Funktionen
-- `@tool`-Docstrings akkurat halten — der Orchestrator-LLM liest sie
-- Keine Modul-Namen im Core (`module_registry.py`, `orchestrator.py`) hardcodieren
-- Frontend: kein ES-Module-Syntax (`export`/`import`) in Tab-JS-Dateien
+- Python: PEP 8, type annotations for new functions
+- Keep `@tool` docstrings accurate — the orchestrator LLM reads them for reasoning
+- Never hardcode module names in core files (`module_registry.py`, `orchestrator.py`)
+- Frontend: no ES module syntax (`export`/`import`) in tab JS files

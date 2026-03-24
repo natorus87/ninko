@@ -1,108 +1,108 @@
 # Changelog
 
-Alle nennenswerten Änderungen an Kumio werden in dieser Datei dokumentiert.
+All notable changes to Kumio are documented in this file.
 
-Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
-Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
+Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
 ## [0.5.0] – 2026-03-24
 
-Erster öffentlicher Release. Kumio ist eine modulare, KI-gestützte IT-Operations-Plattform auf Basis von FastAPI (Python 3.12) mit einem unveränderlichen Core und auto-discovering Modulen.
+First public release. Kumio is a modular, AI-powered IT operations platform built on FastAPI (Python 3.12) with an immutable core and auto-discovering modules.
 
-### Core-Architektur
+### Core Architecture
 
-- **Modulares Auto-Discovery-System** – `ModuleRegistry` scannt `backend/modules/` und `backend/plugins/` beim Start, registriert Agenten, Router und Keywords. Keine Modul-Namen im Core hardcodiert.
-- **4-stufiges Orchestrator-Routing** (`orchestrator.py`):
-  - Tier 1 – Direktantwort (einfache Fragen, < 120 Zeichen, keine Action-Verben)
-  - Tier 2 – Modul-Agent-Delegation via zweistufigem Keyword + LLM-Routing
-  - Tier 3 – Dynamischer Agent (Pool-Suche oder LLM-generierter Agenten-Spec)
-  - Tier 4 – Deterministisches Pipeline-Routing für Multi-Modul-Aufgaben
-- **LLM-basiertes Modul-Routing** – `_detect_module()` (async, zweistufig): Keyword-Schnellpfad + LLM-Klassifikation bei Score=0 oder Ambiguität. MD5-Cache (TTL 60s), 8s Timeout, vollständiger Fallback.
-- **Dynamic Agent Pool** – `DynamicAgentPool` mit Redis-Persistenz, Jaccard-Scoring (Threshold 18%), 4 Basis-Tools für Tier-3-Agenten.
-- **Workflow Engine** – Async DAG mit Trigger, Agent, Condition, Loop, Variable, End-Nodes. Zustand in Redis.
-- **LLM-Factory** – Multi-Provider: `ollama`, `lmstudio`, `openai_compatible`. Auto-`/v1`-Anhang, Context-Window-Auto-Detection, `MAX_OUTPUT_TOKENS=16384`.
+- **Modular auto-discovery system** – `ModuleRegistry` scans `backend/modules/` and `backend/plugins/` at startup, registers agents, routers, and keywords. No module names hardcoded in core.
+- **4-tier orchestrator routing** (`orchestrator.py`):
+  - Tier 1 – Direct answer (simple queries, < 120 chars, no action verbs)
+  - Tier 2 – Module agent delegation via two-stage keyword + LLM routing
+  - Tier 3 – Dynamic agent (pool lookup or LLM-generated agent spec)
+  - Tier 4 – Deterministic pipeline routing for multi-module tasks
+- **LLM-based module routing** – `_detect_module()` (async, two-stage): keyword fast-path + LLM classification at Score=0 or ambiguity. MD5 cache (TTL 60s), 8s timeout, full fallback.
+- **Dynamic Agent Pool** – `DynamicAgentPool` with Redis persistence, Jaccard scoring (threshold 18%), 4 base tools for Tier-3 agents.
+- **Workflow Engine** – Async DAG with Trigger, Agent, Condition, Loop, Variable, End nodes. State stored in Redis.
+- **LLM Factory** – Multi-provider: `ollama`, `lmstudio`, `openai_compatible`. Auto `/v1` append, context window auto-detection, `MAX_OUTPUT_TOKENS=16384`.
 
-### KI-Fähigkeiten
+### AI Capabilities
 
-- **Soul System** – Persistente Agenten-Identitäten (Soul MDs). Built-in: `backend/souls/`. Dynamisch: Redis `kumio:souls`. Injiziert vor RAG/Skills/Sprache in `final_system_prompt`.
-- **Skills System** – SKILL.md-Format mit YAML-Frontmatter. Hot-Reload via `install_skill`-Tool. Max. 2 Skills/Request injiziert (threshold 12%). GUI: `GET/POST/PUT/DELETE /api/skills/`.
-- **Langzeitgedächtnis** – ChromaDB-backed `SemanticMemory`. Tools: `remember_fact`, `recall_memory`, `forget_fact` (Vorschau-Flow), `confirm_forget`. Auto-Memorize mit Cooldown (60s) und Agenten-Ausschlüssen.
-- **Kontext-Komprimierung** – LLM-Summary bei Überschreitung des Context-Window-Budgets (25% des Modell-Fensters). Compaction-Summary als SystemMessage erhalten. Frontend-Benachrichtigung `⟳`.
-- **JIT Tool Injection** – Bei > 6 Tools: max. 8 kontextrelevante Tools per Request, Keyword-Match gegen Name + Docstring (min. 2 Zeichen).
+- **Soul System** – Persistent agent identities (Soul MDs). Built-in: `backend/souls/`. Dynamic: Redis `kumio:souls`. Injected before RAG/Skills/language in `final_system_prompt`.
+- **Skills System** – SKILL.md format with YAML frontmatter. Hot-reload via `install_skill` tool. Max 2 skills/request injected (threshold 12%). GUI: `GET/POST/PUT/DELETE /api/skills/`.
+- **Long-term memory** – ChromaDB-backed `SemanticMemory`. Tools: `remember_fact`, `recall_memory`, `forget_fact` (preview flow), `confirm_forget`. Auto-memorize with cooldown (60s) and agent exclusions.
+- **Context compaction** – LLM summary when context window budget exceeded (25% of model window). Compaction summary preserved as SystemMessage. Frontend notification `⟳`.
+- **JIT tool injection** – With > 6 tools: max 8 context-relevant tools per request, keyword match against name + docstring (min 2 chars).
 
-### LM Studio / Thinking-Modell-Kompatibilität
+### LM Studio / Thinking Model Compatibility
 
-- **`_NormalizingChatOpenAI`** – Normalisiert Listen-Content zu String (Jinja `is sequence`-Bug).
-- **`_LMStudioChatOpenAI`** – Zusätzlich: `_inject_tools_into_system()` (Tool-Defs als Text), `_convert_tool_messages_to_text()` (XML `<tool_call>`/`<tool_response>`-Format für Qwen3.5).
-- **`_strip_thinking()`** – Entfernt `<think>...</think>`-Blöcke aus Thinking-Modell-Antworten.
-- Alle direkten LLM-Calls über `[HumanMessage(content=...)]` für strikte Jinja-Template-Kompatibilität.
+- **`_NormalizingChatOpenAI`** – Normalizes list content to string (Jinja `is sequence` bug).
+- **`_LMStudioChatOpenAI`** – Additionally: `_inject_tools_into_system()` (tool defs as text), `_convert_tool_messages_to_text()` (XML `<tool_call>`/`<tool_response>` format for Qwen3.5).
+- **`_strip_thinking()`** – Removes `<think>...</think>` blocks from thinking model responses.
+- All direct LLM calls via `[HumanMessage(content=...)]` for strict Jinja template compatibility.
 
-### Mehrsprachigkeit (i18n)
+### Internationalization (i18n)
 
-- `_t(de, en)` + `_get_language()` in `base_agent.py`, importierbar in `orchestrator.py`.
-- `_LANG_INSTRUCTIONS` für 10 Sprachen – automatisch ans Ende des System-Prompts injiziert.
-- Auto-Memorize Stop-Wörter: 9 Sprachen (`NICHTS|NOTHING|RIEN|NADA|NULLA|NIETS|NIC|何もない|没有`).
-- Frontend: Vanilla-JS `I18n`-Klasse mit `[data-i18n]`-Attributen, 10 Sprach-JSONs.
+- `_t(de, en)` + `_get_language()` in `base_agent.py`, importable in `orchestrator.py`.
+- `_LANG_INSTRUCTIONS` for 10 languages – automatically appended to system prompts.
+- Auto-memorize stop words: 9 languages (`NICHTS|NOTHING|RIEN|NADA|NULLA|NIETS|NIC|何もない|没有`).
+- Frontend: Vanilla JS `I18n` class with `[data-i18n]` attributes, 10 language JSON files.
 
-### Module (15 aktive)
+### Modules (15 active)
 
-| Modul | Beschreibung |
+| Module | Description |
 |---|---|
-| `kubernetes` | Cluster-Management, Pods, Deployments, Services, Logs |
-| `proxmox` | VMs, Container, Backups, Snapshots, Nodes |
-| `glpi` | Helpdesk-Tickets, Assets, ITSM |
-| `ionos` | DNS-Zonen und Record-Management via IONOS Hosting API |
-| `fritzbox` | Netzwerkstatus, externe IP, WLAN, Verbundene Geräte |
-| `homeassistant` | Smart-Home: Licht, Heizung, Sensoren, Automatisierungen |
-| `pihole` | Pi-hole v6 Blocking, Statistiken, Query-Log, Custom DNS |
-| `web_search` | SearXNG-basierte Websuche (Bing, Mojeek, Qwant) |
-| `telegram` | Telegram Bot mit Voice-Transkription und TTS-Antworten |
-| `email` | SMTP-Versand und IMAP-Abruf |
-| `wordpress` | Posts, Medien, Seiten via WordPress REST API |
-| `codelab` | Code-Ausführung und Debugging |
-| `docker` | Container-Management |
-| `linux_server` | Server-Administration via SSH/CLI |
-| `image_gen` | KI-Bildgenerierung |
+| `kubernetes` | Cluster management, pods, deployments, services, logs |
+| `proxmox` | VMs, containers, backups, snapshots, nodes |
+| `glpi` | Helpdesk tickets, assets, ITSM |
+| `ionos` | DNS zones and record management via IONOS Hosting API |
+| `fritzbox` | Network status, external IP, Wi-Fi, connected devices |
+| `homeassistant` | Smart home: lights, heating, sensors, automations |
+| `pihole` | Pi-hole v6 blocking, statistics, query log, custom DNS |
+| `web_search` | SearXNG-based web search (Bing, Mojeek, Qwant) |
+| `telegram` | Telegram bot with voice transcription and TTS replies |
+| `email` | SMTP sending and IMAP retrieval |
+| `wordpress` | Posts, media, pages via WordPress REST API |
+| `codelab` | Code execution and debugging |
+| `docker` | Container management |
+| `linux_server` | Server administration via SSH/CLI |
+| `image_gen` | AI image generation |
 
 ### TTS / STT
 
-- **Piper TTS** – Lokal im Backend-Pod, Lazy-Load. `POST /api/tts/synthesize`. Voice-Katalog, `_clean_for_tts()` für Markdown/Emoji-Bereinigung.
-- **Whisper STT** – `faster-whisper` im Backend. `POST /api/transcription/`. Unterstützt `base`/`small`-Modelle.
-- **Telegram Voice** – Automatische Sprachantworten wenn User eine Voice-Nachricht sendet.
+- **Piper TTS** – Local in backend pod, lazy-load. `POST /api/tts/synthesize`. Voice catalog, `_clean_for_tts()` for markdown/emoji stripping.
+- **Whisper STT** – `faster-whisper` in backend. `POST /api/transcription/`. Supports `base`/`small` models.
+- **Telegram voice** – Automatic voice replies when user sends a voice message.
 
-### Chat-UI
+### Chat UI
 
-- **AI-Bubble**: `max-width: 90%` (User: 70%) – mehr Platz für lange Antworten.
-- **Tabellen**: `display: block; overflow-x: auto` – horizontales Scrollen statt Clipping.
-- **Textarea**: Scrollbar ausgeblendet (`scrollbar-width: none`), Auto-Resize via JS.
-- **Step-Log**: Live-Statusanzeige mit CSS-Spinner (aktiv) und ✓-Häkchen (abgeschlossen) via SSE.
-- **Theme**: Light/Dark mit FOUC-Prävention (inline `<script>` in `<head>`).
-- **Komprimierungsbenachrichtigung**: `⟳ Gesprächsverlauf komprimiert`-Bubble bei Kontext-Reset.
+- **AI bubble**: `max-width: 90%` (user: 70%) – more space for long responses.
+- **Tables**: `display: block; overflow-x: auto` – horizontal scrolling instead of clipping.
+- **Textarea**: scrollbar hidden (`scrollbar-width: none`), auto-resize via JS.
+- **Step log**: live status display with CSS spinner (active) and ✓ checkmark (done) via SSE.
+- **Theme**: light/dark with FOUC prevention (inline `<script>` in `<head>`).
+- **Compaction notification**: `⟳ Conversation history compacted` bubble on context reset.
 
-### Infrastruktur & Deployment
+### Infrastructure & Deployment
 
-- **Dev**: `docker-compose.yml` – Backend, Redis, ChromaDB, SearXNG, Vault-Fallback (SQLite).
-- **Prod**: Kubernetes/MicroK8s, Namespace `kumio`, Image `natorus87/kumio-backend:latest`, Traefik IngressRoute `kumio.conbro.local`.
-- **Plugin-System**: ZIP-installierbare Plugins mit Hot-Load zur Laufzeit. Namensvalidierung gegen Path-Traversal.
-- **Secrets**: HashiCorp Vault mit SQLite-Fallback (`VAULT_FALLBACK=sqlite`).
-- **ChromaDB**: Gepinnt auf `0.4.24`, `numpy<2.0.0`.
+- **Dev**: `docker-compose.yml` – backend, Redis, ChromaDB, SearXNG, vault fallback (SQLite).
+- **Prod**: Kubernetes/MicroK8s, namespace `kumio`, image `natorus87/kumio-backend:latest`, Traefik IngressRoute.
+- **Plugin system**: ZIP-installable plugins with hot-load at runtime. Name validation against path traversal.
+- **Secrets**: HashiCorp Vault with SQLite fallback (`VAULT_FALLBACK=sqlite`).
+- **ChromaDB**: pinned to `0.4.24`, `numpy<2.0.0`.
 
-### Bekannte Fixes in dieser Version
+### Bug Fixes
 
-- Orchestrator-Retry-Loop: Fehlermeldungen starten mit `"Fehler: ..."` – kein "Bitte versuche es erneut."
-- Compact-Matching-Threshold `>= 7` (war `>= 4`) – verhindert Komposita-Fehlrouting.
-- Telegram-Kontext-Präfix-Routing: `_strip_bot_context()` entfernt `[Telegram Chat-ID: ...]` vor Routing-Detection.
-- LangGraph `recursion_limit=10000` + 1800s Timeout als echte Sicherheitsnetz.
-- `invoke()` gibt `tuple[str, bool]` zurück – alle Aufrufer müssen entpacken.
-- Compaction-Summary als `role=="system"` in History-Loop als `SystemMessage` erhalten.
-- `crypto.randomUUID()` Fallback via `Math.random()` für non-secure HTTP-Contexts.
+- Orchestrator retry loop: error messages now start with `"Fehler: ..."` – no more "Please try again."
+- Compact matching threshold `>= 7` (was `>= 4`) – prevents German compound word misrouting.
+- Telegram context prefix routing: `_strip_bot_context()` strips `[Telegram Chat-ID: ...]` before routing detection.
+- LangGraph `recursion_limit=10000` + 1800s timeout as real safety net.
+- `invoke()` returns `tuple[str, bool]` – all callers must unpack.
+- Compaction summary preserved as `role=="system"` in history loop as `SystemMessage`.
+- `crypto.randomUUID()` fallback via `Math.random()` for non-secure HTTP contexts.
 
 ---
 
-## Versionshistorie
+## Version History
 
-| Version | Datum | Beschreibung |
+| Version | Date | Description |
 |---|---|---|
-| 0.5.0 | 2026-03-24 | Erster öffentlicher Release |
+| 0.5.0 | 2026-03-24 | First public release (beta) |

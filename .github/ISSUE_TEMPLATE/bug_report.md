@@ -1,32 +1,32 @@
 ---
 name: Bug Report
-about: Fehler oder unerwartetes Verhalten melden
+about: Report unexpected behavior or a bug
 labels: bug
 ---
 
-## Beschreibung
+## Description
 
-<!-- Kurze Beschreibung des Problems -->
+<!-- Brief description of the problem -->
 
-## Reproduktionsschritte
+## Steps to reproduce
 
 1.
 2.
 3.
 
-## Erwartetes Verhalten
+## Expected behavior
 
-## Tatsächliches Verhalten
+## Actual behavior
 
-## Umgebung
+## Environment
 
-- **Kumio-Version**: (aus `VERSION` oder `/health`)
-- **LLM-Backend**: ollama / lmstudio / openai_compatible
-- **Modell**:
+- **Kumio version**: (from `VERSION` or `/health`)
+- **LLM backend**: ollama / lmstudio / openai_compatible
+- **Model**:
 - **Deployment**: docker-compose / kubernetes
 
 ## Logs
 
-<!-- Relevante Logs aus Dashboard → Einstellungen → Logs -->
+<!-- Relevant logs from Dashboard → Settings → Logs -->
 ```
 ```

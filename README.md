@@ -1,68 +1,71 @@
 # Kumio
 
-**Modulare, KI-gestützte IT-Operations-Plattform**
+**Modular, AI-powered IT Operations Platform**
 
-Kumio verbindet einen lokalen LLM mit deiner Infrastruktur. Stelle Fragen im Chat, starte Workflows und lass Agenten eigenständig Aufgaben erledigen — ohne dass Daten dein Netzwerk verlassen.
+Kumio connects a local LLM to your infrastructure. Ask questions in chat, trigger workflows, and let agents autonomously handle tasks — without any data leaving your network.
 
 [![Version](https://img.shields.io/badge/version-0.5.0-blue.svg)](CHANGELOG.md)
+[![Status](https://img.shields.io/badge/status-beta-orange.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green.svg)](https://fastapi.tiangolo.com/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+> **Beta:** Kumio is functional and actively used in production environments, but the API and module interfaces may still change. Feedback and contributions welcome.
 
 ---
 
 ## Features
 
-- **Chat-Interface** – Natürlichsprachliche Steuerung deiner gesamten IT-Infrastruktur
-- **15 integrierte Module** – Kubernetes, Proxmox, GLPI, FritzBox, Pi-hole, Home Assistant, IONOS DNS, Docker, WordPress und mehr
-- **4-stufiges Orchestrator-Routing** – Direkt / Modul-Agent / Dynamischer Agent / Pipeline
-- **Langzeitgedächtnis** – ChromaDB-backed Semantic Memory über alle Sitzungen hinweg
-- **Lokale LLMs** – Ollama, LM Studio oder beliebige OpenAI-kompatible API (kein Cloud-Zwang)
-- **Workflow-Engine** – Visueller DAG-Editor für automatisierte Abläufe
-- **Dynamische Agenten** – KI erstellt zur Laufzeit spezialisierte Agenten
-- **Skills-System** – Wiederverwendbares Prozesswissen als SKILL.md-Dateien
-- **TTS/STT** – Piper (lokal) + Whisper für Sprach-Ein- und -Ausgabe
-- **Telegram Bot** – Vollständiger Fernzugriff per Messenger inkl. Sprachnachrichten
-- **Mehrsprachig** – 10 Sprachen, automatisch per Sprache des Nutzers gewählt
-- **Plugin-System** – ZIP-installierbare Module ohne Neustart
+- **Chat Interface** – Control your entire IT infrastructure in natural language
+- **15 built-in modules** – Kubernetes, Proxmox, GLPI, FritzBox, Pi-hole, Home Assistant, IONOS DNS, Docker, WordPress, and more
+- **4-tier orchestrator routing** – Direct / Module Agent / Dynamic Agent / Pipeline
+- **Long-term memory** – ChromaDB-backed semantic memory across all sessions
+- **Local LLMs** – Ollama, LM Studio, or any OpenAI-compatible API (no cloud required)
+- **Workflow engine** – Visual DAG editor for automated multi-step tasks
+- **Dynamic agents** – AI creates specialized agents at runtime on demand
+- **Skills system** – Reusable procedural knowledge as SKILL.md files
+- **TTS/STT** – Piper (local) + Whisper for voice input and output
+- **Telegram bot** – Full remote access via messenger including voice messages
+- **Multilingual** – 10 languages, automatically selected based on the user's language
+- **Plugin system** – ZIP-installable modules without restart
 
 ---
 
-## Schnellstart (Docker Compose)
+## Quickstart (Docker Compose)
 
-### Voraussetzungen
+### Prerequisites
 
 - Docker + Docker Compose
-- Ein laufendes LLM-Backend: [Ollama](https://ollama.ai) oder [LM Studio](https://lmstudio.ai)
+- A running LLM backend: [Ollama](https://ollama.ai) or [LM Studio](https://lmstudio.ai)
 
-### 1. Repository klonen
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/natorus87/kumio.git
 cd kumio
 ```
 
-### 2. Konfiguration anlegen
+### 2. Create configuration
 
 ```bash
 cp .env.example .env
-# .env öffnen und SQLITE_SECRETS_KEY setzen:
+# Open .env and set SQLITE_SECRETS_KEY:
 # python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-### 3. Stack starten
+### 3. Start the stack
 
 ```bash
 docker compose up -d
 ```
 
-Das Dashboard ist unter **http://localhost:8000** erreichbar.
+The dashboard is available at **http://localhost:8000**.
 
-Beim ersten Start unter **Einstellungen → LLM-Provider** das gewünschte Backend konfigurieren (Ollama, LM Studio oder OpenAI-kompatibel).
+On first start, configure your LLM backend under **Settings → LLM Provider** (Ollama, LM Studio, or OpenAI-compatible).
 
 ---
 
-## Architektur
+## Architecture
 
 ```
 ┌──────────────────────────────────────────────────────┐
@@ -72,7 +75,7 @@ Beim ersten Start unter **Einstellungen → LLM-Provider** das gewünschte Backe
                        │
 ┌──────────────────────▼───────────────────────────────┐
 │               Orchestrator Agent                     │
-│  Tier 1: Direkt │ Tier 2: Modul │ Tier 3: Dynamisch │
+│  Tier 1: Direct │ Tier 2: Module │ Tier 3: Dynamic  │
 │                    Tier 4: Pipeline                  │
 └──────────────────────┬───────────────────────────────┘
                        │
@@ -81,7 +84,7 @@ Beim ersten Start unter **Einstellungen → LLM-Provider** das gewünschte Backe
 │        Auto-Discovery · backend/modules/             │
 └──────┬──────────┬──────────┬──────────┬─────────────┘
        │          │          │          │
-  Kubernetes  Proxmox     GLPI      + 12 weitere Module
+  Kubernetes  Proxmox     GLPI      + 12 more modules
        │          │          │
 ┌──────▼──────────▼──────────▼──────────────────────┐
 │  LLM-Factory  │  ChromaDB  │  Redis  │  Vault/SQLite │
@@ -89,90 +92,90 @@ Beim ersten Start unter **Einstellungen → LLM-Provider** das gewünschte Backe
 └──────────────────────────────────────────────────────┘
 ```
 
-### Kernprinzip
+### Core principle
 
-Der Core-Code enthält **keine Modul-Namen**. Jedes Modul registriert sich beim Start selbst über sein `module_manifest`. Um ein neues Modul hinzuzufügen, genügt ein neuer Ordner unter `backend/modules/`.
+The core code contains **no module names**. Every module registers itself at startup via its `module_manifest`. Adding a new module only requires creating a new folder under `backend/modules/` — nothing else changes.
 
 ---
 
-## Module
+## Modules
 
-| Modul | Beschreibung |
+| Module | Description |
 |---|---|
-| `kubernetes` | Cluster-Management, Pods, Deployments, Logs, Auto-Remediation |
-| `proxmox` | VMs, LXC-Container, Backups, Snapshots, Node-Status |
-| `glpi` | Helpdesk-Tickets, Assets, ITSM-Workflows |
-| `ionos` | DNS-Zonen und Record-Management via IONOS Hosting API |
-| `fritzbox` | Netzwerkstatus, externe IP, WLAN, verbundene Geräte |
-| `homeassistant` | Smart-Home: Licht, Heizung, Sensoren, Automatisierungen |
-| `pihole` | Pi-hole v6: Blocking, Statistiken, Query-Log, Custom DNS |
-| `web_search` | SearXNG-basierte Websuche (Bing, Mojeek, Qwant) |
-| `telegram` | Bot mit Voice-Transkription und TTS-Antworten |
-| `email` | SMTP-Versand und IMAP-Abruf |
-| `wordpress` | Posts, Medien, Seiten via WordPress REST API |
-| `codelab` | Code-Ausführung und Debugging |
-| `docker` | Container-Management via Docker API |
-| `linux_server` | Server-Administration via SSH |
-| `image_gen` | KI-Bildgenerierung |
+| `kubernetes` | Cluster management, pods, deployments, logs, auto-remediation |
+| `proxmox` | VMs, LXC containers, backups, snapshots, node status |
+| `glpi` | Helpdesk tickets, assets, ITSM workflows |
+| `ionos` | DNS zones and record management via IONOS Hosting API |
+| `fritzbox` | Network status, external IP, Wi-Fi, connected devices |
+| `homeassistant` | Smart home: lights, heating, sensors, automations |
+| `pihole` | Pi-hole v6: blocking, statistics, query log, custom DNS |
+| `web_search` | SearXNG-based web search (Bing, Mojeek, Qwant) |
+| `telegram` | Bot with voice transcription and TTS replies |
+| `email` | SMTP sending and IMAP retrieval |
+| `wordpress` | Posts, media, pages via WordPress REST API |
+| `codelab` | Code execution and debugging |
+| `docker` | Container management via Docker API |
+| `linux_server` | Server administration via SSH |
+| `image_gen` | AI image generation |
 
-Module werden per Umgebungsvariable aktiviert:
+Modules are enabled via environment variables:
 
 ```env
 KUMIO_MODULE_KUBERNETES=true
 KUMIO_MODULE_PROXMOX=true
-# usw.
+# etc.
 ```
 
 ---
 
-## Konfiguration
+## Configuration
 
-Alle Einstellungen können über die Web-UI unter **Einstellungen** vorgenommen werden. Modul-Verbindungsdaten (API-Keys, Tokens, Passwörter) werden verschlüsselt im SQLite-Vault gespeichert.
+All settings can be managed through the web UI under **Settings**. Module connection data (API keys, tokens, passwords) is stored encrypted in the SQLite vault.
 
-### Wichtige Umgebungsvariablen
+### Key environment variables
 
-| Variable | Standard | Beschreibung |
+| Variable | Default | Description |
 |---|---|---|
-| `LLM_BACKEND` | `ollama` | LLM-Provider: `ollama`, `lmstudio`, `openai_compatible` |
-| `OLLAMA_BASE_URL` | `http://ollama:11434` | Ollama-Endpunkt |
-| `VAULT_FALLBACK` | `sqlite` | Secrets-Backend: `sqlite` oder Vault |
-| `SQLITE_SECRETS_KEY` | — | Verschlüsselungsschlüssel (Pflicht) |
-| `LANGUAGE` | `de` | Standard-Antwortsprache |
-| `MAX_OUTPUT_TOKENS` | `16384` | Maximale Antwortlänge in Tokens |
+| `LLM_BACKEND` | `ollama` | LLM provider: `ollama`, `lmstudio`, `openai_compatible` |
+| `OLLAMA_BASE_URL` | `http://ollama:11434` | Ollama endpoint |
+| `VAULT_FALLBACK` | `sqlite` | Secrets backend: `sqlite` or Vault |
+| `SQLITE_SECRETS_KEY` | — | Encryption key (required) |
+| `LANGUAGE` | `de` | Default response language |
+| `MAX_OUTPUT_TOKENS` | `16384` | Maximum response length in tokens |
 
-Vollständige Vorlage: [.env.example](.env.example)
+Full template: [.env.example](.env.example)
 
 ---
 
-## Eigenes Modul entwickeln
+## Building a Module
 
-Jedes Modul besteht aus:
+Every module consists of:
 
 ```
-backend/modules/meinmodul/
-├── __init__.py       ← exportiert module_manifest, agent, router
-├── manifest.py       ← ModuleManifest mit routing_keywords
-├── agent.py          ← BaseAgent-Subklasse
-├── tools.py          ← @tool-Funktionen (LangChain)
+backend/modules/mymodule/
+├── __init__.py       ← exports module_manifest, agent, router
+├── manifest.py       ← ModuleManifest with routing_keywords
+├── agent.py          ← BaseAgent subclass
+├── tools.py          ← @tool functions (LangChain)
 ├── routes.py         ← FastAPI APIRouter
 └── frontend/
     ├── tab.html
     └── tab.js
 ```
 
-**manifest.py** (Mindestbeispiel):
+**manifest.py** (minimal example):
 
 ```python
 from backend.core.module_registry import ModuleManifest
 
 module_manifest = ModuleManifest(
-    name="meinmodul",
-    display_name="Mein Modul",
-    description="Beschreibung für LLM-Routing",
+    name="mymodule",
+    display_name="My Module",
+    description="Description used for LLM routing",
     version="1.0.0",
-    routing_keywords=["meinmodul", "spezifischer-begriff"],
-    api_prefix="/api/meinmodul",
-    dashboard_tab={"id": "meinmodul", "label": "Mein Modul", "icon": "🔧"},
+    routing_keywords=["mymodule", "specific-term"],
+    api_prefix="/api/mymodule",
+    dashboard_tab={"id": "mymodule", "label": "My Module", "icon": "🔧"},
     health_check=lambda: {"status": "ok"},
 )
 ```
@@ -181,49 +184,49 @@ module_manifest = ModuleManifest(
 
 ```python
 from backend.agents.base_agent import BaseAgent
-from backend.modules.meinmodul.tools import mein_tool
+from backend.modules.mymodule.tools import my_tool
 
-class MeinModulAgent(BaseAgent):
+class MyModuleAgent(BaseAgent):
     def __init__(self):
         super().__init__(
-            name="meinmodul",
-            system_prompt="Du bist Spezialist für Mein Modul.",
-            tools=[mein_tool],
+            name="mymodule",
+            system_prompt="You are the specialist for My Module.",
+            tools=[my_tool],
         )
 ```
 
-**Aktivieren**:
+**Enable**:
 
 ```env
-KUMIO_MODULE_MEINMODUL=true
+KUMIO_MODULE_MYMODULE=true
 ```
 
-Kumio erkennt das Modul beim nächsten Start automatisch — kein Core-Code muss angepasst werden.
+Kumio discovers the module automatically on next start — no core code needs to be touched.
 
 ---
 
 ## Deployment (Kubernetes)
 
-Kubernetes-Manifeste liegen unter `k8s/`. Das Produktions-Image ist auf Docker Hub verfügbar.
+Kubernetes manifests are located under `k8s/`. The production image is available on Docker Hub.
 
 ```bash
-# 1. Namespace anlegen
+# 1. Create namespace
 kubectl apply -f k8s/namespace.yaml
 
-# 2. Secret mit eigenem Key anlegen
-# k8s/backend/secret.yaml editieren (REPLACE_WITH_YOUR_SQLITE_SECRETS_KEY ersetzen)
+# 2. Create secret with your own key
+# Edit k8s/backend/secret.yaml (replace REPLACE_WITH_YOUR_SQLITE_SECRETS_KEY)
 kubectl apply -f k8s/backend/secret.yaml
 
-# 3. Deployment ausrollen
+# 3. Roll out deployment
 kubectl apply -f k8s/backend/
 kubectl apply -f k8s/redis/
 kubectl apply -f k8s/chromadb/
 
-# Status prüfen
+# Check status
 kubectl -n kumio get pods -w
 ```
 
-### Eigenes Image bauen
+### Building your own image
 
 ```bash
 docker compose build backend
@@ -231,25 +234,25 @@ docker tag kumio-backend:latest your-registry/kumio-backend:latest
 docker push your-registry/kumio-backend:latest
 ```
 
-> Piper TTS wird nur bei `--build-arg INSTALL_PIPER=true` eingebaut. `docker compose build` erledigt das automatisch.
+> Piper TTS is only included when built with `--build-arg INSTALL_PIPER=true`. `docker compose build` handles this automatically.
 
 ---
 
-## Entwicklung
+## Development
 
 ```bash
-# Stack lokal starten
+# Start stack locally
 docker compose up -d
 
-# Nach Python- oder Frontend-Änderungen neu bauen
+# Rebuild after Python or frontend changes
 docker compose build backend && docker compose up -d --no-deps backend
 
-# Tests ausführen
+# Run tests
 python backend/test_services.py
 python backend/test_monitor.py
 ```
 
-Lokales Backend ohne Docker:
+Local backend without Docker:
 
 ```bash
 cd backend
@@ -259,22 +262,35 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 ---
 
-## Sicherheit
+## Security
 
-- **Lokale KI**: Alle LLM-Aufrufe bleiben im eigenen Netz (Ollama/LM Studio). Keine Daten gehen an externe Dienste, es sei denn, ein OpenAI-kompatibler externer Provider wird explizit konfiguriert.
-- **Secrets**: Verschlüsselt via HashiCorp Vault oder lokalem SQLite-Fallback. Nie im Klartext im Dateisystem.
-- **Destruktive Aktionen**: `PROXMOX_CONFIRM_DESTRUCTIVE=true` (Standard) — der Agent fragt vor dem Ausführen nach.
-- **Nur internes Netz**: Kumio ist nicht für öffentliche Exposition ausgelegt. Traefik/Nginx mit TLS und ggf. Auth-Middleware vorschalten.
-- **`.env` nicht committen**: Die Datei ist in `.gitignore` enthalten. Vorlage: `.env.example`.
+- **Local AI**: All LLM calls stay within your network (Ollama/LM Studio). No data is sent to external services unless an OpenAI-compatible external provider is explicitly configured.
+- **Secrets**: Encrypted via HashiCorp Vault or local SQLite fallback. Never stored in plaintext on the filesystem.
+- **Destructive actions**: `PROXMOX_CONFIRM_DESTRUCTIVE=true` (default) — the agent asks for confirmation before executing.
+- **Internal network only**: Kumio is not designed for public exposure. Place Traefik/Nginx with TLS and optional auth middleware in front.
+- **Do not commit `.env`**: The file is included in `.gitignore`. Template: `.env.example`.
+
+---
+
+## Acknowledgements
+
+Kumio is an independent project with no affiliation to OpenClaw, OpenCode, or similar projects. The idea of connecting a local AI assistant to infrastructure modules may have drawn inspiration from such projects — but the code, architecture, and all implementations are entirely original.
+
+Built on top of:
+- **[LangChain](https://github.com/langchain-ai/langchain)** + **[LangGraph](https://github.com/langchain-ai/langgraph)** — agent framework and ReAct execution
+- **[FastAPI](https://github.com/fastapi/fastapi)** — web framework
+- **[ChromaDB](https://github.com/chroma-core/chroma)** — vector database for semantic memory
+
+Kumio was developed with the help of **[Claude](https://claude.ai)** by Anthropic — as a coding assistant, architecture partner, and author of large parts of the code.
 
 ---
 
 ## Changelog
 
-Siehe [CHANGELOG.md](CHANGELOG.md).
+See [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
-## Lizenz
+## License
 
 [MIT](LICENSE)

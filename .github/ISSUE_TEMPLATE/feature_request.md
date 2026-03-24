@@ -1,17 +1,17 @@
 ---
 name: Feature Request
-about: Neues Modul, Feature oder Verbesserung vorschlagen
+about: Suggest a new module, feature, or improvement
 labels: enhancement
 ---
 
-## Beschreibung
+## Description
 
-<!-- Was soll hinzugefügt oder verbessert werden? -->
+<!-- What should be added or improved? -->
 
 ## Motivation
 
-<!-- Warum wäre das nützlich? Welches Problem löst es? -->
+<!-- Why would this be useful? What problem does it solve? -->
 
-## Mögliche Umsetzung
+## Possible implementation
 
-<!-- Optional: Ideen zur Implementierung -->
+<!-- Optional: ideas on how to implement this -->
