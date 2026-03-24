@@ -1,14 +1,22 @@
-# Ninko
+<p align="center">
+  <img src="images/ninko.jpg" alt="Ninko" width="180">
+</p>
 
-**Modular, AI-powered IT Operations Platform**
+<h1 align="center">Ninko</h1>
 
+<p align="center"><strong>Modular, AI-powered IT Operations Platform</strong></p>
+
+<p align="center">
 Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigger workflows, and let agents autonomously handle tasks — without any data leaving your network.
+</p>
 
-[![Version](https://img.shields.io/badge/version-0.5.0-blue.svg)](CHANGELOG.md)
-[![Status](https://img.shields.io/badge/status-beta-orange.svg)](CHANGELOG.md)
-[![Python](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green.svg)](https://fastapi.tiangolo.com/)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+<p align="center">
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.5.0-blue.svg" alt="Version"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-beta-orange.svg" alt="Status"></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.12-blue.svg" alt="Python"></a>
+  <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.115-green.svg" alt="FastAPI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
+</p>
 
 > **Beta:** Ninko is functional and actively used in production environments, but the API and module interfaces may still change. Feedback and contributions welcome.
 
@@ -28,6 +36,43 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 - **Telegram bot** – Full remote access via messenger including voice messages
 - **Multilingual** – 10 languages, automatically selected based on the user's language
 - **Plugin system** – ZIP-installable modules without restart
+
+---
+
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="images/screens/Eingef%C3%BCgtes%20Bild.png" alt="Chat – Dark Mode" width="100%"><br>
+      <sub><b>Chat interface — Dark Mode</b></sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="images/screens/Eingef%C3%BCgtes%20Bild%20(2).png" alt="Chat – Light Mode" width="100%"><br>
+      <sub><b>Chat interface — Light Mode</b></sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="images/screens/Eingef%C3%BCgtes%20Bild%20(3).png" alt="CodeLab Module" width="100%"><br>
+      <sub><b>CodeLab — Code execution &amp; text improvement</b></sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="images/screens/Eingef%C3%BCgtes%20Bild%20(6).png" alt="Workflow Canvas" width="100%"><br>
+      <sub><b>Automation — Visual DAG workflow editor</b></sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="images/screens/Eingef%C3%BCgtes%20Bild%20(4).png" alt="FritzBox Module" width="100%"><br>
+      <sub><b>FritzBox — Network management dashboard</b></sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="images/screens/Eingef%C3%BCgtes%20Bild%20(5).png" alt="Pi-hole Module" width="100%"><br>
+      <sub><b>Pi-hole — DNS blocking &amp; query log</b></sub>
+    </td>
+  </tr>
+</table>
 
 ---
 
