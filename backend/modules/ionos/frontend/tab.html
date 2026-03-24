@@ -1,0 +1,42 @@
+<!-- IONOS DNS Dashboard Tab -->
+<div id="ionos-tab-content" class="module-tab-content">
+
+    <!-- Header -->
+    <div style="margin-bottom: 1.5rem;">
+        <h2 style="font-size: 1.3rem; font-weight: 600; margin: 0 0 0.25rem;">
+            IONOS DNS Management
+        </h2>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">
+            DNS Zonen und Records überprüfen. Die aktive Bearbeitung findet über den AI-Chat statt.
+        </p>
+    </div>
+
+    <!-- Status Cards -->
+    <div class="k8s-cluster-status">
+        <div class="status-card">
+            <span class="status-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22V12"></path><path d="M5 12H2a10 10 0 0 0 20 0h-3"></path><rect x="8" y="2" width="8" height="10" rx="1"></rect></svg></span>
+            <span class="status-value" id="ionos-status-val">-</span>
+            <span class="status-label">API Status</span>
+        </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="k8s-controls">
+        <select id="ionos-connection-select" class="form-select"
+            style="min-width: 220px; padding: 0.5rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-body); color: var(--text-color);">
+            <option value="">Lade Verbindungen...</option>
+        </select>
+        <button id="btn-ionos-test" class="btn btn-refresh">API Healthcheck</button>
+    </div>
+
+    <!-- Info Section -->
+    <div class="k8s-section">
+        <h3 class="section-title">Hinweise</h3>
+        <p style="font-size: 0.875rem; color: var(--text-muted); margin: 0; line-height: 1.6;">
+            Wenn der Healthcheck fehlschlägt, stelle sicher, dass der <strong>IONOS API-Key</strong> in der
+            ausgewählten Verbindung korrekt hinterlegt ist und Lese-/Schreibzugriff hat.<br>
+            Der API-Key muss im Format <code style="background: var(--bg-tertiary); padding: 0.1rem 0.4rem; border-radius: 3px; font-family: monospace;">prefix.secret</code> vorliegen (zwei Teile, getrennt durch einen Punkt).
+        </p>
+    </div>
+
+</div>

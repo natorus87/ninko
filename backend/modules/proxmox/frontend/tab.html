@@ -1,0 +1,47 @@
+<!-- Proxmox Dashboard Tab -->
+<div id="proxmox-tab-content" class="module-tab-content">
+
+    <!-- Connection Selector -->
+    <div class="proxmox-controls"
+        style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1.5rem;">
+        <select id="proxmox-connection-select" class="form-select"
+            style="min-width: 200px; padding: 0.5rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-body); color: var(--text-color);">
+            <option value="">Lade Verbindungen...</option>
+        </select>
+        <button class="btn btn-refresh" onclick="ProxmoxTab.refresh()">Aktualisieren</button>
+    </div>
+
+    <!-- Node Status -->
+    <div class="proxmox-section">
+        <h3 class="section-title">Nodes</h3>
+        <div id="proxmox-nodes" class="nodes-grid">
+            <p class="empty-state">Lade Nodes…</p>
+        </div>
+    </div>
+
+    <!-- VM List -->
+    <div class="proxmox-section">
+        <h3 class="section-title">Virtuelle Maschinen &amp; Container</h3>
+        <div class="table-container">
+            <table class="data-table" id="proxmox-vms-table">
+                <thead>
+                    <tr>
+                        <th>VMID</th>
+                        <th>Name</th>
+                        <th>Typ</th>
+                        <th>Node</th>
+                        <th>Status</th>
+                        <th>CPU</th>
+                        <th>RAM</th>
+                        <th>Aktionen</th>
+                    </tr>
+                </thead>
+                <tbody id="proxmox-vms-tbody">
+                    <tr>
+                        <td colspan="8" class="empty-state">Lade VMs…</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

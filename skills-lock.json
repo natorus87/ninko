@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "skills": {
+    "error-handling": {
+      "source": "jiatastic/open-python-skills",
+      "sourceType": "github",
+      "computedHash": "cb2fbcc3c72714f8df6ba3d6bbc76caadd88f3f2226b698d501a40ade1a017c4"
+    },
+    "frontend-design": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "063a0e6448123cd359ad0044cc46b0e490cc7964d45ef4bb9fd842bd2ffbca67"
+    },
+    "kubernetes-specialist": {
+      "source": "jeffallan/claude-skills",
+      "sourceType": "github",
+      "computedHash": "0201bb26821bd6de6ea341f45da863ef70bba0b44363da72f26b7bf7c86869e9"
+    },
+    "linting": {
+      "source": "jiatastic/open-python-skills",
+      "sourceType": "github",
+      "computedHash": "ef9ac092c6b7504e600e21331a8c8540f03e8cd87368d8d53320550105279f67"
+    },
+    "logfire": {
+      "source": "jiatastic/open-python-skills",
+      "sourceType": "github",
+      "computedHash": "dd2b89e765224636615df3660834f3d0bf1e23b68bebd2d3bf23ee191f7cda2c"
+    },
+    "pydantic": {
+      "source": "jiatastic/open-python-skills",
+      "sourceType": "github",
+      "computedHash": "e0d9591c01ccaac3ffe5fd3fc2dab98eb267c8674bd59bb00c8e5eaba2df6fed"
+    },
+    "python-backend": {
+      "source": "jiatastic/open-python-skills",
+      "sourceType": "github",
+      "computedHash": "3e05cfe0d22005cd76126b0a7d67e1b33da8a08da99d863133a37abfd47365a0"
+    },
+    "ty-skills": {
+      "source": "jiatastic/open-python-skills",
+      "sourceType": "github",
+      "computedHash": "d8e7697a79b9466dc7c03d917322b44b33cab0eee2fabf206fc9dfa873256130"
+    },
+    "ui-ux-pro-max": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "computedHash": "0a413bf988d06481f69bb81df2070741c3ba12dd9f1be2706d57f259c905992d"
+    },
+    "web-design-guidelines": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "computedHash": "a6a44d5498f7e8f68289902f3dedfc6f38ae0cee1e96527c80724cf27f727c2a"
+    }
+  }
+}

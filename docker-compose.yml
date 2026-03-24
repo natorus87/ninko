@@ -1,0 +1,118 @@
+services:
+  # ─── ChromaDB (Semantic Memory) ────────────────
+  chromadb:
+    image: chromadb/chroma:0.4.24
+    container_name: kumio-chromadb
+    ports:
+      - "8100:8000"
+    volumes:
+      - chroma-data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "bash", "-c", "echo > /dev/tcp/localhost/8000" ]
+      interval: 15s
+      timeout: 5s
+      start_period: 15s
+      retries: 5
+
+  # ─── Redis (Working Memory & PubSub) ───────────
+  redis:
+    image: redis:7-alpine
+    container_name: kumio-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy volatile-lru
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ─── Kumio Backend ──────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        INSTALL_PIPER: "true"
+    container_name: kumio-backend
+    ports:
+      - "8000:8000"
+    environment:
+      # LLM / Embeddings – LM Studio (OpenAI-kompatibel)
+      # Für lokale Entwicklung mit Ollama: LLM_BACKEND=ollama + OLLAMA_BASE_URL setzen
+      LLM_BACKEND: "lmstudio"
+      LMSTUDIO_BASE_URL: "http://host.docker.internal:1234"
+      LMSTUDIO_MODEL: "local-model"
+      LMSTUDIO_EMBED_MODEL: "nomic-ai/nomic-embed-text-v1.5-GGUF"
+      # ChromaDB
+      CHROMA_HOST: "chromadb"
+      CHROMA_PORT: "8000"
+      # Redis
+      REDIS_URL: "redis://redis:6379/0"
+      # Secrets – SQLite (persistent, kein Vault-Neustart-Verlust)
+      VAULT_FALLBACK: "sqlite"
+      SQLITE_SECRETS_KEY: "9bc4f61cdcefa82c8e4e856923c3f611a3b58527a9a56bd857f34eb3bc4ce663"
+      # Module
+      KUMIO_MODULE_KUBERNETES: "false"
+      KUMIO_MODULE_PROXMOX: "true"
+      KUMIO_MODULE_GLPI: "true"
+      KUMIO_MODULE_IONOS: "true"
+      KUMIO_MODULE_FRITZBOX: "true"
+      KUMIO_MODULE_HOMEASSISTANT: "true"
+      KUMIO_MODULE_PIHOLE: "true"
+      KUMIO_MODULE_WEB_SEARCH: "true"
+      KUMIO_MODULE_DOCKER: "true"
+      KUMIO_MODULE_LINUX_SERVER: "true"
+      KUMIO_MODULE_WORDPRESS: "true"
+      PIHOLE_URL: "http://10.11.14.6"
+      SEARXNG_URL: "http://searxng:8080"
+      # Monitoring
+      MONITOR_INTERVAL_SECONDS: "120"
+      MONITOR_AUTO_REMEDIATE: "false"
+      # Logging
+      LOG_LEVEL: "INFO"
+      # TTS (Piper) – deaktiviert by default
+      # Aktivieren: TTS_ENABLED=true + piper installieren (scripts/download_voices.sh)
+      TTS_ENABLED: "true"
+      PIPER_BINARY: "piper"
+      VOICES_DIR: "/app/data/voices"
+      TTS_DEFAULT_LANG: "de"
+      TTS_DEFAULT_VOICE: "thorsten-medium"
+    depends_on:
+      chromadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - ./data/plugins:/app/plugins
+      - ./data/voices:/app/data/voices
+
+  # ─── SearXNG (Web Search Backend) ──────────────
+  searxng:
+    image: searxng/searxng:latest
+    container_name: kumio-searxng
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data/searxng:/etc/searxng:rw
+    environment:
+      - SEARXNG_SEARCH_FORMATS=html,json
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost:8080" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  chroma-data:
+  redis-data:

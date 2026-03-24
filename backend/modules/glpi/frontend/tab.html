@@ -1,0 +1,61 @@
+<!-- GLPI Helpdesk Dashboard Tab -->
+<div id="glpi-tab-content" class="module-tab-content">
+    <!-- Ticket Stats -->
+    <div class="glpi-stats" id="glpi-stats">
+        <div class="stat-card stat-new">
+            <span class="stat-value" id="glpi-new">-</span>
+            <span class="stat-label">Neu</span>
+        </div>
+        <div class="stat-card stat-processing">
+            <span class="stat-value" id="glpi-processing">-</span>
+            <span class="stat-label">In Bearbeitung</span>
+        </div>
+        <div class="stat-card stat-pending">
+            <span class="stat-value" id="glpi-pending">-</span>
+            <span class="stat-label">Wartend</span>
+        </div>
+        <div class="stat-card stat-solved">
+            <span class="stat-value" id="glpi-solved">-</span>
+            <span class="stat-label">Gelöst</span>
+        </div>
+        <div class="stat-card stat-closed">
+            <span class="stat-value" id="glpi-closed">-</span>
+            <span class="stat-label">Geschlossen</span>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="glpi-controls"
+        style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1.5rem;">
+        <select id="glpi-connection-select" class="form-select"
+            style="min-width: 200px; padding: 0.5rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-body); color: var(--text-color);">
+            <option value="">Lade Verbindungen...</option>
+        </select>
+        <button class="btn btn-primary" onclick="GlpiTab.newTicket()">Neues Ticket</button>
+        <a id="glpi-direct-link" href="#" target="_blank" class="btn btn-outline">GLPI öffnen</a>
+        <button class="btn btn-refresh" onclick="GlpiTab.refresh()">Aktualisieren</button>
+    </div>
+
+    <!-- Recent Tickets -->
+    <div class="glpi-section">
+        <h3 class="section-title">Letzte Tickets</h3>
+        <div class="table-container">
+            <table class="data-table" id="glpi-tickets-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Titel</th>
+                        <th>Priorität</th>
+                        <th>Status</th>
+                        <th>Erstellt</th>
+                    </tr>
+                </thead>
+                <tbody id="glpi-tickets-tbody">
+                    <tr>
+                        <td colspan="5" class="empty-state">Lade Tickets…</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

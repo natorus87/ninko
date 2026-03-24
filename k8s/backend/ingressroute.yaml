@@ -1,0 +1,17 @@
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: kumio-backend
+  labels:
+    app.kubernetes.io/name: kumio-backend
+    app.kubernetes.io/part-of: kumio
+spec:
+  entryPoints:
+    - web
+    - websecure
+  routes:
+    - match: Host(`kumio.conbro.local`)
+      kind: Rule
+      services:
+        - name: kumio-backend
+          port: 8000

@@ -1,0 +1,217 @@
+<!-- Qdrant Knowledge Bank Dashboard Tab -->
+<div id="qdrant-tab-content" class="module-tab-content">
+
+    <!-- Stats-Header -->
+    <div class="k8s-cluster-status" id="qdrant-stats">
+        <div class="status-card">
+            <span class="status-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg></span>
+            <span class="status-value" id="qdrant-total-collections">-</span>
+            <span class="status-label">Collections</span>
+        </div>
+        <div class="status-card running">
+            <span class="status-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg></span>
+            <span class="status-value" id="qdrant-total-vectors">-</span>
+            <span class="status-label">Vektoren</span>
+        </div>
+        <div class="status-card">
+            <span class="status-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></span>
+            <span class="status-value" id="qdrant-active-collection">-</span>
+            <span class="status-label">Aktive Collection</span>
+        </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="k8s-controls" style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;margin-bottom:1.5rem;">
+        <select id="qdrant-connection-select" class="form-select"
+            style="min-width:200px;padding:0.5rem;border-radius:4px;border:1px solid var(--border-color);background:var(--bg-body);color:var(--text-color);">
+            <option value="">Lade Verbindungen…</option>
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="QdrantTab.showConnForm()" title="Verbindung hinzufügen">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Neu
+        </button>
+        <button class="btn btn-outline btn-sm" id="qdrant-conn-edit-btn" style="display:none;"
+            onclick="QdrantTab.editCurrentConnection()" title="Aktive Verbindung bearbeiten">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+        <select id="qdrant-collection-select" class="form-select"
+            style="min-width:200px;padding:0.5rem;border-radius:4px;border:1px solid var(--border-color);background:var(--bg-body);color:var(--text-color);">
+            <option value="">Collection wählen…</option>
+        </select>
+        <button class="btn btn-refresh" onclick="QdrantTab.refresh()">Aktualisieren</button>
+        <button class="btn btn-primary" onclick="QdrantTab.showPanel('add')">+ Wissen hinzufügen</button>
+        <button class="btn btn-primary" onclick="QdrantTab.showPanel('collection')">Neue Collection</button>
+    </div>
+
+    <!-- Panel: Verbindung hinzufügen / bearbeiten -->
+    <div id="qdrant-conn-form-panel" class="k8s-section" style="display:none;">
+        <h3 class="section-title" id="qdrant-conn-form-title">Verbindung hinzufügen</h3>
+        <input type="hidden" id="qdrant-conn-edit-id">
+        <div class="editor-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+            <div class="setting-group">
+                <label class="setting-label">Name *</label>
+                <input type="text" id="qdrant-conn-name" class="form-input" placeholder="z.B. Qdrant Prod">
+            </div>
+            <div class="setting-group">
+                <label class="setting-label">Umgebung</label>
+                <select id="qdrant-conn-env" class="form-select">
+                    <option value="prod">prod</option>
+                    <option value="staging">staging</option>
+                    <option value="dev">dev</option>
+                    <option value="lab">lab</option>
+                    <option value="local" selected>local</option>
+                    <option value="unknown">unknown</option>
+                </select>
+            </div>
+            <div class="setting-group">
+                <label class="setting-label">Qdrant URL *</label>
+                <input type="text" id="qdrant-conn-url" class="form-input" placeholder="http://localhost:6333">
+            </div>
+            <div class="setting-group">
+                <label class="setting-label">Standard-Collection</label>
+                <input type="text" id="qdrant-conn-collection" class="form-input" placeholder="kumio_knowledge">
+            </div>
+            <div class="setting-group">
+                <label class="setting-label">API Key <span style="color:var(--text-muted)">(optional)</span></label>
+                <input type="password" id="qdrant-conn-apikey" class="form-input" placeholder="leer lassen wenn nicht benötigt">
+            </div>
+            <div class="setting-group">
+                <label class="setting-label">Beschreibung <span style="color:var(--text-muted)">(optional)</span></label>
+                <input type="text" id="qdrant-conn-desc" class="form-input" placeholder="Kurze Beschreibung…">
+            </div>
+        </div>
+        <div style="margin-top:0.5rem;">
+            <label style="display:flex;align-items:center;gap:0.5rem;color:var(--text-secondary);font-size:0.9rem;cursor:pointer;">
+                <input type="checkbox" id="qdrant-conn-default"> Als Standard-Verbindung setzen
+            </label>
+        </div>
+        <div style="display:flex;gap:0.75rem;margin-top:1rem;align-items:center;">
+            <button class="btn btn-primary" id="qdrant-conn-save-btn" onclick="QdrantTab.saveConnection()">Speichern</button>
+            <button class="btn" onclick="QdrantTab.showPanel(null)">Abbrechen</button>
+            <button class="btn btn-sm" id="qdrant-conn-delete-btn" style="margin-left:auto;color:var(--error-color);border-color:var(--error-color);display:none;"
+                onclick="QdrantTab.deleteConnection()">Verbindung löschen</button>
+        </div>
+    </div>
+
+    <!-- Panel: Wissen hinzufügen -->
+    <div id="qdrant-add-panel" class="k8s-section" style="display:none;">
+        <h3 class="section-title">Wissen zur Datenbank hinzufügen</h3>
+        <div class="editor-grid" style="display:grid;grid-template-columns:1fr 320px;gap:1.5rem;">
+            <div>
+                <div class="setting-group">
+                    <label class="setting-label">Titel</label>
+                    <input type="text" id="qdrant-add-title" class="form-input" placeholder="Aussagekräftiger Titel…">
+                </div>
+                <div class="setting-group">
+                    <label class="setting-label">Inhalt <span style="color:var(--text-muted)">(wird automatisch gechunkt)</span></label>
+                    <textarea id="qdrant-add-content" class="form-textarea" rows="8"
+                        placeholder="Fachwissen, Prozessbeschreibung, Runbook oder Dokumentation einfügen…"
+                        style="width:100%;resize:vertical;font-family:inherit;"></textarea>
+                </div>
+            </div>
+            <div>
+                <div class="setting-group">
+                    <label class="setting-label">Kategorie</label>
+                    <input type="text" id="qdrant-add-category" class="form-input" value="general"
+                        placeholder="z.B. kubernetes, netzwerk, sicherheit">
+                </div>
+                <div class="setting-group">
+                    <label class="setting-label">Tags <span style="color:var(--text-muted)">(komma-getrennt)</span></label>
+                    <input type="text" id="qdrant-add-tags" class="form-input"
+                        placeholder="z.B. dns, troubleshooting, firewall">
+                </div>
+                <div class="setting-group">
+                    <label class="setting-label">Quelle / Referenz</label>
+                    <input type="text" id="qdrant-add-source" class="form-input"
+                        placeholder="URL, Dateiname, Autor…">
+                </div>
+                <div class="setting-group">
+                    <label class="setting-label">Ziel-Collection</label>
+                    <input type="text" id="qdrant-add-collection" class="form-input"
+                        placeholder="leer = Standard-Collection">
+                </div>
+                <div style="display:flex;gap:0.75rem;margin-top:1rem;">
+                    <button class="btn btn-primary" id="qdrant-save-btn" onclick="QdrantTab.saveEntry()">Speichern</button>
+                    <button class="btn" onclick="QdrantTab.showPanel(null)">Abbrechen</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Panel: Neue Collection -->
+    <div id="qdrant-collection-panel" class="k8s-section" style="display:none;">
+        <h3 class="section-title">Neue Collection erstellen</h3>
+        <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;">
+            <div class="setting-group" style="flex:1;min-width:200px;">
+                <label class="setting-label">Name <span style="color:var(--text-muted)">(a-z, 0-9, _, -)</span></label>
+                <input type="text" id="qdrant-new-collection-name" class="form-input"
+                    placeholder="z.B. it_prozesse, runbooks, hardware_docs">
+            </div>
+            <div style="display:flex;gap:0.75rem;padding-bottom:1px;">
+                <button class="btn btn-primary" onclick="QdrantTab.createCollection()">Erstellen</button>
+                <button class="btn" onclick="QdrantTab.showPanel(null)">Abbrechen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Suche -->
+    <div class="k8s-section">
+        <h3 class="section-title">Semantische Suche</h3>
+        <div style="display:flex;gap:0.75rem;align-items:stretch;flex-wrap:wrap;">
+            <input type="text" id="qdrant-search-query" class="form-input" style="flex:1;min-width:200px;"
+                placeholder="Suche nach Wissen…" onkeydown="if(event.key==='Enter') QdrantTab.doSearch()">
+            <input type="text" id="qdrant-search-category" class="form-input" style="width:150px;"
+                placeholder="Kategorie (opt.)">
+            <select id="qdrant-search-topk" class="form-select"
+                style="padding:0.5rem;border-radius:4px;border:1px solid var(--border-color);background:var(--bg-body);color:var(--text-color);">
+                <option value="5">Top 5</option>
+                <option value="10">Top 10</option>
+                <option value="20">Top 20</option>
+            </select>
+            <button class="btn btn-primary" onclick="QdrantTab.doSearch()">Suchen</button>
+        </div>
+        <div id="qdrant-search-results" style="margin-top:1rem;"></div>
+    </div>
+
+    <!-- Einträge-Browser -->
+    <div class="k8s-section">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+            <h3 class="section-title" style="margin:0;">Einträge</h3>
+            <div style="display:flex;gap:0.5rem;align-items:center;">
+                <input type="text" id="qdrant-filter-category" class="form-input" style="width:160px;"
+                    placeholder="Kategorie filtern…"
+                    onkeydown="if(event.key==='Enter') QdrantTab.loadEntries(0)">
+                <button class="btn btn-sm btn-action" onclick="QdrantTab.loadEntries(0)">Filtern</button>
+            </div>
+        </div>
+        <div class="table-container">
+            <table class="data-table" id="qdrant-entries-table">
+                <thead>
+                    <tr>
+                        <th>Titel</th>
+                        <th>Kategorie</th>
+                        <th>Tags</th>
+                        <th>Quelle</th>
+                        <th>Erstellt</th>
+                        <th>Chunk</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="qdrant-entries-tbody">
+                    <tr><td colspan="7" class="empty-state">Wähle eine Collection und klicke Aktualisieren.</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div id="qdrant-pagination" style="display:flex;gap:0.5rem;margin-top:0.75rem;align-items:center;">
+        </div>
+    </div>
+
+    <!-- Collections-Übersicht -->
+    <div class="k8s-section">
+        <h3 class="section-title">Collections</h3>
+        <div id="qdrant-collections-grid"
+            style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:1rem;">
+            <p class="empty-state">Lade…</p>
+        </div>
+    </div>
+
+</div>

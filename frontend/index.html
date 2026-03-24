@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Kumio – IT-Operations-AI-Agent Dashboard">
+    <title>Kumio</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css?v=46">
+    <script>if(localStorage.getItem('kumio_theme')==='light')document.documentElement.classList.add('light-mode-pre');</script>
+</head>
+
+<body>
+    <div id="app">
+        <!-- Sidebar -->
+        <nav id="sidebar" class="sidebar">
+            <div class="sidebar-panels" id="sidebar-panels">
+                <!-- Primary Sidebar Panel -->
+                <div class="sidebar-panel sidebar-panel-primary" id="sidebar-panel-primary">
+                    <div class="sidebar-header">
+                        <div class="logo">
+                            <span class="logo-icon">
+                                <img src="/static/images/logo_icon.png" alt="Kumio"
+                                    style="width: 28px; height: 28px; object-fit: contain;" />
+                            </span>
+                            <span class="logo-text">Kumio</span>
+                        </div>
+                    </div>
+
+                    <!-- Top Nav -->
+                    <ul class="nav-tabs" id="nav-tabs-top">
+                        <li class="nav-tab active" data-tab="chat">
+                            <span class="tab-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                                    stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round">
+                                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                                </svg></span>
+                            <span class="tab-label" data-i18n="nav.chat">Chat</span>
+                        </li>
+                        <li class="nav-tab" id="nav-automatisierung-trigger">
+                            <span class="tab-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/><polyline points="13 9 11 13 13 13 11 17"/></svg></span>
+                            <span class="tab-label">Automatisierung</span>
+                            <span class="tab-arrow">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="9 18 15 12 9 6"></polyline>
+                                </svg>
+                            </span>
+                        </li>
+                    </ul>
+
+                    <!-- Bottom Nav -->
+                    <ul class="nav-tabs nav-tabs-bottom" id="nav-tabs-bottom">
+                        <li class="nav-tab" id="nav-modules-trigger">
+                            <span class="tab-icon">
+                                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path
+                                        d="M12.89 1.45l8 4A2 2 0 0 1 22 7.24v9.52a2 2 0 0 1-1.11 1.79l-8 4a2 2 0 0 1-1.78 0l-8-4A2 2 0 0 1 2 16.76V7.24a2 2 0 0 1 1.11-1.79l8-4a2 2 0 0 1 1.78 0z">
+                                    </path>
+                                    <polyline points="2.32 6.16 12 11 21.68 6.16"></polyline>
+                                    <line x1="12" y1="22.76" x2="12" y2="11"></line>
+                                </svg>
+                            </span>
+                            <span class="tab-label" data-i18n="nav.modules">Module</span>
+                            <span class="tab-arrow">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="9 18 15 12 9 6"></polyline>
+                                </svg>
+                            </span>
+                        </li>
+                        <li class="nav-tab" data-tab="logs">
+                            <span class="tab-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                                    stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                    <polyline points="14 2 14 8 20 8"></polyline>
+                                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                                    <polyline points="10 9 9 9 8 9"></polyline>
+                                </svg></span>
+                            <span class="tab-label" data-i18n="nav.logs">Logs</span>
+                        </li>
+                    </ul>
+
+                    <!-- Chat History Section (integrated into sidebar) -->
+                    <div class="sidebar-history-section" id="sidebar-history-section">
+                        <div class="history-header">
+                            <span class="history-title" style="display:flex;align-items:center;gap:0.5rem;">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <polyline points="12 6 12 12 16 14"></polyline>
+                                </svg>
+                                Verlauf
+                            </span>
+                            <button class="btn-icon btn-icon-sm" onclick="Kumio.newChat()"
+                                data-i18n-title="chat.newChat" title="Neuer Chat">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 20h9"></path>
+                                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="history-list" id="history-list">
+                            <!-- Filled dynamically -->
+                        </div>
+                    </div>
+
+                    <div class="sidebar-footer">
+                        <div class="system-status" id="system-status">
+                            <span class="status-dot" id="status-dot"></span>
+                            <span class="status-text" id="status-text" data-i18n="status.connecting">Verbinde…</span>
+                        </div>
+                        <button class="btn-icon" onclick="Kumio.toggleSettings()" title="Einstellungen">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Automatisierung Panel -->
+                <div class="sidebar-panel sidebar-panel-automatisierung" id="sidebar-panel-automatisierung">
+                    <div class="sidebar-header">
+                        <button class="btn-icon" id="btn-auto-back" title="Zurück">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="19" y1="12" x2="5" y2="12"></line>
+                                <polyline points="12 19 5 12 12 5"></polyline>
+                            </svg>
+                        </button>
+                        <span class="panel-title">Automatisierung</span>
+                    </div>
+                    <ul class="nav-tabs" id="nav-tabs-automatisierung">
+                        <li class="nav-tab" data-tab="tasks">
+                            <span class="tab-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                                    stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <polyline points="12 6 12 12 16 14"></polyline>
+                                </svg></span>
+                            <span class="tab-label" data-i18n="nav.tasks">Aufgaben</span>
+                        </li>
+                        <li class="nav-tab" data-tab="agents">
+                            <span class="tab-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                                    stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round">
+                                    <path
+                                        d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" />
+                                    <path
+                                        d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" />
+                                    <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4" />
+                                </svg></span>
+                            <span class="tab-label" data-i18n="nav.agents">Agenten</span>
+                        </li>
+                        <li class="nav-tab" data-tab="workflows">
+                            <span class="tab-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                                    stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round">
+                                    <rect x="3" y="3" width="5" height="5" rx="1"></rect>
+                                    <rect x="16" y="3" width="5" height="5" rx="1"></rect>
+                                    <rect x="9.5" y="16" width="5" height="5" rx="1"></rect>
+                                    <path d="M5.5 8v3a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8"></path>
+                                    <line x1="12" y1="13" x2="12" y2="16"></line>
+                                </svg></span>
+                            <span class="tab-label" data-i18n="nav.workflows">Workflows</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Secondary Sidebar Panel (Modules) -->
+                <div class="sidebar-panel sidebar-panel-secondary" id="sidebar-panel-secondary">
+                    <div class="sidebar-header">
+                        <button class="btn-icon" id="btn-sidebar-back" title="Zurück">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="19" y1="12" x2="5" y2="12"></line>
+                                <polyline points="12 19 5 12 12 5"></polyline>
+                            </svg>
+                        </button>
+                        <span class="panel-title">Module</span>
+                    </div>
+                    <ul class="nav-tabs" id="nav-tabs-secondary">
+                        <!-- Module tabs are loaded dynamically here -->
+                    </ul>
+                </div>
+            </div>
+        </nav>
+
+        <div id="sidebar-resizer" class="resizer-h"></div>
+
+
+        <!-- Main Content -->
+        <main id="main-content" class="main-content">
+            <!-- Chat Tab (default) -->
+            <div id="tab-chat" class="tab-panel active">
+                <div class="chat-layout">
+                    <!-- Chat Main Area -->
+                    <div class="chat-main">
+                        <!-- Chat Toolbar -->
+                        <div class="chat-toolbar">
+                            <span class="chat-toolbar-title" id="chat-session-label" data-i18n="chat.newChat">Neuer
+                                Chat</span>
+                            <div class="chat-toolbar-actions">
+                                <button class="btn-icon btn-icon-sm" onclick="Kumio.clearContext()"
+                                    data-i18n-title="chat.clearContext" title="Chat-Kontext löschen">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="3 6 5 6 21 6"></polyline>
+                                        <path
+                                            d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
+                                        </path>
+                                    </svg>
+                                </button>
+                                <button class="btn-icon btn-icon-sm" id="theme-toggle" onclick="Kumio.toggleTheme()"
+                                    data-i18n-title="chat.toggleTheme" title="Theme wechseln">
+                                    <svg id="theme-icon" viewBox="0 0 24 24" width="16" height="16" fill="none"
+                                        stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round">
+                                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="chat-container">
+                            <div class="chat-messages" id="chat-messages">
+                                <div class="welcome-message">
+                                    <div class="logo-wrapper">
+                                        <img src="/static/images/logo_dashboard_new.png?v=3" alt="Kumio Core"
+                                            class="welcome-illustration" />
+                                        <div class="eye eye-left"></div>
+                                        <div class="eye eye-right"></div>
+                                    </div>
+                                    <h2>Kumio</h2>
+                                    <p data-i18n="chat.welcome.desc">Your AI agent platform for IT automation. Create agents, automate workflows and control your entire infrastructure through natural language.</p>
+                                    <div class="quick-actions">
+                                        <button class="quick-action" data-i18n="quick.createAgent"
+                                            onclick="Kumio.sendQuick(t('quick.createAgentMsg'))">Agent erstellen</button>
+                                        <button class="quick-action" data-i18n="quick.rememberFact"
+                                            onclick="Kumio.sendQuick(t('quick.rememberFactMsg'))">Fakt merken</button>
+                                        <button class="quick-action" data-i18n="quick.webSearch"
+                                            onclick="Kumio.sendQuick(t('quick.webSearchMsg'))">Web-Suche</button>
+                                        <button class="quick-action" data-i18n="quick.showAgents"
+                                            onclick="Kumio.sendQuick(t('quick.showAgentsMsg'))">Aktive Agenten</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="chat-input-container">
+                                <div class="chat-input-wrapper">
+                                    <textarea id="chat-input" class="chat-input" data-i18n-placeholder="chat.placeholder"
+                                        placeholder="Frage stellen…" rows="3"
+                                        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();Kumio.sendMessage()}"></textarea>
+                                    <div class="chat-input-actions">
+                                        <button class="btn-mic-inline" id="btn-mic" onclick="Kumio.toggleRecording()" title="Spracheingabe">
+                                            <span class="mic-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></span>
+                                        </button>
+                                        <button class="btn-send-inline" id="btn-send" onclick="Kumio.handleSendOrStop()" title="Senden">
+                                            <svg class="icon-send" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                                            <svg class="icon-stop" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="display:none"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tasks Tab -->
+            <div id="tab-tasks" class="tab-panel">
+                <!-- Übersicht -->
+                <div class="module-dashboard" id="tasks-overview">
+                    <div class="page-header">
+                        <h2>Geplante Aufgaben</h2>
+                        <button class="btn btn-primary" onclick="Kumio.openTaskEditor()">+ Neue Aufgabe</button>
+                    </div>
+                    <div id="scheduler-tasks-list" class="tasks-grid">
+                        <p class="empty-state">Lade Aufgaben…</p>
+                    </div>
+                </div>
+
+                <!-- Editor -->
+                <div id="tasks-editor" class="module-dashboard hidden">
+                    <div class="page-header">
+                        <h2>Neue Aufgabe</h2>
+                        <div style="display:flex;gap:0.5rem;">
+                            <button class="btn btn-outline" onclick="Kumio.closeTaskEditor()">Abbrechen</button>
+                            <button class="btn btn-primary" id="sched-save-btn" onclick="Kumio.addScheduledTask()">Speichern</button>
+                        </div>
+                    </div>
+                    <div class="editor-grid">
+                        <div class="editor-main">
+                            <div class="setting-group">
+                                <h4>Allgemein</h4>
+                                <div class="form-row">
+                                    <label class="form-label" for="sched-name">Name <span style="color:var(--error-color)">*</span></label>
+                                    <input id="sched-name" type="text" class="form-input" placeholder="K8s Health Report">
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="sched-cron">Zeitplan (Cron) <span style="color:var(--error-color)">*</span></label>
+                                    <div class="cron-input-row">
+                                        <input id="sched-cron" type="text" class="form-input" placeholder="*/30 * * * *">
+                                        <select id="sched-cron-preset" class="form-select form-select-sm"
+                                            onchange="Kumio.applyCronPreset()">
+                                            <option value="">Vorlage…</option>
+                                            <option value="*/5 * * * *">Alle 5 Min</option>
+                                            <option value="*/15 * * * *">Alle 15 Min</option>
+                                            <option value="*/30 * * * *">Alle 30 Min</option>
+                                            <option value="0 * * * *">Stündlich</option>
+                                            <option value="0 */6 * * *">Alle 6 Std</option>
+                                            <option value="0 8 * * *">Täglich 08:00</option>
+                                            <option value="0 8 * * 1">Montags 08:00</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="setting-group">
+                                <h4>Aufgabentyp</h4>
+                                <div class="form-row">
+                                    <label class="form-label">Typ</label>
+                                    <div class="radio-group">
+                                        <label class="radio-label">
+                                            <input type="radio" name="sched-type" value="prompt" checked
+                                                onchange="Kumio.toggleSchedType()">
+                                            Agenten-Auftrag (Prompt)
+                                        </label>
+                                        <label class="radio-label">
+                                            <input type="radio" name="sched-type" value="workflow"
+                                                onchange="Kumio.toggleSchedType()">
+                                            Workflow ausführen
+                                        </label>
+                                    </div>
+                                </div>
+                                <div id="sched-prompt-row" class="form-row">
+                                    <label class="form-label" for="sched-prompt">Auftrag (Prompt)</label>
+                                    <textarea id="sched-prompt" class="form-input form-textarea"
+                                        placeholder="Prüfe den Kubernetes-Cluster-Status und melde fehlerhafte Pods."
+                                        rows="4"></textarea>
+                                </div>
+                                <div id="sched-workflow-row" class="form-row hidden">
+                                    <label class="form-label" for="sched-workflow">Workflow auswählen</label>
+                                    <select id="sched-workflow" class="form-select">
+                                        <option value="">Lade Workflows…</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="editor-sidebar">
+                            <div class="setting-group">
+                                <h4>Optionen</h4>
+                                <div class="form-row">
+                                    <label class="form-label" for="sched-module">Zielmodul</label>
+                                    <select id="sched-module" class="form-select">
+                                        <option value="">Automatisch (Orchestrator)</option>
+                                    </select>
+                                </div>
+                                <p class="setting-desc" style="margin-top:0.5rem;">Lasse leer, damit der Orchestrator das passende Modul automatisch wählt.</p>
+                            </div>
+                            <div class="setting-group">
+                                <p class="setting-desc"><span id="sched-save-status" class="save-status"></span></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Logs -->
+                <div id="tasks-logs" class="module-dashboard hidden">
+                    <div class="page-header">
+                        <button class="btn btn-icon" onclick="Kumio.hideTaskLogs()" title="Zurück">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="19" y1="12" x2="5" y2="12"></line>
+                                <polyline points="12 19 5 12 12 5"></polyline>
+                            </svg>
+                        </button>
+                        <h2>Log: <span id="scheduler-log-task-name"></span></h2>
+                    </div>
+                    <div id="scheduler-logs-list"></div>
+                </div>
+            </div>
+
+            <!-- Agents Tab -->
+            <div id="tab-agents" class="tab-panel">
+                <div class="module-dashboard" id="agenten-overview">
+                    <div class="page-header">
+                        <h2>Agenten</h2>
+                        <div style="display:flex;gap:0.5rem;">
+                            <button class="btn btn-outline" onclick="Kumio.openSkillsPanel()">Skills</button>
+                            <button class="btn btn-primary" onclick="Kumio.openAgentEditor(null)">+ Neuer Agent</button>
+                        </div>
+                    </div>
+                    <div id="agents-list" class="agents-grid">
+                        <p class="empty-state">Lade Agenten…</p>
+                    </div>
+                </div>
+                <!-- Skills Panel -->
+                <div id="agenten-skills" class="module-dashboard hidden">
+                    <div class="page-header">
+                        <h2>Skills</h2>
+                        <div style="display:flex;gap:0.5rem;">
+                            <button class="btn btn-outline" onclick="Kumio.closeSkillsPanel()">← Zurück</button>
+                            <button class="btn btn-primary" onclick="Kumio.openSkillEditor(null)">+ Neuer Skill</button>
+                        </div>
+                    </div>
+                    <div id="skills-list" class="agents-grid">
+                        <p class="empty-state">Lade Skills…</p>
+                    </div>
+                </div>
+
+                <!-- Skill Editor Panel -->
+                <div id="agenten-skill-editor" class="module-dashboard hidden">
+                    <div class="page-header">
+                        <h2 id="skill-editor-title">Neuer Skill</h2>
+                        <div style="display:flex;gap:0.5rem;">
+                            <button class="btn btn-outline" onclick="Kumio.closeSkillEditor()">Abbrechen</button>
+                            <button class="btn btn-primary" id="skill-save-btn" onclick="Kumio.saveSkill()">Speichern</button>
+                        </div>
+                    </div>
+                    <input type="hidden" id="skill-edit-name">
+                    <div class="editor-grid">
+                        <div class="editor-main">
+                            <div class="setting-group">
+                                <h4>Allgemein</h4>
+                                <div class="form-row">
+                                    <label class="form-label" for="skill-name">Name <span style="color:var(--error-color)">*</span></label>
+                                    <input id="skill-name" type="text" class="form-input" placeholder="z.B. kubernetes-debug-tipps">
+                                    <span class="text-muted" style="font-size:0.78rem;align-self:center;">Nur a-z, 0-9, Bindestriche</span>
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="skill-description">Beschreibung / Trigger <span style="color:var(--error-color)">*</span></label>
+                                    <input id="skill-description" type="text" class="form-input" placeholder="Wann wird dieser Skill aktiviert? (Keywords für Auto-Match)">
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="skill-modules">Module <span class="text-muted" style="font-size:0.78rem;">(komma-getrennt, leer = alle Agenten)</span></label>
+                                    <input id="skill-modules" type="text" class="form-input" placeholder="kubernetes, pihole  (oder leer lassen)">
+                                </div>
+                            </div>
+                            <div class="setting-group">
+                                <h4>Inhalt <span style="color:var(--error-color)">*</span> <span class="text-muted" style="font-size:0.8rem;font-weight:400;">Markdown – Tabellen, Code-Blöcke, Listen erlaubt</span></h4>
+                                <textarea id="skill-content" class="form-input form-textarea" rows="16"
+                                    placeholder="## Diagnose-Ablauf&#10;&#10;1. Schritt: ...&#10;2. Schritt: ...&#10;&#10;| Fehler | Ursache | Fix |&#10;|---|---|---|&#10;| ... | ... | ... |"></textarea>
+                            </div>
+                        </div>
+                        <div class="editor-sidebar">
+                            <div class="setting-group">
+                                <h4>Skill-Format</h4>
+                                <p class="text-muted" style="font-size:0.82rem;line-height:1.6;">
+                                    Skills werden <strong>automatisch injiziert</strong> wenn die Beschreibung mit der Anfrage übereinstimmt (Keyword-Match ≥ 12%).<br><br>
+                                    <strong>Name:</strong> Eindeutiger Slug (wird Verzeichnisname)<br>
+                                    <strong>Beschreibung:</strong> Keywords die eine Aktivierung auslösen<br>
+                                    <strong>Module:</strong> Leer = alle Agenten können den Skill bekommen<br><br>
+                                    Max. <strong>2 Skills</strong> werden pro Anfrage injiziert.
+                                </p>
+                            </div>
+                            <div class="setting-group">
+                                <h4>Vorschau Frontmatter</h4>
+                                <pre id="skill-frontmatter-preview" style="background:var(--bg-body);border:1px solid var(--border-color);border-radius:4px;padding:0.75rem;font-size:0.78rem;color:var(--text-secondary);white-space:pre-wrap;"></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="agenten-editor" class="module-dashboard hidden">
+                    <div class="page-header">
+                        <h2 id="agent-editor-title">Neuer Agent</h2>
+                        <div style="display:flex;gap:0.5rem;">
+                            <button class="btn btn-outline" onclick="Kumio.closeAgentEditor()">Abbrechen</button>
+                            <button class="btn btn-primary" onclick="Kumio.saveAgent()">Speichern</button>
+                        </div>
+                    </div>
+                    <div class="editor-grid">
+                        <div class="editor-main">
+                            <div class="setting-group">
+                                <h4>Allgemein</h4>
+                                <div class="form-row">
+                                    <label class="form-label" for="agent-name">Name <span
+                                            style="color:var(--error-color)">*</span></label>
+                                    <input id="agent-name" type="text" class="form-input" placeholder="Mein Agent">
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="agent-desc">Beschreibung</label>
+                                    <input id="agent-desc" type="text" class="form-input"
+                                        placeholder="Was macht dieser Agent?">
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="agent-llm">LLM-Provider</label>
+                                    <select id="agent-llm" class="form-select">
+                                        <option value="">Standard verwenden</option>
+                                    </select>
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label">Aktiv</label>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="agent-enabled" checked>
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="setting-group">
+                                <h4>System-Prompt <span style="color:var(--error-color)">*</span></h4>
+                                <textarea id="agent-system-prompt" class="form-input form-textarea" rows="8"
+                                    placeholder="Du bist ein spezialisierter IT-Agent. Deine Aufgabe ist es…"></textarea>
+                            </div>
+                        </div>
+                        <div class="editor-sidebar">
+                            <div class="setting-group">
+                                <h4>Module</h4>
+                                <p class="setting-desc">Module die dieser Agent verwenden kann.</p>
+                                <div id="agent-modules-list" class="agent-modules-checklist">
+                                    <p class="text-muted">Lade Module…</p>
+                                </div>
+                            </div>
+                            <div class="setting-group">
+                                <h4>Skills</h4>
+                                <p class="setting-desc">Skills die für diesen Agenten verfügbar sind. ✓ = Modul-gebunden oder universal.</p>
+                                <div id="agent-skills-list" style="display:flex;flex-direction:column;gap:0.4rem;margin-bottom:0.75rem;">
+                                    <p class="text-muted" style="font-size:0.82rem;">Lade Skills…</p>
+                                </div>
+                                <button class="btn btn-sm btn-outline" onclick="Kumio.openSkillEditorFromAgent()">+ Skill erstellen</button>
+                            </div>
+                            <div class="setting-group">
+                                <h4>Ausführungsschritte</h4>
+                                <p class="setting-desc">Geordnete Schritte für diesen Agenten.</p>
+                                <div id="agent-steps-list"></div>
+                                <button class="btn btn-sm btn-outline" style="margin-top:0.75rem;"
+                                    onclick="Kumio.addAgentStep()">+ Schritt hinzufügen</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Workflows Tab -->
+            <div id="tab-workflows" class="tab-panel">
+                <div class="module-dashboard" id="workflows-overview">
+                    <div class="page-header">
+                        <h2>Workflows</h2>
+                        <button class="btn btn-primary" onclick="Kumio.openWorkflowEditor(null)">+ Neuen Workflow
+                            erstellen</button>
+                    </div>
+                    <div id="workflows-list" class="workflows-grid">
+                        <p class="empty-state">Lade Workflows…</p>
+                    </div>
+                </div>
+                <!-- Workflow Editor -->
+                <div id="workflow-editor" class="wf-editor-layout hidden">
+                    <div class="wf-editor-toolbar">
+                        <div style="display:flex;align-items:center;gap:0.75rem;">
+                            <button class="btn btn-icon" onclick="Kumio.closeWorkflowEditor()" title="Zurück">
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="19" y1="12" x2="5" y2="12"></line>
+                                    <polyline points="12 19 5 12 12 5"></polyline>
+                                </svg>
+                            </button>
+                            <input id="wf-name-input" type="text" class="form-input wf-title-input"
+                                placeholder="Workflow Name…">
+                        </div>
+                        <div class="wf-node-palette">
+                            <span class="palette-label">Hinzufügen:</span>
+                            <button class="btn btn-sm wf-palette-btn" onclick="Kumio.wfAddNode('trigger')">Trigger</button>
+                            <button class="btn btn-sm wf-palette-btn" onclick="Kumio.wfAddNode('agent')">Agent</button>
+                            <button class="btn btn-sm wf-palette-btn" onclick="Kumio.wfAddNode('condition')">Bedingung</button>
+                            <button class="btn btn-sm wf-palette-btn" onclick="Kumio.wfAddNode('loop')">Loop</button>
+                            <button class="btn btn-sm wf-palette-btn" onclick="Kumio.wfAddNode('variable')">Variable</button>
+                            <button class="btn btn-sm wf-palette-btn" onclick="Kumio.wfAddNode('end')">Ende</button>
+                        </div>
+                        <div style="display:flex;gap:0.5rem;">
+                            <button class="btn btn-outline" onclick="Kumio.closeWorkflowEditor()">Abbrechen</button>
+                            <button class="btn btn-primary" onclick="Kumio.saveWorkflow()">Speichern</button>
+                        </div>
+                    </div>
+                    <div class="wf-editor-body">
+                        <div id="wf-canvas-container" class="wf-canvas-container">
+                            <svg id="wf-edges-svg" class="wf-edges-svg"></svg>
+                            <div id="wf-canvas" class="wf-canvas">
+                                <div class="wf-canvas-hint">Klicke auf „Node hinzufügen" und verbinde Nodes über die
+                                    Port-Punkte</div>
+                            </div>
+                        </div>
+                    </div>
+                    <input type="hidden" id="wf-edit-id" value="">
+                </div>
+
+                <div id="wf-node-inspector" class="wf-inspector hidden">
+                    <div class="wf-inspector-header">
+                        <h4 id="wf-inspector-title">Node-Einstellungen</h4>
+                        <button class="btn-close" onclick="Kumio.wfCloseInspector()">✕</button>
+                    </div>
+                    <div id="wf-inspector-content"></div>
+                    <div id="wf-inspector-footer" style="margin-top:auto; padding-top:1rem;">
+                        <button id="wf-node-delete-btn" class="btn btn-sm" style="color:var(--error-color);width:100%;"
+                            onclick="Kumio.wfDeleteSelectedNode()">Node löschen</button>
+                    </div>
+                </div>
+                <!-- Run Dashboard -->
+                <div id="workflow-run-dashboard" class="module-dashboard hidden">
+                    <div class="page-header">
+                        <button class="btn btn-icon" onclick="Kumio.closeRunDashboard()">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="19" y1="12" x2="5" y2="12"></line>
+                                <polyline points="12 19 5 12 12 5"></polyline>
+                            </svg>
+                        </button>
+                        <h2 id="run-dashboard-title">Run</h2>
+                        <span id="run-dashboard-status" class="run-status-badge run-running">running</span>
+                    </div>
+                    <div class="run-progress-bar">
+                        <div id="run-progress-fill" class="run-progress-fill"></div>
+                    </div>
+                    <p id="run-progress-text"
+                        style="text-align:center;font-size:0.8rem;color:var(--text-muted);margin-top:0.25rem;"></p>
+                    <div id="run-steps-grid" class="run-steps-grid"></div>
+                    <div style="margin-top:1.5rem; padding:0 1rem;">
+                        <h3 class="section-title">Run-Historie</h3>
+                        <div id="run-history-list"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Logs Tab -->
+            <div id="tab-logs" class="tab-panel">
+                <div class="logs-layout">
+                    <div class="logs-toolbar">
+                        <div class="logs-toolbar-left">
+                            <span class="toolbar-label">Level:</span>
+                            <button class="log-level-btn active" data-level="INFO"
+                                onclick="Kumio.toggleLogLevel('INFO', this)">INFO</button>
+                            <button class="log-level-btn active" data-level="WARN"
+                                onclick="Kumio.toggleLogLevel('WARN', this)">WARN</button>
+                            <button class="log-level-btn active" data-level="ERROR"
+                                onclick="Kumio.toggleLogLevel('ERROR', this)">ERROR</button>
+                            <button class="log-level-btn active" data-level="CRIT"
+                                onclick="Kumio.toggleLogLevel('CRIT', this)">CRIT</button>
+                            <span class="toolbar-sep"></span>
+                            <select id="log-filter-category" class="form-select form-select-sm"
+                                onchange="Kumio.applyLogFilters()">
+                                <option value="">Alle Kategorien</option>
+                                <option value="agent">Agent</option>
+                                <option value="workflow">Workflow</option>
+                                <option value="module">Module</option>
+                                <option value="system">System</option>
+                                <option value="llm">LLM</option>
+                            </select>
+                            <input id="log-filter-search" type="text" class="form-input form-input-sm"
+                                placeholder="Suchen…" oninput="Kumio.applyLogFilters()">
+                        </div>
+                        <div class="logs-toolbar-right">
+                            <select id="log-filter-time" class="form-select form-select-sm"
+                                onchange="Kumio.applyLogFilters()">
+                                <option value="">Alle Zeiten</option>
+                                <option value="15">Letzte 15 Min</option>
+                                <option value="60">Letzte Stunde</option>
+                                <option value="1440">Letzte 24h</option>
+                            </select>
+                            <button class="btn btn-sm btn-outline" onclick="Kumio.exportLogs('csv')">CSV</button>
+                            <button class="btn btn-sm btn-outline" onclick="Kumio.exportLogs('json')">JSON</button>
+                            <label class="toggle-switch" title="Auto-Scroll">
+                                <input type="checkbox" id="log-autoscroll" checked
+                                    onchange="Kumio.toggleLogAutoScroll(this.checked)">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <span style="font-size:0.75rem;color:var(--text-muted);">Auto-Scroll</span>
+                        </div>
+                    </div>
+                    <div id="log-active-filters" class="log-active-filters"></div>
+                    <div class="log-table-wrapper" id="log-table-wrapper">
+                        <table class="log-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:175px;">Timestamp</th>
+                                    <th style="width:70px;">Level</th>
+                                    <th style="width:90px;">Kategorie</th>
+                                    <th>Message</th>
+                                </tr>
+                            </thead>
+                            <tbody id="log-table-body">
+                                <tr>
+                                    <td colspan="4" class="empty-state">Lade Logs…</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="log-detail-panel" class="log-detail-panel hidden">
+                        <div class="log-detail-header">
+                            <strong>Log-Detail</strong>
+                            <button class="btn-close"
+                                onclick="document.getElementById('log-detail-panel').classList.add('hidden')">✕</button>
+                        </div>
+                        <div id="log-detail-content" class="log-detail-content"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dynamic module tabs are injected here -->
+        </main>
+
+        <!-- Notifications Toast -->
+        <div id="notifications" class="notifications-container"></div>
+
+        <!-- Settings Modal -->
+        <div id="settings-modal" class="modal hidden">
+            <div class="modal-overlay" onclick="Kumio.toggleSettings()"></div>
+            <div class="modal-content modal-content-lg">
+                <div class="modal-header">
+                    <h3><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:0.375rem;"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>Einstellungen</h3>
+                    <button class="btn-close" onclick="Kumio.toggleSettings()"><svg viewBox="0 0 24 24" width="20"
+                            height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg></button>
+                </div>
+
+                <div class="settings-layout">
+                    <!-- Settings Tab Nav (Sidebar) -->
+                    <div class="settings-sidebar">
+                        <button class="settings-tab active" data-settings-tab="llm"
+                            onclick="Kumio.switchSettingsTab('llm')">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 2v20"></path>
+                                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                            </svg> LLM Provider
+                        </button>
+                        <button class="settings-tab" data-settings-tab="modules"
+                            onclick="Kumio.switchSettingsTab('modules')">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line>
+                                <path
+                                    d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z">
+                                </path>
+                                <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                                <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                            </svg> Module
+                        </button>
+                        <button class="settings-tab" data-settings-tab="system"
+                            onclick="Kumio.switchSettingsTab('system')">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                                <line x1="8" y1="21" x2="16" y2="21"></line>
+                                <line x1="12" y1="17" x2="12" y2="21"></line>
+                            </svg> <span data-i18n="settings.system">System</span>
+                        </button>
+                        <button class="settings-tab" data-settings-tab="language"
+                            onclick="Kumio.switchSettingsTab('language')">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="2" y1="12" x2="22" y2="12"></line>
+                                <path
+                                    d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z">
+                                </path>
+                            </svg> <span data-i18n="settings.language">Sprache</span>
+                        </button>
+                        <button class="settings-tab" data-settings-tab="tts"
+                            onclick="Kumio.switchSettingsTab('tts')">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                            </svg> <span data-i18n="settings.tts">Sprachausgabe</span>
+                        </button>
+                        <button class="settings-tab" data-settings-tab="imagegen"
+                            onclick="Kumio.switchSettingsTab('imagegen')">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                <polyline points="21 15 16 10 5 21"></polyline>
+                            </svg> Bildgenerierung
+                        </button>
+                    </div>
+
+                    <div class="settings-main">
+                        <!-- LLM Tab -->
+                        <div class="settings-panel active" id="settings-panel-llm">
+                            <div class="setting-group">
+                                <div
+                                    style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+                                    <h4 style="margin:0;">LLM-Provider</h4>
+                                    <button class="btn btn-sm btn-primary" onclick="Kumio.openProviderEditor(null)">+ Provider hinzufügen</button>
+                                </div>
+                                <div id="llm-providers-list">
+                                    <p class="text-muted">Lade Provider…</p>
+                                </div>
+                            </div>
+
+                            <!-- Globales Embedding-Modell -->
+                            <div class="setting-group" style="margin-top:1.5rem;">
+                                <h4 style="margin-top:0;">Embedding-Modell</h4>
+                                <p class="text-muted" style="font-size:0.85rem;margin-bottom:1rem;">Einheitlich für ChromaDB. Wird verwendet, egal welcher LLM-Provider aktiv ist. Wechsel löscht nicht die bestehenden Vektoren – Re-Embedding nötig.</p>
+                                <div class="form-row" style="display:flex;gap:0.5rem;align-items:center;">
+                                    <input id="global-embed-model" type="text" class="form-input" style="flex:1;"
+                                        placeholder="nomic-ai/nomic-embed-text-v1.5-GGUF">
+                                    <button class="btn btn-sm btn-primary" onclick="Kumio.saveEmbedModel()">Speichern</button>
+                                </div>
+                                <span id="embed-model-status" class="save-status" style="font-size:0.85rem;"></span>
+                            </div>
+
+                            <!-- Provider Editor (inline, hidden until opened) -->
+                            <div id="llm-provider-editor" class="setting-group hidden"
+                                style="border:1px solid var(--primary-color);border-radius:var(--border-radius);padding:1rem;">
+                                <h4 id="provider-editor-title" style="margin-top:0;">Neuer Provider</h4>
+                                <input type="hidden" id="provider-edit-id" value="">
+                                <div class="form-row">
+                                    <label class="form-label" for="provider-name">Name <span
+                                            style="color:var(--error-color)">*</span></label>
+                                    <input id="provider-name" type="text" class="form-input"
+                                        placeholder="z.B. Lokales Ollama">
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="provider-backend">Backend</label>
+                                    <select id="provider-backend" class="form-select"
+                                        onchange="Kumio.toggleProviderApiKey()">
+                                        <option value="ollama">Ollama</option>
+                                        <option value="lmstudio">LM Studio</option>
+                                        <option value="openai_compatible">OpenAI-kompatibel (API-Key)</option>
+                                    </select>
+                                </div>
+                                <div class="form-row" id="provider-api-key-row" style="display:none;">
+                                    <label class="form-label" for="provider-api-key">API Key</label>
+                                    <input id="provider-api-key" type="password" class="form-input"
+                                        placeholder="sk-...">
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="provider-url">Base URL</label>
+                                    <input id="provider-url" type="text" class="form-input"
+                                        placeholder="http://ollama:11434">
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="provider-model">Standard-Modell</label>
+                                    <input id="provider-model" type="text" class="form-input" placeholder="llama3.2:3b">
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label">
+                                        <input type="checkbox" id="provider-is-default">
+                                        Als Standard-Provider setzen
+                                    </label>
+                                </div>
+                                <div class="form-actions">
+                                    <span id="provider-save-status" class="save-status"></span>
+                                    <button class="btn btn-outline btn-sm"
+                                        onclick="Kumio.closeProviderEditor()">Abbrechen</button>
+                                    <button class="btn btn-primary btn-sm" onclick="Kumio.saveLlmProvider()">Speichern</button>
+                                </div>
+                            </div>
+
+                            <!-- Legacy single-provider (hidden, kept for backward compat) -->
+                            <div style="display:none;">
+                                <input id="llm-backend" type="hidden" value="ollama">
+                                <input id="llm-base-url" type="hidden">
+                                <input id="llm-model" type="hidden">
+                                <input id="llm-embed-model" type="hidden">
+                                <span id="llm-save-status"></span>
+                            </div>
+                        </div>
+
+
+                        <!-- Modules Tab -->
+                        <div class="settings-panel" id="settings-panel-modules">
+                            <!-- Plugin Upload Section -->
+                            <div class="setting-group"
+                                style="background: rgba(var(--primary-color-rgb), 0.1); border: 1px dashed var(--primary-color); padding: 1rem; border-radius: var(--border-radius); margin-bottom: 2rem;">
+                                <h4><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                        style="vertical-align:text-bottom;margin-right:0.25rem;">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="17 8 12 3 7 8"></polyline>
+                                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                                    </svg> Plugin installieren</h4>
+                                <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">Lade ein
+                                    Kumio-Modul als ZIP-Datei hoch. Es wird ohne Neustart installiert und aktiviert.
+                                </p>
+                                <div class="form-row" style="display: flex; gap: 1rem; align-items: center;">
+                                    <input type="file" id="plugin-upload-file" accept=".zip" class="form-input"
+                                        style="flex: 1;">
+                                    <button class="btn btn-primary" onclick="Kumio.uploadPlugin()"
+                                        id="plugin-upload-btn">Installieren</button>
+                                </div>
+                                <div id="plugin-upload-status" class="save-status"
+                                    style="margin-top: 0.5rem; display: block;"></div>
+                            </div>
+
+                            <h3>Installierte Module</h3>
+                            <div id="settings-modules-list" class="modules-grid">
+                                <p class="text-muted">Lade Module…</p>
+                            </div>
+                        </div>
+
+                        <!-- System Tab -->
+                        <div class="settings-panel" id="settings-panel-system">
+                            <div class="setting-group">
+                                <h4>Memory</h4>
+                                <div id="settings-memory">
+                                    <button class="btn btn-outline" onclick="Kumio.viewMemoryStats()">Memory-Stats</button>
+                                </div>
+                            </div>
+                            <div class="setting-group">
+                                <h4>Secrets</h4>
+                                <div id="settings-secrets">
+                                    <button class="btn btn-outline" onclick="Kumio.viewSecrets()">Secrets verwalten</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Language Tab -->
+                        <div class="settings-panel" id="settings-panel-language">
+                            <!-- Filled dynamically by Kumio.renderLanguageTab() -->
+                        </div>
+
+                        <!-- TTS Tab -->
+                        <div class="settings-panel" id="settings-panel-tts">
+
+                            <!-- STT (Spracheingabe) -->
+                            <div class="setting-group">
+                                <h4 data-i18n="settings.stt">Spracheingabe (STT)</h4>
+                                <div class="form-row">
+                                    <label class="form-label" for="stt-provider" data-i18n="settings.sttProvider">Provider</label>
+                                    <select id="stt-provider" class="form-select" style="max-width:220px;" onchange="Kumio.onSttProviderChange()">
+                                        <option value="whisper">Whisper (lokal, built-in)</option>
+                                        <option value="openai_compatible">OpenAI-kompatibel (Groq, OpenAI, …)</option>
+                                    </select>
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="stt-language" data-i18n="settings.sttLanguage">Sprache</label>
+                                    <input id="stt-language" type="text" class="form-input" placeholder="de" style="max-width:80px;">
+                                    <span class="text-muted" style="font-size:0.8rem;align-self:center;">de · en · auto · …</span>
+                                </div>
+
+                                <!-- Whisper-spezifisch -->
+                                <div id="stt-whisper-fields">
+                                    <div class="form-row">
+                                        <label class="form-label" for="stt-model-size" data-i18n="settings.sttModelSize">Modell-Größe</label>
+                                        <select id="stt-model-size" class="form-select" style="max-width:180px;">
+                                            <option value="tiny">tiny (~39 MB, schnell)</option>
+                                            <option value="base">base (~74 MB)</option>
+                                            <option value="small">small (~244 MB)</option>
+                                            <option value="medium">medium (~769 MB)</option>
+                                            <option value="large-v3">large-v3 (~1.5 GB, genau)</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-row">
+                                        <label class="form-label" for="stt-device" data-i18n="settings.sttDevice">Gerät</label>
+                                        <select id="stt-device" class="form-select" style="max-width:120px;">
+                                            <option value="cpu">cpu</option>
+                                            <option value="cuda">cuda (GPU)</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-row">
+                                        <label class="form-label" for="stt-compute-type" data-i18n="settings.sttComputeType">Compute Type</label>
+                                        <select id="stt-compute-type" class="form-select" style="max-width:160px;">
+                                            <option value="int8">int8 (Standard, CPU)</option>
+                                            <option value="float16">float16 (GPU)</option>
+                                            <option value="float32">float32</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- OpenAI-compatible-spezifisch -->
+                                <div id="stt-api-fields" class="hidden">
+                                    <div class="form-row">
+                                        <label class="form-label" for="stt-api-url">Base URL</label>
+                                        <input id="stt-api-url" type="text" class="form-input" placeholder="https://api.groq.com/openai/v1">
+                                    </div>
+                                    <div class="form-row">
+                                        <label class="form-label" for="stt-api-key">API Key</label>
+                                        <input id="stt-api-key" type="password" class="form-input" placeholder="gsk_…">
+                                    </div>
+                                    <div class="form-row">
+                                        <label class="form-label" for="stt-api-model">Modell</label>
+                                        <input id="stt-api-model" type="text" class="form-input" placeholder="whisper-large-v3" style="max-width:220px;">
+                                    </div>
+                                </div>
+
+                                <div class="form-row" style="margin-top:0.25rem;">
+                                    <label class="form-label">
+                                        <input type="checkbox" id="stt-spellcheck">
+                                        <span data-i18n="settings.sttSpellcheck">LLM-Spellcheck aktivieren</span>
+                                    </label>
+                                </div>
+                                <div class="form-actions">
+                                    <span id="stt-save-status" class="save-status"></span>
+                                    <button class="btn btn-primary btn-sm" id="stt-save-btn" onclick="Kumio.saveSttSettings()" data-i18n="settings.save">💾 Speichern</button>
+                                </div>
+                            </div>
+
+                            <!-- TTS Aktivierung & Grundeinstellungen -->
+                            <div class="setting-group">
+                                <h4 data-i18n="settings.tts">Sprachausgabe</h4>
+                                <div class="form-row">
+                                    <label class="form-label">
+                                        <input type="checkbox" id="tts-enabled">
+                                        TTS aktivieren (Piper)
+                                    </label>
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="tts-piper-binary">Piper-Binary</label>
+                                    <input id="tts-piper-binary" type="text" class="form-input" placeholder="piper">
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="tts-voices-dir">Stimmen-Verzeichnis</label>
+                                    <input id="tts-voices-dir" type="text" class="form-input" placeholder="/app/data/voices">
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="tts-default-lang">Standard-Sprache</label>
+                                    <input id="tts-default-lang" type="text" class="form-input" placeholder="de" style="max-width:80px;">
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="tts-default-voice">Standard-Stimme</label>
+                                    <select id="tts-default-voice" class="form-select">
+                                        <option value="">-- Stimme wählen --</option>
+                                    </select>
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="tts-sample-rate">Sample Rate (Hz)</label>
+                                    <input id="tts-sample-rate" type="number" class="form-input" placeholder="22050" style="max-width:120px;" min="8000" max="48000" step="1">
+                                </div>
+                                <div class="form-actions">
+                                    <span id="tts-save-status" class="save-status"></span>
+                                    <button class="btn btn-primary btn-sm" id="tts-save-btn" onclick="Kumio.saveTtsSettings()">Speichern</button>
+                                </div>
+                            </div>
+
+                            <!-- Test-Vorschau -->
+                            <div class="setting-group">
+                                <h4>Vorschau</h4>
+                                <div class="form-row" style="display:flex;gap:0.5rem;align-items:center;">
+                                    <input id="tts-preview-text" type="text" class="form-input" placeholder="Hallo, ich bin Kumio." style="flex:1;">
+                                    <button class="btn btn-outline btn-sm" onclick="Kumio.testTtsPreview()">▶ Abspielen</button>
+                                </div>
+                                <p class="text-muted" style="font-size:0.8rem;margin-top:0.25rem;">Nutzt die aktuell gespeicherten Einstellungen (Standard-Stimme &amp; -Sprache).</p>
+                                <audio id="tts-preview-audio" style="display:none;margin-top:0.5rem;" controls></audio>
+                            </div>
+
+                            <!-- Installierte Stimmen -->
+                            <div class="setting-group">
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+                                    <h4 style="margin:0;">Installierte Stimmen</h4>
+                                    <button class="btn btn-outline btn-sm" onclick="Kumio.loadTtsVoices()">Aktualisieren</button>
+                                </div>
+                                <div id="tts-voices-list"><p class="text-muted">Lade Stimmen…</p></div>
+                            </div>
+
+                            <!-- Stimme herunterladen -->
+                            <div class="setting-group" style="background:rgba(var(--primary-color-rgb),0.07);border:1px dashed var(--primary-color);padding:1rem;border-radius:var(--border-radius);">
+                                <h4>Stimme herunterladen</h4>
+                                <p class="text-muted" style="font-size:0.85rem;margin-bottom:0.75rem;">
+                                    Stimmen von <strong>HuggingFace (rhasspy/piper-voices)</strong> laden.<br>
+                                    Format: <code>&lt;speaker&gt;-&lt;quality&gt;</code>, z.B. <code>thorsten-medium</code>, <code>kerstin-low</code>
+                                </p>
+                                <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.75rem;">
+                                    <span style="font-size:0.8rem;color:var(--text-muted);align-self:center;">Presets:</span>
+                                    <button class="btn btn-outline btn-sm" onclick="Kumio.fillTtsPreset('de','thorsten-medium')">DE thorsten-medium</button>
+                                    <button class="btn btn-outline btn-sm" onclick="Kumio.fillTtsPreset('de','kerstin-low')">DE kerstin-low</button>
+                                    <button class="btn btn-outline btn-sm" onclick="Kumio.fillTtsPreset('de','ramona-low')">DE ramona-low</button>
+                                    <button class="btn btn-outline btn-sm" onclick="Kumio.fillTtsPreset('de','eva_k-x_low')">DE eva_k-x_low</button>
+                                    <button class="btn btn-outline btn-sm" onclick="Kumio.fillTtsPreset('en','lessac-medium')">EN lessac-medium</button>
+                                    <button class="btn btn-outline btn-sm" onclick="Kumio.fillTtsPreset('en','ryan-medium')">EN ryan-medium</button>
+                                </div>
+                                <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:flex-end;">
+                                    <div>
+                                        <label class="form-label" for="tts-dl-lang">Sprache</label>
+                                        <input id="tts-dl-lang" type="text" class="form-input" placeholder="de" style="width:70px;">
+                                    </div>
+                                    <div style="flex:1;min-width:150px;">
+                                        <label class="form-label" for="tts-dl-voice">Stimmenname</label>
+                                        <input id="tts-dl-voice" type="text" class="form-input" placeholder="thorsten-medium">
+                                    </div>
+                                    <button class="btn btn-primary btn-sm" id="tts-dl-btn" onclick="Kumio.downloadTtsVoice()" style="align-self:flex-end;">Herunterladen</button>
+                                </div>
+                                <div id="tts-dl-status" class="save-status" style="margin-top:0.5rem;display:block;"></div>
+                            </div>
+                        </div>
+
+                        <!-- Image Generation Tab -->
+                        <div class="settings-panel" id="settings-panel-imagegen">
+                            <div class="setting-group">
+                                <h4>Bildgenerierung – Provider konfigurieren</h4>
+                                <p class="text-muted" style="font-size:0.85rem;margin-bottom:1rem;">
+                                    Konfiguriere einen KI-Bildgenerierungs-Provider. Kumio nutzt diesen um Bilder auf Anfrage zu erstellen.
+                                </p>
+                                <div class="form-row">
+                                    <label class="form-label" for="imggen-backend">Provider</label>
+                                    <select id="imggen-backend" class="form-select" onchange="Kumio.onImageGenBackendChange()">
+                                        <option value="">-- Provider wählen --</option>
+                                        <option value="together_ai">Together AI (Flux, SDXL)</option>
+                                        <option value="openai">OpenAI (DALL-E 2/3)</option>
+                                        <option value="google">Google (Imagen 3/4)</option>
+                                    </select>
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="imggen-api-key">API-Key</label>
+                                    <input id="imggen-api-key" type="password" class="form-input" placeholder="••••••••••••">
+                                    <span id="imggen-api-key-masked" class="text-muted" style="font-size:0.85rem;"></span>
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="imggen-model">Modell (optional)</label>
+                                    <input id="imggen-model" type="text" class="form-input" placeholder="Leer = Standard-Modell des Providers">
+                                    <p class="text-muted" style="font-size:0.8rem;margin-top:0.25rem;">
+                                        Together AI: <code>black-forest-labs/FLUX.1-schnell-Free</code> | 
+                                        OpenAI: <code>dall-e-3</code> | 
+                                        Google: <code>imagen-3.0-generate-002</code>
+                                    </p>
+                                </div>
+                                <div class="form-actions">
+                                    <span id="imggen-save-status" class="save-status"></span>
+                                    <button class="btn btn-primary btn-sm" onclick="Kumio.saveImageGenProvider()">Speichern</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div> <!-- End settings-main -->
+            </div> <!-- End settings-layout -->
+        </div>
+    </div>
+    <!-- Custom Confirmation Modal -->
+    <div id="kumio-confirm-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="var(--error-color)"
+                    stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+                    style="margin-bottom: 0.5rem; filter: drop-shadow(0 0 8px rgba(220, 53, 69, 0.4));">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                </svg>
+                <h3 id="kumio-confirm-title">Bestätigung</h3>
+            </div>
+            <div class="modal-body" id="kumio-confirm-message">
+                Möchtest du das wirklich tun?
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" id="kumio-confirm-cancel">Abbrechen</button>
+                <button class="btn btn-danger" id="kumio-confirm-ok">Löschen</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+    <script src="/static/app.js?v=57"></script>
+</body>
+
+</html>

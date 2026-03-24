@@ -1,0 +1,147 @@
+<!-- Telegram Dashboard Tab -->
+<div id="telegram-tab-content" class="module-tab-content">
+
+    <!-- Status Header -->
+    <div class="k8s-cluster-status">
+        <div class="status-card" id="tg-status-card">
+            <span class="status-icon" id="tg-status-icon">—</span>
+            <span class="status-value" id="tg-status-text">Prüfe…</span>
+            <span class="status-label">Polling</span>
+        </div>
+        <div class="status-card" id="tg-username-card">
+            <span class="status-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></span>
+            <span class="status-value" id="tg-username" style="font-size:0.85rem;">—</span>
+            <span class="status-label">Bot</span>
+        </div>
+        <div class="status-card" id="tg-chatid-card">
+            <span class="status-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span>
+            <span class="status-value" id="tg-chatid" style="font-size:0.85rem;">—</span>
+            <span class="status-label">Default Chat-ID</span>
+        </div>
+    </div>
+
+    <!-- Default Chat-ID -->
+    <div class="k8s-section" style="margin-top:1.5rem;">
+        <h3 class="section-title">Standard Chat-ID</h3>
+        <p style="color:var(--text-muted);font-size:0.875rem;margin-bottom:1rem;line-height:1.6;">
+            Diese Chat-ID wird verwendet, wenn andere Agenten proaktiv Telegram-Nachrichten versenden (z.B. Benachrichtigungen).
+        </p>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+            <input
+                id="tg-default-chatid-input"
+                type="text"
+                placeholder="Chat-ID eingeben (z.B. 1260743556)"
+                style="flex:1;min-width:180px;max-width:300px;padding:0.4rem 0.65rem;border-radius:4px;border:1px solid var(--border-color);background:var(--bg-card);color:var(--text-color);font-size:0.875rem;font-family:inherit;"
+                onkeydown="if(event.key==='Enter') TelegramModule.saveDefaultChatId()"
+            />
+            <button class="btn btn-primary btn-sm" onclick="TelegramModule.saveDefaultChatId()">
+                Speichern
+            </button>
+        </div>
+        <div id="tg-default-chatid-status" style="font-size:0.82rem;margin-top:0.5rem;min-height:1.2em;"></div>
+    </div>
+
+    <!-- Bot Steuerung -->
+    <div class="k8s-section" style="margin-top:1.5rem;">
+        <h3 class="section-title">Bot Steuerung</h3>
+        <p style="color:var(--text-muted);font-size:0.875rem;margin-bottom:1.2rem;line-height:1.6;">
+            Verbinde Kumio mit einem Telegram Bot, um von überall mit dem Orchestrator-Agenten zu chatten.<br>
+            Den Bot-Token kannst du in den <strong>Modul-Einstellungen</strong> konfigurieren.
+        </p>
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;">
+            <button class="btn btn-outline" onclick="TelegramModule.stopBot()">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:0.4rem;"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>
+                Stoppen
+            </button>
+            <button class="btn btn-primary" onclick="TelegramModule.startBot()">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:0.4rem;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Starten
+            </button>
+            <button class="btn btn-sm btn-outline" onclick="TelegramModule.checkStatus()" style="margin-left:auto;">
+                Aktualisieren
+            </button>
+        </div>
+    </div>
+
+    <!-- Erlaubte Nutzer-IDs -->
+    <div class="k8s-section">
+        <h3 class="section-title">Erlaubte Nutzer-IDs</h3>
+        <p style="color:var(--text-muted);font-size:0.875rem;margin-bottom:1rem;line-height:1.6;">
+            Nur diese Telegram Chat-IDs dürfen mit Kumio kommunizieren. Leere Liste = keine Einschränkung.<br>
+            <span style="font-size:0.82rem;opacity:0.7;">Tipp: Sende <code>/start</code> an deinen Bot — deine Chat-ID erscheint dann in den Container-Logs.</span>
+        </p>
+
+        <!-- ID-Liste -->
+        <div id="tg-allowed-ids-list" style="display:flex;flex-wrap:wrap;gap:0.5rem;min-height:2rem;margin-bottom:0.75rem;">
+            <span style="color:var(--text-muted);font-size:0.82rem;line-height:2rem;">Lade…</span>
+        </div>
+
+        <!-- Neue ID hinzufügen -->
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+            <input
+                id="tg-new-id-input"
+                type="text"
+                placeholder="Chat-ID eingeben (z.B. 123456789)"
+                style="flex:1;min-width:180px;max-width:260px;padding:0.4rem 0.65rem;border-radius:4px;border:1px solid var(--border-color);background:var(--bg-card);color:var(--text-color);font-size:0.875rem;font-family:inherit;"
+                onkeydown="if(event.key==='Enter') TelegramModule.addAllowedId()"
+            />
+            <button class="btn btn-primary btn-sm" onclick="TelegramModule.addAllowedId()">
+                + Hinzufügen
+            </button>
+            <span style="color:var(--text-muted);font-size:0.78rem;margin-left:auto;opacity:0.7;">
+                Alle erlauben wenn leer
+            </span>
+        </div>
+        <div id="tg-allowed-ids-status" style="font-size:0.82rem;margin-top:0.5rem;min-height:1.2em;"></div>
+    </div>
+
+    <!-- Voice-Reply Konfiguration -->
+    <div class="k8s-section">
+        <h3 class="section-title">Voice-Reply (TTS)</h3>
+        <p style="color:var(--text-muted);font-size:0.875rem;margin-bottom:1rem;line-height:1.6;">
+            Bei eingehenden Sprachnachrichten antwortet Kumio ebenfalls als Sprachnachricht (OGG/Opus).<br>
+            Erfordert aktiviertes TTS in <strong>Einstellungen → Sprachausgabe (TTS)</strong>.
+        </p>
+        <div style="display:flex;flex-direction:column;gap:0.6rem;margin-bottom:1rem;">
+            <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;cursor:pointer;">
+                <input type="checkbox" id="tg-voice-reply">
+                Sprachantwort bei Sprachnachrichten aktivieren
+            </label>
+            <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;cursor:pointer;">
+                <input type="checkbox" id="tg-voice-reply-text-too">
+                Zusätzlich Textnachricht mitschicken
+            </label>
+        </div>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:0.75rem;">
+            <div>
+                <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:0.2rem;">Stimmen-Sprache (leer = System-Default)</label>
+                <input id="tg-voice-lang" type="text" placeholder="de" style="width:70px;padding:0.35rem 0.6rem;border-radius:4px;border:1px solid var(--border-color);background:var(--bg-card);color:var(--text-color);font-size:0.875rem;font-family:inherit;">
+            </div>
+            <div style="flex:1;min-width:140px;">
+                <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:0.2rem;">Stimme (leer = System-Default)</label>
+                <input id="tg-voice-name" type="text" placeholder="thorsten-medium" style="width:100%;padding:0.35rem 0.6rem;border-radius:4px;border:1px solid var(--border-color);background:var(--bg-card);color:var(--text-color);font-size:0.875rem;font-family:inherit;">
+            </div>
+            <button class="btn btn-primary btn-sm" id="tg-voice-reply-save-btn" onclick="TelegramModule.saveVoiceReplyConfig()" style="align-self:flex-end;">Speichern</button>
+        </div>
+        <div id="tg-voice-reply-status" style="font-size:0.82rem;min-height:1.2em;"></div>
+    </div>
+
+    <!-- Nachricht senden -->
+    <div class="k8s-section">
+        <h3 class="section-title">Nachricht senden</h3>
+        <p style="color:var(--text-muted);font-size:0.875rem;margin-bottom:1rem;">
+            Sende eine Testnachricht an die Standard-Chat-ID.
+        </p>
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-start;">
+            <textarea id="tg-test-msg" rows="3"
+                placeholder="Nachricht eingeben…"
+                style="flex:1;min-width:200px;padding:0.5rem 0.75rem;border-radius:4px;border:1px solid var(--border-color);background:var(--bg-card);color:var(--text-color);font-size:0.875rem;resize:vertical;font-family:inherit;"></textarea>
+            <button class="btn btn-primary" onclick="TelegramModule.sendTestMessage()">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:0.4rem;"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                Senden
+            </button>
+        </div>
+        <div id="tg-send-status" style="font-size:0.82rem;margin-top:0.5rem;min-height:1.2em;"></div>
+    </div>
+
+</div>

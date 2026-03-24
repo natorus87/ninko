@@ -1,0 +1,149 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kumio-backend
+  labels:
+    app.kubernetes.io/name: kumio-backend
+    app.kubernetes.io/part-of: kumio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kumio-backend
+  template:
+    metadata:
+      labels:
+        app: kumio-backend
+    spec:
+      serviceAccountName: kumio
+      containers:
+        - name: backend
+          image: natorus87/kumio-backend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          env:
+            # ─── LLM / Embeddings (LM Studio – OpenAI-kompatibel) ───
+            - name: LLM_BACKEND
+              value: "lmstudio"
+            - name: LMSTUDIO_BASE_URL
+              value: "http://10.11.12.6:1234"
+            - name: LMSTUDIO_MODEL
+              value: "openai/gpt-oss-20b"
+            - name: LMSTUDIO_EMBED_MODEL
+              value: "nomic-ai/nomic-embed-text-v1.5-GGUF"
+
+            # ─── ChromaDB ───
+            - name: CHROMA_HOST
+              value: "chromadb"
+            - name: CHROMA_PORT
+              value: "8000"
+
+            # ─── Redis ───
+            - name: REDIS_URL
+              value: "redis://redis:6379/0"
+
+            # ─── Secrets (SQLite – persistent via PVC) ───
+            - name: VAULT_FALLBACK
+              value: "sqlite"
+            - name: SQLITE_SECRETS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: kumio-secrets
+                  key: SQLITE_SECRETS_KEY
+
+            # ─── Module ───
+            - name: KUMIO_MODULE_KUBERNETES
+              value: "true"
+            - name: K8S_IN_CLUSTER
+              value: "true"
+            - name: KUMIO_MODULE_IONOS
+              value: "true"
+            - name: KUMIO_MODULE_FRITZBOX
+              value: "true"
+            - name: KUMIO_MODULE_HOMEASSISTANT
+              value: "true"
+            - name: KUMIO_MODULE_PROXMOX
+              value: "true"
+            - name: KUMIO_MODULE_GLPI
+              value: "true"
+            - name: KUMIO_MODULE_WEB_SEARCH
+              value: "true"
+            - name: KUMIO_MODULE_DOCKER
+              value: "false"
+            - name: SEARXNG_URL
+              value: "http://searxng:8080"
+
+            # ─── Modul-Secrets (Fallback wenn kein UI-Connection konfiguriert) ───
+            # - name: IONOS_API_KEY
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: kumio-secrets
+            #       key: IONOS_API_KEY
+            # - name: FRITZBOX_HOST
+            #   value: "192.168.178.1"
+            # - name: FRITZBOX_PASSWORD
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: kumio-secrets
+            #       key: FRITZBOX_PASSWORD
+            # - name: HOMEASSISTANT_URL
+            #   value: "http://homeassistant.local:8123"
+            # - name: HOMEASSISTANT_API_TOKEN
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: kumio-secrets
+            #       key: HOMEASSISTANT_API_TOKEN
+
+            # ─── Monitoring ───
+            - name: MONITOR_INTERVAL_SECONDS
+              value: "120"
+            - name: MONITOR_AUTO_REMEDIATE
+              value: "false"
+
+            # ─── Logging ───
+            - name: LOG_LEVEL
+              value: "INFO"
+
+            # ─── TTS (Piper) ───
+            - name: TTS_ENABLED
+              value: "true"
+            - name: PIPER_BINARY
+              value: "piper"
+            - name: VOICES_DIR
+              value: "/app/data/voices"
+            - name: TTS_DEFAULT_LANG
+              value: "de"
+            - name: TTS_DEFAULT_VOICE
+              value: "ramona-low"
+
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "4Gi"
+              cpu: "2"
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+          volumeMounts:
+            - name: backend-data
+              mountPath: /app/data
+
+      volumes:
+        - name: backend-data
+          persistentVolumeClaim:
+            claimName: backend-data

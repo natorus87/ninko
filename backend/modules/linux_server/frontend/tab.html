@@ -1,0 +1,55 @@
+<!-- Linux Server Dashboard Tab -->
+<div id="linux-server-tab-content" class="module-tab-content">
+
+    <!-- Connection Selector -->
+    <div class="linux-server-controls"
+        style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1.5rem;">
+        <select id="linux-server-connection-select" class="form-select"
+            style="min-width: 200px; padding: 0.5rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-body); color: var(--text-color);">
+            <option value="">Lade Verbindungen...</option>
+        </select>
+        <button class="btn btn-refresh" onclick="LinuxServerTab.refresh()">Aktualisieren</button>
+    </div>
+
+    <!-- System Info Cards -->
+    <div id="linux-server-info" class="docker-info-grid"
+        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+        <p class="empty-state">Lade System-Info…</p>
+    </div>
+
+    <!-- Services -->
+    <div class="linux-server-section">
+        <h3 class="section-title">Services</h3>
+        <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+            <button class="btn btn-sm" onclick="LinuxServerTab.loadServices('all')">Alle</button>
+            <button class="btn btn-sm" onclick="LinuxServerTab.loadServices('running')">Laufend</button>
+            <button class="btn btn-sm btn-danger" onclick="LinuxServerTab.loadServices('failed')">Fehler</button>
+            <button class="btn btn-sm" onclick="LinuxServerTab.loadServices('stopped')">Gestoppt</button>
+        </div>
+        <pre id="linux-server-services" class="code-block"
+            style="background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 4px; padding: 1rem; overflow-x: auto; max-height: 300px; font-size: 0.85rem;">Lade Services…</pre>
+    </div>
+
+    <!-- Logs -->
+    <div class="linux-server-section" style="margin-top: 2rem;">
+        <h3 class="section-title">Logs</h3>
+        <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center;">
+            <input type="text" id="linux-server-log-service" class="form-input" placeholder="Service (leer = alle)"
+                style="max-width: 200px; padding: 0.4rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-body); color: var(--text-color);">
+            <button class="btn btn-sm btn-refresh" onclick="LinuxServerTab.loadJournal()">Laden</button>
+        </div>
+        <pre id="linux-server-journal" class="code-block"
+            style="background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 4px; padding: 1rem; overflow-x: auto; max-height: 300px; font-size: 0.85rem;">Logs werden hier angezeigt.</pre>
+    </div>
+
+    <!-- Processes -->
+    <div class="linux-server-section" style="margin-top: 2rem;">
+        <h3 class="section-title">Top Prozesse</h3>
+        <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+            <button class="btn btn-sm" onclick="LinuxServerTab.loadProcesses('cpu')">Nach CPU</button>
+            <button class="btn btn-sm" onclick="LinuxServerTab.loadProcesses('mem')">Nach RAM</button>
+        </div>
+        <pre id="linux-server-processes" class="code-block"
+            style="background: var(--bg-body); border: 1px solid var(--border-color); border-radius: 4px; padding: 1rem; overflow-x: auto; max-height: 300px; font-size: 0.85rem;">Prozesse werden hier angezeigt.</pre>
+    </div>
+</div>

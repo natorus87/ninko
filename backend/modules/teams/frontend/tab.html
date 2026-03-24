@@ -1,0 +1,140 @@
+<!-- Microsoft Teams Dashboard Tab -->
+<div id="teams-tab-content" class="module-tab-content">
+
+    <!-- Header -->
+    <div style="margin-bottom: 1.5rem;">
+        <h2 style="font-size: 1.3rem; font-weight: 600; margin: 0 0 0.25rem;">
+            Microsoft Teams Integration
+        </h2>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">
+            Kumio als Azure Bot in Microsoft Teams einbinden.
+        </p>
+    </div>
+
+    <!-- Status -->
+    <div class="k8s-cluster-status">
+        <div class="status-card" id="teams-config-card">
+            <span class="status-icon" id="teams-config-icon">—</span>
+            <span class="status-value" id="teams-config-text">Prüfe…</span>
+            <span class="status-label">Konfiguration</span>
+        </div>
+        <div class="status-card" id="teams-conv-card">
+            <span class="status-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span>
+            <span class="status-value" id="teams-conv-text" style="font-size:0.75rem;word-break:break-all;">—</span>
+            <span class="status-label">Letzte Konversation</span>
+        </div>
+        <div class="status-card" id="teams-allowed-card">
+            <span class="status-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></span>
+            <span class="status-value" id="teams-allowed-count">—</span>
+            <span class="status-label">Erlaubte Nutzer</span>
+        </div>
+        <button class="btn btn-sm btn-outline" onclick="TeamsTab.checkStatus()" style="align-self:center;">
+            Aktualisieren
+        </button>
+    </div>
+
+    <!-- Erlaubte Nutzer-IDs -->
+    <div class="k8s-section" style="margin-top:1.5rem;">
+        <h3 class="section-title">Erlaubte Nutzer-IDs</h3>
+        <p style="color:var(--text-muted);font-size:0.875rem;margin-bottom:1rem;line-height:1.6;">
+            Nur diese Teams-Nutzer-IDs dürfen mit Kumio kommunizieren. Leere Liste = keine Einschränkung.<br>
+            <span style="font-size:0.82rem;opacity:0.7;">
+                Tipp: Die ID erscheint im Container-Log als <code>Teams: Zugriff verweigert für Nutzer '…' (ID: 29:1abc…)</code> beim ersten Kontakt.
+            </span>
+        </p>
+
+        <!-- ID-Liste -->
+        <div id="teams-allowed-ids-list" style="display:flex;flex-wrap:wrap;gap:0.5rem;min-height:2rem;margin-bottom:0.75rem;">
+            <span style="color:var(--text-muted);font-size:0.82rem;line-height:2rem;">Lade…</span>
+        </div>
+
+        <!-- Neue ID hinzufügen -->
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+            <input
+                id="teams-new-id-input"
+                type="text"
+                placeholder="Nutzer-ID eingeben (z.B. 29:1abc...)"
+                style="flex:1;min-width:220px;max-width:340px;padding:0.4rem 0.65rem;border-radius:4px;border:1px solid var(--border-color);background:var(--bg-card);color:var(--text-color);font-size:0.875rem;font-family:inherit;"
+                onkeydown="if(event.key==='Enter') TeamsTab.addAllowedId()"
+            />
+            <button class="btn btn-primary btn-sm" onclick="TeamsTab.addAllowedId()">
+                + Hinzufügen
+            </button>
+            <span style="color:var(--text-muted);font-size:0.78rem;margin-left:auto;opacity:0.7;">
+                Alle erlauben wenn leer
+            </span>
+        </div>
+        <div id="teams-allowed-ids-status" style="font-size:0.82rem;margin-top:0.5rem;min-height:1.2em;"></div>
+    </div>
+
+    <!-- Voice-Reply Konfiguration -->
+    <div class="k8s-section">
+        <h3 class="section-title">Voice-Reply (TTS)</h3>
+        <p style="color:var(--text-muted);font-size:0.875rem;margin-bottom:1rem;line-height:1.6;">
+            Bei eingehenden Audio-Anhängen antwortet Kumio ebenfalls als MP3-Datei.<br>
+            Erfordert aktiviertes TTS in <strong>Einstellungen → Sprachausgabe (TTS)</strong>.
+        </p>
+        <div style="display:flex;flex-direction:column;gap:0.6rem;margin-bottom:1rem;">
+            <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;cursor:pointer;">
+                <input type="checkbox" id="teams-voice-reply">
+                Sprachantwort bei Audio-Nachrichten aktivieren
+            </label>
+            <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;cursor:pointer;">
+                <input type="checkbox" id="teams-voice-reply-text-too" checked>
+                Zusätzlich Textnachricht mitschicken (empfohlen für Teams)
+            </label>
+        </div>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:0.75rem;">
+            <div>
+                <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:0.2rem;">Stimmen-Sprache (leer = System-Default)</label>
+                <input id="teams-voice-lang" type="text" placeholder="de" style="width:70px;padding:0.35rem 0.6rem;border-radius:4px;border:1px solid var(--border-color);background:var(--bg-card);color:var(--text-color);font-size:0.875rem;font-family:inherit;">
+            </div>
+            <div style="flex:1;min-width:140px;">
+                <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:0.2rem;">Stimme (leer = System-Default)</label>
+                <input id="teams-voice-name" type="text" placeholder="thorsten-medium" style="width:100%;padding:0.35rem 0.6rem;border-radius:4px;border:1px solid var(--border-color);background:var(--bg-card);color:var(--text-color);font-size:0.875rem;font-family:inherit;">
+            </div>
+            <button class="btn btn-primary btn-sm" id="teams-voice-reply-save-btn" onclick="TeamsTab.saveVoiceReplyConfig()" style="align-self:flex-end;">Speichern</button>
+        </div>
+        <div id="teams-voice-reply-status" style="font-size:0.82rem;min-height:1.2em;"></div>
+    </div>
+
+    <!-- Setup Guide -->
+    <div class="k8s-section">
+        <h3 class="section-title">Einrichtung</h3>
+        <p style="font-size: 0.875rem; color: var(--text-muted); margin: 0 0 1rem;">
+            Um Kumio in Teams nutzen zu können, musst du einen <strong>Azure Bot</strong> (Bot Framework) registrieren.
+        </p>
+
+        <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; padding: 1.25rem;">
+            <h4 style="font-size: 0.95rem; font-weight: 600; margin: 0 0 0.75rem;">So funktioniert die Einrichtung:</h4>
+            <ol style="margin: 0; padding-left: 1.25rem; font-size: 0.875rem; color: var(--text-secondary); line-height: 1.8;">
+                <li>
+                    Gehe ins <a href="https://portal.azure.com" target="_blank"
+                        style="color: var(--accent-blue);">Azure Portal</a>
+                    und erstelle eine Ressource vom Typ <strong>Azure Bot</strong>.
+                </li>
+                <li>
+                    Hinterlege als <strong>Messaging-Endpunkt (Webhook)</strong> zwingend eine externe HTTPS-URL,
+                    die auf deinen Kumio-Server zeigt:
+                    <code style="display: block; margin-top: 0.4rem; background: var(--bg-tertiary); padding: 0.4rem 0.75rem;
+                        border-radius: 4px; font-family: monospace; font-size: 0.82rem; color: var(--accent-blue);">
+                        https://deinedomain.com/api/teams/messages
+                    </code>
+                </li>
+                <li>
+                    Notiere dir im Azure Portal die <strong>Microsoft App ID</strong> und generiere ein
+                    <strong>Client Secret (App Password)</strong>.
+                </li>
+                <li>
+                    Wechsle in Kumio zu <strong>Einstellungen → Module</strong>, aktiviere
+                    <em>Microsoft Teams</em> und trage dort App ID und Password ein.
+                </li>
+                <li>
+                    Gehe abschließend im Azure Portal bei deinem Bot unter <em>Kanäle</em>,
+                    füge <strong>Microsoft Teams</strong> hinzu und speichere. <strong>Fertig!</strong>
+                </li>
+            </ol>
+        </div>
+    </div>
+
+</div>

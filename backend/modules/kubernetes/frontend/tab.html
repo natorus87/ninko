@@ -1,0 +1,116 @@
+<!-- Kubernetes Dashboard Tab -->
+<style>
+#k8s-tab-content .cl-select { position:relative; display:inline-block; user-select:none; }
+#k8s-tab-content .cl-select-btn {
+    display:flex; align-items:center; justify-content:space-between; gap:0.5rem;
+    padding:0.45rem 0.75rem; border-radius:4px; cursor:pointer;
+    border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-color);
+    font-size:0.875rem; white-space:nowrap;
+}
+#k8s-tab-content .cl-select-btn:hover { border-color:var(--accent-color, #4a9eff); }
+#k8s-tab-content .cl-select-arrow { font-size:0.65rem; opacity:0.7; transition:transform 0.15s; }
+#k8s-tab-content .cl-select.open .cl-select-arrow { transform:rotate(180deg); }
+#k8s-tab-content .cl-select-dropdown {
+    display:none; position:absolute; top:calc(100% + 4px); left:0; min-width:100%;
+    background:var(--bg-card); border:1px solid var(--border-color);
+    border-radius:4px; box-shadow:0 4px 16px rgba(0,0,0,0.4);
+    z-index:999; overflow:hidden; max-height:260px; overflow-y:auto;
+}
+#k8s-tab-content .cl-select.open .cl-select-dropdown { display:block; }
+#k8s-tab-content .cl-select-option {
+    padding:0.45rem 0.75rem; cursor:pointer; font-size:0.875rem;
+    color:var(--text-color); white-space:nowrap;
+}
+#k8s-tab-content .cl-select-option:hover { background:rgba(255,255,255,0.07); }
+#k8s-tab-content .cl-select-option.selected { color:var(--accent-color, #4a9eff); }
+</style>
+
+<div id="k8s-tab-content" class="module-tab-content">
+    <!-- Cluster Status Header -->
+    <div class="k8s-cluster-status" id="k8s-cluster-status">
+        <div class="status-card">
+            <span class="status-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg></span>
+            <span class="status-value" id="k8s-nodes">-</span>
+            <span class="status-label">Nodes</span>
+        </div>
+        <div class="status-card">
+            <span class="status-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg></span>
+            <span class="status-value" id="k8s-total-pods">-</span>
+            <span class="status-label">Pods</span>
+        </div>
+        <div class="status-card running">
+            <span class="status-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--accent-green)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
+            <span class="status-value" id="k8s-running-pods">-</span>
+            <span class="status-label">Running</span>
+        </div>
+        <div class="status-card" id="k8s-failing-card">
+            <span class="status-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></span>
+            <span class="status-value" id="k8s-failing-pods">-</span>
+            <span class="status-label">Failing</span>
+        </div>
+        <div class="status-card">
+            <span class="status-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg></span>
+            <span class="status-value" id="k8s-deployments">-</span>
+            <span class="status-label">Deployments</span>
+        </div>
+    </div>
+
+    <!-- Connection & Namespace Selector -->
+    <div class="k8s-controls"
+        style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap; margin-bottom:1.5rem;">
+
+        <!-- Verbindungs-Dropdown -->
+        <div class="cl-select" id="k8s-conn-select" style="min-width:200px;">
+            <div class="cl-select-btn" onclick="K8sTab.toggleSelect('k8s-conn-select')">
+                <span class="cl-select-label">Lade Verbindungen…</span>
+                <span class="cl-select-arrow">▼</span>
+            </div>
+            <div class="cl-select-dropdown" id="k8s-conn-options"></div>
+        </div>
+
+        <!-- Namespace-Dropdown -->
+        <div class="cl-select" id="k8s-ns-select" style="min-width:130px;">
+            <div class="cl-select-btn" onclick="K8sTab.toggleSelect('k8s-ns-select')">
+                <span class="cl-select-label">default</span>
+                <span class="cl-select-arrow">▼</span>
+            </div>
+            <div class="cl-select-dropdown" id="k8s-ns-options">
+                <div class="cl-select-option selected" data-value="default">default</div>
+            </div>
+        </div>
+
+        <button class="btn btn-refresh" onclick="K8sTab.refresh()">Aktualisieren</button>
+    </div>
+
+    <!-- Failing Pods Section -->
+    <div class="k8s-section">
+        <h3 class="section-title">Fehlerhafte Pods</h3>
+        <div id="k8s-failing-list" class="failing-pods-list">
+            <p class="empty-state">Keine fehlerhaften Pods gefunden.</p>
+        </div>
+    </div>
+
+    <!-- All Pods Section -->
+    <div class="k8s-section">
+        <h3 class="section-title">Pods</h3>
+        <div class="table-container">
+            <table class="data-table" id="k8s-pods-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Status</th>
+                        <th>Ready</th>
+                        <th>Restarts</th>
+                        <th>Alter</th>
+                        <th>Aktionen</th>
+                    </tr>
+                </thead>
+                <tbody id="k8s-pods-tbody">
+                    <tr>
+                        <td colspan="6" class="empty-state">Lade Pods…</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,91 @@
+<!-- FritzBox Dashboard Tab -->
+<div id="fritzbox-tab-content" class="module-tab-content">
+
+    <!-- Header -->
+    <div style="margin-bottom: 1.5rem;">
+        <h2 style="font-size: 1.3rem; font-weight: 600; margin: 0 0 0.25rem;">
+            FritzBox Management
+        </h2>
+        <p id="fritzbox-model-info" style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">
+            Modell: ... | Firmware: ... | Uptime: ...
+        </p>
+    </div>
+
+    <!-- WAN Status Cards -->
+    <div class="k8s-cluster-status">
+        <div class="status-card" id="fritzbox-wan-card">
+            <span class="status-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></span>
+            <span class="status-value" id="fritzbox-wan-status-val">-</span>
+            <span class="status-label">Verbindung</span>
+        </div>
+        <div class="status-card">
+            <span class="status-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><circle cx="12" cy="20" r="1" fill="currentColor"></circle></svg></span>
+            <span class="status-value" id="fritzbox-wan-ip" style="font-size: 0.9rem;">-</span>
+            <span class="status-label">Öffentliche IP</span>
+        </div>
+        <div class="status-card running">
+            <span class="status-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg></span>
+            <span class="status-value" id="fritzbox-downstream">-</span>
+            <span class="status-label">Download</span>
+        </div>
+        <div class="status-card">
+            <span class="status-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg></span>
+            <span class="status-value" id="fritzbox-upstream">-</span>
+            <span class="status-label">Upload</span>
+        </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="k8s-controls">
+        <span id="fritzbox-wan-status" class="status-badge status-unknown">Lade...</span>
+        <button class="btn btn-refresh" onclick="window.fritzboxApp.loadStatus()">Aktualisieren</button>
+    </div>
+
+    <!-- WLAN Netzwerke -->
+    <div class="k8s-section">
+        <h3 class="section-title">WLAN Netzwerke</h3>
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>SSID</th>
+                        <th>Kanal</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="fritzbox-wlan-list">
+                    <tr>
+                        <td colspan="3" class="empty-state">Lade WLAN Daten...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Bekannte Geräte -->
+    <div class="k8s-section">
+        <h3 class="section-title" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>Bekannte Geräte</span>
+            <button class="btn btn-sm btn-action" onclick="window.fritzboxApp.loadDevices()">Aktualisieren</button>
+        </h3>
+        <div class="table-container" style="max-height: 420px; overflow-y: auto;">
+            <table class="data-table">
+                <thead style="position: sticky; top: 0; background: var(--bg-tertiary); z-index: 1;">
+                    <tr>
+                        <th>Name</th>
+                        <th>IP-Adresse</th>
+                        <th>MAC</th>
+                        <th>Verbindung</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="fritzbox-devices-list">
+                    <tr>
+                        <td colspan="5" class="empty-state">Lade Geräte...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>

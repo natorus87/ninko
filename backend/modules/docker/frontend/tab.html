@@ -1,0 +1,85 @@
+<!-- Docker Dashboard Tab -->
+<div id="docker-tab-content" class="module-tab-content">
+
+    <!-- Connection Selector -->
+    <div class="docker-controls"
+        style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1.5rem;">
+        <select id="docker-connection-select" class="form-select"
+            style="min-width: 200px; padding: 0.5rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-body); color: var(--text-color);">
+            <option value="">Lade Verbindungen...</option>
+        </select>
+        <button class="btn btn-refresh" onclick="DockerTab.refresh()">Aktualisieren</button>
+    </div>
+
+    <!-- System Info Cards -->
+    <div id="docker-system-info" class="docker-info-grid"
+        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+        <p class="empty-state">Lade System-Info…</p>
+    </div>
+
+    <!-- Container List -->
+    <div class="docker-section">
+        <h3 class="section-title">Container</h3>
+        <div class="table-container">
+            <table class="data-table" id="docker-containers-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Image</th>
+                        <th>Status</th>
+                        <th>State</th>
+                        <th>Ports</th>
+                        <th>Aktionen</th>
+                    </tr>
+                </thead>
+                <tbody id="docker-containers-tbody">
+                    <tr>
+                        <td colspan="6" class="empty-state">Lade Container…</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Images List -->
+    <div class="docker-section" style="margin-top: 2rem;">
+        <h3 class="section-title">Images</h3>
+        <div class="table-container">
+            <table class="data-table" id="docker-images-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Tags</th>
+                        <th>Größe</th>
+                    </tr>
+                </thead>
+                <tbody id="docker-images-tbody">
+                    <tr>
+                        <td colspan="3" class="empty-state">Lade Images…</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Volumes List -->
+    <div class="docker-section" style="margin-top: 2rem;">
+        <h3 class="section-title">Volumes</h3>
+        <div class="table-container">
+            <table class="data-table" id="docker-volumes-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Driver</th>
+                        <th>Mountpoint</th>
+                    </tr>
+                </thead>
+                <tbody id="docker-volumes-tbody">
+                    <tr>
+                        <td colspan="3" class="empty-state">Lade Volumes…</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

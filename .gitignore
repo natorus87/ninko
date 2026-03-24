@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+.venv/
+env/
+
+# Logs
+*.log
+backend.log
+my_backend.log
+
+# Laufzeit-Daten (persistent volume, nicht ins Repo)
+data/secrets.db
+data/plugins/
+data/skills/
+data/uploads/
+data/voices/
+data/searxng/
+
+# Docker
+.dockerignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Secrets & Keys
+.env
+.env.*
+*.pem
+*.key
+
+# Node (falls mal Frontend-Build-Tools)
+node_modules/
+
+# macOS
+.DS_Store
+
+# Test-Outputs
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Temporäre Dateien
+*.tmp
+*.bak
+changes/
+
+# AI-Assistenten-Konfiguration
+CLAUDE.md
+AGENTS.md

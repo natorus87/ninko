@@ -1,0 +1,121 @@
+<!-- WordPress Dashboard Tab -->
+<div id="wordpress-tab-content" class="module-tab-content">
+
+    <!-- Connection Selector -->
+    <div class="wordpress-controls"
+        style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1.5rem;">
+        <select id="wordpress-connection-select" class="form-select"
+            style="min-width: 200px; padding: 0.5rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-body); color: var(--text-color);">
+            <option value="">Lade Verbindungen...</option>
+        </select>
+        <button class="btn btn-refresh" onclick="WordPressTab.refresh()">Aktualisieren</button>
+    </div>
+
+    <!-- Site Info Cards -->
+    <div id="wordpress-info" class="docker-info-grid"
+        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+        <p class="empty-state">Lade WordPress-Info…</p>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">
+        <button class="btn btn-sm wordpress-nav-btn active" onclick="WordPressTab.showSection('pages')">Seiten</button>
+        <button class="btn btn-sm wordpress-nav-btn" onclick="WordPressTab.showSection('posts')">Beiträge</button>
+        <button class="btn btn-sm wordpress-nav-btn" onclick="WordPressTab.showSection('plugins')">Plugins</button>
+        <button class="btn btn-sm wordpress-nav-btn" onclick="WordPressTab.showSection('users')">Benutzer</button>
+    </div>
+
+    <!-- Pages Section -->
+    <div id="wordpress-section-pages" class="wordpress-section">
+        <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center;">
+            <button class="btn btn-sm" onclick="WordPressTab.loadPages('publish')">Veröffentlicht</button>
+            <button class="btn btn-sm" onclick="WordPressTab.loadPages('draft')">Entwürfe</button>
+            <button class="btn btn-sm" onclick="WordPressTab.loadPages('trash')">Papierkorb</button>
+            <button class="btn btn-sm" onclick="WordPressTab.loadPages('any')">Alle</button>
+        </div>
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Titel</th>
+                        <th>Status</th>
+                        <th>Geändert</th>
+                        <th>Link</th>
+                    </tr>
+                </thead>
+                <tbody id="wordpress-pages-tbody">
+                    <tr><td colspan="5" class="empty-state">Lade Seiten…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Posts Section -->
+    <div id="wordpress-section-posts" class="wordpress-section" style="display: none;">
+        <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center;">
+            <button class="btn btn-sm" onclick="WordPressTab.loadPosts('publish')">Veröffentlicht</button>
+            <button class="btn btn-sm" onclick="WordPressTab.loadPosts('draft')">Entwürfe</button>
+            <button class="btn btn-sm" onclick="WordPressTab.loadPosts('any')">Alle</button>
+        </div>
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Titel</th>
+                        <th>Status</th>
+                        <th>Geändert</th>
+                        <th>Link</th>
+                    </tr>
+                </thead>
+                <tbody id="wordpress-posts-tbody">
+                    <tr><td colspan="5" class="empty-state">Lade Beiträge…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Plugins Section -->
+    <div id="wordpress-section-plugins" class="wordpress-section" style="display: none;">
+        <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center;">
+            <button class="btn btn-sm" onclick="WordPressTab.loadPlugins('all')">Alle</button>
+            <button class="btn btn-sm" onclick="WordPressTab.loadPlugins('active')">Aktiv</button>
+            <button class="btn btn-sm" onclick="WordPressTab.loadPlugins('inactive')">Inaktiv</button>
+        </div>
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Version</th>
+                        <th>Status</th>
+                        <th>Update</th>
+                    </tr>
+                </thead>
+                <tbody id="wordpress-plugins-tbody">
+                    <tr><td colspan="4" class="empty-state">Lade Plugins…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Users Section -->
+    <div id="wordpress-section-users" class="wordpress-section" style="display: none;">
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>E-Mail</th>
+                        <th>Rolle</th>
+                    </tr>
+                </thead>
+                <tbody id="wordpress-users-tbody">
+                    <tr><td colspan="4" class="empty-state">Lade Benutzer…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

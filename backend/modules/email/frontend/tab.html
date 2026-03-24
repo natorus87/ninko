@@ -1,0 +1,38 @@
+<div id="email-tab-content" class="module-tab-content">
+    <div class="k8s-controls"
+        style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1.5rem;">
+        <select id="email-connection-select" class="form-select"
+            style="min-width: 200px; padding: 0.5rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-body); color: var(--text-color);">
+            <option value="">Lade Verbindungen...</option>
+        </select>
+        <button class="btn btn-refresh" onclick="EmailTab.refresh()">Aktualisieren</button>
+    </div>
+
+    <div class="k8s-section">
+        <h3 class="section-title">Verbindungsstatus</h3>
+        <p class="text-secondary section-description">Zeigt den aktuellen Authentifizierungsstatus des konfigurierten
+            Postfachs (IMAP & SMTP).</p>
+
+        <div class="status-card" id="email-status-card"
+            style="max-width: 400px; padding: 1.5rem; display: flex; flex-direction: column; align-items: center; text-align: center; margin-top: 1rem;">
+            <div style="font-size: 3rem; margin-bottom: 1rem; display:flex; align-items:center; justify-content:center;" id="email-status-icon"><svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></div>
+            <div style="font-weight: 500; font-size: 1.2rem; margin-bottom: 0.5rem;" id="email-status-text">Wird
+                geprüft...</div>
+            <div style="font-size: 0.9rem; color: var(--text-secondary);" id="email-status-detail">Bitte warten</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function toggleEmailAuthFields() {
+        const authType = document.getElementById("email-auth-type").value;
+        const oauthFields = document.getElementById("email-oauth-fields");
+        // Das Passwort-Label in index.html können wir hier über css tricky ändern, oder wir lassen es generisch "Secret".
+
+        if (authType === "oauth2") {
+            oauthFields.style.display = "block";
+        } else {
+            oauthFields.style.display = "none";
+        }
+    }
+</script>

@@ -1,0 +1,85 @@
+<!-- Pi-hole Dashboard Tab -->
+<div id="pihole-tab-content" class="module-tab-content">
+    <!-- Stats Header -->
+    <div class="k8s-cluster-status" id="pihole-stats">
+        <div class="status-card">
+            <span class="status-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></span>
+            <span class="status-value" id="pihole-total-queries">-</span>
+            <span class="status-label">Anfragen</span>
+        </div>
+        <div class="status-card failing">
+            <span class="status-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></span>
+            <span class="status-value" id="pihole-blocked">-</span>
+            <span class="status-label">Blockiert</span>
+        </div>
+        <div class="status-card">
+            <span class="status-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg></span>
+            <span class="status-value" id="pihole-percent">-</span>
+            <span class="status-label">% Blockiert</span>
+        </div>
+        <div class="status-card running">
+            <span class="status-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></span>
+            <span class="status-value" id="pihole-domains-blocked">-</span>
+            <span class="status-label">Blockliste</span>
+        </div>
+        <div class="status-card">
+            <span class="status-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>
+            <span class="status-value" id="pihole-clients">-</span>
+            <span class="status-label">Clients</span>
+        </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="k8s-controls"
+        style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1.5rem;">
+        <select id="pihole-connection-select" class="form-select"
+            style="min-width: 200px; padding: 0.5rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-body); color: var(--text-color);">
+            <option value="">Lade Verbindungen...</option>
+        </select>
+        <div class="pihole-status-row">
+            <span id="pihole-blocking-status" class="pihole-blocking-badge">—</span>
+            <button class="btn btn-sm btn-action" onclick="PiholeTab.toggleBlocking()" id="pihole-toggle-btn">
+                Blocking umschalten
+            </button>
+        </div>
+        <button class="btn btn-refresh" onclick="PiholeTab.refresh()">Aktualisieren</button>
+    </div>
+
+    <!-- Top Domains -->
+    <div class="k8s-section">
+        <h3 class="section-title">Top Domains</h3>
+        <div class="pihole-top-grid">
+            <div>
+                <h4 class="subsection-title">Erlaubt</h4>
+                <div id="pihole-top-permitted" class="top-list">Lade…</div>
+            </div>
+            <div>
+                <h4 class="subsection-title">Blockiert</h4>
+                <div id="pihole-top-blocked" class="top-list">Lade…</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Query Log -->
+    <div class="k8s-section">
+        <h3 class="section-title">Letzte DNS-Anfragen</h3>
+        <div class="table-container">
+            <table class="data-table" id="pihole-queries-table">
+                <thead>
+                    <tr>
+                        <th>Domain</th>
+                        <th>Client</th>
+                        <th>Typ</th>
+                        <th>Status</th>
+                        <th>Zeit (ms)</th>
+                    </tr>
+                </thead>
+                <tbody id="pihole-queries-tbody">
+                    <tr>
+                        <td colspan="5" class="empty-state">Lade Queries…</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

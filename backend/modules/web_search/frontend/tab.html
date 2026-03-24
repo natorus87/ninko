@@ -1,0 +1,48 @@
+<!-- Web Search Dashboard Tab -->
+<div id="websearch-tab-content" class="module-tab-content">
+
+    <!-- Status Header -->
+    <div class="k8s-cluster-status" id="websearch-status-cards">
+        <div class="status-card" id="websearch-conn-card">
+            <span class="status-icon" id="websearch-conn-icon">—</span>
+            <span class="status-value" id="websearch-conn-label">—</span>
+            <span class="status-label">SearXNG</span>
+        </div>
+        <div class="status-card" id="websearch-engines-card">
+            <span class="status-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></span>
+            <span class="status-value" id="websearch-engines-ok">—</span>
+            <span class="status-label">Engines aktiv</span>
+        </div>
+        <div class="status-card" id="websearch-engines-err-card">
+            <span class="status-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></span>
+            <span class="status-value" id="websearch-engines-err">—</span>
+            <span class="status-label">Engines blockiert</span>
+        </div>
+    </div>
+
+    <!-- URL -->
+    <div style="margin: 1rem 0 1.5rem; color: var(--text-muted); font-size: 0.85rem;">
+        URL: <code id="websearch-url">—</code>
+    </div>
+
+    <!-- Engine-Tabelle -->
+    <div class="k8s-section">
+        <div class="k8s-section-header">
+            <h3 class="k8s-section-title">Search Engines</h3>
+            <button class="btn btn-sm btn-outline" onclick="WebSearchTab.refresh()">↻ Aktualisieren</button>
+        </div>
+        <table class="k8s-table" id="websearch-engine-table">
+            <thead>
+                <tr>
+                    <th>Engine</th>
+                    <th>Status</th>
+                    <th>Info</th>
+                </tr>
+            </thead>
+            <tbody id="websearch-engine-tbody">
+                <tr><td colspan="3" style="text-align:center;color:var(--text-muted);">Lade…</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+</div>

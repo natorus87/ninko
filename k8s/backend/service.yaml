@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kumio-backend
+  labels:
+    app.kubernetes.io/name: kumio-backend
+    app.kubernetes.io/part-of: kumio
+spec:
+  selector:
+    app: kumio-backend
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+  type: ClusterIP
