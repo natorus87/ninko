@@ -69,10 +69,24 @@ spec:
               value: "true"
             - name: KUMIO_MODULE_WEB_SEARCH
               value: "true"
-            - name: KUMIO_MODULE_DOCKER
-              value: "false"
             - name: SEARXNG_URL
               value: "http://searxng:8080"
+            - name: KUMIO_MODULE_PIHOLE
+              value: "true"
+            - name: KUMIO_MODULE_DOCKER
+              value: "false"
+            - name: KUMIO_MODULE_LINUX_SERVER
+              value: "true"
+            - name: KUMIO_MODULE_WORDPRESS
+              value: "true"
+            - name: KUMIO_MODULE_TELEGRAM
+              value: "false"
+            - name: KUMIO_MODULE_EMAIL
+              value: "false"
+            - name: KUMIO_MODULE_CODELAB
+              value: "true"
+            - name: KUMIO_MODULE_IMAGE_GEN
+              value: "false"
 
             # ─── Modul-Secrets (Fallback wenn kein UI-Connection konfiguriert) ───
             # - name: IONOS_API_KEY
@@ -115,7 +129,7 @@ spec:
             - name: TTS_DEFAULT_LANG
               value: "de"
             - name: TTS_DEFAULT_VOICE
-              value: "ramona-low"
+              value: "thorsten-medium"
 
           resources:
             requests:

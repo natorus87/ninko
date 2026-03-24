@@ -39,6 +39,9 @@ data/searxng/
 .env.*
 *.pem
 *.key
+*.secret
+# Lokale K8s-Secret-Overrides (mit echten Keys)
+k8s/**/*.local.yaml
 
 # Node (falls mal Frontend-Build-Tools)
 node_modules/
@@ -59,3 +62,8 @@ changes/
 # AI-Assistenten-Konfiguration
 CLAUDE.md
 AGENTS.md
+.claude/
+skills-lock.json
+
+# Interne Entwicklungs-Todos
+TODO.md

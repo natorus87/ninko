@@ -58,7 +58,7 @@ services:
       REDIS_URL: "redis://redis:6379/0"
       # Secrets – SQLite (persistent, kein Vault-Neustart-Verlust)
       VAULT_FALLBACK: "sqlite"
-      SQLITE_SECRETS_KEY: "9bc4f61cdcefa82c8e4e856923c3f611a3b58527a9a56bd857f34eb3bc4ce663"
+      SQLITE_SECRETS_KEY: "${SQLITE_SECRETS_KEY}"
       # Module
       KUMIO_MODULE_KUBERNETES: "false"
       KUMIO_MODULE_PROXMOX: "true"
@@ -71,7 +71,11 @@ services:
       KUMIO_MODULE_DOCKER: "true"
       KUMIO_MODULE_LINUX_SERVER: "true"
       KUMIO_MODULE_WORDPRESS: "true"
-      PIHOLE_URL: "http://10.11.14.6"
+      KUMIO_MODULE_TELEGRAM: "false"
+      KUMIO_MODULE_EMAIL: "false"
+      KUMIO_MODULE_CODELAB: "true"
+      KUMIO_MODULE_IMAGE_GEN: "false"
+      PIHOLE_URL: "${PIHOLE_URL:-http://192.168.1.10}"
       SEARXNG_URL: "http://searxng:8080"
       # Monitoring
       MONITOR_INTERVAL_SECONDS: "120"
@@ -94,7 +98,6 @@ services:
     volumes:
       - ./data:/app/data
       - ./data/plugins:/app/plugins
-      - ./data/voices:/app/data/voices
 
   # ─── SearXNG (Web Search Backend) ──────────────
   searxng:

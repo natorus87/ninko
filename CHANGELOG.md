@@ -7,9 +7,9 @@ Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [1.0.0] – 2026-03-24
+## [0.5.0] – 2026-03-24
 
-Erster stabiler Release. Kumio ist eine modulare, KI-gestützte IT-Operations-Plattform auf Basis von FastAPI (Python 3.12) mit einem unveränderlichen Core und auto-discovering Modulen.
+Erster öffentlicher Release. Kumio ist eine modulare, KI-gestützte IT-Operations-Plattform auf Basis von FastAPI (Python 3.12) mit einem unveränderlichen Core und auto-discovering Modulen.
 
 ### Core-Architektur
 
@@ -105,4 +105,4 @@ Erster stabiler Release. Kumio ist eine modulare, KI-gestützte IT-Operations-Pl
 
 | Version | Datum | Beschreibung |
 |---|---|---|
-| 1.0.0 | 2026-03-24 | Erster stabiler Release |
+| 0.5.0 | 2026-03-24 | Erster öffentlicher Release |
