@@ -1,5 +1,5 @@
 """
-Microsoft Teams Modul für Kumio.
+Microsoft Teams Modul für Ninko.
 """
 
 from .manifest import module_manifest

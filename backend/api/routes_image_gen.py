@@ -18,7 +18,7 @@ from core.image_provider import (
     IMAGES_DIR,
 )
 
-logger = logging.getLogger("kumio.api.routes_image_gen")
+logger = logging.getLogger("ninko.api.routes_image_gen")
 
 router = APIRouter(tags=["Image Generation"])
 

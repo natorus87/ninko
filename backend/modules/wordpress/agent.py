@@ -36,7 +36,7 @@ from modules.wordpress.tools import (
     list_media,
 )
 
-WORDPRESS_SYSTEM_PROMPT = """Du bist der WordPress-Spezialist von Kumio.
+WORDPRESS_SYSTEM_PROMPT = """Du bist der WordPress-Spezialist von Ninko.
 
 Deine Fähigkeiten:
 - **Site-Info**: WordPress-Version, Einstellungen, Updates prüfen

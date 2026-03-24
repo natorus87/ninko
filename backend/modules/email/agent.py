@@ -2,7 +2,7 @@ import logging
 from agents.base_agent import BaseAgent
 from modules.email.tools import send_email, read_emails, move_email, delete_email
 
-logger = logging.getLogger("kumio.modules.email.agent")
+logger = logging.getLogger("ninko.modules.email.agent")
 
 def _get_email_tools():
     # perform_web_search wird NICHT mehr geladen – das Email-Modul sendet nur.
@@ -15,7 +15,7 @@ class EmailAgent(BaseAgent):
         super().__init__(
             name="email",
             system_prompt=(
-                "Du bist der E-Mail (SMTP/IMAP) Spezialist in Kumio. "
+                "Du bist der E-Mail (SMTP/IMAP) Spezialist in Ninko. "
                 "Du kümmerst dich um das Lesen, Filtern, Verschieben und Senden von E-Mails, inklusive Anhängen.\n\n"
                 "KRITISCHE REGELN:\n"
                 "1. WENN der Benutzer eine E-Mail senden will: Rufe SOFORT und ZWINGEND das Tool `send_email` auf! "

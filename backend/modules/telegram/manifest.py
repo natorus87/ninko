@@ -10,7 +10,7 @@ import httpx
 from core.module_registry import ModuleManifest
 from core.vault import get_vault
 
-logger = logging.getLogger("kumio.modules.telegram")
+logger = logging.getLogger("ninko.modules.telegram")
 
 
 async def check_telegram_health(connection_id: str = "") -> dict:
@@ -53,9 +53,9 @@ async def check_telegram_health(connection_id: str = "") -> dict:
 module_manifest = ModuleManifest(
     name="telegram",
     display_name="Telegram Bot",
-    description="Ermöglicht das Chatten mit dem Kumio Orchestrator über Telegram",
+    description="Ermöglicht das Chatten mit dem Ninko Orchestrator über Telegram",
     version="1.0.0",
-    author="Kumio Team",
+    author="Ninko Team",
     enabled_by_default=True,
     env_prefix="TELEGRAM_",
     required_secrets=[],

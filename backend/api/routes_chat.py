@@ -1,5 +1,5 @@
 """
-Kumio Chat API – Haupt-Interface für Chat-Kommunikation.
+Ninko Chat API – Haupt-Interface für Chat-Kommunikation.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from core.context_manager import get_context_manager
 from core import status_bus
 from agents.base_agent import _t
 
-logger = logging.getLogger("kumio.api.chat")
+logger = logging.getLogger("ninko.api.chat")
 router = APIRouter(prefix="/api/chat", tags=["Chat"])
 
 

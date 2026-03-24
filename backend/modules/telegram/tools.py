@@ -11,7 +11,7 @@ from langchain_core.tools import tool
 
 from .formatter import format_for_telegram
 
-logger = logging.getLogger("kumio.modules.telegram.tools")
+logger = logging.getLogger("ninko.modules.telegram.tools")
 
 
 @tool

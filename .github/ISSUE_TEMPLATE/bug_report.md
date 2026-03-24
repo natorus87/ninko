@@ -20,7 +20,7 @@ labels: bug
 
 ## Environment
 
-- **Kumio version**: (from `VERSION` or `/health`)
+- **Ninko version**: (from `VERSION` or `/health`)
 - **LLM backend**: ollama / lmstudio / openai_compatible
 - **Model**:
 - **Deployment**: docker-compose / kubernetes

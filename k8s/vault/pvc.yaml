@@ -4,7 +4,7 @@ metadata:
   name: vault-data
   labels:
     app.kubernetes.io/name: vault
-    app.kubernetes.io/part-of: kumio
+    app.kubernetes.io/part-of: ninko
 spec:
   accessModes:
     - ReadWriteOnce

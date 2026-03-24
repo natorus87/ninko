@@ -6,7 +6,7 @@ Unterstützte Provider:
 - openai: OpenAI DALL-E 2/3
 - google: Google Imagen 3/4
 
-Konfiguration in Redis: kumio:settings:image_provider
+Konfiguration in Redis: ninko:settings:image_provider
 """
 
 from __future__ import annotations
@@ -20,9 +20,9 @@ from typing import Any
 
 import httpx
 
-logger = logging.getLogger("kumio.core.image_provider")
+logger = logging.getLogger("ninko.core.image_provider")
 
-REDIS_KEY = "kumio:settings:image_provider"
+REDIS_KEY = "ninko:settings:image_provider"
 IMAGES_DIR = Path("data/images")
 
 # ── Default Config ───────────────────────────────────────────────────────────

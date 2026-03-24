@@ -9,7 +9,7 @@ import logging
 
 from core.module_registry import ModuleManifest
 
-logger = logging.getLogger("kumio.modules.linux_server")
+logger = logging.getLogger("ninko.modules.linux_server")
 
 
 async def check_linux_server_health() -> dict:
@@ -25,7 +25,7 @@ module_manifest = ModuleManifest(
     display_name="Linux Server",
     description="Linux Server Management über SSH – Befehle, Services, Monitoring, Dateien",
     version="1.0.0",
-    author="Kumio Team",
+    author="Ninko Team",
     enabled_by_default=False,
     env_prefix="LINUX_SERVER_",
     required_secrets=["LINUX_SERVER_PASSWORD"],

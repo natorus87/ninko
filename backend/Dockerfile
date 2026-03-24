@@ -44,10 +44,10 @@ COPY backend/ .
 COPY frontend/ /app/frontend/
 
 # Create non-root user
-RUN groupadd -r kumio && useradd -r -g kumio -d /app -s /bin/bash kumio && \
-    chown -R kumio:kumio /app
+RUN groupadd -r ninko && useradd -r -g ninko -d /app -s /bin/bash ninko && \
+    chown -R ninko:kumio /app
 
-USER kumio
+USER ninko
 
 EXPOSE 8000
 

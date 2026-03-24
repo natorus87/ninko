@@ -1,5 +1,5 @@
 """
-Kumio – Pydantic-Modelle für Agenten-Definitionen.
+Ninko – Pydantic-Modelle für Agenten-Definitionen.
 """
 
 from __future__ import annotations

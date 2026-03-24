@@ -8,7 +8,7 @@ import logging
 from typing import List, Dict, Any
 from langchain.tools import tool
 
-logger = logging.getLogger("kumio.modules.web_search")
+logger = logging.getLogger("ninko.modules.web_search")
 
 @tool
 async def perform_web_search(query: str, connection_id: str = "") -> List[Dict[str, Any]]:

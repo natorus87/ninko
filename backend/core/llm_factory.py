@@ -1,5 +1,5 @@
 """
-Kumio LLM Factory – Backend-Switch für Ollama und LM Studio (OpenAI-kompatibel).
+Ninko LLM Factory – Backend-Switch für Ollama und LM Studio (OpenAI-kompatibel).
 Embeddings und Chat-LLM nutzen denselben konfigurierten Provider.
 """
 
@@ -176,7 +176,7 @@ class _LMStudioChatOpenAI(_NormalizingChatOpenAI):
         prepared = self._prepare(messages, kwargs.get("tools", []))
         return await ChatOpenAI._agenerate(self, prepared, stop=stop, run_manager=run_manager, **kwargs)
 
-logger = logging.getLogger("kumio.llm_factory")
+logger = logging.getLogger("ninko.llm_factory")
 
 # Gecachte Context-Window-Größe des aktuell geladenen Modells
 _cached_context_window: Optional[int] = None

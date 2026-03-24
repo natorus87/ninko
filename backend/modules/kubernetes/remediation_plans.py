@@ -20,7 +20,7 @@ from modules.kubernetes.tools import (
     get_pod_logs,
 )
 
-logger = logging.getLogger("kumio.modules.kubernetes.remediation")
+logger = logging.getLogger("ninko.modules.kubernetes.remediation")
 
 
 async def restart_with_db_dependency(

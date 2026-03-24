@@ -8,7 +8,7 @@ from modules.fritzbox.tools import (
     get_fritz_system_info
 )
 
-logger = logging.getLogger("kumio.modules.fritzbox")
+logger = logging.getLogger("ninko.modules.fritzbox")
 
 router = APIRouter(tags=["FritzBox"])
 

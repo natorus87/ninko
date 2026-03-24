@@ -13,7 +13,7 @@ from pathlib import Path
 
 from langchain_core.tools import tool
 
-logger = logging.getLogger("kumio.modules.codelab")
+logger = logging.getLogger("ninko.modules.codelab")
 
 # Unterstützte Sprachen mit Ausführungs-Kommandos
 _LANGUAGES: dict[str, dict] = {

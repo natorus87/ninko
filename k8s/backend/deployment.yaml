@@ -1,24 +1,24 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: kumio-backend
+  name: ninko-backend
   labels:
-    app.kubernetes.io/name: kumio-backend
-    app.kubernetes.io/part-of: kumio
+    app.kubernetes.io/name: ninko-backend
+    app.kubernetes.io/part-of: ninko
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: kumio-backend
+      app: ninko-backend
   template:
     metadata:
       labels:
-        app: kumio-backend
+        app: ninko-backend
     spec:
-      serviceAccountName: kumio
+      serviceAccountName: ninko
       containers:
         - name: backend
-          image: natorus87/kumio-backend:latest
+          image: natorus87/ninko-backend:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8000
@@ -49,64 +49,64 @@ spec:
             - name: SQLITE_SECRETS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: kumio-secrets
+                  name: ninko-secrets
                   key: SQLITE_SECRETS_KEY
 
             # ─── Module ───
-            - name: KUMIO_MODULE_KUBERNETES
+            - name: NINKO_MODULE_KUBERNETES
               value: "true"
             - name: K8S_IN_CLUSTER
               value: "true"
-            - name: KUMIO_MODULE_IONOS
+            - name: NINKO_MODULE_IONOS
               value: "true"
-            - name: KUMIO_MODULE_FRITZBOX
+            - name: NINKO_MODULE_FRITZBOX
               value: "true"
-            - name: KUMIO_MODULE_HOMEASSISTANT
+            - name: NINKO_MODULE_HOMEASSISTANT
               value: "true"
-            - name: KUMIO_MODULE_PROXMOX
+            - name: NINKO_MODULE_PROXMOX
               value: "true"
-            - name: KUMIO_MODULE_GLPI
+            - name: NINKO_MODULE_GLPI
               value: "true"
-            - name: KUMIO_MODULE_WEB_SEARCH
+            - name: NINKO_MODULE_WEB_SEARCH
               value: "true"
             - name: SEARXNG_URL
               value: "http://searxng:8080"
-            - name: KUMIO_MODULE_PIHOLE
+            - name: NINKO_MODULE_PIHOLE
               value: "true"
-            - name: KUMIO_MODULE_DOCKER
+            - name: NINKO_MODULE_DOCKER
               value: "false"
-            - name: KUMIO_MODULE_LINUX_SERVER
+            - name: NINKO_MODULE_LINUX_SERVER
               value: "true"
-            - name: KUMIO_MODULE_WORDPRESS
+            - name: NINKO_MODULE_WORDPRESS
               value: "true"
-            - name: KUMIO_MODULE_TELEGRAM
+            - name: NINKO_MODULE_TELEGRAM
               value: "false"
-            - name: KUMIO_MODULE_EMAIL
+            - name: NINKO_MODULE_EMAIL
               value: "false"
-            - name: KUMIO_MODULE_CODELAB
+            - name: NINKO_MODULE_CODELAB
               value: "true"
-            - name: KUMIO_MODULE_IMAGE_GEN
+            - name: NINKO_MODULE_IMAGE_GEN
               value: "false"
 
             # ─── Modul-Secrets (Fallback wenn kein UI-Connection konfiguriert) ───
             # - name: IONOS_API_KEY
             #   valueFrom:
             #     secretKeyRef:
-            #       name: kumio-secrets
+            #       name: ninko-secrets
             #       key: IONOS_API_KEY
             # - name: FRITZBOX_HOST
             #   value: "192.168.178.1"
             # - name: FRITZBOX_PASSWORD
             #   valueFrom:
             #     secretKeyRef:
-            #       name: kumio-secrets
+            #       name: ninko-secrets
             #       key: FRITZBOX_PASSWORD
             # - name: HOMEASSISTANT_URL
             #   value: "http://homeassistant.local:8123"
             # - name: HOMEASSISTANT_API_TOKEN
             #   valueFrom:
             #     secretKeyRef:
-            #       name: kumio-secrets
+            #       name: ninko-secrets
             #       key: HOMEASSISTANT_API_TOKEN
 
             # ─── Monitoring ───

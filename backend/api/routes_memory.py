@@ -1,5 +1,5 @@
 """
-Kumio Memory API – CRUD für Semantic Memory.
+Ninko Memory API – CRUD für Semantic Memory.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from schemas.memory import (
 )
 from core.memory import get_memory
 
-logger = logging.getLogger("kumio.api.memory")
+logger = logging.getLogger("ninko.api.memory")
 router = APIRouter(prefix="/api/memory", tags=["Memory"])
 
 

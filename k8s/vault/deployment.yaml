@@ -4,7 +4,7 @@ metadata:
   name: vault
   labels:
     app.kubernetes.io/name: vault
-    app.kubernetes.io/part-of: kumio
+    app.kubernetes.io/part-of: ninko
 spec:
   replicas: 1
   selector:
@@ -22,7 +22,7 @@ spec:
             - containerPort: 8200
           env:
             - name: VAULT_DEV_ROOT_TOKEN_ID
-              value: "kumio-dev-token"
+              value: "ninko-dev-token"
             - name: VAULT_DEV_LISTEN_ADDRESS
               value: "0.0.0.0:8200"
           command: ["vault", "server", "-dev"]

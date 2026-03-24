@@ -25,7 +25,7 @@ from modules.proxmox.tools import (
     get_vm_config,
 )
 
-PROXMOX_SYSTEM_PROMPT = """Du bist der Proxmox-Spezialist von Kumio.
+PROXMOX_SYSTEM_PROMPT = """Du bist der Proxmox-Spezialist von Ninko.
 
 Deine Fähigkeiten:
 - Node-Status und Ressourcen-Monitoring (CPU, RAM)

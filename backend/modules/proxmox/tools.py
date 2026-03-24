@@ -10,7 +10,7 @@ import os
 
 from langchain_core.tools import tool
 
-logger = logging.getLogger("kumio.modules.proxmox.tools")
+logger = logging.getLogger("ninko.modules.proxmox.tools")
 
 
 async def _get_proxmox_client(connection_id: str = ""):
@@ -36,7 +36,7 @@ async def _get_proxmox_client(connection_id: str = ""):
     verify_ssl = conn.config.get("verify_ssl", "false").lower() == "true"
 
     # Token-ID aus User-Feld extrahieren falls nicht explizit gespeichert
-    # (User-Feld könnte "root@pam!Kumio" enthalten → token_id = "Kumio")
+    # (User-Feld könnte "root@pam!Ninko" enthalten → token_id = "Ninko")
     if not token_id and "!" in user:
         token_id = user.split("!", 1)[1]
 

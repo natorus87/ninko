@@ -10,7 +10,7 @@ async def check_homeassistant_health() -> dict:
         # Pings the /api/ Endpoints to check if it's reachable and the token is valid
         client = await _get_api_client("") 
         # TODO: A proper ping could be done using httpx inside tools.py, but for now we rely on 
-        # the client returning some basic data if configured. Usually Kumio expects a real check.
+        # the client returning some basic data if configured. Usually Ninko expects a real check.
         # But we'll trust that the client data is present.
         return {"status": "ok", "detail": "Home Assistant Konfiguration vorhanden."}
     except Exception as e:
@@ -21,7 +21,7 @@ module_manifest = ModuleManifest(
     display_name="Home Assistant",
     description="Steuerung und Abfrage von Smart Home Geräten in Home Assistant.",
     version="1.0.0",
-    author="Kumio",
+    author="Ninko",
     enabled_by_default=False,
     env_prefix="HOMEASSISTANT_",
     

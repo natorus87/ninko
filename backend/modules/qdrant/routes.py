@@ -24,7 +24,7 @@ from modules.qdrant.tools import (
     search_knowledge,
 )
 
-logger = logging.getLogger("kumio.modules.qdrant.routes")
+logger = logging.getLogger("ninko.modules.qdrant.routes")
 router = APIRouter()
 
 

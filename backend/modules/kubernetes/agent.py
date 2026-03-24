@@ -21,7 +21,7 @@ from modules.kubernetes.tools import (
     list_pvcs,
 )
 
-K8S_SYSTEM_PROMPT = """Du bist der Kubernetes-Spezialist von Kumio.
+K8S_SYSTEM_PROMPT = """Du bist der Kubernetes-Spezialist von Ninko.
 
 Deine Fähigkeiten:
 - Cluster-Status und Health-Monitoring

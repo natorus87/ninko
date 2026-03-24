@@ -17,10 +17,10 @@ from fastapi import FastAPI
 
 from .formatter import format_for_teams
 
-logger = logging.getLogger("kumio.modules.teams.bot")
+logger = logging.getLogger("ninko.modules.teams.bot")
 
 # Redis-Key für die letzte bekannte Teams-Konversation (für proaktive Nachrichten)
-_LAST_CONV_KEY = "kumio:teams:last_conversation"
+_LAST_CONV_KEY = "ninko:teams:last_conversation"
 
 
 async def get_teams_credentials(connection_id: str = "") -> tuple[str | None, str | None]:
@@ -243,7 +243,7 @@ async def handle_teams_turn(app: FastAPI, activity: dict[str, Any]) -> None:
     if not text:
         return
 
-    # Bot-Mentions strippen (Teams sendet z.B. "<at>Kumio</at> Hallo")
+    # Bot-Mentions strippen (Teams sendet z.B. "<at>Ninko</at> Hallo")
     clean_text = re.sub(r"<[^>]+>", "", text).strip()
 
     service_url = activity.get("serviceUrl", "")
@@ -352,7 +352,7 @@ async def handle_teams_turn(app: FastAPI, activity: dict[str, Any]) -> None:
 
         # ── Text-Antwort ───────────────────────────────────────────────────────
         final_text = response_text
-        if module_used and module_used != "Kumio":
+        if module_used and module_used != "Ninko":
             final_text += f"\n\n*(via {module_used})*"
 
         await send_teams_message(service_url, conv_id, activity_id, final_text)

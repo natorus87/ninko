@@ -7,7 +7,7 @@ async def main():
     registry.discover_and_load()
     agent = OrchestratorAgent(registry)
     
-    msg = "füge in pihole folgenden a-record hinzu: kumio.conbro.local ipadresse: 10.11.14.6"
+    msg = "füge in pihole folgenden a-record hinzu: ninko.conbro.local ipadresse: 10.11.14.6"
     target = agent._detect_module(msg)
     print("Detected module for msg:", target)
 

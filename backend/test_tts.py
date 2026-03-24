@@ -1,5 +1,5 @@
 """
-Tests für das Kumio TTS-System (Piper TTS).
+Tests für das Ninko TTS-System (Piper TTS).
 
 Testet:
 - VoiceManager (mit Mock-Verzeichnisstruktur)
@@ -479,6 +479,6 @@ class TestTtsAvailability(unittest.TestCase):
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("Kumio TTS Tests")
+    print("Ninko TTS Tests")
     print("=" * 60)
     unittest.main(verbosity=2)

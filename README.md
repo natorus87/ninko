@@ -1,8 +1,8 @@
-# Kumio
+# Ninko
 
 **Modular, AI-powered IT Operations Platform**
 
-Kumio connects a local LLM to your infrastructure. Ask questions in chat, trigger workflows, and let agents autonomously handle tasks — without any data leaving your network.
+Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigger workflows, and let agents autonomously handle tasks — without any data leaving your network.
 
 [![Version](https://img.shields.io/badge/version-0.5.0-blue.svg)](CHANGELOG.md)
 [![Status](https://img.shields.io/badge/status-beta-orange.svg)](CHANGELOG.md)
@@ -10,7 +10,7 @@ Kumio connects a local LLM to your infrastructure. Ask questions in chat, trigge
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green.svg)](https://fastapi.tiangolo.com/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-> **Beta:** Kumio is functional and actively used in production environments, but the API and module interfaces may still change. Feedback and contributions welcome.
+> **Beta:** Ninko is functional and actively used in production environments, but the API and module interfaces may still change. Feedback and contributions welcome.
 
 ---
 
@@ -41,8 +41,8 @@ Kumio connects a local LLM to your infrastructure. Ask questions in chat, trigge
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/natorus87/kumio.git
-cd kumio
+git clone https://github.com/natorus87/ninko.git
+cd ninko
 ```
 
 ### 2. Create configuration
@@ -69,7 +69,7 @@ On first start, configure your LLM backend under **Settings → LLM Provider** (
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│                    Kumio Dashboard                   │
+│                    Ninko Dashboard                   │
 │   Chat  │  Kubernetes  │  Proxmox  │  GLPI  │  ...  │
 └──────────────────────┬───────────────────────────────┘
                        │
@@ -121,8 +121,8 @@ The core code contains **no module names**. Every module registers itself at sta
 Modules are enabled via environment variables:
 
 ```env
-KUMIO_MODULE_KUBERNETES=true
-KUMIO_MODULE_PROXMOX=true
+NINKO_MODULE_KUBERNETES=true
+NINKO_MODULE_PROXMOX=true
 # etc.
 ```
 
@@ -198,10 +198,10 @@ class MyModuleAgent(BaseAgent):
 **Enable**:
 
 ```env
-KUMIO_MODULE_MYMODULE=true
+NINKO_MODULE_MYMODULE=true
 ```
 
-Kumio discovers the module automatically on next start — no core code needs to be touched.
+Ninko discovers the module automatically on next start — no core code needs to be touched.
 
 ---
 
@@ -223,15 +223,15 @@ kubectl apply -f k8s/redis/
 kubectl apply -f k8s/chromadb/
 
 # Check status
-kubectl -n kumio get pods -w
+kubectl -n ninko get pods -w
 ```
 
 ### Building your own image
 
 ```bash
 docker compose build backend
-docker tag kumio-backend:latest your-registry/kumio-backend:latest
-docker push your-registry/kumio-backend:latest
+docker tag ninko-backend:latest your-registry/ninko-backend:latest
+docker push your-registry/ninko-backend:latest
 ```
 
 > Piper TTS is only included when built with `--build-arg INSTALL_PIPER=true`. `docker compose build` handles this automatically.
@@ -267,21 +267,21 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 - **Local AI**: All LLM calls stay within your network (Ollama/LM Studio). No data is sent to external services unless an OpenAI-compatible external provider is explicitly configured.
 - **Secrets**: Encrypted via HashiCorp Vault or local SQLite fallback. Never stored in plaintext on the filesystem.
 - **Destructive actions**: `PROXMOX_CONFIRM_DESTRUCTIVE=true` (default) — the agent asks for confirmation before executing.
-- **Internal network only**: Kumio is not designed for public exposure. Place Traefik/Nginx with TLS and optional auth middleware in front.
+- **Internal network only**: Ninko is not designed for public exposure. Place Traefik/Nginx with TLS and optional auth middleware in front.
 - **Do not commit `.env`**: The file is included in `.gitignore`. Template: `.env.example`.
 
 ---
 
 ## Acknowledgements
 
-Kumio is an independent project with no affiliation to OpenClaw, OpenCode, or similar projects. The idea of connecting a local AI assistant to infrastructure modules may have drawn inspiration from such projects — but the code, architecture, and all implementations are entirely original.
+Ninko is an independent project with no affiliation to OpenClaw, OpenCode, or similar projects. The idea of connecting a local AI assistant to infrastructure modules may have drawn inspiration from such projects — but the code, architecture, and all implementations are entirely original.
 
 Built on top of:
 - **[LangChain](https://github.com/langchain-ai/langchain)** + **[LangGraph](https://github.com/langchain-ai/langgraph)** — agent framework and ReAct execution
 - **[FastAPI](https://github.com/fastapi/fastapi)** — web framework
 - **[ChromaDB](https://github.com/chroma-core/chroma)** — vector database for semantic memory
 
-Kumio was developed with the help of **[Claude](https://claude.ai)** by Anthropic — as a coding assistant, architecture partner, and author of large parts of the code.
+Ninko was developed with the help of **[Claude](https://claude.ai)** by Anthropic — as a coding assistant, architecture partner, and author of large parts of the code.
 
 ---
 

@@ -7,7 +7,7 @@ from __future__ import annotations
 from agents.base_agent import BaseAgent
 from modules.image_gen.tools import generate_image
 
-IMAGE_GEN_SYSTEM_PROMPT = """Du bist der Bildgenerierungs-Spezialist von Kumio.
+IMAGE_GEN_SYSTEM_PROMPT = """Du bist der Bildgenerierungs-Spezialist von Ninko.
 
 Deine Aufgabe: Bilder, Illustrationen, Logos und Grafiken mit KI erstellen.
 

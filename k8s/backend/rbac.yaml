@@ -1,10 +1,10 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: kumio-k8s-manager
+  name: ninko-k8s-manager
   labels:
-    app.kubernetes.io/name: kumio
-    app.kubernetes.io/part-of: kumio
+    app.kubernetes.io/name: ninko
+    app.kubernetes.io/part-of: ninko
 rules:
   # Pods – Read + Delete (Restart)
   - apiGroups: [""]
@@ -34,15 +34,15 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: kumio-k8s-manager-binding
+  name: ninko-k8s-manager-binding
   labels:
-    app.kubernetes.io/name: kumio
-    app.kubernetes.io/part-of: kumio
+    app.kubernetes.io/name: ninko
+    app.kubernetes.io/part-of: ninko
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: kumio-k8s-manager
+  name: ninko-k8s-manager
 subjects:
   - kind: ServiceAccount
-    name: kumio
-    namespace: kumio
+    name: ninko
+    namespace: ninko

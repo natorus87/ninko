@@ -9,7 +9,7 @@ from langchain_core.tools import tool
 from core.connections import ConnectionManager
 from core.vault import get_vault
 
-logger = logging.getLogger("kumio.modules.homeassistant.tools")
+logger = logging.getLogger("ninko.modules.homeassistant.tools")
 
 async def _get_api_client(connection_id: str = "") -> Dict[str, Any]:
     """

@@ -7,7 +7,7 @@ import httpx
 import logging
 from fastapi import APIRouter
 
-logger = logging.getLogger("kumio.modules.web_search")
+logger = logging.getLogger("ninko.modules.web_search")
 
 router = APIRouter()
 

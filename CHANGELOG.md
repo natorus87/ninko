@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Kumio are documented in this file.
+All notable changes to Ninko are documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
@@ -9,7 +9,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [0.5.0] – 2026-03-24
 
-First public release. Kumio is a modular, AI-powered IT operations platform built on FastAPI (Python 3.12) with an immutable core and auto-discovering modules.
+First public release. Ninko is a modular, AI-powered IT operations platform built on FastAPI (Python 3.12) with an immutable core and auto-discovering modules.
 
 ### Core Architecture
 
@@ -26,7 +26,7 @@ First public release. Kumio is a modular, AI-powered IT operations platform buil
 
 ### AI Capabilities
 
-- **Soul System** – Persistent agent identities (Soul MDs). Built-in: `backend/souls/`. Dynamic: Redis `kumio:souls`. Injected before RAG/Skills/language in `final_system_prompt`.
+- **Soul System** – Persistent agent identities (Soul MDs). Built-in: `backend/souls/`. Dynamic: Redis `ninko:souls`. Injected before RAG/Skills/language in `final_system_prompt`.
 - **Skills System** – SKILL.md format with YAML frontmatter. Hot-reload via `install_skill` tool. Max 2 skills/request injected (threshold 12%). GUI: `GET/POST/PUT/DELETE /api/skills/`.
 - **Long-term memory** – ChromaDB-backed `SemanticMemory`. Tools: `remember_fact`, `recall_memory`, `forget_fact` (preview flow), `confirm_forget`. Auto-memorize with cooldown (60s) and agent exclusions.
 - **Context compaction** – LLM summary when context window budget exceeded (25% of model window). Compaction summary preserved as SystemMessage. Frontend notification `⟳`.
@@ -84,7 +84,7 @@ First public release. Kumio is a modular, AI-powered IT operations platform buil
 ### Infrastructure & Deployment
 
 - **Dev**: `docker-compose.yml` – backend, Redis, ChromaDB, SearXNG, vault fallback (SQLite).
-- **Prod**: Kubernetes/MicroK8s, namespace `kumio`, image `natorus87/kumio-backend:latest`, Traefik IngressRoute.
+- **Prod**: Kubernetes/MicroK8s, namespace `ninko`, image `natorus87/ninko-backend:latest`, Traefik IngressRoute.
 - **Plugin system**: ZIP-installable plugins with hot-load at runtime. Name validation against path traversal.
 - **Secrets**: HashiCorp Vault with SQLite fallback (`VAULT_FALLBACK=sqlite`).
 - **ChromaDB**: pinned to `0.4.24`, `numpy<2.0.0`.

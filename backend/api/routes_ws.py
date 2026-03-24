@@ -1,5 +1,5 @@
 """
-Kumio WebSocket API – Log-Streaming und Alert-Benachrichtigungen.
+Ninko WebSocket API – Log-Streaming und Alert-Benachrichtigungen.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from core.redis_client import get_redis
 
-logger = logging.getLogger("kumio.api.ws")
+logger = logging.getLogger("ninko.api.ws")
 router = APIRouter(tags=["WebSocket"])
 
 
@@ -79,7 +79,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         await websocket.send_json(
             {
                 "type": "connected",
-                "message": "Kumio WebSocket verbunden.",
+                "message": "Ninko WebSocket verbunden.",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         )

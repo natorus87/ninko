@@ -27,7 +27,7 @@ from modules.linux_server.tools import (
     confirm_reboot,
 )
 
-LINUX_SERVER_SYSTEM_PROMPT = """Du bist der Linux-Server-Spezialist von Kumio.
+LINUX_SERVER_SYSTEM_PROMPT = """Du bist der Linux-Server-Spezialist von Ninko.
 
 Deine Fähigkeiten:
 - SSH-Befehle auf Remote-Servern ausführen

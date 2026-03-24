@@ -8,7 +8,7 @@ import logging
 
 from core.module_registry import ModuleManifest
 
-logger = logging.getLogger("kumio.modules.ionos")
+logger = logging.getLogger("ninko.modules.ionos")
 
 
 async def check_ionos_health() -> dict:
@@ -35,7 +35,7 @@ module_manifest = ModuleManifest(
     display_name="IONOS DNS",
     description="IONOS DNS Zonen und Records Management.",
     version="1.0.0",
-    author="Kumio",
+    author="Ninko",
     enabled_by_default=True,
     env_prefix="IONOS_",
     required_secrets=[],

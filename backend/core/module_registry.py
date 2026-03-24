@@ -1,5 +1,5 @@
 """
-Kumio Module Registry – Herzstück der modularen Architektur.
+Ninko Module Registry – Herzstück der modularen Architektur.
 
 Scannt modules/, importiert Manifeste, validiert, registriert Agenten,
 Router und Keywords. Alle anderen Komponenten fragen hier nach –
@@ -19,19 +19,19 @@ from typing import Any, Callable, Awaitable
 
 from fastapi import FastAPI
 
-logger = logging.getLogger("kumio.registry")
+logger = logging.getLogger("ninko.registry")
 
 
 # ── Modul-Manifest-Datenklasse ──────────────────────────────
 @dataclass
 class ModuleManifest:
-    """Pflichtfelder jedes Kumio-Moduls."""
+    """Pflichtfelder jedes Ninko-Moduls."""
 
     name: str
     display_name: str
     description: str = ""
     version: str = "1.0.0"
-    author: str = "Kumio Team"
+    author: str = "Ninko Team"
     enabled_by_default: bool = True
     env_prefix: str = ""
     required_secrets: list[str] = field(default_factory=list)
@@ -70,7 +70,7 @@ class ModuleRegistry:
         """
         1. Scannt backend/modules/ nach Unterordnern
         2. Importiert modules/<name>/__init__.py → module_manifest
-        3. Prüft Env: KUMIO_MODULE_<NAME_UPPER>=true|false
+        3. Prüft Env: NINKO_MODULE_<NAME_UPPER>=true|false
         4. Registriert Modul: Agent, Router, Keywords
         5. Loggt welche Module geladen / übersprungen wurden
         """
@@ -131,7 +131,7 @@ class ModuleRegistry:
             return
 
         # Prüfe ob per Env aktiviert/deaktiviert
-        env_key = f"KUMIO_MODULE_{manifest.name.upper()}"
+        env_key = f"NINKO_MODULE_{manifest.name.upper()}"
         env_val = os.environ.get(env_key)
 
         if env_val is not None:

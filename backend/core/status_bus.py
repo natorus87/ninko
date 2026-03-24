@@ -1,5 +1,5 @@
 """
-Kumio Status Bus – Per-Session asyncio Queue für Live-Status-Updates.
+Ninko Status Bus – Per-Session asyncio Queue für Live-Status-Updates.
 Wird vom Orchestrator/Agent beschrieben, vom SSE-Endpoint gelesen.
 """
 
@@ -9,13 +9,13 @@ import asyncio
 import logging
 from contextvars import ContextVar
 
-logger = logging.getLogger("kumio.core.status_bus")
+logger = logging.getLogger("ninko.core.status_bus")
 
 # session_id → asyncio.Queue
 _queues: dict[str, asyncio.Queue] = {}
 
 # Async-sicherer Context-Variable: aktuelle session_id im laufenden Task
-_session_id_var: ContextVar[str] = ContextVar("kumio_session_id", default="")
+_session_id_var: ContextVar[str] = ContextVar("ninko_session_id", default="")
 
 
 def set_session_id(session_id: str) -> None:

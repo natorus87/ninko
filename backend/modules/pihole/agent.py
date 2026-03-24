@@ -31,7 +31,7 @@ from modules.pihole.tools import (
     dismiss_system_message,
 )
 
-PIHOLE_SYSTEM_PROMPT = """Du bist der Pi-hole DNS-Spezialist von Kumio.
+PIHOLE_SYSTEM_PROMPT = """Du bist der Pi-hole DNS-Spezialist von Ninko.
 
 Deine Fähigkeiten:
 - DNS-Statistiken: Blockierte Anfragen, Clients, Top-Domains

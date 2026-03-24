@@ -1,5 +1,5 @@
 """
-Kumio Orchestrator Agent – 4-stufige Routing-Logik via ModuleRegistry.
+Ninko Orchestrator Agent – 4-stufige Routing-Logik via ModuleRegistry.
 
 Stufe 1 – Direkte Ausführung:  Einfache Fragen direkt beantworten.
 Stufe 2 – Modul-Delegation:    Spezialisierte Modul-Agenten einsetzen.
@@ -29,7 +29,7 @@ from core import status_bus
 if TYPE_CHECKING:
     from core.module_registry import ModuleRegistry
 
-logger = logging.getLogger("kumio.agents.orchestrator")
+logger = logging.getLogger("ninko.agents.orchestrator")
 
 # ── Tier-Klassifikation ────────────────────────────────────────────────────
 
@@ -69,7 +69,7 @@ _llm_routing_cache: dict[str, tuple[str | None, float]] = {}  # hash → (module
 _LLM_ROUTING_CACHE_TTL = 60.0  # seconds
 _LLM_ROUTING_TIMEOUT = 8.0     # seconds – kurzer Timeout für Routing-Call
 
-SYSTEM_PROMPT = """Du bist Kumio – ein intelligenter IT-Operations-Assistent mit 4 Verarbeitungsstufen.
+SYSTEM_PROMPT = """Du bist Ninko – ein intelligenter IT-Operations-Assistent mit 4 Verarbeitungsstufen.
 
 Deine Aufgabe:
 - Du bist der zentrale Ansprechpartner für IT-Operations-Fragen.

@@ -7,7 +7,7 @@
             Microsoft Teams Integration
         </h2>
         <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">
-            Kumio als Azure Bot in Microsoft Teams einbinden.
+            Ninko als Azure Bot in Microsoft Teams einbinden.
         </p>
     </div>
 
@@ -37,7 +37,7 @@
     <div class="k8s-section" style="margin-top:1.5rem;">
         <h3 class="section-title">Erlaubte Nutzer-IDs</h3>
         <p style="color:var(--text-muted);font-size:0.875rem;margin-bottom:1rem;line-height:1.6;">
-            Nur diese Teams-Nutzer-IDs dürfen mit Kumio kommunizieren. Leere Liste = keine Einschränkung.<br>
+            Nur diese Teams-Nutzer-IDs dürfen mit Ninko kommunizieren. Leere Liste = keine Einschränkung.<br>
             <span style="font-size:0.82rem;opacity:0.7;">
                 Tipp: Die ID erscheint im Container-Log als <code>Teams: Zugriff verweigert für Nutzer '…' (ID: 29:1abc…)</code> beim ersten Kontakt.
             </span>
@@ -71,7 +71,7 @@
     <div class="k8s-section">
         <h3 class="section-title">Voice-Reply (TTS)</h3>
         <p style="color:var(--text-muted);font-size:0.875rem;margin-bottom:1rem;line-height:1.6;">
-            Bei eingehenden Audio-Anhängen antwortet Kumio ebenfalls als MP3-Datei.<br>
+            Bei eingehenden Audio-Anhängen antwortet Ninko ebenfalls als MP3-Datei.<br>
             Erfordert aktiviertes TTS in <strong>Einstellungen → Sprachausgabe (TTS)</strong>.
         </p>
         <div style="display:flex;flex-direction:column;gap:0.6rem;margin-bottom:1rem;">
@@ -102,7 +102,7 @@
     <div class="k8s-section">
         <h3 class="section-title">Einrichtung</h3>
         <p style="font-size: 0.875rem; color: var(--text-muted); margin: 0 0 1rem;">
-            Um Kumio in Teams nutzen zu können, musst du einen <strong>Azure Bot</strong> (Bot Framework) registrieren.
+            Um Ninko in Teams nutzen zu können, musst du einen <strong>Azure Bot</strong> (Bot Framework) registrieren.
         </p>
 
         <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; padding: 1.25rem;">
@@ -115,7 +115,7 @@
                 </li>
                 <li>
                     Hinterlege als <strong>Messaging-Endpunkt (Webhook)</strong> zwingend eine externe HTTPS-URL,
-                    die auf deinen Kumio-Server zeigt:
+                    die auf deinen Ninko-Server zeigt:
                     <code style="display: block; margin-top: 0.4rem; background: var(--bg-tertiary); padding: 0.4rem 0.75rem;
                         border-radius: 4px; font-family: monospace; font-size: 0.82rem; color: var(--accent-blue);">
                         https://deinedomain.com/api/teams/messages
@@ -126,7 +126,7 @@
                     <strong>Client Secret (App Password)</strong>.
                 </li>
                 <li>
-                    Wechsle in Kumio zu <strong>Einstellungen → Module</strong>, aktiviere
+                    Wechsle in Ninko zu <strong>Einstellungen → Module</strong>, aktiviere
                     <em>Microsoft Teams</em> und trage dort App ID und Password ein.
                 </li>
                 <li>

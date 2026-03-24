@@ -1,5 +1,5 @@
 /**
- * Kumio – Main Application JavaScript
+ * Ninko – Main Application JavaScript
  */
 
 // ─── i18n ─────────────────────────────────────────────
@@ -63,7 +63,7 @@ function t(key, ...args) { return I18n.t(key, ...args); }
 
 // ──────────────────────────────────────────────────────
 
-const Kumio = {
+const Ninko = {
     ws: null,
     sessionId: null,
     modules: [],
@@ -110,21 +110,21 @@ const Kumio = {
 
     // ─── Init ───
     async init() {
-        console.log('Kumio: Initializing v1.0.1...');
+        console.log('Ninko: Initializing v1.0.1...');
 
         // Sprache laden (aus localStorage oder API)
-        const savedLang = localStorage.getItem('kumio_lang') || 'de';
+        const savedLang = localStorage.getItem('ninko_lang') || 'de';
         await I18n.load(savedLang);
 
         // Sprache aus Backend übernehmen wenn noch keine lokale gespeichert
-        if (!localStorage.getItem('kumio_lang')) {
+        if (!localStorage.getItem('ninko_lang')) {
             try {
                 const r = await fetch('/api/settings/language');
                 if (r.ok) {
                     const d = await r.json();
                     if (d.language && d.language !== savedLang) {
                         await I18n.load(d.language);
-                        localStorage.setItem('kumio_lang', d.language);
+                        localStorage.setItem('ninko_lang', d.language);
                     }
                 }
             } catch { /* Fallback */ }
@@ -145,11 +145,11 @@ const Kumio = {
         this._setChatState('centered');
 
         // Modal Event-Handler (Cancel)
-        document.getElementById('kumio-confirm-cancel')?.addEventListener('click', () => {
+        document.getElementById('ninko-confirm-cancel')?.addEventListener('click', () => {
             this._confirmResolver?.(false);
             this._hideConfirm();
         });
-        document.getElementById('kumio-confirm-ok')?.addEventListener('click', () => {
+        document.getElementById('ninko-confirm-ok')?.addEventListener('click', () => {
             this._confirmResolver?.(true);
             this._hideConfirm();
         });
@@ -166,9 +166,9 @@ const Kumio = {
     /** Custom Confirm Promise */
     confirm(message, title = 'Bestätigung') {
         return new Promise((resolve) => {
-            const modal = document.getElementById('kumio-confirm-modal');
-            const msgEl = document.getElementById('kumio-confirm-message');
-            const titleEl = document.getElementById('kumio-confirm-title');
+            const modal = document.getElementById('ninko-confirm-modal');
+            const msgEl = document.getElementById('ninko-confirm-message');
+            const titleEl = document.getElementById('ninko-confirm-title');
 
             if (msgEl) msgEl.innerText = message;
             if (titleEl) titleEl.innerText = title;
@@ -186,7 +186,7 @@ const Kumio = {
 
     /** Hide Modal with animation */
     _hideConfirm() {
-        const modal = document.getElementById('kumio-confirm-modal');
+        const modal = document.getElementById('ninko-confirm-modal');
         if (modal) {
             modal.classList.remove('active');
             setTimeout(() => {
@@ -203,10 +203,10 @@ const Kumio = {
     },
 
     getSessionId() {
-        let id = sessionStorage.getItem('kumio_session');
+        let id = sessionStorage.getItem('ninko_session');
         if (!id) {
             id = this.generateUUID();
-            sessionStorage.setItem('kumio_session', id);
+            sessionStorage.setItem('ninko_session', id);
         }
         return id;
     },
@@ -401,7 +401,7 @@ const Kumio = {
             'wordpress': typeof WordPressTab !== 'undefined' ? WordPressTab : null,
             'qdrant': typeof QdrantTab !== 'undefined' ? QdrantTab : null,
         };
-        // Fallback: dynamisch registrierte Plugin-Tabs (via Kumio._pluginTabs)
+        // Fallback: dynamisch registrierte Plugin-Tabs (via Ninko._pluginTabs)
         return map[tabId] || this._pluginTabs[tabId] || null;
     },
 
@@ -696,14 +696,14 @@ const Kumio = {
                 const data = await res.json();
                 this.chatHistory = data.conversations || [];
                 // Lokalen Cache aktualisieren
-                try { localStorage.setItem('kumio_chat_history', JSON.stringify(this.chatHistory)); } catch { /**/ }
+                try { localStorage.setItem('ninko_chat_history', JSON.stringify(this.chatHistory)); } catch { /**/ }
             } else {
                 throw new Error('API nicht erreichbar');
             }
         } catch {
             // Fallback auf localStorage wenn Server nicht erreichbar
             try {
-                const raw = localStorage.getItem('kumio_chat_history');
+                const raw = localStorage.getItem('ninko_chat_history');
                 this.chatHistory = raw ? JSON.parse(raw) : [];
             } catch {
                 this.chatHistory = [];
@@ -722,7 +722,7 @@ const Kumio = {
             });
         } catch { /* Server nicht erreichbar – localStorage-Fallback reicht */ }
         // Immer auch lokal cachen
-        try { localStorage.setItem('kumio_chat_history', JSON.stringify(this.chatHistory)); } catch { /**/ }
+        try { localStorage.setItem('ninko_chat_history', JSON.stringify(this.chatHistory)); } catch { /**/ }
     },
 
     async deleteHistoryEntry(id) {
@@ -730,7 +730,7 @@ const Kumio = {
             await fetch(`/api/chat/ui-history/${id}`, { method: 'DELETE' });
         } catch { /**/ }
         this.chatHistory = this.chatHistory.filter(h => h.id !== id);
-        try { localStorage.setItem('kumio_chat_history', JSON.stringify(this.chatHistory)); } catch { /**/ }
+        try { localStorage.setItem('ninko_chat_history', JSON.stringify(this.chatHistory)); } catch { /**/ }
         this.renderHistory();
     },
 
@@ -745,10 +745,10 @@ const Kumio = {
 
         list.innerHTML = this.chatHistory.map(h => `
             <div class="history-item ${h.id === this.currentHistoryId ? 'active' : ''}"
-                onclick="Kumio.loadHistoryEntry('${h.id}')"
+                onclick="Ninko.loadHistoryEntry('${h.id}')"
                 title="${h.title}">
                 <span class="history-item-text">${h.title}</span>
-                <button class="history-item-delete" onclick="event.stopPropagation(); Kumio.deleteHistoryEntry('${h.id}')" title="Chat löschen">
+                <button class="history-item-delete" onclick="event.stopPropagation(); Ninko.deleteHistoryEntry('${h.id}')" title="Chat löschen">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m5 0V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
                 </button>
             </div>
@@ -775,7 +775,7 @@ const Kumio = {
         // Update state
         this.currentHistoryId = id;
         this.sessionId = entry.sessionId;
-        sessionStorage.setItem('kumio_session', this.sessionId);
+        sessionStorage.setItem('ninko_session', this.sessionId);
 
         const label = document.getElementById('chat-session-label');
         if (label) label.textContent = entry.title;
@@ -790,17 +790,17 @@ const Kumio = {
         container.innerHTML = `
             <div class="welcome-message">
                 <div class="logo-wrapper">
-                    <img src="/static/images/logo_dashboard_new.png?v=3" alt="Kumio Core" class="welcome-illustration" />
+                    <img src="/static/images/logo_dashboard_new.png?v=3" alt="Ninko Core" class="welcome-illustration" />
                     <div class="eye eye-left"></div>
                     <div class="eye eye-right"></div>
                 </div>
-                <h2>Kumio</h2>
+                <h2>Ninko</h2>
                 <p>${t('chat.welcome.desc')}</p>
                 <div class="quick-actions">
-                    <button class="quick-action" onclick="Kumio.sendQuick(this.dataset.msg)" data-msg="${t('quick.createAgentMsg')}">${t('quick.createAgent')}</button>
-                    <button class="quick-action" onclick="Kumio.sendQuick(this.dataset.msg)" data-msg="${t('quick.rememberFactMsg')}">${t('quick.rememberFact')}</button>
-                    <button class="quick-action" onclick="Kumio.sendQuick(this.dataset.msg)" data-msg="${t('quick.webSearchMsg')}">${t('quick.webSearch')}</button>
-                    <button class="quick-action" onclick="Kumio.sendQuick(this.dataset.msg)" data-msg="${t('quick.showAgentsMsg')}">${t('quick.showAgents')}</button>
+                    <button class="quick-action" onclick="Ninko.sendQuick(this.dataset.msg)" data-msg="${t('quick.createAgentMsg')}">${t('quick.createAgent')}</button>
+                    <button class="quick-action" onclick="Ninko.sendQuick(this.dataset.msg)" data-msg="${t('quick.rememberFactMsg')}">${t('quick.rememberFact')}</button>
+                    <button class="quick-action" onclick="Ninko.sendQuick(this.dataset.msg)" data-msg="${t('quick.webSearchMsg')}">${t('quick.webSearch')}</button>
+                    <button class="quick-action" onclick="Ninko.sendQuick(this.dataset.msg)" data-msg="${t('quick.showAgentsMsg')}">${t('quick.showAgents')}</button>
                 </div>
             </div>`;
 
@@ -809,7 +809,7 @@ const Kumio = {
 
         // New session
         this.sessionId = this.generateUUID();
-        sessionStorage.setItem('kumio_session', this.sessionId);
+        sessionStorage.setItem('ninko_session', this.sessionId);
         this.currentHistoryId = null;
 
         const label = document.getElementById('chat-session-label');
@@ -824,7 +824,7 @@ const Kumio = {
 
         // New session ID = fresh context on the server
         this.sessionId = this.generateUUID();
-        sessionStorage.setItem('kumio_session', this.sessionId);
+        sessionStorage.setItem('ninko_session', this.sessionId);
         this.currentHistoryId = null;
 
         // Also clear visible messages
@@ -839,7 +839,7 @@ const Kumio = {
 
     // ─── Theme Toggle ───
     restoreTheme() {
-        const saved = localStorage.getItem('kumio_theme');
+        const saved = localStorage.getItem('ninko_theme');
         if (saved === 'light') {
             document.body.classList.add('light-mode');
             const btn = document.getElementById('theme-toggle');
@@ -849,7 +849,7 @@ const Kumio = {
 
     toggleTheme() {
         const isLight = document.body.classList.toggle('light-mode');
-        localStorage.setItem('kumio_theme', isLight ? 'light' : 'dark');
+        localStorage.setItem('ninko_theme', isLight ? 'light' : 'dark');
         const btn = document.getElementById('theme-toggle');
         if (btn) {
             btn.innerHTML = isLight
@@ -887,12 +887,12 @@ const Kumio = {
         const avatar = role === 'user' ? avatarUser : avatarAi;
 
         const retryBtn = role === 'ai'
-            ? `<button class="chat-action-btn" title="Wiederholen" onclick="Kumio.retryMessage('${msgId}')">↺</button>`
+            ? `<button class="chat-action-btn" title="Wiederholen" onclick="Ninko.retryMessage('${msgId}')">↺</button>`
             : '';
 
         const speakerIcon = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`;
         const ttsBtn = (role === 'ai' && this._ttsAvailable)
-            ? `<button class="chat-action-btn chat-action-tts" data-tts-id="${msgId}" title="Vorlesen" onclick="Kumio.speakMessage('${msgId}')">${speakerIcon}</button>`
+            ? `<button class="chat-action-btn chat-action-tts" data-tts-id="${msgId}" title="Vorlesen" onclick="Ninko.speakMessage('${msgId}')">${speakerIcon}</button>`
             : '';
 
         const div = document.createElement('div');
@@ -905,7 +905,7 @@ const Kumio = {
                 <div class="chat-actions">
                     ${ttsBtn}
                     ${retryBtn}
-                    <button class="chat-action-btn chat-action-delete" title="Löschen" onclick="Kumio.deleteMessage('${msgId}')"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
+                    <button class="chat-action-btn chat-action-delete" title="Löschen" onclick="Ninko.deleteMessage('${msgId}')"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
                 </div>
             </div>
         `;
@@ -1241,7 +1241,7 @@ const Kumio = {
     async setLanguage(lang) {
         // UI sofort aktualisieren
         await I18n.load(lang);
-        localStorage.setItem('kumio_lang', lang);
+        localStorage.setItem('ninko_lang', lang);
 
         // Aktiven Zustand der Sprach-Buttons aktualisieren
         document.querySelectorAll('.lang-btn').forEach(btn => {
@@ -1265,7 +1265,7 @@ const Kumio = {
         const container = document.getElementById('settings-panel-language');
         if (!container) return;
 
-        const currentLang = localStorage.getItem('kumio_lang') || 'de';
+        const currentLang = localStorage.getItem('ninko_lang') || 'de';
         const languages = [
             { code: 'de', flag: '🇩🇪', label: 'Deutsch' },
             { code: 'en', flag: '🇬🇧', label: 'English' },
@@ -1287,7 +1287,7 @@ const Kumio = {
                     ${languages.map(l => `
                         <button class="lang-btn ${l.code === currentLang ? 'lang-btn-active' : ''}"
                             data-lang="${l.code}"
-                            onclick="Kumio.setLanguage('${l.code}')">
+                            onclick="Ninko.setLanguage('${l.code}')">
                             <span class="lang-flag">${l.flag}</span>
                             <span class="lang-name">${l.label}</span>
                         </button>
@@ -1513,7 +1513,7 @@ const Kumio = {
                     <td>${v.name}</td>
                     <td>${v.quality}</td>
                     <td><button class="btn btn-outline btn-sm" style="color:var(--error-color);border-color:var(--error-color);"
-                        onclick="Kumio.deleteTtsVoice('${v.lang}','${v.name}')"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></td>
+                        onclick="Ninko.deleteTtsVoice('${v.lang}','${v.name}')"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></td>
                 </tr>`).join('')}
             </tbody></table>`;
         } catch (err) {
@@ -1522,7 +1522,7 @@ const Kumio = {
     },
 
     async testTtsPreview() {
-        const text = document.getElementById('tts-preview-text').value.trim() || 'Hallo, ich bin Kumio.';
+        const text = document.getElementById('tts-preview-text').value.trim() || 'Hallo, ich bin Ninko.';
         const audioEl = document.getElementById('tts-preview-audio');
         audioEl.style.display = 'none';
         try {
@@ -1801,13 +1801,13 @@ const Kumio = {
                             <label class="toggle-switch" title="Aktivieren/Deaktivieren">
                                 <input type="checkbox" ${mod.enabled ? 'checked' : ''}
                                     id="mod-toggle-${mod.name}"
-                                    onchange="Kumio.toggleModule('${mod.name}', this.checked)">
+                                    onchange="Ninko.toggleModule('${mod.name}', this.checked)">
                                 <span class="toggle-slider"></span>
                             </label>
-                            <button class="btn-icon btn-icon-sm" onclick="Kumio.toggleModuleSettings('${mod.name}')" title="Einstellungen">
+                            <button class="btn-icon btn-icon-sm" onclick="Ninko.toggleModuleSettings('${mod.name}')" title="Einstellungen">
                                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                             </button>
-                            <button class="btn-icon btn-icon-sm" onclick="Kumio.deletePlugin('${mod.name}')" title="Plugin unwiderruflich deinstallieren" style="color: var(--error-color);">
+                            <button class="btn-icon btn-icon-sm" onclick="Ninko.deletePlugin('${mod.name}')" title="Plugin unwiderruflich deinstallieren" style="color: var(--error-color);">
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                             </button>
                         </div>
@@ -1925,11 +1925,11 @@ const Kumio = {
                 <div class="form-actions" style="margin-top: 1rem; display: flex; gap: 0.5rem; align-items: center;">
                     <span id="mod-save-status-${moduleName}" class="save-status"></span>
                     <button class="btn btn-sm btn-primary" id="conn-save-btn-${moduleName}"
-                        onclick="Kumio.saveConnection('${moduleName}')">
+                        onclick="Ninko.saveConnection('${moduleName}')">
                         ➕ Speichern
                     </button>
                     <button class="btn btn-sm btn-outline hidden" id="conn-cancel-btn-${moduleName}"
-                        onclick="Kumio.cancelEditConnection('${moduleName}')">
+                        onclick="Ninko.cancelEditConnection('${moduleName}')">
                         Abbrechen
                     </button>
                 </div>
@@ -1962,9 +1962,9 @@ const Kumio = {
                         ${c.is_default ? '<span class="status-badge status-ok" style="align-self: flex-start; margin-top: 0.25rem;">Standard</span>' : ''}
                     </div>
                     <div class="cluster-actions" style="display: flex; gap: 0.5rem; align-items: center;">
-                        ${!c.is_default ? `<button class="btn btn-sm btn-outline" onclick="Kumio.setDefaultConnection('${moduleName}', '${c.id}')">⭐ Standard</button>` : ''}
-                        <button class="btn btn-sm btn-outline" onclick="Kumio.editConnection('${moduleName}', '${c.id}')">✎</button>
-                        <button class="btn btn-sm btn-danger" onclick="Kumio.deleteConnection('${moduleName}', '${c.id}')">${this._ic.trash}</button>
+                        ${!c.is_default ? `<button class="btn btn-sm btn-outline" onclick="Ninko.setDefaultConnection('${moduleName}', '${c.id}')">⭐ Standard</button>` : ''}
+                        <button class="btn btn-sm btn-outline" onclick="Ninko.editConnection('${moduleName}', '${c.id}')">✎</button>
+                        <button class="btn btn-sm btn-danger" onclick="Ninko.deleteConnection('${moduleName}', '${c.id}')">${this._ic.trash}</button>
                     </div>
                 </div>
             `).join('');
@@ -2194,16 +2194,16 @@ const Kumio = {
     // ─── Resizing ───
     initResizers() {
         // Migrate sidebar width: boost by 20% for unified sidebar with history
-        if (!localStorage.getItem('kumio_sidebar_migrated')) {
-            const savedWidth = localStorage.getItem('kumio_sidebar_width');
+        if (!localStorage.getItem('ninko_sidebar_migrated')) {
+            const savedWidth = localStorage.getItem('ninko_sidebar_width');
             if (savedWidth) {
                 const boosted = Math.min(Math.round(parseInt(savedWidth) * 1.2), 500);
-                localStorage.setItem('kumio_sidebar_width', boosted);
+                localStorage.setItem('ninko_sidebar_width', boosted);
             }
-            localStorage.setItem('kumio_sidebar_migrated', '1');
+            localStorage.setItem('ninko_sidebar_migrated', '1');
         }
 
-        this.setupResizer('sidebar-resizer', 'sidebar', 'kumio_sidebar_width');
+        this.setupResizer('sidebar-resizer', 'sidebar', 'ninko_sidebar_width');
         // history-resizer removed — history is now integrated into sidebar
     },
 
@@ -2703,8 +2703,8 @@ const Kumio = {
                             </div>
                         </div>
                         <div class="agent-card-actions">
-                            ${!s.builtin ? `<button class="btn-icon btn-icon-sm" onclick="Kumio.openSkillEditor('${s.name}')" title="Bearbeiten">${this._ic.edit}</button>` : `<button class="btn-icon btn-icon-sm" onclick="Kumio.openSkillEditor('${s.name}')" title="Ansehen/Override">${this._ic.edit}</button>`}
-                            ${!s.builtin ? `<button class="btn-icon btn-icon-sm" onclick="Kumio.deleteSkill('${s.name}')" title="Löschen" style="color:var(--error-color);">${this._ic.trash}</button>` : ''}
+                            ${!s.builtin ? `<button class="btn-icon btn-icon-sm" onclick="Ninko.openSkillEditor('${s.name}')" title="Bearbeiten">${this._ic.edit}</button>` : `<button class="btn-icon btn-icon-sm" onclick="Ninko.openSkillEditor('${s.name}')" title="Ansehen/Override">${this._ic.edit}</button>`}
+                            ${!s.builtin ? `<button class="btn-icon btn-icon-sm" onclick="Ninko.deleteSkill('${s.name}')" title="Löschen" style="color:var(--error-color);">${this._ic.trash}</button>` : ''}
                         </div>
                     </div>
                     <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-top:0.5rem;">
@@ -2877,7 +2877,7 @@ const Kumio = {
                         ${s.builtin ? '<span class="status-badge status-unknown" style="font-size:0.68rem;margin-left:4px;">built-in</span>' : ''}
                         <div style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${s.description}</div>
                     </div>
-                    <button class="btn-icon btn-icon-sm" onclick="Kumio.openSkillEditorFromAgentWithName('${s.name}')" title="Bearbeiten" style="flex-shrink:0;">${this._ic.edit}</button>
+                    <button class="btn-icon btn-icon-sm" onclick="Ninko.openSkillEditorFromAgentWithName('${s.name}')" title="Bearbeiten" style="flex-shrink:0;">${this._ic.edit}</button>
                 </div>
             `).join('');
         } catch {
@@ -3438,7 +3438,7 @@ const Kumio = {
         // Build label field
         let html = `<div class="form-row"><label class="form-label">Label</label>
             <input type="text" class="form-input" value="${this._escapeHtml(node.label)}"
-                onchange="Kumio._wfUpdateNode('${nodeId}', 'label', this.value)">
+                onchange="Ninko._wfUpdateNode('${nodeId}', 'label', this.value)">
         </div>`;
 
         // Smart fields per node type
@@ -3447,13 +3447,13 @@ const Kumio = {
                 // Render agent list as select, loaded async below
                 html += `<div class="form-row"><label class="form-label">Agent</label>
                     <select id="wf-inspect-agent_id" class="form-select"
-                        onchange="Kumio._wfUpdateNodeConfig('${nodeId}', 'agent_id', this.value)">
+                        onchange="Ninko._wfUpdateNodeConfig('${nodeId}', 'agent_id', this.value)">
                         <option value="">– Laden… –</option>
                     </select>
                 </div>`;
             } else if (k === 'mode' && node.type === 'trigger') {
                 html += `<div class="form-row"><label class="form-label">Modus</label>
-                    <select class="form-select" onchange="Kumio._wfUpdateNodeConfig('${nodeId}', 'mode', this.value)">
+                    <select class="form-select" onchange="Ninko._wfUpdateNodeConfig('${nodeId}', 'mode', this.value)">
                         <option value="manual" ${v === 'manual' ? 'selected' : ''}>Manuell</option>
                         <option value="cron" ${v === 'cron' ? 'selected' : ''}>Zeitplan (Cron)</option>
                         <option value="webhook" ${v === 'webhook' ? 'selected' : ''}>Webhook</option>
@@ -3462,7 +3462,7 @@ const Kumio = {
                 </div>`;
             } else if (k === 'status' && node.type === 'end') {
                 html += `<div class="form-row"><label class="form-label">Status</label>
-                    <select class="form-select" onchange="Kumio._wfUpdateNodeConfig('${nodeId}', 'status', this.value)">
+                    <select class="form-select" onchange="Ninko._wfUpdateNodeConfig('${nodeId}', 'status', this.value)">
                         <option value="succeeded" ${v === 'succeeded' ? 'selected' : ''}>Erfolgreich</option>
                         <option value="failed" ${v === 'failed' ? 'selected' : ''}>Fehlgeschlagen</option>
                     </select>
@@ -3470,7 +3470,7 @@ const Kumio = {
             } else {
                 html += `<div class="form-row"><label class="form-label">${this._escapeHtml(k)}</label>
                     <input type="text" class="form-input" value="${this._escapeHtml(String(v ?? ''))}"
-                        onchange="Kumio._wfUpdateNodeConfig('${nodeId}', '${k}', this.value)">
+                        onchange="Ninko._wfUpdateNodeConfig('${nodeId}', '${k}', this.value)">
                 </div>`;
             }
         }
@@ -3485,14 +3485,14 @@ const Kumio = {
                 const src = this._wfNodes.find(n => n.id === e.source_id);
                 html += `<div style="font-size:0.8rem;display:flex;align-items:center;justify-content:space-between;margin-bottom:0.3rem">
                     <span>↩ ${src?.label || e.source_id}</span>
-                    <button class="btn-icon btn-icon-sm" style="color:var(--error-color)" onclick="Kumio._wfDeleteEdge('${e.id}')" title="Entfernen">✕</button>
+                    <button class="btn-icon btn-icon-sm" style="color:var(--error-color)" onclick="Ninko._wfDeleteEdge('${e.id}')" title="Entfernen">✕</button>
                 </div>`;
             });
             outEdges.forEach(e => {
                 const tgt = this._wfNodes.find(n => n.id === e.target_id);
                 html += `<div style="font-size:0.8rem;display:flex;align-items:center;justify-content:space-between;margin-bottom:0.3rem">
                     <span>↪ ${tgt?.label || e.target_id}</span>
-                    <button class="btn-icon btn-icon-sm" style="color:var(--error-color)" onclick="Kumio._wfDeleteEdge('${e.id}')" title="Entfernen">✕</button>
+                    <button class="btn-icon btn-icon-sm" style="color:var(--error-color)" onclick="Ninko._wfDeleteEdge('${e.id}')" title="Entfernen">✕</button>
                 </div>`;
             });
             html += `</div>`;
@@ -3644,7 +3644,7 @@ const Kumio = {
             const historyEl = document.getElementById('run-history-list');
             if (historyEl) {
                 historyEl.innerHTML = runs.map(r => `
-                    <div class="run-history-item" onclick="Kumio._showRunDetail('${wfId}', '${r.id}')">
+                    <div class="run-history-item" onclick="Ninko._showRunDetail('${wfId}', '${r.id}')">
                         <span class="run-status-badge run-${r.status}">${r.status}</span>
                         <span>${r.started_at ? new Date(r.started_at).toLocaleString('de') : '–'}</span>
                         <span>${r.duration_ms ? (r.duration_ms / 1000).toFixed(1) + 's' : '–'}</span>
@@ -3794,7 +3794,7 @@ const Kumio = {
         // Älteste zuerst anzeigen (neueste am Ende, Auto-Scroll zeigt aktuellste)
         const displayEntries = [...this._logCache].reverse();
         tbody.innerHTML = displayEntries.map((entry, idx) => `
-            <tr class="log-row log-row-${(entry.level || 'INFO').toLowerCase()}" onclick="Kumio._showLogDetail(${this._logCache.length - 1 - idx})">
+            <tr class="log-row log-row-${(entry.level || 'INFO').toLowerCase()}" onclick="Ninko._showLogDetail(${this._logCache.length - 1 - idx})">
                 <td class="log-ts">${entry.timestamp || ''}</td>
                 <td><span class="log-level-badge ${levelColors[entry.level] || 'log-info'}">${entry.level || 'INFO'}</span></td>
                 <td class="log-cat">${entry.category || ''}</td>
@@ -3843,7 +3843,7 @@ const Kumio = {
         }
         const blob = new Blob([content], { type });
         const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = `kumio-logs.${ext}`;
+        const a = document.createElement('a'); a.href = url; a.download = `ninko-logs.${ext}`;
         a.click(); URL.revokeObjectURL(url);
     },
 
@@ -3872,15 +3872,15 @@ const Kumio = {
                         </div>
                         <div class="provider-actions">
                             <span class="provider-status" title="${this._escapeHtml(p.status || '')}">${statusDot[p.status] || statusDot.unknown}</span>
-                            <button class="btn btn-sm btn-outline" onclick="Kumio.testLlmProvider('${p.id}')">Test</button>
-                            <button class="btn-icon btn-icon-sm" onclick="Kumio.openProviderEditor('${p.id}')">${this._ic.edit}</button>
-                            <button class="btn-icon btn-icon-sm" onclick="Kumio.deleteLlmProvider('${p.id}', ${this._escapeHtml(JSON.stringify(p.name))})" style="color:var(--error-color)">${this._ic.trash}</button>
+                            <button class="btn btn-sm btn-outline" onclick="Ninko.testLlmProvider('${p.id}')">Test</button>
+                            <button class="btn-icon btn-icon-sm" onclick="Ninko.openProviderEditor('${p.id}')">${this._ic.edit}</button>
+                            <button class="btn-icon btn-icon-sm" onclick="Ninko.deleteLlmProvider('${p.id}', ${this._escapeHtml(JSON.stringify(p.name))})" style="color:var(--error-color)">${this._ic.trash}</button>
                         </div>
                     </div>
                     <div class="provider-meta">
                         <span>${this._escapeHtml({ollama:'Ollama',lmstudio:'LM Studio',openai_compatible:'OpenAI'}[p.backend] || p.backend || '')}</span> · <span>${this._escapeHtml(p.base_url || '')}</span> · <span>${this._escapeHtml(p.model || '')}</span>
                     </div>
-                    ${!p.is_default ? `<button class="btn btn-sm btn-outline" style="margin-top:0.5rem;" onclick="Kumio.setDefaultProvider('${p.id}')">Als Standard setzen</button>` : ''}
+                    ${!p.is_default ? `<button class="btn btn-sm btn-outline" style="margin-top:0.5rem;" onclick="Ninko.setDefaultProvider('${p.id}')">Als Standard setzen</button>` : ''}
                 </div>
             `).join('');
         } catch { container.innerHTML = '<p class="empty-state">Fehler beim Laden.</p>'; }
@@ -4019,12 +4019,12 @@ function showNotification(message, type = 'info') {
 }
 
 function switchTab(tabId) {
-    Kumio.switchTab(tabId);
+    Ninko.switchTab(tabId);
 }
 
 // ─── Export für HTML-Event-Handler ───
-window.Kumio = Kumio;
+window.Ninko = Ninko;
 window.I18n = I18n;
 
 // ─── Boot ───
-document.addEventListener('DOMContentLoaded', () => Kumio.init());
+document.addEventListener('DOMContentLoaded', () => Ninko.init());

@@ -1,16 +1,16 @@
-# Kumio Module: Kubernetes (☸)
+# Ninko Module: Kubernetes (☸)
 
-Dieses Modul integriert Kubernetes-Cluster-Management in Kumio, bietet Health-Checks für Nodes und Pods sowie Funktionen für Skalierung und Rollouts.
+Dieses Modul integriert Kubernetes-Cluster-Management in Ninko, bietet Health-Checks für Nodes und Pods sowie Funktionen für Skalierung und Rollouts.
 
 ## Architektur & Zugriff
 
-Da Kumio primär *IN* einem Kubernetes-Cluster betrieben wird, verwendet das Modul standardmäßig die berechtigte **In-Cluster-Konfiguration** des Pods. Es sind in der Regel keine extra Anmeldedaten erforderlich, sofern der ServiceAccount von Kumio über ausreichende RBAC-Rechte verfügt (siehe `k8s/rbac.yaml`).
+Da Ninko primär *IN* einem Kubernetes-Cluster betrieben wird, verwendet das Modul standardmäßig die berechtigte **In-Cluster-Konfiguration** des Pods. Es sind in der Regel keine extra Anmeldedaten erforderlich, sofern der ServiceAccount von Ninko über ausreichende RBAC-Rechte verfügt (siehe `k8s/rbac.yaml`).
 
-Läuft Kumio lokal, wird die lokale `~/.kube/config` verwendet.
+Läuft Ninko lokal, wird die lokale `~/.kube/config` verwendet.
 
 ## Konfiguration (Connections)
 
-Über das Kumio Backend (`⚙ Einstellungen -> Kubernetes`) können Verbinden angelegt werden. Dies ist primär nützlich, um verschiedene *Kontexte* (z.B. verschiedene Umgebungen wie `prod` oder `staging`) zu definieren:
+Über das Ninko Backend (`⚙ Einstellungen -> Kubernetes`) können Verbinden angelegt werden. Dies ist primär nützlich, um verschiedene *Kontexte* (z.B. verschiedene Umgebungen wie `prod` oder `staging`) zu definieren:
 
 - **Namespace**: (Optional) Standard-Namespace, falls nicht im Chat genannt.
 

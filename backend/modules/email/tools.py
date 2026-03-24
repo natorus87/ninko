@@ -22,7 +22,7 @@ from modules.email.schemas import (
     SendEmailRequest, FilterEmailRequest, MoveEmailRequest, DeleteEmailRequest
 )
 
-logger = logging.getLogger("kumio.modules.email.tools")
+logger = logging.getLogger("ninko.modules.email.tools")
 
 async def _get_auth_context(connection_id: str = "") -> dict:
     """Lädt die Setup Parameter und generiert ein OAuth2 Token oder gibt einfach das Basic Auth Password zurück."""

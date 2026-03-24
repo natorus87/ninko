@@ -21,7 +21,7 @@ from pathlib import Path
 
 import httpx
 
-logger = logging.getLogger("kumio.core.tts.voices")
+logger = logging.getLogger("ninko.core.tts.voices")
 
 _HUGGINGFACE_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
 

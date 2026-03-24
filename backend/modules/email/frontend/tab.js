@@ -1,5 +1,5 @@
 /**
- * Kumio Frontend Script für das Email Modul (Dashboard Dashboard)
+ * Ninko Frontend Script für das Email Modul (Dashboard Dashboard)
  */
 const EmailTab = {
     API_PREFIX: '/api/email',

@@ -16,15 +16,15 @@ modules: [email]
 
 ### Alert-E-Mail (Monitoring)
 ```
-Betreff: [KRITISCH] Kubernetes: Pod kumio-backend CrashLoopBackOff
+Betreff: [KRITISCH] Kubernetes: Pod ninko-backend CrashLoopBackOff
 
 Hallo Team,
 
-PROBLEM: Pod kumio-backend befindet sich seit 10 Minuten im Status CrashLoopBackOff.
+PROBLEM: Pod ninko-backend befindet sich seit 10 Minuten im Status CrashLoopBackOff.
 
 DETAILS:
-- Namespace: kumio
-- Pod: kumio-backend-abc123
+- Namespace: ninko
+- Pod: ninko-backend-abc123
 - Restarts: 5 in 10 Minuten
 - Letzter Fehler: OOMKilled (Speicherlimit überschritten)
 
@@ -32,7 +32,7 @@ MASSNAHME ERFORDERLICH:
 - Memory-Limit prüfen und ggf. erhöhen
 - kubectl logs <pod> für Details
 
-Automatisch gemeldet von Kumio IT-Operations
+Automatisch gemeldet von Ninko IT-Operations
 ```
 
 ### Sammel-Bericht (wöchentlich/täglich)

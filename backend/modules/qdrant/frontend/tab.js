@@ -407,7 +407,7 @@
                     is_default: document.getElementById('qdrant-conn-default').checked,
                     config: {
                         url,
-                        default_collection: document.getElementById('qdrant-conn-collection').value.trim() || 'kumio_knowledge',
+                        default_collection: document.getElementById('qdrant-conn-collection').value.trim() || 'ninko_knowledge',
                     },
                     secrets: apiKey ? { api_key: apiKey } : {},
                 };

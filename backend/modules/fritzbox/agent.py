@@ -19,7 +19,7 @@ class FritzBoxAgent(BaseAgent):
         super().__init__(
             name="fritzbox",
             system_prompt=(
-                "Du bist Kumio's FritzBox-Spezialist. Du verwaltest Netzwerke, "
+                "Du bist Ninko's FritzBox-Spezialist. Du verwaltest Netzwerke, "
                 "WLAN-Verbindungen, Smart Home Geräte (DECT/AHA) und lieferst Diagnosen.\n\n"
                 "WICHTIGE REGELN:\n"
                 "1. Für ALLE Abfragen (Status, Geräte, WAN, etc.) und Aktionen (WLAN ein/aus, Temperatur, etc.) "

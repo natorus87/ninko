@@ -1,9 +1,9 @@
 """
-Kumio – Soul-Manager.
+Ninko – Soul-Manager.
 Verwaltet Soul MDs: die persistente Identität jedes Agenten.
 
-- Kumios eigene Soul MD wird aus backend/souls/kumio.md geladen (built-in, im Image).
-- Agent-Souls werden in Redis gespeichert (kumio:souls) und beim Start geladen.
+- Ninkos eigene Soul MD wird aus backend/souls/ninko.md geladen (built-in, im Image).
+- Agent-Souls werden in Redis gespeichert (ninko:souls) und beim Start geladen.
 - Dynamisch erstellte Agenten erhalten beim Register automatisch eine generierte Soul MD.
 """
 
@@ -14,9 +14,9 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
-logger = logging.getLogger("kumio.core.soul_manager")
+logger = logging.getLogger("ninko.core.soul_manager")
 
-REDIS_KEY = "kumio:souls"
+REDIS_KEY = "ninko:souls"
 
 # Pfad zu den eingebauten Soul-Dateien (im Docker-Image)
 _SOULS_DIR = Path(__file__).resolve().parent.parent / "souls"
@@ -173,7 +173,7 @@ class SoulManager:
     ) -> str:
         """
         Generiert eine Soul MD für einen neuen dynamischen Agenten anhand einer Vorlage.
-        Die Soul MD erbt Kumios Grundprinzipien und wird auf den Agenten zugeschnitten.
+        Die Soul MD erbt Ninkos Grundprinzipien und wird auf den Agenten zugeschnitten.
         """
         now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         caps = capabilities or []
@@ -183,7 +183,7 @@ class SoulManager:
 
 ## Identity
 Name: {name}
-Erstellt von: Kumio
+Erstellt von: Ninko
 Erstellt am: {now}
 Typ: Dynamisch
 
@@ -195,9 +195,9 @@ Typ: Dynamisch
 
 ## Behavior Guidelines
 - Fokus strikt auf den definierten Purpose
-- Ergebnisse immer strukturiert an Kumio zurückgeben
+- Ergebnisse immer strukturiert an Ninko zurückgeben
 - Keine eigenständigen Entscheidungen außerhalb des eigenen Scopes
-- Verhalten konsistent mit Kumios Grundprinzipien
+- Verhalten konsistent mit Ninkos Grundprinzipien
 
 ## Constraints
 - Keine Aktionen außerhalb der definierten Capabilities
@@ -205,8 +205,8 @@ Typ: Dynamisch
 - Keine Veränderung anderer Agenten oder des Agenten-Pools
 
 ## Escalation Rules
-- Aufgabe außerhalb des eigenen Scopes → an Kumio zurückgeben
-- Fehler bei der Ausführung → Fehlerbeschreibung + Kontext an Kumio melden
+- Aufgabe außerhalb des eigenen Scopes → an Ninko zurückgeben
+- Fehler bei der Ausführung → Fehlerbeschreibung + Kontext an Ninko melden
 """
 
     def generate_module_soul(
@@ -226,7 +226,7 @@ Typ: Dynamisch
 
 ## Identity
 Name: {display_name}
-Rolle: {display_name}-Spezialist von Kumio
+Rolle: {display_name}-Spezialist von Ninko
 Typ: Statisch (Modul-Agent)
 
 ## Purpose
@@ -239,7 +239,7 @@ Typ: Statisch (Modul-Agent)
 - Fokus strikt auf den definierten Modulbereich
 - Ergebnisse immer strukturiert und vollständig zurückgeben
 - Bei destruktiven Aktionen: kurze Bestätigung einholen
-- Verhalten konsistent mit Kumios Grundprinzipien
+- Verhalten konsistent mit Ninkos Grundprinzipien
 
 ## Constraints
 - Keine Aktionen außerhalb der definierten Capabilities
@@ -247,8 +247,8 @@ Typ: Statisch (Modul-Agent)
 - Sicherheitsrelevante Aktionen erfordern Bestätigung
 
 ## Escalation Rules
-- Aufgabe außerhalb des eigenen Modulbereichs → an Kumio zurückgeben
-- Fehler bei der Ausführung → Fehlerbeschreibung + Kontext an Kumio melden
+- Aufgabe außerhalb des eigenen Modulbereichs → an Ninko zurückgeben
+- Fehler bei der Ausführung → Fehlerbeschreibung + Kontext an Ninko melden
 - Sicherheitsrelevante Aktionen → Bestätigung einholen
 """
 

@@ -10,7 +10,7 @@ import os
 
 from core.module_registry import ModuleManifest
 
-logger = logging.getLogger("kumio.modules.docker")
+logger = logging.getLogger("ninko.modules.docker")
 
 
 async def check_docker_health() -> dict:
@@ -43,7 +43,7 @@ module_manifest = ModuleManifest(
     display_name="Docker",
     description="Docker Host Management – Container, Images, Volumes, System-Info",
     version="1.0.0",
-    author="Kumio Team",
+    author="Ninko Team",
     enabled_by_default=False,
     env_prefix="DOCKER_",
     required_secrets=[],

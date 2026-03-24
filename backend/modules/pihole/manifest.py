@@ -8,7 +8,7 @@ import logging
 
 from core.module_registry import ModuleManifest
 
-logger = logging.getLogger("kumio.modules.pihole")
+logger = logging.getLogger("ninko.modules.pihole")
 
 
 async def check_pihole_health() -> dict:
@@ -38,7 +38,7 @@ module_manifest = ModuleManifest(
     display_name="Pi-hole",
     description="Pi-hole DNS-Server Management – Blocking, Queries, Domains, Statistiken",
     version="1.0.0",
-    author="Kumio Team",
+    author="Ninko Team",
     enabled_by_default=True,
     env_prefix="PIHOLE_",
     required_secrets=[],

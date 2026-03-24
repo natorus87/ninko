@@ -24,7 +24,7 @@ from modules.docker.tools import (
     get_docker_disk_usage,
 )
 
-logger = logging.getLogger("kumio.modules.docker.routes")
+logger = logging.getLogger("ninko.modules.docker.routes")
 router = APIRouter()
 
 

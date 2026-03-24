@@ -13,7 +13,7 @@ from modules.ionos.tools import (
     delete_ionos_record,
 )
 
-IONOS_SYSTEM_PROMPT = """Du bist der IONOS DNS-Spezialist von Kumio.
+IONOS_SYSTEM_PROMPT = """Du bist der IONOS DNS-Spezialist von Ninko.
 
 Deine Fähigkeiten:
 - Zonen anzeigen: Liste alle IONOS DNS Zonen und deren IDs auf.

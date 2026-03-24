@@ -1,5 +1,5 @@
 """
-Kumio Connection Manager.
+Ninko Connection Manager.
 Handhabt Multi-Connection CRUD Operationen mit Metadaten in Redis und Secrets in HashiCorp Vault.
 """
 
@@ -25,7 +25,7 @@ from core.redis_client import get_redis
 from core.vault import get_vault
 
 
-logger = logging.getLogger("kumio.core.connections")
+logger = logging.getLogger("ninko.core.connections")
 
 
 class ConnectionManager:
@@ -33,7 +33,7 @@ class ConnectionManager:
 
     @staticmethod
     def _get_redis_key(module_id: str) -> str:
-        return f"kumio:connections:{module_id}"
+        return f"ninko:connections:{module_id}"
 
     @staticmethod
     async def list_connections(module_id: str) -> List[ConnectionRead]:

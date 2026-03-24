@@ -14,7 +14,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-logger = logging.getLogger("kumio.core.tts.piper")
+logger = logging.getLogger("ninko.core.tts.piper")
 
 _SYNTHESIZE_TIMEOUT = 30  # Sekunden
 

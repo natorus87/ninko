@@ -1,5 +1,5 @@
 """
-Telegram Long-Polling-Bot für Kumio.
+Telegram Long-Polling-Bot für Ninko.
 Verbindet sich mit der Telegram API, empfängt Nachrichten und leitet sie an den Orchestrator weiter.
 
 Voice-Reply: Wenn eine eingehende Sprachnachricht erkannt wird und voice_reply in der
@@ -65,7 +65,7 @@ def _clean_for_tts(text: str) -> str:
     text = re.sub(r"[ \t]+", " ", text)
     return text.strip()
 
-logger = logging.getLogger("kumio.modules.telegram.bot")
+logger = logging.getLogger("ninko.modules.telegram.bot")
 
 # Maximale Nachrichtenlänge (Telegram-Limit: 4096)
 _MAX_MSG_LEN = 4000

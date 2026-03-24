@@ -12,7 +12,7 @@ from datetime import datetime, timezone, timedelta
 from kubernetes import client, config
 from langchain_core.tools import tool
 
-logger = logging.getLogger("kumio.modules.kubernetes.tools")
+logger = logging.getLogger("ninko.modules.kubernetes.tools")
 
 
 async def _get_k8s_client(

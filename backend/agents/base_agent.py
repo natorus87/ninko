@@ -1,5 +1,5 @@
 """
-Kumio BaseAgent – Abstrakte Basis für alle Agenten.
+Ninko BaseAgent – Abstrakte Basis für alle Agenten.
 Nutzt LangGraph für Tool-Calling und Conversation-Management.
 """
 
@@ -25,7 +25,7 @@ from core.memory import get_memory
 from core.context_manager import get_context_manager
 from core import status_bus
 
-logger = logging.getLogger("kumio.agents.base")
+logger = logging.getLogger("ninko.agents.base")
 
 
 def _get_language() -> str:

@@ -1,5 +1,5 @@
 """
-Kumio Scheduler API – CRUD für geplante Aufgaben.
+Ninko Scheduler API – CRUD für geplante Aufgaben.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from schemas.scheduler import (
     TaskExecutionLog,
 )
 
-logger = logging.getLogger("kumio.api.scheduler")
+logger = logging.getLogger("ninko.api.scheduler")
 router = APIRouter(prefix="/api/scheduler", tags=["Scheduler"])
 
 

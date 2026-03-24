@@ -20,7 +20,7 @@ from typing import Any, Optional
 
 from langchain.tools import tool
 
-logger = logging.getLogger("kumio.modules.qdrant")
+logger = logging.getLogger("ninko.modules.qdrant")
 
 # ── Chunking-Konstanten ────────────────────────────────────────────────────────
 CHUNK_SIZE = 800       # Zeichen pro Chunk
@@ -82,7 +82,7 @@ async def _get_qdrant_client(connection_id: str = "") -> tuple[Any, str]:
 
     if conn:
         url = conn.config.get("url", "").rstrip("/")
-        default_collection = conn.config.get("default_collection", "kumio_knowledge")
+        default_collection = conn.config.get("default_collection", "ninko_knowledge")
         # API-Key aus Vault holen
         if "api_key" in conn.vault_keys:
             from core.vault import get_vault
@@ -92,7 +92,7 @@ async def _get_qdrant_client(connection_id: str = "") -> tuple[Any, str]:
         # Env-Var-Fallback
         url = os.getenv("QDRANT_URL", "http://localhost:6333").rstrip("/")
         api_key = os.getenv("QDRANT_API_KEY") or None
-        default_collection = os.getenv("QDRANT_DEFAULT_COLLECTION", "kumio_knowledge")
+        default_collection = os.getenv("QDRANT_DEFAULT_COLLECTION", "ninko_knowledge")
 
     if not url:
         raise ValueError("Keine Qdrant-URL konfiguriert (ConnectionManager oder QDRANT_URL Env-Var).")

@@ -1,5 +1,5 @@
 """
-Kumio Redis Client – Working Memory, PubSub-Events, Cache.
+Ninko Redis Client – Working Memory, PubSub-Events, Cache.
 """
 
 from __future__ import annotations
@@ -12,15 +12,15 @@ import redis.asyncio as aioredis
 
 from core.config import get_settings
 
-logger = logging.getLogger("kumio.redis")
+logger = logging.getLogger("ninko.redis")
 
 
 class RedisClient:
-    """Async Redis Client für Kumio."""
+    """Async Redis Client für Ninko."""
 
-    EVENTS_CHANNEL = "kumio:events"
-    CHAT_HISTORY_PREFIX = "kumio:chat:"
-    CACHE_PREFIX = "kumio:cache:"
+    EVENTS_CHANNEL = "ninko:events"
+    CHAT_HISTORY_PREFIX = "ninko:chat:"
+    CACHE_PREFIX = "ninko:cache:"
 
     def __init__(self) -> None:
         settings = get_settings()
@@ -73,7 +73,7 @@ class RedisClient:
         return pubsub
 
     # ── UI Chat History (persistent, geräteübergreifend) ──
-    UI_HISTORY_KEY = "kumio:ui:history"
+    UI_HISTORY_KEY = "ninko:ui:history"
 
     async def ui_history_save(self, conversation: dict) -> None:
         """Speichert oder aktualisiert einen Konversationseintrag dauerhaft."""

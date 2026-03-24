@@ -7,9 +7,9 @@ async def check_email_health() -> dict:
 module_manifest = ModuleManifest(
     name="email",
     display_name="Email (SMTP/IMAP)",
-    description="E-Mail Client für Kumio. Senden via SMTP und Lesen/Verwalten via IMAP. Unterstützt Basic Auth und MSAL (Microsoft 365 OAuth2).",
+    description="E-Mail Client für Ninko. Senden via SMTP und Lesen/Verwalten via IMAP. Unterstützt Basic Auth und MSAL (Microsoft 365 OAuth2).",
     version="1.0.0",
-    author="Kumio",
+    author="Ninko",
     enabled_by_default=True,
     env_prefix="EMAIL_",
     

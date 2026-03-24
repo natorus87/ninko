@@ -1,5 +1,5 @@
 """
-Kumio – Dynamischer Agenten-Pool (Stufe 3).
+Ninko – Dynamischer Agenten-Pool (Stufe 3).
 Verwaltet zur Laufzeit erstellte Agenten: persistiert Metadaten in Redis,
 hält instanziierte Objekte im Speicher und ermöglicht Wiederverwendung.
 """
@@ -16,9 +16,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from agents.base_agent import BaseAgent
 
-logger = logging.getLogger("kumio.core.agent_pool")
+logger = logging.getLogger("ninko.core.agent_pool")
 
-REDIS_KEY = "kumio:agents"
+REDIS_KEY = "ninko:agents"
 # Minimale Keyword-Übereinstimmung (0–1) damit ein Agent als passend gilt
 _MATCH_THRESHOLD = 0.18
 
@@ -169,7 +169,7 @@ class DynamicAgentPool:
     ) -> tuple[str, "BaseAgent"]:
         """
         Registriert einen neuen Agenten:
-        - Persistiert Metadaten in Redis (kumio:agents).
+        - Persistiert Metadaten in Redis (ninko:agents).
         - Erstellt sofort eine Live-Instanz.
         - Gibt (agent_id, agent_instance) zurück.
         """

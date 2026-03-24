@@ -1,5 +1,5 @@
 """
-Kumio Memory Schemas – Pydantic-Modelle für Semantic Memory API.
+Ninko Memory Schemas – Pydantic-Modelle für Semantic Memory API.
 """
 
 from __future__ import annotations

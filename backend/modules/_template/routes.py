@@ -10,7 +10,7 @@ from fastapi import APIRouter
 
 from modules._template.tools import beispiel_tool
 
-logger = logging.getLogger("kumio.modules.template.routes")
+logger = logging.getLogger("ninko.modules.template.routes")
 router = APIRouter()
 
 

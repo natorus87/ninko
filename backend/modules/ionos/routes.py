@@ -2,7 +2,7 @@ import logging
 from fastapi import APIRouter
 from modules.ionos.tools import _ionos_request
 
-logger = logging.getLogger("kumio.modules.ionos.routes")
+logger = logging.getLogger("ninko.modules.ionos.routes")
 router = APIRouter()
 
 @router.get("/status")

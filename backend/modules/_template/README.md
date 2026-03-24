@@ -1,6 +1,6 @@
-# Kumio Module: Template (🧩)
+# Ninko Module: Template (🧩)
 
-Dieses Verzeichnis dient als strukturierte Vorlage für die Entwicklung brandneuer Kumio Module.
+Dieses Verzeichnis dient als strukturierte Vorlage für die Entwicklung brandneuer Ninko Module.
 Kopiere einfach den Ordner `_template` und benenne ihn um.
 
 ---
@@ -60,13 +60,13 @@ Damit `MeinModulTab.init()` aufgerufen wird, trage das globale JS-Objekt in die 
 
 ```yaml
 environment:
-    KUMIO_MODULE_MEINMODUL: "true"
+    NINKO_MODULE_MEINMODUL: "true"
 ```
 
 ### 4. `k8s/backend/deployment.yaml` — Env-Var aktivieren
 
 ```yaml
-- name: KUMIO_MODULE_MEINMODUL
+- name: NINKO_MODULE_MEINMODUL
   value: "true"
 ```
 
@@ -174,16 +174,16 @@ const MeinModulTab = {
 Plugins können `getTabObject()` nicht editieren. Stattdessen im globalen Plugin-Tab-Registry registrieren:
 
 ```js
-// tab.js — Plugin-Registrierung via Kumio._pluginTabs
+// tab.js — Plugin-Registrierung via Ninko._pluginTabs
 const MeinPluginTab = {
     async init() { /* ... */ },
     async refresh() { /* ... */ },
     destroy() { /* ... */ },
 };
 
-// Am Ende der tab.js eintragen — Kumio ruft dann init() beim Tab-Wechsel auf:
-if (typeof Kumio !== 'undefined') {
-    Kumio._pluginTabs['mein_plugin'] = MeinPluginTab;
+// Am Ende der tab.js eintragen — Ninko ruft dann init() beim Tab-Wechsel auf:
+if (typeof Ninko !== 'undefined') {
+    Ninko._pluginTabs['mein_plugin'] = MeinPluginTab;
 }
 ```
 
@@ -243,12 +243,12 @@ docker compose build backend
 docker compose up -d --no-deps backend
 
 # 2. Auf Docker Hub
-docker tag kumio-backend:latest natorus87/kumio-backend:latest
-docker push natorus87/kumio-backend:latest
+docker tag ninko-backend:latest natorus87/ninko-backend:latest
+docker push natorus87/ninko-backend:latest
 
 # 3. Kubernetes Rollout
-kubectl rollout restart deployment/kumio-backend -n kumio
-kubectl rollout status deployment/kumio-backend -n kumio --timeout=120s
+kubectl rollout restart deployment/ninko-backend -n ninko
+kubectl rollout status deployment/ninko-backend -n ninko --timeout=120s
 ```
 
 > **WICHTIG**: Jede Änderung an Python ODER Frontend-Dateien erfordert einen kompletten Build-Zyklus. Frontend-Dateien sind ins Docker-Image gebacken — `docker restart` reicht NICHT.

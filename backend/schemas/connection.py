@@ -1,5 +1,5 @@
 """
-Kumio Connection Schemas.
+Ninko Connection Schemas.
 Verwaltet die Metadaten für Multi-Connection-Support (z. B. Prod-Cluster vs Staging-Cluster).
 """
 

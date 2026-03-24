@@ -11,9 +11,9 @@ from langchain_core.tools import tool
 
 from .formatter import format_for_teams
 
-logger = logging.getLogger("kumio.modules.teams.tools")
+logger = logging.getLogger("ninko.modules.teams.tools")
 
-_LAST_CONV_KEY = "kumio:teams:last_conversation"
+_LAST_CONV_KEY = "ninko:teams:last_conversation"
 
 
 @tool

@@ -18,7 +18,7 @@ from modules.glpi.tools import (
     add_followup as add_followup_tool,
 )
 
-logger = logging.getLogger("kumio.modules.glpi.routes")
+logger = logging.getLogger("ninko.modules.glpi.routes")
 router = APIRouter()
 
 

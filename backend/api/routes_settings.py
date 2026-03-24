@@ -1,5 +1,5 @@
 """
-Kumio Settings API – Runtime-Konfiguration für LLM, Module, K8s-Cluster.
+Ninko Settings API – Runtime-Konfiguration für LLM, Module, K8s-Cluster.
 Persistenz via Redis (Hash-basiert). Secrets via Vault.
 """
 
@@ -26,13 +26,13 @@ from schemas.settings import (
 from core.config import get_settings
 from core.redis_client import get_redis
 
-logger = logging.getLogger("kumio.api.settings")
+logger = logging.getLogger("ninko.api.settings")
 router = APIRouter(prefix="/api/settings", tags=["Settings"])
 
-REDIS_KEY_LLM = "kumio:settings:llm"
-REDIS_KEY_MODULES = "kumio:settings:modules"
-REDIS_KEY_K8S_CLUSTERS = "kumio:settings:k8s_clusters"
-REDIS_KEY_LLM_PROVIDERS = "kumio:settings:llm_providers"
+REDIS_KEY_LLM = "ninko:settings:llm"
+REDIS_KEY_MODULES = "ninko:settings:modules"
+REDIS_KEY_K8S_CLUSTERS = "ninko:settings:k8s_clusters"
+REDIS_KEY_LLM_PROVIDERS = "ninko:settings:llm_providers"
 
 
 # ═══════════════════════════════════════════════════════
@@ -83,7 +83,7 @@ async def update_llm_settings(body: LlmSettings) -> LlmSettingsResponse:
 
 # ── Global Embedding Model (einheitlich für ChromaDB) ──
 
-REDIS_KEY_EMBED_MODEL = "kumio:settings:embed_model"
+REDIS_KEY_EMBED_MODEL = "ninko:settings:embed_model"
 
 
 @router.get("/llm/embed-model")
@@ -143,7 +143,7 @@ def _reconfigure_llm(settings: LlmSettings) -> None:
 #  Language Settings
 # ═══════════════════════════════════════════════════════
 
-REDIS_KEY_LANGUAGE = "kumio:settings:language"
+REDIS_KEY_LANGUAGE = "ninko:settings:language"
 SUPPORTED_LANGUAGES = {"de", "en", "fr", "es", "it", "nl", "pl", "pt", "ja", "zh"}
 
 
@@ -257,7 +257,7 @@ async def update_module_settings(
     _apply_module_connection(module_name, merged_connection)
 
     # Modul-Status aktualisieren
-    env_key = f"KUMIO_MODULE_{module_name.upper()}"
+    env_key = f"NINKO_MODULE_{module_name.upper()}"
     os.environ[env_key] = "true" if body.enabled else "false"
 
     logger.info(
@@ -617,7 +617,7 @@ async def delete_k8s_cluster(cluster_name: str) -> dict:
 #  TTS Settings
 # ═══════════════════════════════════════════════════════
 
-REDIS_KEY_TTS = "kumio:settings:tts"
+REDIS_KEY_TTS = "ninko:settings:tts"
 
 
 @router.get("/tts")
@@ -669,7 +669,7 @@ async def update_tts_settings(body: dict) -> dict:
 #  STT Settings
 # ═══════════════════════════════════════════════════════
 
-REDIS_KEY_STT = "kumio:settings:stt"
+REDIS_KEY_STT = "ninko:settings:stt"
 _STT_ALLOWED = {
     "STT_PROVIDER",
     "WHISPER_MODEL_SIZE", "WHISPER_DEVICE", "WHISPER_COMPUTE_TYPE", "WHISPER_LANGUAGE",

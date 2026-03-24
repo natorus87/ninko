@@ -1,5 +1,5 @@
 """
-Kumio Core Configuration – Pydantic BaseSettings.
+Ninko Core Configuration – Pydantic BaseSettings.
 Nur Core-Konfiguration, keine Modul-spezifischen Einstellungen.
 """
 
@@ -11,7 +11,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class CoreSettings(BaseSettings):
-    """Zentrale Konfiguration für den Kumio Core."""
+    """Zentrale Konfiguration für den Ninko Core."""
 
     model_config = SettingsConfigDict(
         env_file=".env",

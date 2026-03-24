@@ -15,7 +15,7 @@ from langchain_core.tools import tool
 from core.connections import ConnectionManager
 from core.vault import get_vault
 
-logger = logging.getLogger("kumio.modules.docker.tools")
+logger = logging.getLogger("ninko.modules.docker.tools")
 
 
 def _format_bytes(b: int | float) -> str:

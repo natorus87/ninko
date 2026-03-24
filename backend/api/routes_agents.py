@@ -1,6 +1,6 @@
 """
-Kumio Agents API – CRUD für Agenten-Definitionen.
-Persistenz via Redis (kumio:agents).
+Ninko Agents API – CRUD für Agenten-Definitionen.
+Persistenz via Redis (ninko:agents).
 """
 
 from __future__ import annotations
@@ -15,10 +15,10 @@ from fastapi import APIRouter, HTTPException
 from core.redis_client import get_redis
 from schemas.agents import AgentDefinition, AgentCreate, AgentListResponse
 
-logger = logging.getLogger("kumio.api.agents")
+logger = logging.getLogger("ninko.api.agents")
 router = APIRouter(prefix="/api/agents", tags=["Agents"])
 
-REDIS_KEY = "kumio:agents"
+REDIS_KEY = "ninko:agents"
 
 
 async def _load_agents(redis) -> list[dict]:

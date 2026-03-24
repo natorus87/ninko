@@ -19,7 +19,7 @@ from modules.linux_server.tools import (
     get_network_info,
 )
 
-logger = logging.getLogger("kumio.modules.linux_server.routes")
+logger = logging.getLogger("ninko.modules.linux_server.routes")
 router = APIRouter()
 
 

@@ -1,5 +1,5 @@
 """
-Kumio Semantic Memory – ChromaDB-basiert.
+Ninko Semantic Memory – ChromaDB-basiert.
 Speichert Incidents, Runbooks und Chat-Kontext als Embeddings.
 """
 
@@ -16,13 +16,13 @@ from chromadb.config import Settings as ChromaSettings
 from core.config import get_settings
 from core.llm_factory import get_embeddings
 
-logger = logging.getLogger("kumio.memory")
+logger = logging.getLogger("ninko.memory")
 
 
 class SemanticMemory:
-    """ChromaDB Semantic Memory für Kumio."""
+    """ChromaDB Semantic Memory für Ninko."""
 
-    COLLECTION_NAME = "kumio_memory"
+    COLLECTION_NAME = "ninko_memory"
 
     def __init__(self) -> None:
         settings = get_settings()

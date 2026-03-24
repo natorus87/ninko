@@ -26,9 +26,9 @@ from modules.glpi.tools import (
     get_ticket_stats,
 )
 
-logger = logging.getLogger("kumio.modules.glpi.agent")
+logger = logging.getLogger("ninko.modules.glpi.agent")
 
-GLPI_SYSTEM_PROMPT = """Du bist der GLPI Helpdesk-Spezialist von Kumio.
+GLPI_SYSTEM_PROMPT = """Du bist der GLPI Helpdesk-Spezialist von Ninko.
 
 Deine Fähigkeiten:
 - Ticket-Erstellung und -Verwaltung
@@ -123,7 +123,7 @@ class GlpiAgent(BaseAgent):
 
             title = f"[Auto] {source.upper()} Incident: {data.get('error', data.get('namespace', 'Fehler erkannt'))}"
             description = (
-                f"Automatisch erstelltes Ticket von Kumio.\n\n"
+                f"Automatisch erstelltes Ticket von Ninko.\n\n"
                 f"Quell-Modul: {source}\n"
                 f"Schweregrad: {severity}\n"
                 f"Details:\n{json.dumps(data, ensure_ascii=False, indent=2)}"

@@ -21,7 +21,7 @@ from modules.pihole.tools import (
     get_pihole_system,
 )
 
-logger = logging.getLogger("kumio.modules.pihole.routes")
+logger = logging.getLogger("ninko.modules.pihole.routes")
 router = APIRouter()
 
 

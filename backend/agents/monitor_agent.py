@@ -1,5 +1,5 @@
 """
-Kumio Monitor Agent – Background-Monitoring aller aktiven Module.
+Ninko Monitor Agent – Background-Monitoring aller aktiven Module.
 Ruft zyklisch Health-Checks auf und sendet Alerts via WebSocket/Redis.
 """
 
@@ -18,7 +18,7 @@ from core.memory import get_memory
 if TYPE_CHECKING:
     from core.module_registry import ModuleRegistry
 
-logger = logging.getLogger("kumio.agents.monitor")
+logger = logging.getLogger("ninko.agents.monitor")
 
 
 class MonitorAgent:

@@ -12,7 +12,7 @@ from typing import Optional
 import httpx
 from langchain_core.tools import tool
 
-logger = logging.getLogger("kumio.modules.pihole.tools")
+logger = logging.getLogger("ninko.modules.pihole.tools")
 
 # ── Session Cache ──────────────────────────────────
 _session_cache: dict[str, dict] = {}  # url -> {"sid": str, "expires": float}
@@ -57,7 +57,7 @@ async def _get_pihole_config(connection_id: str = "") -> dict:
             from core.redis_client import get_redis
             import json
             redis = get_redis()
-            raw = await redis.connection.get("kumio:settings:modules")
+            raw = await redis.connection.get("ninko:settings:modules")
             if raw:
                 overrides = json.loads(raw)
                 conn_data = overrides.get("pihole", {}).get("connection", {})
@@ -345,7 +345,7 @@ async def add_domain_to_list(
 
     body = {
         "domain": domain,
-        "comment": comment or f"Hinzugefügt via Kumio",
+        "comment": comment or f"Hinzugefügt via Ninko",
     }
 
     await _pihole_request("POST", f"/domains/{list_type}/{kind}", body=body, connection_id=connection_id)

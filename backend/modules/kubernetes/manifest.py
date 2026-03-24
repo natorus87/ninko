@@ -8,7 +8,7 @@ import logging
 
 from core.module_registry import ModuleManifest
 
-logger = logging.getLogger("kumio.modules.kubernetes")
+logger = logging.getLogger("ninko.modules.kubernetes")
 
 
 async def check_k8s_health() -> dict:
@@ -32,7 +32,7 @@ module_manifest = ModuleManifest(
     display_name="Kubernetes",
     description="Kubernetes Cluster Management – Pods, Deployments, Services, Health-Monitoring",
     version="1.0.0",
-    author="Kumio Team",
+    author="Ninko Team",
     enabled_by_default=True,
     env_prefix="K8S_",
     required_secrets=[],

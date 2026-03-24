@@ -1,6 +1,6 @@
 """
-Kumio Logs API – Zentrales Log-Panel.
-Liest Einträge aus der Redis-Liste kumio:logs.
+Ninko Logs API – Zentrales Log-Panel.
+Liest Einträge aus der Redis-Liste ninko:logs.
 """
 
 from __future__ import annotations
@@ -13,10 +13,10 @@ from fastapi import APIRouter, Query
 
 from core.redis_client import get_redis
 
-logger = logging.getLogger("kumio.api.logs")
+logger = logging.getLogger("ninko.api.logs")
 router = APIRouter(prefix="/api/logs", tags=["Logs"])
 
-REDIS_LOG_KEY = "kumio:logs"
+REDIS_LOG_KEY = "ninko:logs"
 MAX_LOG_ENTRIES = 10000
 
 

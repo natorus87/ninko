@@ -24,7 +24,7 @@ from modules.docker.tools import (
     get_docker_disk_usage,
 )
 
-DOCKER_SYSTEM_PROMPT = """Du bist der Docker-Spezialist von Kumio.
+DOCKER_SYSTEM_PROMPT = """Du bist der Docker-Spezialist von Ninko.
 
 Deine Fähigkeiten:
 - Container-Management: Auflisten, Starten, Stoppen, Neustarten, Entfernen

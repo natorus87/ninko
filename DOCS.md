@@ -1,15 +1,15 @@
-# Kumio – Anwenderdokumentation (DOCS)
+# Ninko – Anwenderdokumentation (DOCS)
 
-Willkommen zur Anwenderdokumentation von Kumio. Dieses Dokument beschreibt die Funktionalitäten des Dashboards, die Konfiguration der Module, das Management von LLM-Einstellungen sowie das Einrichten von Verbindungen (Connections).
+Willkommen zur Anwenderdokumentation von Ninko. Dieses Dokument beschreibt die Funktionalitäten des Dashboards, die Konfiguration der Module, das Management von LLM-Einstellungen sowie das Einrichten von Verbindungen (Connections).
 
 ---
 
 ## 1. Modul-Verbindungen (Connections) verwalten
 
-Kumio verfolgt das Konzept der **Multi-Connections**. Das bedeutet, dass ein einziges Modul (z. B. Kubernetes oder Proxmox) gleichzeitig mehrere Umgebungen (Prod, Staging, Dev, Lab) ansteuern kann.
+Ninko verfolgt das Konzept der **Multi-Connections**. Das bedeutet, dass ein einziges Modul (z. B. Kubernetes oder Proxmox) gleichzeitig mehrere Umgebungen (Prod, Staging, Dev, Lab) ansteuern kann.
 
 ### Eine neue Verbindung anlegen
-1. Klicke im Kumio-Dashboard oben rechts auf das **Zahnrad-Symbol** (Einstellungen).
+1. Klicke im Ninko-Dashboard oben rechts auf das **Zahnrad-Symbol** (Einstellungen).
 2. Wähle das gewünschte Modul in der linken Navigationsleiste aus (z. B. `kubernetes`, `proxmox`, `pihole` oder `ionos`).
 3. Klicke auf den Tab **Verbindungen (Connections)**.
 4. Fülle die Felder aus:
@@ -17,7 +17,7 @@ Kumio verfolgt das Konzept der **Multi-Connections**. Das bedeutet, dass ein ein
     - **Umgebung**: Wähle aus dem Dropdown (z.B. `prod`, `staging`, `dev`, `lab`, `local`). Diese Angabe hilft dem AI Orchestrator, Risiken (wie destruktive Aktionen) besser abzuschätzen.
     - **Nicht-Geheime Konfiguration**: z. B. URLs oder Optionen.
     - **Geheimnisse (Vault)**: Passwörter oder API-Keys. Diese Felder werden bei der Anzeige im Frontend immer leer sein (aus Sicherheitsgründen), selbst wenn ein Schlüssel hinterlegt ist.
-5. **Als Standard setzen**: Wenn aktiviert, greift Kumio automatisch auf diese Verbindung zurück, sofern im Chat nicht explizit etwas anderes gefordert wird.
+5. **Als Standard setzen**: Wenn aktiviert, greift Ninko automatisch auf diese Verbindung zurück, sofern im Chat nicht explizit etwas anderes gefordert wird.
 6. Klicke auf **Speichern**.
 
 *(Hinweis: Leere Passwortfelder überschreiben niemals bereits gespeicherte Passwörter).*
@@ -30,7 +30,7 @@ Kumio verfolgt das Konzept der **Multi-Connections**. Das bedeutet, dass ein ein
 
 ## 2. LLM Backend & Multi-Provider System
 
-Kumio nutzt Large Language Models (LLMs) für die Autonomie der Agenten. Seit dem neuesten Update unterstützt Kumio **Multiple LLM Provider**. Das erlaubt es, verschiedene Server (Ollama, LM Studio, OpenAI) gleichzeitig zu konfigurieren und als Standard-Backend zu wählen.
+Ninko nutzt Large Language Models (LLMs) für die Autonomie der Agenten. Seit dem neuesten Update unterstützt Ninko **Multiple LLM Provider**. Das erlaubt es, verschiedene Server (Ollama, LM Studio, OpenAI) gleichzeitig zu konfigurieren und als Standard-Backend zu wählen.
 
 ### Einen Provider hinzufügen
 1. Gehe in die **Einstellungen** und wähle **LLM Providers**.
@@ -42,16 +42,16 @@ Kumio nutzt Large Language Models (LLMs) für die Autonomie der Agenten. Seit de
 5. **Standard-Modell**: Der exakte Name des LLMs (z.B. `llama3.2:3b` oder `nomic-embed-text` für Embeddings).
 6. **Standard-Provider**: Aktiviere den Schalter "Als Standard setzen", damit alle Agenten primär diesen Provider nutzen.
 
-*Hinweis: Wenn du einen neuen Standard-Provider wählst oder einen Bearbeitest, rekonfiguriert Kumio die KI-Factory im Hintergrund sofort. Ein Neustart ist nicht erforderlich.*
+*Hinweis: Wenn du einen neuen Standard-Provider wählst oder einen Bearbeitest, rekonfiguriert Ninko die KI-Factory im Hintergrund sofort. Ein Neustart ist nicht erforderlich.*
 
 ---
 
 ## 3. Multilingual Support (i18n)
 
-Kumio unterstützt 10 Sprachen out-of-the-box (u.a. Deutsch, Englisch, Französisch, Spanisch, Japanisch). Sowohl das User-Interface als auch die Antworten der KI-Agenten passen sich automatisch an die gewählte Sprache an.
+Ninko unterstützt 10 Sprachen out-of-the-box (u.a. Deutsch, Englisch, Französisch, Spanisch, Japanisch). Sowohl das User-Interface als auch die Antworten der KI-Agenten passen sich automatisch an die gewählte Sprache an.
 
 ### Sprache ändern
-1. Klicke im Kumio-Dashboard in den **Einstellungen** auf den Tab **Sprache**.
+1. Klicke im Ninko-Dashboard in den **Einstellungen** auf den Tab **Sprache**.
 2. Wähle deine gewünschte Sprache per Klick auf die entsprechende Flagge.
 3. Die Benutzeroberfläche wechselt **sofort** (ohne Seiten-Reload) in die neue Sprache. Die Einstellung wird zudem im Backend gespeichert, sodass künftige Antworten der KI in der neuen Sprache generiert werden.
 
@@ -59,7 +59,7 @@ Kumio unterstützt 10 Sprachen out-of-the-box (u.a. Deutsch, Englisch, Französi
 
 ## 4. Nutzung der AI Module im Chat
 
-Der Kumio Orchestrator delegiert Aufgaben automatisch an das richtige Modul, basierend auf deinen Eingaben. Hier sind einige Module und ihre typischen Befehle:
+Der Ninko Orchestrator delegiert Aufgaben automatisch an das richtige Modul, basierend auf deinen Eingaben. Hier sind einige Module und ihre typischen Befehle:
 
 ### Kubernetes (☸)
 - *Modul für Cluster-Verwaltung, Pods und Deployments.*
@@ -94,10 +94,10 @@ Der Kumio Orchestrator delegiert Aufgaben automatisch an das richtige Modul, bas
   - "Schalte das Gast-WLAN ein."
 
 ### Telegram Bot (💬)
-- *Ermöglicht den Zugriff auf Kumio über den Telegram-Messenger.*
+- *Ermöglicht den Zugriff auf Ninko über den Telegram-Messenger.*
 - **Verbindung**: Der Bot-Token wird in den globalen Einstellungen unter `telegram` (als Connection) hinterlegt.
 - **Besonderheiten**: 
-  - Die Chat-Historie (Memory) bleibt im Gegensatz zum Web-Interface über längere Zeit in der Kumio-Datenbank gespeichert.
+  - Die Chat-Historie (Memory) bleibt im Gegensatz zum Web-Interface über längere Zeit in der Ninko-Datenbank gespeichert.
   - Sende `/start`, `/clear` oder `/reset` direkt im Telegram-Chat, um dein lokales Chat-Gedächtnis zu löschen, falls die KI sich wiederholt oder in einem alten Kontext feststeckt.
 
 ### Web Search (🔍)
@@ -119,17 +119,17 @@ Der Kumio Orchestrator delegiert Aufgaben automatisch an das richtige Modul, bas
 
 ## 5. Langzeitgedächtnis (Semantic Memory)
 
-Kumio besitzt ein **persistentes Langzeitgedächtnis** auf Basis von ChromaDB-Embeddings. Im Gegensatz zum einfachen Chat-Verlauf (kurzfristig in Redis) überlebt dieses Wissen Container-Neustarts und neue Chat-Sessions.
+Ninko besitzt ein **persistentes Langzeitgedächtnis** auf Basis von ChromaDB-Embeddings. Im Gegensatz zum einfachen Chat-Verlauf (kurzfristig in Redis) überlebt dieses Wissen Container-Neustarts und neue Chat-Sessions.
 
 ### Automatisches Merken
-Nach jeder Antwort prüft Kumio im Hintergrund automatisch, ob das Gespräch dauerhaft relevante Informationen enthält (z. B. Nutzerpräferenzen, bekannte IPs, gelöste Probleme). Wenn ja, wird der Fakt still gespeichert – ohne Verzögerung für dich.
+Nach jeder Antwort prüft Ninko im Hintergrund automatisch, ob das Gespräch dauerhaft relevante Informationen enthält (z. B. Nutzerpräferenzen, bekannte IPs, gelöste Probleme). Wenn ja, wird der Fakt still gespeichert – ohne Verzögerung für dich.
 
 ### Manuelles Merken
-Du kannst Kumio aktiv anweisen, etwas zu speichern:
+Du kannst Ninko aktiv anweisen, etwas zu speichern:
 ```
 "Merke dir: Der Pi-hole läuft auf 192.168.1.10"
 "Bitte merke dir, dass ich im Team Infrastruktur arbeite"
-"Kumio, speichere: Produktions-Cluster läuft auf Node k3s-prod-01"
+"Ninko, speichere: Produktions-Cluster läuft auf Node k3s-prod-01"
 ```
 
 ### Erinnerungen abrufen
@@ -142,13 +142,13 @@ Du kannst Kumio aktiv anweisen, etwas zu speichern:
 ### Erinnerungen löschen (zweistufig / sicher)
 Das Löschen von Erinnerungen läuft **immer zweistufig** ab, um versehentliches Löschen zu verhindern:
 
-1. **Schritt 1 – Vorschau**: Sage Kumio, was vergessen werden soll:
+1. **Schritt 1 – Vorschau**: Sage Ninko, was vergessen werden soll:
    ```
    "Vergiss, dass der Pi-hole auf 192.168.1.10 läuft"
    ```
-   Kumio zeigt dir die gefundenen Kandidaten mit Inhalt und ID an – **löscht aber noch nichts**.
+   Ninko zeigt dir die gefundenen Kandidaten mit Inhalt und ID an – **löscht aber noch nichts**.
 
-2. **Schritt 2 – Bestätigung**: Kumio fragt dich zur Bestätigung. Antworte:
+2. **Schritt 2 – Bestätigung**: Ninko fragt dich zur Bestätigung. Antworte:
    ```
    "Ja, lösch das" oder "alle löschen"
    ```
@@ -156,7 +156,7 @@ Das Löschen von Erinnerungen läuft **immer zweistufig** ab, um versehentliches
 
 ## 4. Agenten, Workflows & Logs
 
-Zusätzlich zu den Modulen bietet Kumio fortschrittliche Werkzeuge zur Automatisierung und Überwachung.
+Zusätzlich zu den Modulen bietet Ninko fortschrittliche Werkzeuge zur Automatisierung und Überwachung.
 
 ### 4.1 Eigene Agenten (Aufgaben) 🤖
 Im Tab **Agenten** kannst du spezialisierte AI-Personas erstellen:
@@ -185,10 +185,10 @@ Im Tab **Logs** laufen alle System- und Modul-Informationen in Echtzeit zusammen
 ## 6. Chat-Interface
 
 ### AI-Avatar
-Das Chat-Interface verwendet durchgehend das **Kumio-Logo** (`chat_logo.png`) als Avatar für alle AI-Nachrichten – sowohl bei regulären Antworten als auch beim Lade-Indikator (Typing-Bubble). Der User-Avatar ist ein neutrales Personen-Icon.
+Das Chat-Interface verwendet durchgehend das **Ninko-Logo** (`chat_logo.png`) als Avatar für alle AI-Nachrichten – sowohl bei regulären Antworten als auch beim Lade-Indikator (Typing-Bubble). Der User-Avatar ist ein neutrales Personen-Icon.
 
 ### Typing-Indikator
-Während Kumio eine Antwort berechnet, erscheint eine kompakte Bubble mit drei animierten Punkten direkt unterhalb des letzten User-Beitrags. Die Bubble schließt nach Eingang der Antwort automatisch.
+Während Ninko eine Antwort berechnet, erscheint eine kompakte Bubble mit drei animierten Punkten direkt unterhalb des letzten User-Beitrags. Die Bubble schließt nach Eingang der Antwort automatisch.
 
 ---
 
@@ -196,7 +196,7 @@ Während Kumio eine Antwort berechnet, erscheint eine kompakte Bubble mit drei a
 
 1. **Vorsicht bei destruktiven Aktionen:** Insbesondere das Löschen von VMs (Proxmox) oder DNS-Records (IONOS) ohne manuelles Review kann zu Ausfallzeiten führen. Formulierungen im Chat immer präzise halten.
 2. **Arbeiten mit Environments:** Teile Modulen idealerweise explizit mit, auf welcher Connection sie arbeiten sollen: "Starte die VM 105 auf der Verbindung 'Prod Cluster'".
-3. **Vault & Logs:** Alle sensiblen Daten liegen verschlüsselt im Vault. Beachte, dass Kumio Logs speichert. Geheime API-Keys werden automatisch maskiert, aber achte dennoch darauf, keine sensiblen Daten direkt im System-Prompt von Agenten zu hinterlegen.
+3. **Vault & Logs:** Alle sensiblen Daten liegen verschlüsselt im Vault. Beachte, dass Ninko Logs speichert. Geheime API-Keys werden automatisch maskiert, aber achte dennoch darauf, keine sensiblen Daten direkt im System-Prompt von Agenten zu hinterlegen.
 4. **Monitoring:** Nutze den Logs-Tab regelmäßig, um Fehler in automatisierten Workflows frühzeitig zu erkennen.
-5. **Zugriff (Kubernetes):** Nach einem regulären Kubernetes-Rollout mit Traefik erreichst du Kumio unter `http://kumio.conbro.local`.
+5. **Zugriff (Kubernetes):** Nach einem regulären Kubernetes-Rollout mit Traefik erreichst du Ninko unter `http://ninko.conbro.local`.
 

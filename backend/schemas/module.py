@@ -1,5 +1,5 @@
 """
-Kumio Module Schemas – Pydantic-Modelle für Modul-Verwaltung.
+Ninko Module Schemas – Pydantic-Modelle für Modul-Verwaltung.
 """
 
 from __future__ import annotations

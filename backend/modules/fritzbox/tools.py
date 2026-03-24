@@ -10,7 +10,7 @@ from modules.fritzbox.schemas import (
     FritzSmartHomeDevice, FritzCallEntry, FritzSystemInfo
 )
 
-logger = logging.getLogger("kumio.modules.fritzbox")
+logger = logging.getLogger("ninko.modules.fritzbox")
 
 # --- Helper ---
 

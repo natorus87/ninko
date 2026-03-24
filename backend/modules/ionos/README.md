@@ -1,4 +1,4 @@
-# Kumio Module: IONOS DNS (🌐)
+# Ninko Module: IONOS DNS (🌐)
 
 Dieses Modul ermöglicht die Verwaltung öffentlicher DNS-Zonen und Einträge über die **IONOS Hosting Developer API**.
 
@@ -6,7 +6,7 @@ Dieses Modul ermöglicht die Verwaltung öffentlicher DNS-Zonen und Einträge ü
 
 ## Konfiguration (Connections)
 
-Über das Kumio Backend (`⚙ Einstellungen -> IONOS DNS`) können Verbindungen (API-Keys) angelegt werden.
+Über das Ninko Backend (`⚙ Einstellungen -> IONOS DNS`) können Verbindungen (API-Keys) angelegt werden.
 
 ### Geheimnisse (Vault)
 - **API Key** (`IONOS_API_KEY`): Dein IONOS Developer API Key.
@@ -15,7 +15,7 @@ Dieses Modul ermöglicht die Verwaltung öffentlicher DNS-Zonen und Einträge ü
 Der API-Key muss exakt das Format `prefix.secret` (zwei Teile, getrennt durch einen Punkt) haben.
 1. Melde dich im IONOS Developer Portal (developer.hosting.ionos.de) an.
 2. Erstelle einen neuen API-Schlüssel.
-3. Kopiere den gesamten String inklusive des Punktes. Kumio kümmert sich um die Kodierung und fehlerhafte Typographie (wie em-dashes `—`), falls du den Key unsauber kopiert haben solltest.
+3. Kopiere den gesamten String inklusive des Punktes. Ninko kümmert sich um die Kodierung und fehlerhafte Typographie (wie em-dashes `—`), falls du den Key unsauber kopiert haben solltest.
 
 ## Features & Tools
 
@@ -26,7 +26,7 @@ Der AI Orchestrator nutzt folgende Funktionen:
 - `update_ionos_record`: Verändert Werte (Content, TTL, Prio) eines bestehenden Eintrags.
 - `delete_ionos_record`: Löscht einen DNS-Record sicher.
 
-*Hinweis für Entwickler*: Die API benötigt für den Lesevorgang von Records den GET-Aufruf auf `/zones/{id}` (inkl. embedded Records), da `/zones/{id}/records` fälschlicherweise `401 Unauthorized` liefert, wenn keine spezielle Support-Rolle existiert. Kumio handelt dies transparent.
+*Hinweis für Entwickler*: Die API benötigt für den Lesevorgang von Records den GET-Aufruf auf `/zones/{id}` (inkl. embedded Records), da `/zones/{id}/records` fälschlicherweise `401 Unauthorized` liefert, wenn keine spezielle Support-Rolle existiert. Ninko handelt dies transparent.
 
 ## Beispiel-Prompt (Chat)
 

@@ -1,5 +1,5 @@
 """
-Kumio Module API – Modul-Verwaltung und Tab-Informationen.
+Ninko Module API – Modul-Verwaltung und Tab-Informationen.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from schemas.module import (
     AllModulesHealthResponse,
 )
 
-logger = logging.getLogger("kumio.api.modules")
+logger = logging.getLogger("ninko.api.modules")
 router = APIRouter(prefix="/api/modules", tags=["Module"])
 
 

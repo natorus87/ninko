@@ -1,5 +1,5 @@
 """
-Kumio – Pydantic-Modelle für Workflow-Definitionen und Runs.
+Ninko – Pydantic-Modelle für Workflow-Definitionen und Runs.
 """
 
 from __future__ import annotations

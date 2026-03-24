@@ -1,5 +1,5 @@
 /**
- * Kumio Frontend Script für das Home Assistant Modul
+ * Ninko Frontend Script für das Home Assistant Modul
  */
 const HomeAssistantTab = {
     API_PREFIX: '/api/homeassistant',
@@ -97,7 +97,7 @@ const HomeAssistantTab = {
             }
 
             if (contentArea) {
-                contentArea.innerHTML = `<p style="color: var(--text-muted); font-size: 0.9rem;">Home Assistant erfolgreich erreicht. Der Kumio AI Agent kann nun Smart Home Entitäten abfragen und steuern.</p>`;
+                contentArea.innerHTML = `<p style="color: var(--text-muted); font-size: 0.9rem;">Home Assistant erfolgreich erreicht. Der Ninko AI Agent kann nun Smart Home Entitäten abfragen und steuern.</p>`;
             }
         } catch (err) {
             console.error(err);

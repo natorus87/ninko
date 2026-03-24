@@ -7,7 +7,7 @@ from __future__ import annotations
 from agents.base_agent import BaseAgent
 from modules.telegram.tools import send_telegram_message
 
-SYSTEM_PROMPT = """Du bist der Telegram-Agent von Kumio.
+SYSTEM_PROMPT = """Du bist der Telegram-Agent von Ninko.
 Deine Aufgabe: Telegram-Nachrichten an Benutzer senden, wenn sie darum bitten.
 
 Nutze das Tool `send_telegram_message` um Nachrichten zu versenden.

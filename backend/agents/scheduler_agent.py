@@ -1,5 +1,5 @@
 """
-Kumio Scheduler Agent – Autonome Aufgabenplanung mit Cron-Ausdrücken.
+Ninko Scheduler Agent – Autonome Aufgabenplanung mit Cron-Ausdrücken.
 Führt geplante Aufgaben über den Orchestrator aus und pusht Ergebnisse via PubSub.
 """
 
@@ -24,10 +24,10 @@ if TYPE_CHECKING:
     from agents.orchestrator import OrchestratorAgent
     from core.module_registry import ModuleRegistry
 
-logger = logging.getLogger("kumio.agents.scheduler")
+logger = logging.getLogger("ninko.agents.scheduler")
 
-REDIS_KEY_TASKS = "kumio:scheduler:tasks"
-REDIS_KEY_LOG_PREFIX = "kumio:scheduler:log:"
+REDIS_KEY_TASKS = "ninko:scheduler:tasks"
+REDIS_KEY_LOG_PREFIX = "ninko:scheduler:log:"
 MAX_LOG_ENTRIES = 50
 CHECK_INTERVAL_SECONDS = 30
 
@@ -114,7 +114,7 @@ class SchedulerAgent:
             if workflow_id:
                 # Workflow ausführen
                 from core.workflow_engine import WorkflowEngine
-                wf_raw = await self._redis.connection.get("kumio:workflows")
+                wf_raw = await self._redis.connection.get("ninko:workflows")
                 workflows = json.loads(wf_raw) if wf_raw else []
                 wf = next((w for w in workflows if w["id"] == workflow_id), None)
                 if not wf:
@@ -127,7 +127,7 @@ class SchedulerAgent:
                 await engine.execute(wf, run_id)
 
                 # Ergebnis aus Redis lesen
-                runs_raw = await self._redis.connection.get(f"kumio:workflow:runs:{workflow_id}")
+                runs_raw = await self._redis.connection.get(f"ninko:workflow:runs:{workflow_id}")
                 runs = json.loads(runs_raw) if runs_raw else []
                 run_result = next((r for r in runs if r["id"] == run_id), {})
                 status = run_result.get("status", "error")

@@ -1,5 +1,5 @@
 """
-Kumio Skills API – CRUD für das prozeduale Domänenwissen der Agenten.
+Ninko Skills API – CRUD für das prozeduale Domänenwissen der Agenten.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from core.skills_manager import get_skills_manager
 
-logger = logging.getLogger("kumio.api.skills")
+logger = logging.getLogger("ninko.api.skills")
 
 router = APIRouter(prefix="/api/skills", tags=["skills"])
 

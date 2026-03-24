@@ -7,17 +7,17 @@ import datetime
 from typing import Optional, List
 
 
-REDIS_LOG_KEY = "kumio:logs"
+REDIS_LOG_KEY = "ninko:logs"
 MAX_LOG_ENTRIES = 10000
 
 _CATEGORY_MAP = {
-    "kumio.agents": "agent",
-    "kumio.workflow": "workflow",
-    "kumio.modules": "module",
-    "kumio.api.logs": "system",
-    "kumio.api": "system",
-    "kumio.llm": "llm",
-    "kumio": "system",
+    "ninko.agents": "agent",
+    "ninko.workflow": "workflow",
+    "ninko.modules": "module",
+    "ninko.api.logs": "system",
+    "ninko.api": "system",
+    "ninko.llm": "llm",
+    "ninko": "system",
 }
 
 def _guess_category(logger_name: str) -> str:
@@ -106,7 +106,7 @@ class RedisLogHandler(logging.Handler):
             settings = get_settings()
             redis_conn = None
             
-            logging.getLogger("kumio.log_handler").debug("RedisLogWorker started.")
+            logging.getLogger("ninko.log_handler").debug("RedisLogWorker started.")
             
             while not self._stop_event.is_set():
                 try:
@@ -130,7 +130,7 @@ class RedisLogHandler(logging.Handler):
                                 encoding="utf-8",
                             )
                         except Exception as e:
-                            logging.getLogger("kumio.log_handler").error("RedisLogWorker redis init error: %s", e)
+                            logging.getLogger("ninko.log_handler").error("RedisLogWorker redis init error: %s", e)
                             await asyncio.sleep(2)
                             continue
 
@@ -142,7 +142,7 @@ class RedisLogHandler(logging.Handler):
                             pipe.ltrim(REDIS_LOG_KEY, 0, MAX_LOG_ENTRIES - 1)
                             await pipe.execute()
                     except Exception as e:
-                        logging.getLogger("kumio.log_handler").error("RedisLogWorker push error: %s", e)
+                        logging.getLogger("ninko.log_handler").error("RedisLogWorker push error: %s", e)
                         redis_conn = None  # Reconnect beim nächsten Mal
                         await asyncio.sleep(2)
                         continue
@@ -151,7 +151,7 @@ class RedisLogHandler(logging.Handler):
                         self._queue.task_done()
 
                 except Exception as e:
-                    logging.getLogger("kumio.log_handler").error("RedisLogWorker loop error: %s", e)
+                    logging.getLogger("ninko.log_handler").error("RedisLogWorker loop error: %s", e)
                     await asyncio.sleep(5)
 
             if redis_conn:

@@ -2,7 +2,7 @@ import logging
 from fritzconnection import FritzConnection
 from core.module_registry import ModuleManifest
 
-logger = logging.getLogger("kumio.modules.fritzbox")
+logger = logging.getLogger("ninko.modules.fritzbox")
 
 async def check_fritzbox_health(connection_id: str = "") -> dict:
     """Verifies the FritzBox connection using TR-064."""
@@ -44,7 +44,7 @@ module_manifest = ModuleManifest(
     display_name="FritzBox",
     description="Integration und Steuerung von AVM FritzBox Routern via TR-064 und AHA",
     version="1.0.0",
-    author="Kumio",
+    author="Ninko",
     enabled_by_default=False,
     env_prefix="FRITZBOX_",
     required_secrets=["FRITZBOX_PASSWORD"],

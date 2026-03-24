@@ -1,5 +1,5 @@
 """
-Kumio – Hauptanwendung (Entry Point).
+Ninko – Hauptanwendung (Entry Point).
 Lädt Module dynamisch, registriert Routen, startet Monitor.
 """
 
@@ -44,7 +44,7 @@ logging.basicConfig(
     format="%(asctime)s │ %(name)-30s │ %(levelname)-7s │ %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
-logger = logging.getLogger("kumio.main")
+logger = logging.getLogger("ninko.main")
 
 # Redis-Log-Handler (nach Redis-Verfügbarkeit lazy)
 from core.log_handler import RedisLogHandler as _RedisLogHandler
@@ -58,7 +58,7 @@ if not any(isinstance(h, _RedisLogHandler) for h in root_logger.handlers):
 async def lifespan(app: FastAPI):
     """Application Lifespan – Startup und Shutdown."""
     logger.info("═" * 60)
-    logger.info("  Kumio – IT-Operations AI-Agent wird gestartet…")
+    logger.info("  Ninko – IT-Operations AI-Agent wird gestartet…")
     logger.info("═" * 60)
 
     # ── LLM-Settings aus Redis wiederherstellen ──────────────
@@ -220,13 +220,13 @@ async def lifespan(app: FastAPI):
             break
 
     logger.info("═" * 60)
-    logger.info("  Kumio bereit! Module: %d", len(registry.list_modules()))
+    logger.info("  Ninko bereit! Module: %d", len(registry.list_modules()))
     logger.info("═" * 60)
 
     yield
 
     # ── Shutdown ──────────────────────────────────────
-    logger.info("Kumio wird heruntergefahren…")
+    logger.info("Ninko wird heruntergefahren…")
     
     # Telegram Bot stoppen
     await telegram_bot.stop()
@@ -240,12 +240,12 @@ async def lifespan(app: FastAPI):
     redis = get_redis()
     await redis.close()
 
-    logger.info("Kumio beendet.")
+    logger.info("Ninko beendet.")
 
 
 # ── FastAPI App ───────────────────────────────────────
 app = FastAPI(
-    title="Kumio",
+    title="Ninko",
     description="Modularer IT-Operations-AI-Agent",
     version="1.0.0",
     lifespan=lifespan,
@@ -294,7 +294,7 @@ async def health():
     """Basis Health-Check."""
     return {
         "status": "ok",
-        "service": "kumio",
+        "service": "ninko",
         "version": "0.5.0",
     }
 

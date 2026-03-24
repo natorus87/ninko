@@ -1,10 +1,10 @@
-# Kumio Module: FritzBox (📶)
+# Ninko Module: FritzBox (📶)
 
 Dieses Modul fügt Support für AVM FRITZ!Box Router hinzu. Es nutzt das TR-064 Protokoll, um Einstellungen abzufragen und das Heim-/Firmennetzwerk zu steuern.
 
 ## Konfiguration (Connections)
 
-Über das Kumio Backend (`⚙ Einstellungen -> FritzBox`) können Verbindungen zu deinem Router verwaltet werden.
+Über das Ninko Backend (`⚙ Einstellungen -> FritzBox`) können Verbindungen zu deinem Router verwaltet werden.
 
 ### Benötigte Felder
 - **Host**: Die IP-Adresse oder der Hostname deiner FRITZ!Box (z.B. `192.168.178.1`, `fritz.box`).

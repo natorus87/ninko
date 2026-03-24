@@ -1,4 +1,4 @@
-# Contributing to Kumio
+# Contributing to Ninko
 
 ## Adding a new module
 
@@ -11,7 +11,7 @@ Details and example: [README.md → Building a Module](README.md#building-a-modu
 ## Reporting bugs
 
 Please open an [issue](../../issues/new) including:
-- Kumio version (from `VERSION` or `/health`)
+- Ninko version (from `VERSION` or `/health`)
 - LLM backend and model
 - Steps to reproduce
 - Expected vs. actual behavior
@@ -33,7 +33,7 @@ cp .env.example .env
 docker compose up -d
 ```
 
-Live backend logs: `docker logs -f kumio-backend`
+Live backend logs: `docker logs -f ninko-backend`
 
 ## Code style
 

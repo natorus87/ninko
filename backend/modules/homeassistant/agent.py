@@ -8,7 +8,7 @@ from modules.homeassistant.tools import (
     ha_list_entities,
 )
 
-logger = logging.getLogger("kumio.modules.homeassistant.agent")
+logger = logging.getLogger("ninko.modules.homeassistant.agent")
 
 class HomeAssistantAgent(BaseAgent):
     """
@@ -21,7 +21,7 @@ class HomeAssistantAgent(BaseAgent):
             name="homeassistant",
 
             system_prompt=(
-                "Du bist der Smart Home und IoT Spezialist von Kumio. "
+                "Du bist der Smart Home und IoT Spezialist von Ninko. "
                 "Du steuerst und überwachst Home Assistant Umgebungen im Namen des Benutzers.\n\n"
                 "GERÄTE FINDEN — Strategie:\n"
                 "1. User nennt einen Gerätenamen (z.B. 'Thermostat Büro', 'Shelly Küche') → "

@@ -1,9 +1,9 @@
-# Kumio – Technical Development Memory
+# Ninko – Technical Development Memory
 
-This document serves as a persistent "memory" and technical guide for the Kumio project. It captures the architecture, design decisions, implementation patterns, and development history.
+This document serves as a persistent "memory" and technical guide for the Ninko project. It captures the architecture, design decisions, implementation patterns, and development history.
 
 ## 🚀 Project Vision
-Kumio is a modular, AI-powered IT-Operations platform. Its core philosophy is an **immutable core** with **auto-discovering modules**. The AI Orchestrator uses a dynamic tool-discovery mechanism based on module manifests, allowing for infinite extensibility without modifying core code.
+Ninko is a modular, AI-powered IT-Operations platform. Its core philosophy is an **immutable core** with **auto-discovering modules**. The AI Orchestrator uses a dynamic tool-discovery mechanism based on module manifests, allowing for infinite extensibility without modifying core code.
 
 ---
 
@@ -35,8 +35,8 @@ Each module **must** export:
 - `router`: (Optional) FastAPI router for dashboard endpoints.
 
 ### 2. Configuration & Settings System
-Kumio uses a dual-source configuration system:
-1. **Redis (`kumio:settings:modules`)**: Stores the primary configuration (enabled state, connection parameters) gathered from the UI.
+Ninko uses a dual-source configuration system:
+1. **Redis (`ninko:settings:modules`)**: Stores the primary configuration (enabled state, connection parameters) gathered from the UI.
 2. **Environment Variables**: Primary fallback and source for container-level configuration.
 3. **Vault**: Secure storage for keys ending in `_PASSWORD`, `_TOKEN`, `_KEY`, or `_SECRET`.
 
@@ -45,9 +45,9 @@ Kumio uses a dual-source configuration system:
 **Settings Save Merge Strategy**: When saving module settings, new connection values are **merged over** existing ones. Empty fields (e.g., a blank password input) do NOT overwrite previously saved values. This prevents password fields from being cleared every time the user clicks "Speichern" without re-entering the secret.
 
 ### 3. LLM Backend Configuration (Multi-Provider)
-Kumio supports multiple LLM providers (Ollama, LM Studio, etc.) with a configurable default.
+Ninko supports multiple LLM providers (Ollama, LM Studio, etc.) with a configurable default.
 
-**Persistence Pattern**: Settings are stored in Redis under `kumio:settings:llm_providers` (a list of provider objects).
+**Persistence Pattern**: Settings are stored in Redis under `ninko:settings:llm_providers` (a list of provider objects).
 - **Startup**: `main.py`'s `lifespan` prioritizes the multi-provider list. It finds the provider with `is_default=True` and calls `_apply_default_provider()`.
 - **Runtime**: Changing the default or updating a provider's settings trigger an immediate environment variable update (`_reconfigure_llm()`) so the `llm_factory` picks up the change without restart.
 
@@ -117,7 +117,7 @@ docker compose up -d backend
     - **Persistence**: Workflows and their Run-States are stored in Redis.
 - **Centralized Logging**: 
     - Implemented a custom `RedisLogHandler` that intercepts all Python logs.
-    - Logs are stored in a capped Redis list (`kumio:logs`) for high-performance real-time access.
+    - Logs are stored in a capped Redis list (`ninko:logs`) for high-performance real-time access.
     - Frontend provides a unified Log Viewer with advanced filtering and search.
 - **LLM Multi-Provider System**: Refactored the single-provider logic into a dynamic list of providers, allowing users to switch between different Models/Servers on the fly.
 
@@ -132,13 +132,13 @@ docker compose up -d backend
 ### Phase 12a: LLM Configuration Persistence Fix (Feb 2026)
 - **Issue**: After each container restart, the backend defaulted to Ollama even if LM Studio was configured in the UI.
 - **Root Cause**: `_reconfigure_llm()` only ran when users explicitly saved LLM settings, not on startup.
-- **Fix**: Added a startup step in `main.py` (`lifespan`) that reads `kumio:settings:llm` from Redis and calls `_reconfigure_llm()` before any agents are initialized.
+- **Fix**: Added a startup step in `main.py` (`lifespan`) that reads `ninko:settings:llm` from Redis and calls `_reconfigure_llm()` before any agents are initialized.
 - **Additional Fix**: `llm_factory.py` now reads `LMSTUDIO_MODEL` from settings instead of hardcoding `"local-model"`. Added auto-appending of `/v1` suffix to the LM Studio URL.
 
 ### Phase 11a: Kubernetes Dashboard UI & Networking Fixes (Feb 2026)
 - **Problem 1 (Routing):** K8s Ingress (Traefik) entfernte gelegentlich den Trailing-Slash bei Backend-Aufrufen (z.B. `/api/modules/`). Da FastAPI standardmäßig strikt den Pfad inklusive Slash verlangt, resultierte dies in statischen 404 Fehlern und unvollständigen JavaScript-Erfassungen.
   - **Lösung:** Alle dynamisch vom Frontend aufgerufenen FastAPI-Endpoints (`routes_modules.py` etc.) auf leere Endungen (`@router.get("")`) erweitert.
-- **Problem 2 (Secure Context/UUID):** Der JavaScript-Aufruf `crypto.randomUUID()` zur Generierung der Chat-Session-ID wurde bei Aufruf des Dashboards über lokale HTTP-Netzwerkadressen (`http://kumio.conbro.local`) von modernen Browsern (Firefox/Chrome/Safari) als `undefined` blockiert. Dies brachte die UI komplett zum Absturz (ewiger "Verbinde..."-Websocket Zustand).
+- **Problem 2 (Secure Context/UUID):** Der JavaScript-Aufruf `crypto.randomUUID()` zur Generierung der Chat-Session-ID wurde bei Aufruf des Dashboards über lokale HTTP-Netzwerkadressen (`http://ninko.conbro.local`) von modernen Browsern (Firefox/Chrome/Safari) als `undefined` blockiert. Dies brachte die UI komplett zum Absturz (ewiger "Verbinde..."-Websocket Zustand).
   - **Lösung:** Fallback auf `Math.random()`-basierte UUID-Generierung in ungesicherten Kontexten in `app.js` (`generateUUID`) integriert und IngressRoute auf `websecure` (HTTPS) erweitert.
 - **Problem 3 (Frontend Architektur):** Das Binden von Sidebar-Klick-Events an die primären Navigationspunkte (Tasks, Agenten, Chat) erfolgte erst im `try...catch` Block des Modul-Ladevorgangs. Scheiterte dieser, war das gesamte Dashboard tot.
   - **Lösung:** Unabhängiges, unkonditionales Initialisieren der Core-UI-Eventlistener in `app.js`.
@@ -165,10 +165,10 @@ docker compose up -d backend
 - **Troubleshooting Scripting**: Verified Vault deletion behavior using an isolated Python backend script (`test_connection_bug.py`). Confirmed that `ConnectionManager.delete_connection()` was gracefully handling missing secrets, pointing the root cause toward the validation schema.
 
 ### Phase 14: Telegram Bot Integration & Connection Refactoring (Feb 2026)
-- **Task**: Implementing a Telegram Bot to interact with Kumio from outside the local network.
+- **Task**: Implementing a Telegram Bot to interact with Ninko from outside the local network.
 - **Architecture**: The bot runs in a background task (`asyncio.create_task` inside `main.py` lifespan) using `httpx` long-polling on the `getUpdates` endpoint. It intercepts messages and proxies them to the `OrchestratorAgent`.
 - **Connection Refactoring**: The `TELEGRAM_BOT_TOKEN` was originally loaded from standard HashiCorp Vault environment secrets, but this broke the modular architecture where *multiple* bots could exist. Refactored the bot to use the `ConnectionManager.get_default_connection("telegram")` instead. The token is now entered in the global dashboard Settings gear icon under the Telegram tab.
-- **Chat History (Memory) Bug**: Telegram chat histories are tied to the Telegram User ID in Redis (`kumio:chat:telegram_<userid>`). Unlike the web GUI where refreshing the page assigns a new `session_id`, the Telegram session is persistent. If the agent hallucinated or got stuck in a connection error loop, it read its own error messages as truth and refused to try again.
+- **Chat History (Memory) Bug**: Telegram chat histories are tied to the Telegram User ID in Redis (`ninko:chat:telegram_<userid>`). Unlike the web GUI where refreshing the page assigns a new `session_id`, the Telegram session is persistent. If the agent hallucinated or got stuck in a connection error loop, it read its own error messages as truth and refused to try again.
 - **Fix**: Added `/start`, `/clear`, `/reset` command hooks directly into `backend/modules/telegram/bot.py` to allow users to trigger an immediate `redis.clear_chat_history(session_id)`.
 
 ### Phase 15: FritzBox Routing Fix & Orchestrator Dynamic Matching (Feb 2026)
@@ -178,12 +178,12 @@ docker compose up -d backend
   2. Dynamic subspace matching for longer words (>= 4 characters). The orchestrator now strips all whitespace and punctuation (`[\W_]+`) from both the user prompt and the target keyword ("FRITZ!Box" -> "fritzbox"). This allows the algorithm to detect "fritzbox" even if the user types it with irregular punctuation.
 
 ### Phase 16: Rebranding & Design Overhaul (Feb 2026)
-- **Task**: Global rename from earlier project name to **Kumio** and complete visual redesign.
+- **Task**: Global rename from earlier project name to **Ninko** and complete visual redesign.
 - **Backend Rebranding**:
-    - Logger root renamed to `kumio`.
+    - Logger root renamed to `ninko`.
     - Module environment variable prefix changed to `KUMIO_`.
-    - Redis key prefix changed to `kumio:`.
-    - Vault path prefix changed to `kumio/`.
+    - Redis key prefix changed to `ninko:`.
+    - Vault path prefix changed to `ninko/`.
 - **UI Design ("Fox Armor")**:
     - **Light Mode**: High-contrast blue/white palette (#1A237E, #00B0FF).
     - **Dark Mode**: High-tech "Glowing" look with neon-cyan (#00D2FF) and purple (#9747FF) highlights.
@@ -196,14 +196,14 @@ docker compose up -d backend
 - **Visual Fixes**: Improved the separator line in the chat sidebar to span the full width of the container.
 
 ### Phase 18: Kubernetes Deployment & Version Standardization (Feb 2026)
-- **Task**: Deployed the full Kumio stack to MicroK8s (excluding `ollama`).
+- **Task**: Deployed the full Ninko stack to MicroK8s (excluding `ollama`).
 - **ChromaDB Alignment**: Identified that `chromadb/chroma:latest` uses a newer API version than standard LangChain/Chroma clients in Python 3.12. Standardized both server and client to **version 0.4.24**.
 - **NumPy 2.0 Conflict**: Fixed `AttributeError: np.float_ was removed` by pinning `numpy<2.0.0` in `requirements.txt`.
 - **Dockerfile Enhancement**: Added `build-essential` and `python3-dev` to the backend Dockerfile to allow compilation of `chroma-hnswlib` during the build process.
 - **K8s Configuration**:
     - Service Type: `ClusterIP` (requires Ingress or NodePort for external access).
     - Resource Limits: Configured for stable operation on MicroK8s nodes.
-    - Namespace: `kumio`.
+    - Namespace: `ninko`.
 
 ---
 
@@ -245,7 +245,7 @@ docker compose up -d backend
 
 ### Pi-hole v6 Auth (429 Too Many Requests)
 - **Cause**: Repeated failed auth attempts or too many open sessions.
-- **Fix**: Check `webserver.api.max_sessions` in Pi-hole config. In Kumio, ensure sessions are reused and old ones are deleted if possible.
+- **Fix**: Check `webserver.api.max_sessions` in Pi-hole config. In Ninko, ensure sessions are reused and old ones are deleted if possible.
 
 ### SVG Rendering in Workflow Canvas
 - **Issue**: SVG edges (Bezier curves) appeared offset or remained invisible despite valid path data.
@@ -256,7 +256,7 @@ docker compose up -d backend
 
 ### Persistence-Pattern (Settings)
 - **Issue**: OS environment variables are not persistent after container restart if set via API.
-- **Fix**: Always read from Redis `kumio:settings:modules` (and now `llm_providers`) as the source of truth for UI-configured values.
+- **Fix**: Always read from Redis `ninko:settings:modules` (and now `llm_providers`) as the source of truth for UI-configured values.
 
 ### ChromaDB: 410 Gone / Connection Refused in K8s
 - **Issue**: Backend cannot connect to ChromaDB or receives `410 Gone`.
@@ -269,7 +269,7 @@ docker compose up -d backend
 
 ### Phase 23: Chat UI Avatar-Vereinheitlichung (März 2026)
 - **Task**: Inkonsistente AI-Avatare in der Chat-UI ersetzt (drei verschiedene Icons je nach Message-Status) und die Typing-Bubble verkleinert.
-- **Problem**: `addChatMessage()` nutzte ein SVG-Brain-Icon, `showTyping()` nutzte das 🧠-Emoji – beide mit lila hinterlegtem ``-Element, das dem Kumio-Logo-Stil nicht entsprach.
+- **Problem**: `addChatMessage()` nutzte ein SVG-Brain-Icon, `showTyping()` nutzte das 🧠-Emoji – beide mit lila hinterlegtem ``-Element, das dem Ninko-Logo-Stil nicht entsprach.
 - **Fix (`app.js`)**: Beide Stellen (`avatarAi`-Variable und `showTyping()`) auf `<img src="/static/images/chat_logo.png" class="chat-avatar-img">` umgestellt.
 - **Fix (`style.css`)**:
     - `.chat-message.ai .chat-avatar`: Hintergrund von `var(--accent-purple)` auf `transparent` geändert.
@@ -305,11 +305,11 @@ docker compose up -d backend
 - **Task**: The entire UI and AI agent responses needed to be dynamically localized without page reloads.
 - **Frontend Approach**: Created a lightweight Vanilla JS `I18n` class (`app.js`) overriding `[data-i18n]` text contents dynamically from JSON dictionaries (`de.json`, `en.json`, etc.).
 - **Backend Approach**:
-  - `routes_settings.py`: API endpoints to persist the language in standard Redis `kumio:settings:language` configuration and inject it as the `LANGUAGE` environment variable.
+  - `routes_settings.py`: API endpoints to persist the language in standard Redis `ninko:settings:language` configuration and inject it as the `LANGUAGE` environment variable.
   - `BaseAgent.py`: Automatically injects `os.getenv("LANGUAGE", "de")` into the agent's core system prompt to enforce translated reasoning and responses.
 - **Kubernetes Access**:
   - Replaced the simple ClusterIP instruction with a formal `traefik.containo.us/v1alpha1` `IngressRoute` configuration in `k8s/backend/ingressroute.yaml`.
-  - Maps `kumio.conbro.local` directly to the `kumio-backend` ClusterIP on port 8000.
+  - Maps `ninko.conbro.local` directly to the `ninko-backend` ClusterIP on port 8000.
 
 ### ConnectionManager-Secrets nach PVC-Reset verloren
 - **Issue**: Modul-Tools melden "Keine Standard-Verbindung konfiguriert" oder "API-Token fehlt", obwohl der User Verbindungen angelegt hat.
@@ -330,8 +330,8 @@ docker compose up -d backend
 ### Phase 25: WebSearch K8s-Aktivierung & Modul-Env-Var-Fallbacks (März 2026)
 
 #### WebSearch auf Kubernetes
-- **Problem**: `KUMIO_MODULE_WEB_SEARCH` und `SEARXNG_URL` fehlten in `k8s/backend/deployment.yaml`. SearXNG-Manifeste (`k8s/searxng/`) waren vorhanden, aber das Backend kannte die URL nicht.
-- **Fix**: `KUMIO_MODULE_WEB_SEARCH=true` und `SEARXNG_URL=http://searxng:8080` ergänzt. SearXNG k8s-Service heißt `searxng` (Port 8080), entspricht exakt der URL.
+- **Problem**: `NINKO_MODULE_WEB_SEARCH` und `SEARXNG_URL` fehlten in `k8s/backend/deployment.yaml`. SearXNG-Manifeste (`k8s/searxng/`) waren vorhanden, aber das Backend kannte die URL nicht.
+- **Fix**: `NINKO_MODULE_WEB_SEARCH=true` und `SEARXNG_URL=http://searxng:8080` ergänzt. SearXNG k8s-Service heißt `searxng` (Port 8080), entspricht exakt der URL.
 
 #### Env-Var-Fallback für IONOS, FritzBox, HomeAssistant
 - **Problem**: Module nutzen `ConnectionManager.get_default_connection()` → wenn kein UI-Connection existiert (z.B. nach PVC-Reset), schlugen alle Tools mit `ValueError` fehl.
@@ -340,7 +340,7 @@ docker compose up -d backend
   - IONOS: `IONOS_API_KEY`
   - FritzBox: `FRITZBOX_HOST`, `FRITZBOX_USER`, `FRITZBOX_PASSWORD`
   - HomeAssistant: `HOMEASSISTANT_URL`, `HOMEASSISTANT_API_TOKEN`
-- Kommentierte Beispiel-Blöcke in `k8s/backend/deployment.yaml` ergänzt (zeigen, wie man sie via `kumio-secrets` K8s-Secret einbindet).
+- Kommentierte Beispiel-Blöcke in `k8s/backend/deployment.yaml` ergänzt (zeigen, wie man sie via `ninko-secrets` K8s-Secret einbindet).
 - **Fehlermeldungen verbessert**: Statt missverständlichem "Bitte IONOS_API_KEY in den Modul-Einstellungen setzen" gibt es jetzt eine klare Anleitung mit beiden Konfigurationspfaden.
 
 ### Phase 26: LangGraph Recursion-Limit Fix & WebSearch-Routing-Verfeinerung (März 2026)
@@ -358,10 +358,10 @@ Der WebSearch-Agent lief in eine Endlosschleife: Das Routing-Keyword `"aktuell"`
 
 ### Phase 27: Soul System – Persistente Agenten-Identitäten (März 2026)
 - **Task**: Jeder Agent erhält eine unveränderliche „Seele" (Soul MD), die seine Rolle, Fähigkeiten und Verhaltensregeln definiert.
-- **`SoulManager`** (`core/soul_manager.py`): Singleton, geladen beim Start nach ModuleRegistry, vor SkillsManager. Lädt built-in Souls aus `backend/souls/` und dynamische Souls aus Redis (`kumio:souls`).
+- **`SoulManager`** (`core/soul_manager.py`): Singleton, geladen beim Start nach ModuleRegistry, vor SkillsManager. Lädt built-in Souls aus `backend/souls/` und dynamische Souls aus Redis (`ninko:souls`).
 - **Injection**: In `base_agent.invoke()` wird die Soul MD an den Anfang von `final_system_prompt` gesetzt (vor RAG, Skills, Sprachanweisung).
 - **Auto-Generierung**: Modul-Souls werden beim Start generiert wenn keine existieren. Dynamische Agenten-Souls werden bei `DynamicAgentPool.register()` aus dem System-Prompt extrahiert.
-- **Kumio-Seele**: `backend/souls/kumio.md` – wird in den Orchestrator injiziert (`name="orchestrator"`).
+- **Ninko-Seele**: `backend/souls/ninko.md` – wird in den Orchestrator injiziert (`name="orchestrator"`).
 
 ### Phase 28: Skills-System & GUI (März 2026)
 - **Task**: Prozedurales Domänenwissen (how-to, step-by-step) in SKILL.md-Dateien persistieren und automatisch in passende Agenten-Kontexte injizieren.

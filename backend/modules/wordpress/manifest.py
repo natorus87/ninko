@@ -9,7 +9,7 @@ import logging
 
 from core.module_registry import ModuleManifest
 
-logger = logging.getLogger("kumio.modules.wordpress")
+logger = logging.getLogger("ninko.modules.wordpress")
 
 
 async def check_wordpress_health() -> dict:
@@ -25,7 +25,7 @@ module_manifest = ModuleManifest(
     display_name="WordPress",
     description="WordPress-Verwaltung – Plugins, Seiten, Beiträge, Benutzer, Einstellungen",
     version="1.0.0",
-    author="Kumio Team",
+    author="Ninko Team",
     enabled_by_default=False,
     env_prefix="WORDPRESS_",
     required_secrets=["WORDPRESS_APP_PASSWORD"],

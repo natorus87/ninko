@@ -9,7 +9,7 @@ import logging
 
 from core.module_registry import ModuleManifest
 
-logger = logging.getLogger("kumio.modules.image_gen")
+logger = logging.getLogger("ninko.modules.image_gen")
 
 
 async def check_image_gen_health() -> dict:
@@ -29,7 +29,7 @@ module_manifest = ModuleManifest(
     display_name="Bildgenerierung",
     description="KI-Bildgenerierung – Bilder, Illustrationen, Logos mit Flux, DALL-E, Imagen",
     version="1.0.0",
-    author="Kumio Team",
+    author="Ninko Team",
     enabled_by_default=True,
     env_prefix="IMAGE_GEN_",
     required_secrets=[],

@@ -14,7 +14,7 @@ from langchain_core.tools import tool
 
 from core.vault import get_vault
 
-logger = logging.getLogger("kumio.modules.glpi.tools")
+logger = logging.getLogger("ninko.modules.glpi.tools")
 
 STATUS_MAP = {1: "Neu", 2: "In Bearbeitung", 3: "Geplant", 4: "Wartend", 5: "Gelöst", 6: "Geschlossen"}
 PRIORITY_MAP = {1: "Sehr niedrig", 2: "Niedrig", 3: "Mittel", 4: "Hoch", 5: "Sehr hoch", 6: "Kritisch"}

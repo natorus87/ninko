@@ -1,5 +1,5 @@
 """
-Kumio Skills Manager – Prozedurales Domänenwissen für Agenten.
+Ninko Skills Manager – Prozedurales Domänenwissen für Agenten.
 
 Skills sind Markdown-Dateien (SKILL.md) mit YAML-ähnlichem Frontmatter.
 Sie werden lazy in den Agenten-Kontext injiziert wenn eine Aufgabe passt.
@@ -29,7 +29,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-logger = logging.getLogger("kumio.core.skills_manager")
+logger = logging.getLogger("ninko.core.skills_manager")
 
 # Maximale Anzahl Skills die pro Request injiziert werden (Token-Budget)
 _MAX_INJECTED_SKILLS = 2

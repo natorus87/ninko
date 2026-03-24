@@ -9,7 +9,7 @@ import os
 
 from core.module_registry import ModuleManifest
 
-logger = logging.getLogger("kumio.modules.template")
+logger = logging.getLogger("ninko.modules.template")
 
 
 async def check_template_health() -> dict:
@@ -24,7 +24,7 @@ async def check_template_health() -> dict:
 module_manifest = ModuleManifest(
     name="template",
     display_name="Template Modul",
-    description="Eine Vorlage zum Erstellen neuer Kumio Module.",
+    description="Eine Vorlage zum Erstellen neuer Ninko Module.",
     version="1.0.0",
     author="Dein Name",
     enabled_by_default=False,  # Standardmäßig deaktiviert

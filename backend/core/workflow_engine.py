@@ -1,5 +1,5 @@
 """
-Kumio – Workflow Execution Engine.
+Ninko – Workflow Execution Engine.
 Traversiert einen Workflow-DAG asynchron und schreibt Statusupdates nach Redis.
 """
 
@@ -15,10 +15,10 @@ from typing import Any
 # Per-workflow asyncio locks prevent concurrent R-M-W races on run state
 _run_update_locks: dict[str, asyncio.Lock] = {}
 
-logger = logging.getLogger("kumio.workflow_engine")
+logger = logging.getLogger("ninko.workflow_engine")
 
-REDIS_KEY_RUNS_PREFIX = "kumio:workflow:runs:"
-REDIS_KEY_RUN_INDEX = "kumio:workflow:run_index"
+REDIS_KEY_RUNS_PREFIX = "ninko:workflow:runs:"
+REDIS_KEY_RUN_INDEX = "ninko:workflow:run_index"
 
 
 class WorkflowEngine:

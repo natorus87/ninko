@@ -20,7 +20,7 @@ from pydantic import BaseModel
 
 from core.config import get_settings
 
-logger = logging.getLogger("kumio.api.tts")
+logger = logging.getLogger("ninko.api.tts")
 router = APIRouter(prefix="/api/tts", tags=["TTS"])
 
 

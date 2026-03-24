@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: kumio-backend
+  name: ninko-backend
   labels:
-    app.kubernetes.io/name: kumio-backend
-    app.kubernetes.io/part-of: kumio
+    app.kubernetes.io/name: ninko-backend
+    app.kubernetes.io/part-of: ninko
 spec:
   selector:
-    app: kumio-backend
+    app: ninko-backend
   ports:
     - port: 8000
       targetPort: 8000

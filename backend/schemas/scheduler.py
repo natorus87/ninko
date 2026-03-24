@@ -1,5 +1,5 @@
 """
-Kumio Scheduler Schemas – Geplante Aufgaben (CronJobs).
+Ninko Scheduler Schemas – Geplante Aufgaben (CronJobs).
 """
 
 from __future__ import annotations

@@ -9,7 +9,7 @@ import os
 
 from core.module_registry import ModuleManifest
 
-logger = logging.getLogger("kumio.modules.glpi")
+logger = logging.getLogger("ninko.modules.glpi")
 
 
 async def check_glpi_health() -> dict:
@@ -60,7 +60,7 @@ module_manifest = ModuleManifest(
     display_name="GLPI Helpdesk",
     description="GLPI Helpdesk Integration – Tickets, Incidents, SLA-Tracking",
     version="1.0.0",
-    author="Kumio Team",
+    author="Ninko Team",
     enabled_by_default=True,
     env_prefix="GLPI_",
     required_secrets=["GLPI_APP_TOKEN", "GLPI_USER_TOKEN"],

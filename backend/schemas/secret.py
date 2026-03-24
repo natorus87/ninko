@@ -1,5 +1,5 @@
 """
-Kumio Secret Schemas – Pydantic-Modelle für Secrets API.
+Ninko Secret Schemas – Pydantic-Modelle für Secrets API.
 """
 
 from __future__ import annotations

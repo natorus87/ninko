@@ -9,13 +9,13 @@ import logging
 from agents.base_agent import BaseAgent, _t
 from modules._template.tools import beispiel_tool, lade_daten
 
-logger = logging.getLogger("kumio.modules.template.agent")
+logger = logging.getLogger("ninko.modules.template.agent")
 
 # System-Prompt mit _t(de, en) für Mehrsprachigkeit.
 # NICHT "Antworte immer auf Deutsch" hardcoden — base_agent.py injiziert
 # automatisch die Sprachanweisung aus der LANGUAGE-Konfiguration.
 TEMPLATE_SYSTEM_PROMPT = _t(
-    de="""Du bist der Template-Spezialist von Kumio.
+    de="""Du bist der Template-Spezialist von Ninko.
 
 Deine Fähigkeiten:
 - TODO: Beschreibe hier die Fähigkeiten des Moduls
@@ -28,7 +28,7 @@ Verhaltensregeln:
 Sicherheit:
 - Führe keine destruktiven Aktionen ohne Bestätigung aus""",
 
-    en="""You are Kumio's Template specialist.
+    en="""You are Ninko's Template specialist.
 
 Your capabilities:
 - TODO: Describe the module's capabilities here

@@ -3,8 +3,8 @@ kind: PersistentVolumeClaim
 metadata:
   name: backend-data
   labels:
-    app.kubernetes.io/name: kumio-backend
-    app.kubernetes.io/part-of: kumio
+    app.kubernetes.io/name: ninko-backend
+    app.kubernetes.io/part-of: ninko
 spec:
   accessModes:
     - ReadWriteOnce

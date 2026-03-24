@@ -1,6 +1,6 @@
-# Kumio Module: Email (SMTP/IMAP)
+# Ninko Module: Email (SMTP/IMAP)
 
-Dieses Modul befähigt Kumio dazu, als vollwertiger E-Mail Client zu agieren. Der Agent kann Posteingänge lesen, E-Mails durchsuchen, E-Mails verschieben, löschen und natürlich neue E-Mails via SMTP (inkl. HTML und Dateianhängen) versenden.
+Dieses Modul befähigt Ninko dazu, als vollwertiger E-Mail Client zu agieren. Der Agent kann Posteingänge lesen, E-Mails durchsuchen, E-Mails verschieben, löschen und natürlich neue E-Mails via SMTP (inkl. HTML und Dateianhängen) versenden.
 
 ## Architektur & Protokolle
 
@@ -24,7 +24,7 @@ Unter **Einstellungen -> Module -> Email** kannst du beliebig viele "Postfächer
 
 ### Speziell für Microsoft 365 (OAuth 2.0)
 
-Microsoft deaktiviert Basic Auth für IMAP zunehmend. Kumio bietet nativen Microsoft Authentication Library (MSAL) Support.
+Microsoft deaktiviert Basic Auth für IMAP zunehmend. Ninko bietet nativen Microsoft Authentication Library (MSAL) Support.
 
 1. Erstelle eine **App Registration** im [Azure Portal](https://portal.azure.com/).
 2. Unter "API-Berechtigungen" (API Permissions) füge folgende **Microsoft Graph** Berechtigungen hinzu (als *Application Permissions* für den daemon-artigen Client Credentials Flow, oder *Delegated* falls gewünscht):
@@ -32,7 +32,7 @@ Microsoft deaktiviert Basic Auth für IMAP zunehmend. Kumio bietet nativen Micro
    - `Mail.Send`
 3. Gewähre den **Admin Consent** für dein Tenant.
 4. Unter "Zertifikate & Geheimnisse" (Certificates & Secrets) erstelle ein neues **Client Secret**.
-5. Trage in Kumio ein:
+5. Trage in Ninko ein:
    - **Client ID**: Die Anwendungs-ID (Application ID) deiner App Registration.
    - **Tenant ID**: Deine Verzeichnis-ID (oder einfach `common` für Multitenant).
    - **Passwort / Client Secret**: Der _Wert_ des im Azure Portal generierten Client Secrets.

@@ -22,7 +22,7 @@ from modules.kubernetes.tools import (
 )
 from modules.kubernetes.remediation_plans import auto_remediate_failing_pods
 
-logger = logging.getLogger("kumio.modules.kubernetes.routes")
+logger = logging.getLogger("ninko.modules.kubernetes.routes")
 router = APIRouter()
 
 

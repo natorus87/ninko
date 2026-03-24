@@ -9,7 +9,7 @@ import os
 
 from core.module_registry import ModuleManifest
 
-logger = logging.getLogger("kumio.modules.proxmox")
+logger = logging.getLogger("ninko.modules.proxmox")
 
 
 async def check_proxmox_health() -> dict:
@@ -78,7 +78,7 @@ module_manifest = ModuleManifest(
     display_name="Proxmox",
     description="Proxmox VE Management – VMs, Container, Nodes, Snapshots",
     version="1.0.0",
-    author="Kumio Team",
+    author="Ninko Team",
     enabled_by_default=True,
     env_prefix="PROXMOX_",
     required_secrets=["PROXMOX_TOKEN_SECRET"],

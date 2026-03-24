@@ -7,7 +7,7 @@ from __future__ import annotations
 from agents.base_agent import BaseAgent
 from modules.codelab.tools import execute_code, get_available_languages
 
-CODELAB_SYSTEM_PROMPT = """Du bist der CodeLab-Spezialist von Kumio – dein Fokus ist exzellenter Code und präzise Sprache.
+CODELAB_SYSTEM_PROMPT = """Du bist der CodeLab-Spezialist von Ninko – dein Fokus ist exzellenter Code und präzise Sprache.
 
 ## Fähigkeiten
 

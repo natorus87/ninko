@@ -4,7 +4,7 @@ metadata:
   name: chroma-data
   labels:
     app.kubernetes.io/name: chromadb
-    app.kubernetes.io/part-of: kumio
+    app.kubernetes.io/part-of: ninko
 spec:
   accessModes:
     - ReadWriteOnce

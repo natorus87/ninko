@@ -10,7 +10,7 @@ from typing import Any
 
 from langchain_core.tools import tool
 
-logger = logging.getLogger("kumio.modules.image_gen.tools")
+logger = logging.getLogger("ninko.modules.image_gen.tools")
 
 
 @tool

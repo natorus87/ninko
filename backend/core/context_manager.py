@@ -1,5 +1,5 @@
 """
-Kumio Context Manager – Token-Budget-Verwaltung und automatischer Reset.
+Ninko Context Manager – Token-Budget-Verwaltung und automatischer Reset.
 Verhindert Context-Overflow und Prompt-Injection-Eskalation.
 """
 
@@ -13,7 +13,7 @@ from langchain_core.messages import HumanMessage
 
 from core.config import get_settings
 
-logger = logging.getLogger("kumio.context")
+logger = logging.getLogger("ninko.context")
 
 
 class ContextManager:

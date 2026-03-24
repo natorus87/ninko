@@ -1,6 +1,6 @@
 """
-Kumio Workflows API – CRUD + Run-Management.
-Persistenz via Redis (kumio:workflows, kumio:workflow:runs).
+Ninko Workflows API – CRUD + Run-Management.
+Persistenz via Redis (ninko:workflows, ninko:workflow:runs).
 """
 
 from __future__ import annotations
@@ -19,12 +19,12 @@ from schemas.workflows import (
     WorkflowRun, WorkflowRunListResponse
 )
 
-logger = logging.getLogger("kumio.api.workflows")
+logger = logging.getLogger("ninko.api.workflows")
 router = APIRouter(prefix="/api/workflows", tags=["Workflows"])
 
-REDIS_KEY_WORKFLOWS = "kumio:workflows"
-REDIS_KEY_RUNS_PREFIX = "kumio:workflow:runs:"
-REDIS_KEY_RUN_INDEX = "kumio:workflow:run_index"
+REDIS_KEY_WORKFLOWS = "ninko:workflows"
+REDIS_KEY_RUNS_PREFIX = "ninko:workflow:runs:"
+REDIS_KEY_RUN_INDEX = "ninko:workflow:run_index"
 MAX_RUNS_PER_WORKFLOW = 50
 
 

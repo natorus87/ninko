@@ -13,7 +13,7 @@ from langchain_core.tools import tool
 from core.connections import ConnectionManager
 from core.vault import get_vault
 
-logger = logging.getLogger("kumio.modules.template.tools")
+logger = logging.getLogger("ninko.modules.template.tools")
 
 
 async def _get_api_client(connection_id: str = "") -> dict:

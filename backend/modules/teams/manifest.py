@@ -11,7 +11,7 @@ from core.module_registry import ModuleManifest
 from core.vault import get_vault
 from .bot import get_teams_access_token
 
-logger = logging.getLogger("kumio.modules.teams")
+logger = logging.getLogger("ninko.modules.teams")
 
 
 async def check_teams_health(connection_id: str = "") -> dict:
@@ -29,9 +29,9 @@ async def check_teams_health(connection_id: str = "") -> dict:
 module_manifest = ModuleManifest(
     name="teams",
     display_name="Microsoft Teams",
-    description="Ermöglicht das Chatten mit dem Kumio Orchestrator über Microsoft Teams",
+    description="Ermöglicht das Chatten mit dem Ninko Orchestrator über Microsoft Teams",
     version="1.0.0",
-    author="Kumio Team",
+    author="Ninko Team",
     enabled_by_default=True,
     env_prefix="TEAMS_",
     required_secrets=[],

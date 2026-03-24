@@ -20,7 +20,7 @@ from modules.wordpress.tools import (
     list_media,
 )
 
-logger = logging.getLogger("kumio.modules.wordpress.routes")
+logger = logging.getLogger("ninko.modules.wordpress.routes")
 router = APIRouter()
 
 

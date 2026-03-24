@@ -1,5 +1,5 @@
 """
-Core Tools for Kumio Agents.
+Core Tools for Ninko Agents.
 These tools provide fundamental system capabilities rather than domain-specific modular functions.
 """
 
@@ -29,7 +29,7 @@ _ALLOWED_COMMANDS = {
     "systemctl", "journalctl", "dmesg", "curl", "wget", "nmap",
 }
 
-logger = logging.getLogger("kumio.agents.core_tools")
+logger = logging.getLogger("ninko.agents.core_tools")
 
 # opencode-Prinzip: Tool-Outputs auf sinnvolle Größe begrenzen
 _MAX_OUTPUT_CHARS = 4000
@@ -152,7 +152,7 @@ async def execute_cli_command(command: str) -> str:
 @tool
 async def create_custom_agent(name: str, system_prompt: str, description: str = "") -> str:
     """
-    Erstellt einen neuen benutzerspezifischen Agenten in Kumio.
+    Erstellt einen neuen benutzerspezifischen Agenten in Ninko.
     Dies ist nützlich, um spezialisierte KI-Personas für bestimmte Aufgaben dauerhaft anzulegen.
     Der Agent wird sofort im Agenten-Pool registriert und ist für zukünftige Aufgaben wiederverwendbar.
     Gibt die ID des neu erstellten Agenten zurück.
@@ -216,7 +216,7 @@ async def create_linear_workflow(name: str, description: str, steps: list[str]) 
         y_pos += 150
             
     redis = get_redis()
-    raw = await redis.connection.get("kumio:workflows")
+    raw = await redis.connection.get("ninko:workflows")
     workflows = json.loads(raw) if raw else []
     
     wf_id = str(uuid.uuid4())
@@ -235,7 +235,7 @@ async def create_linear_workflow(name: str, description: str, steps: list[str]) 
     }
     
     workflows.append(new_wf)
-    await redis.connection.set("kumio:workflows", json.dumps(workflows))
+    await redis.connection.set("ninko:workflows", json.dumps(workflows))
     logger.info("Linearer Workflow via Tool erstellt: %s (%s)", name, wf_id)
 
     return _t(
@@ -258,7 +258,7 @@ async def execute_workflow(workflow_name_or_id: str) -> str:
     from core.redis_client import get_redis
     
     redis = get_redis()
-    raw = await redis.connection.get("kumio:workflows")
+    raw = await redis.connection.get("ninko:workflows")
     workflows = json.loads(raw) if raw else []
     
     wf = next((w for w in workflows if w["id"] == workflow_name_or_id or w["name"].lower() == workflow_name_or_id.lower()), None)
@@ -283,7 +283,7 @@ async def execute_workflow(workflow_name_or_id: str) -> str:
         triggered_by="AI_Agent"
     )
     
-    runs_key = f"kumio:workflow:runs:{wf_id}"
+    runs_key = f"ninko:workflow:runs:{wf_id}"
     runs_raw = await redis.connection.get(runs_key)
     runs = json.loads(runs_raw) if runs_raw else []
     runs.append(run_obj.model_dump())

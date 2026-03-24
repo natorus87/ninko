@@ -1,5 +1,5 @@
 """
-Kumio Vault – Secrets Store mit HashiCorp Vault und SQLite-Fallback.
+Ninko Vault – Secrets Store mit HashiCorp Vault und SQLite-Fallback.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from cryptography.fernet import Fernet, InvalidToken
 
 from core.config import get_settings
 
-logger = logging.getLogger("kumio.vault")
+logger = logging.getLogger("ninko.vault")
 
 
 class VaultClient:
@@ -27,7 +27,7 @@ class VaultClient:
     """
 
     VAULT_MOUNT = "secret"
-    VAULT_PATH_PREFIX = "kumio"
+    VAULT_PATH_PREFIX = "ninko"
     SQLITE_DB_PATH = "/app/data/secrets.db"
 
     def __init__(self) -> None:

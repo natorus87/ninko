@@ -1,5 +1,5 @@
 """
-Kumio Plugin API – Dynamische Installation und Deinstallation von Modulen (ZIP).
+Ninko Plugin API – Dynamische Installation und Deinstallation von Modulen (ZIP).
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from tempfile import mkdtemp
 from fastapi import APIRouter, Request, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
 
-logger = logging.getLogger("kumio.api.plugins")
+logger = logging.getLogger("ninko.api.plugins")
 router = APIRouter(prefix="/api/plugins", tags=["Plugins"])
 
 _MAX_UNCOMPRESSED_SIZE = 100 * 1024 * 1024  # 100 MB

@@ -1,10 +1,10 @@
-# Kumio Module: Pi-hole (🛡️)
+# Ninko Module: Pi-hole (🛡️)
 
-Dieses Modul integriert das beliebte DNS-Sinkhole **Pi-hole v6** in Kumio, um dir das Verwalten von Blocklisten und Netzwerkanalysen per Chat zu ermöglichen.
+Dieses Modul integriert das beliebte DNS-Sinkhole **Pi-hole v6** in Ninko, um dir das Verwalten von Blocklisten und Netzwerkanalysen per Chat zu ermöglichen.
 
 ## Konfiguration (Connections)
 
-Über das Kumio Backend (`⚙ Einstellungen -> Pi-hole`) können Verbindungen zu verschiedenen Pi-hole-Instanzen verwaltet werden.
+Über das Ninko Backend (`⚙ Einstellungen -> Pi-hole`) können Verbindungen zu verschiedenen Pi-hole-Instanzen verwaltet werden.
 
 ### Benötigte Felder
 - **URL**: Die URL des Pi-hole Web-Interfaces (z.B. `http://192.168.1.5` oder `http://pihole.local`). Ohne trailing Slash (`/`).

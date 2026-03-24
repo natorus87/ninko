@@ -1,12 +1,12 @@
 """
-Kumio Core TTS – öffentliche API.
+Ninko Core TTS – öffentliche API.
 
 Zentrale Einstiegspunkte für alle Module:
 
     from core.tts import synthesize_reply, is_tts_available
 
     # Audio für eine Agent-Antwort erzeugen (nutzt Config-Defaults)
-    wav_bytes = await synthesize_reply("Hallo, ich bin Kumio.")
+    wav_bytes = await synthesize_reply("Hallo, ich bin Ninko.")
 
     # Mit expliziter Stimme
     wav_bytes = await synthesize_reply("Hello", lang="en", voice="lessac-medium")
@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-logger = logging.getLogger("kumio.core.tts")
+logger = logging.getLogger("ninko.core.tts")
 
 # Lazy-initialisierter Service-Singleton
 _service: object | None = None

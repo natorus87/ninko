@@ -2,7 +2,7 @@
 Audio-Konvertierungshelfer – alle Konvertierungen via ffmpeg subprocess.
 
 Nutzt keine Python-Audio-Libraries, nur ffmpeg als externen Prozess.
-ffmpeg ist bereits im Kumio-Docker-Image vorhanden (backend/Dockerfile).
+ffmpeg ist bereits im Ninko-Docker-Image vorhanden (backend/Dockerfile).
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import os
 import shutil
 import tempfile
 
-logger = logging.getLogger("kumio.core.tts.audio")
+logger = logging.getLogger("ninko.core.tts.audio")
 
 _FFMPEG_TIMEOUT = 30  # Sekunden
 

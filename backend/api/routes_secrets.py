@@ -1,5 +1,5 @@
 """
-Kumio Secrets API – CRUD für Vault/SQLite Secrets Store.
+Ninko Secrets API – CRUD für Vault/SQLite Secrets Store.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from schemas.secret import (
 )
 from core.vault import get_vault
 
-logger = logging.getLogger("kumio.api.secrets")
+logger = logging.getLogger("ninko.api.secrets")
 router = APIRouter(prefix="/api/secrets", tags=["Secrets"])
 
 

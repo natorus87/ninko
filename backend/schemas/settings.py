@@ -1,5 +1,5 @@
 """
-Kumio Settings – Pydantic-Modelle für Konfiguration.
+Ninko Settings – Pydantic-Modelle für Konfiguration.
 """
 
 from __future__ import annotations

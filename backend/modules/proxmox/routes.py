@@ -20,7 +20,7 @@ from modules.proxmox.tools import (
     list_containers,
 )
 
-logger = logging.getLogger("kumio.modules.proxmox.routes")
+logger = logging.getLogger("ninko.modules.proxmox.routes")
 router = APIRouter()
 
 

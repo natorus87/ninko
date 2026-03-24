@@ -1,5 +1,5 @@
 """
-Telegram Bot Modul für Kumio.
+Telegram Bot Modul für Ninko.
 Erlaubt das Chatten mit dem Agenten via Telegram.
 """
 

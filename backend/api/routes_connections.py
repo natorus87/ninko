@@ -1,5 +1,5 @@
 """
-Kumio API Router für Multi-Connection Management.
+Ninko API Router für Multi-Connection Management.
 """
 
 from fastapi import APIRouter, HTTPException

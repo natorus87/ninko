@@ -1,16 +1,16 @@
-# Kumio Module: GLPI Helpdesk (🎫)
+# Ninko Module: GLPI Helpdesk (🎫)
 
-Dieses Modul integriert die IT-Service-Management (ITSM) Lösung **GLPI** in Kumio. Es ermöglicht dem KI-Agenten, Tickets zu lesen, zu erstellen, zu kommentieren und automatisiert Incidents aufzunehmen.
+Dieses Modul integriert die IT-Service-Management (ITSM) Lösung **GLPI** in Ninko. Es ermöglicht dem KI-Agenten, Tickets zu lesen, zu erstellen, zu kommentieren und automatisiert Incidents aufzunehmen.
 
 ## Konfiguration (Connections)
 
-Über das Kumio Backend (`⚙ Einstellungen -> GLPI Helpdesk`) können Verbindungen zum GLPI-Server hergestellt werden.
+Über das Ninko Backend (`⚙ Einstellungen -> GLPI Helpdesk`) können Verbindungen zum GLPI-Server hergestellt werden.
 
 ### Benötigte Felder
-- **URL**: Die Basis-URL deiner GLPI-Instanz (z.B. `https://glpi.meinedomain.de`). Kumio fügt den `/apirest.php` Pfad automatisch hinzu.
+- **URL**: Die Basis-URL deiner GLPI-Instanz (z.B. `https://glpi.meinedomain.de`). Ninko fügt den `/apirest.php` Pfad automatisch hinzu.
 
 ### Geheimnisse (Vault)
-- **App Token** (`GLPI_APP_TOKEN`): Wird im GLPI unter `Setup -> General -> API -> Application token` konfiguriert, um die anfragende App (Kumio) zu identifizieren.
+- **App Token** (`GLPI_APP_TOKEN`): Wird im GLPI unter `Setup -> General -> API -> Application token` konfiguriert, um die anfragende App (Ninko) zu identifizieren.
 - **User Token** (`GLPI_USER_TOKEN`): Wird in den profilbezogenen Einstellungen eines Benutzer-Accounts im GLPI generiert (`Preferences -> API token`). Dieser User führt die Aktionen im Namen des Bots aus.
 
 ## GLPI API aktivieren

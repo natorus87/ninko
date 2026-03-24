@@ -12,7 +12,7 @@ from typing import Optional
 import httpx
 from langchain_core.tools import tool
 
-logger = logging.getLogger("kumio.modules.ionos.tools")
+logger = logging.getLogger("ninko.modules.ionos.tools")
 
 IONOS_DNS_API_BASE = "https://api.hosting.ionos.com/dns/v1"
 

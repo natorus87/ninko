@@ -1,5 +1,5 @@
 """
-Kumio Chat Schemas – Pydantic-Modelle für Chat-API.
+Ninko Chat Schemas – Pydantic-Modelle für Chat-API.
 """
 
 from __future__ import annotations

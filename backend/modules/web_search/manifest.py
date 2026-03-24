@@ -8,7 +8,7 @@ import httpx
 import logging
 from core.module_registry import ModuleManifest
 
-logger = logging.getLogger("kumio.modules.web_search")
+logger = logging.getLogger("ninko.modules.web_search")
 
 async def check_web_search_health() -> dict:
     """Health-Check für SearXNG-Verbindung."""
@@ -36,9 +36,9 @@ module_manifest = ModuleManifest(
     display_name="Web Search",
     description="Ermöglicht der KI Web-Suchen über eine lokale SearXNG-Instanz durchzuführen.",
     version="1.0.0",
-    author="Kumio Team",
+    author="Ninko Team",
     enabled_by_default=True,
-    env_prefix="KUMIO_MODULE_WEB_SEARCH", 
+    env_prefix="NINKO_MODULE_WEB_SEARCH", 
     required_secrets=[],
     optional_secrets=[],
     routing_keywords=[

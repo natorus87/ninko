@@ -16,7 +16,7 @@ from langchain_core.tools import tool
 from core.connections import ConnectionManager
 from core.vault import get_vault
 
-logger = logging.getLogger("kumio.modules.wordpress.tools")
+logger = logging.getLogger("ninko.modules.wordpress.tools")
 
 
 async def _get_wp_client(connection_id: str = "") -> dict:

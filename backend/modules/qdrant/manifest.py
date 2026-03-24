@@ -11,7 +11,7 @@ import httpx
 
 from core.module_registry import ModuleManifest
 
-logger = logging.getLogger("kumio.modules.qdrant")
+logger = logging.getLogger("ninko.modules.qdrant")
 
 
 async def check_qdrant_health() -> dict:
@@ -49,9 +49,9 @@ module_manifest = ModuleManifest(
         "per semantischer Vektorsuche mit Payload-Filterung nach Kategorie und Tags."
     ),
     version="1.0.0",
-    author="Kumio Team",
+    author="Ninko Team",
     enabled_by_default=False,
-    env_prefix="KUMIO_MODULE_QDRANT",
+    env_prefix="NINKO_MODULE_QDRANT",
     required_secrets=[],
     optional_secrets=["api_key"],
     routing_keywords=[

@@ -13,7 +13,7 @@ from langchain_core.messages import HumanMessage
 from modules.codelab.schemas import ExecuteRequest, ImproveTextRequest
 from modules.codelab.tools import execute_code, get_available_languages
 
-logger = logging.getLogger("kumio.modules.codelab.routes")
+logger = logging.getLogger("ninko.modules.codelab.routes")
 router = APIRouter()
 
 
