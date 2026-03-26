@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Any, Sequence
 
 from langchain_core.callbacks import AsyncCallbackHandler
@@ -121,6 +122,9 @@ _memorize_cooldowns: dict[str, float] = {}
 _MEMORIZE_COOLDOWN_SECS = 60.0  # Max 1 Auto-Memorize pro Minute pro Agent
 # Agenten die kein Auto-Memorize brauchen (Background-Loops)
 _MEMORIZE_EXCLUDED_AGENTS = {"monitor", "scheduler"}
+_MEMORIZE_STOP_WORDS = {
+    "NICHTS", "NOTHING", "RIEN", "NADA", "NULLA", "NIETS", "NIC", "何もない", "没有"
+}
 
 # Sprachanweisungen für Language-Injection am Ende jedes System-Prompts
 _LANG_INSTRUCTIONS: dict[str, str] = {
@@ -157,15 +161,16 @@ def _extract_text(content: str | list) -> str:
     return str(content)
 
 
+_RE_THINK = re.compile(r"<think>.*?</think>", re.DOTALL)
+
+
 def _strip_thinking(text: str) -> str:
     """Entfernt <think>...</think> Blöcke aus Thinking-Model-Antworten.
 
     Qwen3.5, DeepSeek-R1 und ähnliche Modelle generieren interne
     Überlegungen in <think>-Tags, die nicht an den User weitergegeben werden sollen.
     """
-    import re
-    stripped = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
-    return stripped.strip()
+    return _RE_THINK.sub("", text).strip()
 
 
 class BaseAgent:
@@ -468,7 +473,7 @@ class BaseAgent:
             # Langzeitgedächtnis: relevante Fakten im Hintergrund speichern
             # Triviale Antworten (< 80 Zeichen) überspringen – kein Mehrwert
             # Background-Agenten (monitor, scheduler) ausschließen + Cooldown pro Agent
-            _now = asyncio.get_event_loop().time()
+            _now = asyncio.get_running_loop().time()
             _last = _memorize_cooldowns.get(self.name, 0.0)
             if (
                 len(response) >= 80
@@ -545,9 +550,6 @@ class BaseAgent:
             )
             result = await self._llm.ainvoke([HumanMessage(content=prompt)])
             fact = result.content.strip() if hasattr(result, "content") else str(result).strip()
-            _MEMORIZE_STOP_WORDS = {
-                "NICHTS", "NOTHING", "RIEN", "NADA", "NULLA", "NIETS", "NIC", "何もない", "没有"
-            }
             if fact and fact.strip("*_ \n").upper() not in _MEMORIZE_STOP_WORDS:
                 await self._memory.store(
                     content=fact,

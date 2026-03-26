@@ -124,8 +124,8 @@ async def execute_cli_command(command: str) -> str:
                 f"Error: Command '{args[0]}' timed out after 30 seconds and was aborted.",
             )
 
-        out_str = stdout.decode('utf-8').strip() if stdout else ""
-        err_str = stderr.decode('utf-8').strip() if stderr else ""
+        out_str = stdout.decode('utf-8', errors='replace').strip() if stdout else ""
+        err_str = stderr.decode('utf-8', errors='replace').strip() if stderr else ""
 
         result = []
         if out_str:
@@ -468,7 +468,7 @@ async def run_pipeline(steps: list[dict]) -> str:
             )
         else:
             # Status-Update für diesen Schritt emittieren
-            display = manifests.get(module, type("", (), {"display_name": module})()).display_name
+            display = manifests[module].display_name if module in manifests else module
             await status_bus.emit(
                 session_id,
                 _t(f"Rufe {display} auf… ({i + 1}/{len(steps)})", f"Calling {display}… ({i + 1}/{len(steps)})"),

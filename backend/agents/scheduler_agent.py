@@ -107,6 +107,8 @@ class SchedulerAgent:
         start_time = time.monotonic()
         workflow_id = task.get("workflow_id")
 
+        agent_id = task.get("agent_id")
+
         try:
             response_text = ""
             module_used = None
@@ -137,9 +139,25 @@ class SchedulerAgent:
                 else:
                     response_text += f": {run_result.get('error', 'Unbekannter Fehler')}"
                 module_used = "workflow"
+
+            elif agent_id:
+                # Dynamischen Agenten aus dem Pool aufrufen
+                from core.agent_pool import get_agent_pool
+                pool = get_agent_pool()
+                agent, agent_name = pool.get_agent_by_id(agent_id)
+                if agent is None:
+                    raise ValueError(f"Agent '{agent_id}' nicht im Pool gefunden.")
+
+                logger.info("Starte Agent '%s' (%s) für Task '%s'", agent_name, agent_id, task["name"])
+                response_text, _ = await agent.invoke(
+                    message=task.get("prompt", "Führe deine Aufgabe aus."),
+                    chat_history=None,
+                )
+                module_used = f"agent:{agent_name}"
+
             else:
                 # Orchestrator ausführen (Prompt)
-                response_text, module_used = await self.orchestrator.route(
+                response_text, module_used, _ = await self.orchestrator.route(
                     message=task["prompt"],
                     chat_history=None,
                 )
@@ -154,6 +172,7 @@ class SchedulerAgent:
                 "module_used": module_used,
                 "prompt": task.get("prompt", ""),
                 "workflow_id": workflow_id,
+                "agent_id": agent_id,
                 "response": response_text[:2000],  # Limit für Redis
                 "duration_ms": duration_ms,
             }
@@ -192,9 +211,10 @@ class SchedulerAgent:
                 "task_name": task["name"],
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "status": "error",
-                "module_used": "workflow" if workflow_id else None,
+                "module_used": "workflow" if workflow_id else (f"agent:{agent_id}" if agent_id else None),
                 "prompt": task.get("prompt", ""),
                 "workflow_id": workflow_id,
+                "agent_id": agent_id,
                 "response": str(exc)[:2000],
                 "duration_ms": duration_ms,
             }
@@ -245,6 +265,7 @@ class SchedulerAgent:
                 "cron": data["cron"],
                 "prompt": data.get("prompt", ""),
                 "workflow_id": data.get("workflow_id"),
+                "agent_id": data.get("agent_id"),
                 "target_module": data.get("target_module"),
                 "enabled": data.get("enabled", True),
                 "last_run": None,
@@ -278,7 +299,7 @@ class SchedulerAgent:
                 cron = croniter(task["cron"], datetime.now(timezone.utc))
                 task["next_run"] = cron.get_next(datetime).isoformat()
 
-            for key in ("name", "prompt", "target_module", "enabled"):
+            for key in ("name", "prompt", "target_module", "enabled", "agent_id", "workflow_id"):
                 if key in data and data[key] is not None:
                     task[key] = data[key]
 

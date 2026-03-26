@@ -692,8 +692,10 @@ class OrchestratorAgent(BaseAgent):
                 except Exception as exc:
                     logger.error("Stufe 2: Modul '%s' Fehler: %s", target_module, exc, exc_info=True)
                     return (
-                        f"Das Modul '{target_module}' hat einen Fehler gemeldet: {exc}. "
-                        "Ich versuche, direkt zu antworten.",
+                        _t(
+                            f"Fehler: Modul '{target_module}' hat einen Fehler gemeldet: {exc}.",
+                            f"Error: Module '{target_module}' reported an error: {exc}.",
+                        ),
                         target_module,
                         False,
                     )

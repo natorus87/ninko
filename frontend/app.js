@@ -55,6 +55,8 @@ const I18n = {
         });
         // HTML-Lang-Attribut
         document.documentElement.lang = this._lang;
+        // Safeguard-Button-Titel nach Sprachwechsel aktualisieren
+        if (typeof Ninko !== 'undefined') Ninko._updateSafeguardBtn?.();
     },
 };
 
@@ -77,6 +79,9 @@ const Ninko = {
     _ttsAvailable: false,
     _ttsAudio: null,
     _ttsSpeakingMsgId: null,
+    _safeguardEnabled: true,
+    _safeguardPendingMessage: null,
+    _confirmedPending: false,
 
     // ─── SVG Icon Library (Lucide-style, currentColor) ───
     _ic: {
@@ -159,6 +164,7 @@ const Ninko = {
         this.initResizers();
         this.initSidebarTransitions();
         this._checkTtsAvailable();
+        this.initSafeguard();
         document.documentElement.classList.remove('light-mode-pre');
         document.body.style.opacity = '1';
     },
@@ -585,12 +591,16 @@ const Ninko = {
         } catch (_) { /* SSE nicht verfügbar – trotzdem fortfahren */ }
 
         try {
+            const confirmedNow = this._confirmedPending;
+            this._confirmedPending = false;
+
             const res = await fetch('/api/chat/', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     message: text,
                     session_id: this.sessionId,
+                    confirmed: confirmedNow,
                 }),
                 signal: this._abortController.signal,
             });
@@ -601,6 +611,11 @@ const Ninko = {
             if (res.ok) {
                 const data = await res.json();
                 this.addChatMessage('ai', data.response);
+
+                if (data.confirmation_required && data.safeguard) {
+                    this._safeguardPendingMessage = text;
+                    this._showSafeguardConfirmPrompt(data.safeguard);
+                }
 
                 if (data.compacted) {
                     this.addCompactionNotice();
@@ -952,6 +967,81 @@ const Ninko = {
                 this._ttsAvailable = !!data.TTS_ENABLED;
             }
         } catch { /* TTS bleibt deaktiviert */ }
+    },
+
+    // ─── Safeguard Toggle ───────────────────────────────────────────────────
+
+    async initSafeguard() {
+        try {
+            const res = await fetch('/api/safeguard/status');
+            if (res.ok) {
+                const data = await res.json();
+                this._safeguardEnabled = !!data.enabled;
+                this._updateSafeguardBtn();
+            }
+        } catch { /* Safeguard-Status nicht abfragbar — Default: on */ }
+    },
+
+    async toggleSafeguard() {
+        const newState = !this._safeguardEnabled;
+        const endpoint = newState ? '/api/safeguard/enable' : '/api/safeguard/disable';
+        try {
+            const res = await fetch(endpoint, { method: 'POST' });
+            if (res.ok) {
+                this._safeguardEnabled = newState;
+                this._updateSafeguardBtn();
+            }
+        } catch { /* Zustandsänderung fehlgeschlagen */ }
+    },
+
+    _updateSafeguardBtn() {
+        const btn = document.getElementById('btn-safeguard');
+        if (!btn) return;
+        if (this._safeguardEnabled) {
+            btn.classList.add('safeguard-on');
+            btn.classList.remove('safeguard-off');
+            btn.title = t('safeguard.btnTitleOn');
+        } else {
+            btn.classList.remove('safeguard-on');
+            btn.classList.add('safeguard-off');
+            btn.title = t('safeguard.btnTitleOff');
+        }
+    },
+
+    _showSafeguardConfirmPrompt(sg) {
+        document.getElementById('safeguard-confirm-prompt')?.remove();
+        const container = document.getElementById('chat-messages');
+        const catClass = `sg-${(sg.category || 'unknown').toLowerCase()}`;
+        const div = document.createElement('div');
+        div.className = 'safeguard-confirm-prompt';
+        div.id = 'safeguard-confirm-prompt';
+        div.innerHTML = `
+            <div class="safeguard-confirm-content">
+                <span class="safeguard-confirm-category ${catClass}">${sg.category}</span>
+                <div class="safeguard-confirm-actions">
+                    <button class="btn-confirm-action btn-confirm-run" onclick="Ninko.confirmSafeguardAction()">${t('safeguard.confirmRun')}</button>
+                    <button class="btn-confirm-action btn-confirm-cancel" onclick="Ninko.cancelSafeguardAction()">${t('safeguard.confirmCancel')}</button>
+                </div>
+            </div>
+        `;
+        container.appendChild(div);
+        container.scrollTop = container.scrollHeight;
+    },
+
+    async confirmSafeguardAction() {
+        if (!this._safeguardPendingMessage) return;
+        document.getElementById('safeguard-confirm-prompt')?.remove();
+        const msg = this._safeguardPendingMessage;
+        this._safeguardPendingMessage = null;
+        const input = document.getElementById('chat-input');
+        input.value = msg;
+        this._confirmedPending = true;
+        await this.sendMessage();
+    },
+
+    cancelSafeguardAction() {
+        this._safeguardPendingMessage = null;
+        document.getElementById('safeguard-confirm-prompt')?.remove();
     },
 
     async speakMessage(msgId) {
@@ -2260,6 +2350,9 @@ const Ninko = {
         document.getElementById('sched-name').value = '';
         document.getElementById('sched-cron').value = '';
         document.getElementById('sched-prompt').value = '';
+        const agentPromptEl = document.getElementById('sched-agent-prompt');
+        if (agentPromptEl) agentPromptEl.value = '';
+        if (document.getElementById('sched-agent')) document.getElementById('sched-agent').value = '';
         if (document.getElementById('sched-workflow')) document.getElementById('sched-workflow').value = '';
         if (document.getElementById('sched-module')) document.getElementById('sched-module').value = '';
         const typePrompt = document.querySelector('input[name="sched-type"][value="prompt"]');
@@ -2278,15 +2371,36 @@ const Ninko = {
         if (!container) return;
 
         try {
-            const workflowsRes = await fetch('/api/workflows/');
-            if (!workflowsRes.ok) throw new Error(workflowsRes.statusText);
-            const workflowData = await workflowsRes.json();
+            const [workflowsRes, agentsRes, tasksRes] = await Promise.all([
+                fetch('/api/workflows/'),
+                fetch('/api/agents'),
+                fetch('/api/scheduler/tasks'),
+            ]);
+
+            const workflowData = workflowsRes.ok ? await workflowsRes.json() : { workflows: [] };
             const workflows = workflowData.workflows || [];
             this._wfList = workflows;
 
-            const res = await fetch('/api/scheduler/tasks');
-            if (!res.ok) throw new Error(res.statusText);
-            const data = await res.json();
+            const agentData = agentsRes.ok ? await agentsRes.json() : { agents: [] };
+            const agents = agentData.agents || [];
+            this._agentList = agents;
+
+            // Dropdowns immer befüllen (auch wenn keine Tasks vorhanden)
+            const wfSelect = document.getElementById('sched-workflow');
+            if (wfSelect) {
+                wfSelect.innerHTML = '<option value="">Workflow auswählen…</option>' +
+                    workflows.map(wf => `<option value="${this._escapeHtml(wf.id)}">${this._escapeHtml(wf.name)}</option>`).join('');
+            }
+            const agentSelect = document.getElementById('sched-agent');
+            if (agentSelect) {
+                agentSelect.innerHTML = '<option value="">Agent auswählen…</option>' +
+                    agents.filter(a => a.enabled !== false).map(a =>
+                        `<option value="${this._escapeHtml(a.id)}">${this._escapeHtml(a.name)}</option>`
+                    ).join('');
+            }
+
+            if (!tasksRes.ok) throw new Error(tasksRes.statusText);
+            const data = await tasksRes.json();
             const tasks = data.tasks || [];
 
             if (tasks.length === 0) {
@@ -2309,6 +2423,10 @@ const Ninko = {
                 if (task.workflow_id) {
                     const wf = workflows.find(w => w.id === task.workflow_id);
                     taskDetails = `<div class="task-badge task-badge-workflow">${this._ic.branch} Workflow: ${this._escapeHtml(wf ? wf.name : task.workflow_id)}</div>`;
+                } else if (task.agent_id) {
+                    const ag = agents.find(a => a.id === task.agent_id);
+                    taskDetails = `<div class="task-badge task-badge-agent">🤖 Agent: ${this._escapeHtml(ag ? ag.name : task.agent_id)}</div>` +
+                        (task.prompt ? `<div class="task-prompt" style="margin-top:0.25rem;">${this._escapeHtml(task.prompt)}</div>` : '');
                 }
 
                 return `
@@ -2350,13 +2468,6 @@ const Ninko = {
                 card.querySelector('[data-action="delete"]')?.addEventListener('click', () => this.deleteScheduledTask(id));
             });
 
-            // Workflow-Dropdown im Editor befüllen
-            const wfSelect = document.getElementById('sched-workflow');
-            if (wfSelect) {
-                wfSelect.innerHTML = '<option value="">Workflow auswählen…</option>' +
-                    workflows.map(wf => `<option value="${wf.id}">${this._escapeHtml(wf.name)}</option>`).join('');
-            }
-
         } catch (err) {
             container.innerHTML = `<p class="text-error">Fehler: ${err.message}</p>`;
         }
@@ -2369,6 +2480,8 @@ const Ninko = {
 
         const type = document.querySelector('input[name="sched-type"]:checked')?.value;
         const prompt = document.getElementById('sched-prompt')?.value?.trim() || "";
+        const agentId = document.getElementById('sched-agent')?.value || null;
+        const agentPrompt = document.getElementById('sched-agent-prompt')?.value?.trim() || "";
         const workflowId = document.getElementById('sched-workflow')?.value || null;
         const module = document.getElementById('sched-module')?.value || null;
 
@@ -2379,6 +2492,11 @@ const Ninko = {
 
         if (type === 'prompt' && !prompt) {
             if (status) status.textContent = 'Prompt ist Pflicht für Agenten-Aufträge.';
+            return;
+        }
+
+        if (type === 'agent' && !agentId) {
+            if (status) status.textContent = 'Agent muss ausgewählt werden.';
             return;
         }
 
@@ -2395,9 +2513,12 @@ const Ninko = {
 
             if (type === 'prompt') {
                 body.prompt = prompt;
+            } else if (type === 'agent') {
+                body.agent_id = agentId;
+                body.prompt = agentPrompt || "";
             } else {
                 body.workflow_id = workflowId;
-                body.prompt = `Workflow: ${workflowId}`; // Fallback für Logs
+                body.prompt = "";
             }
 
             const res = await fetch('/api/scheduler/tasks', {
@@ -2422,18 +2543,15 @@ const Ninko = {
     toggleSchedType() {
         const type = document.querySelector('input[name="sched-type"]:checked')?.value;
         const promptRow = document.getElementById('sched-prompt-row');
+        const agentRow = document.getElementById('sched-agent-row');
         const workflowRow = document.getElementById('sched-workflow-row');
         const moduleRow = document.getElementById('sched-module')?.parentElement;
 
-        if (type === 'workflow') {
-            promptRow?.classList.add('hidden');
-            workflowRow?.classList.remove('hidden');
-            moduleRow?.classList.add('hidden'); // Modul-Override bei Workflows nicht sinnvoll
-        } else {
-            promptRow?.classList.remove('hidden');
-            workflowRow?.classList.add('hidden');
-            moduleRow?.classList.remove('hidden');
-        }
+        promptRow?.classList.toggle('hidden', type !== 'prompt');
+        agentRow?.classList.toggle('hidden', type !== 'agent');
+        workflowRow?.classList.toggle('hidden', type !== 'workflow');
+        // Modul-Override nur bei Prompt sinnvoll
+        moduleRow?.classList.toggle('hidden', type !== 'prompt');
     },
 
     async deleteScheduledTask(id) {
@@ -2923,6 +3041,17 @@ const Ninko = {
                     const cb = document.getElementById(`agent-mod-${name}`);
                     if (cb) cb.checked = true;
                 });
+                // Load per-agent safeguard state
+                try {
+                    const sgRes = await fetch(`/api/safeguard/agents/${agentId}`);
+                    if (sgRes.ok) {
+                        const sgData = await sgRes.json();
+                        const sgCb = document.getElementById('agent-safeguard');
+                        if (sgCb) {
+                            sgCb.checked = sgData.safeguard_enabled !== false;
+                        }
+                    }
+                } catch { }
             } catch { }
         } else {
             document.getElementById('agent-editor-title').textContent = 'Neuer Agent';
@@ -2930,6 +3059,8 @@ const Ninko = {
             document.getElementById('agent-desc').value = '';
             document.getElementById('agent-system-prompt').value = '';
             document.getElementById('agent-enabled').checked = true;
+            const sgCb = document.getElementById('agent-safeguard');
+            if (sgCb) sgCb.checked = true;
         }
         this._renderAgentSteps();
         await this._populateAgentSkills();
@@ -3070,6 +3201,14 @@ const Ninko = {
             const method = this._agentEditId ? 'PUT' : 'POST';
             const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
             if (res.ok) {
+                const saved = await res.json();
+                const savedId = saved.id || this._agentEditId;
+                // Persist per-agent safeguard setting
+                if (savedId) {
+                    const sgEnabled = document.getElementById('agent-safeguard')?.checked !== false;
+                    const sgEndpoint = sgEnabled ? 'enable' : 'disable';
+                    try { await fetch(`/api/safeguard/agents/${savedId}/${sgEndpoint}`, { method: 'POST' }); } catch { }
+                }
                 showNotification(`Agent "${name}" gespeichert`, 'success');
                 this.closeAgentEditor();
             } else {
@@ -3109,6 +3248,8 @@ const Ninko = {
     _wfRunRefreshTimer: null,
     _wfCurrentRunId: null,
     _wfCurrentWorkflowId: null,
+    _wfRunNodes: [],
+    _wfRunEdges: [],
 
     async loadWorkflows() {
         const container = document.getElementById('workflows-list');
@@ -3136,7 +3277,7 @@ const Ninko = {
                         <button class="btn btn-sm btn-primary" data-action="run">${this._ic.play} Run</button>
                         <button class="btn btn-sm btn-outline" data-action="edit">${this._ic.edit} Bearbeiten</button>
                         <button class="btn btn-sm btn-outline" data-action="logs">${this._ic.list} Logs</button>
-                        <button class="btn btn-sm btn-outline" data-action="delete" style="color:var(--error-color)">${this._ic.trash}</button>
+                        <button class="btn btn-sm btn-outline" data-action="delete" title="Löschen" style="color:var(--error-color)">${this._ic.trash} Löschen</button>
                     </div>
                 </div>
             `).join('');
@@ -3166,11 +3307,13 @@ const Ninko = {
                 const res = await fetch(`/api/workflows/${wfId}`);
                 const wf = await res.json();
                 document.getElementById('wf-name-input').value = wf.name || '';
+                document.getElementById('wf-desc-input').value = wf.description || '';
                 this._wfNodes = wf.nodes || [];
                 this._wfEdges = wf.edges || [];
             } catch { }
         } else {
             document.getElementById('wf-name-input').value = '';
+            document.getElementById('wf-desc-input').value = '';
         }
         this._wfRenderCanvas();
 
@@ -3309,6 +3452,7 @@ const Ninko = {
     _wfStartConnection(sourceId) {
         if (this._wfConnecting) {
             // Complete connection: port of a different node was clicked
+            document.querySelector('.wf-node-connecting')?.classList.remove('wf-node-connecting');
             if (this._wfConnecting !== sourceId) {
                 const exists = this._wfEdges.some(e => e.source_id === this._wfConnecting && e.target_id === sourceId);
                 if (!exists) {
@@ -3324,7 +3468,8 @@ const Ninko = {
         } else {
             this._wfConnecting = sourceId;
             document.getElementById('wf-canvas').style.cursor = 'crosshair';
-            showNotification('Klicke auf den Ziel-Node um zu verbinden', 'info');
+            document.getElementById(`wf-node-${sourceId}`)?.classList.add('wf-node-connecting');
+            showNotification('Klicke auf einen Ziel-Node, um die Verbindung herzustellen', 'info');
         }
     },
 
@@ -3412,6 +3557,7 @@ const Ninko = {
             if (!exists) {
                 this._wfEdges.push({ id: Date.now().toString(36), source_id: this._wfConnecting, target_id: nodeId, label: '' });
             }
+            document.querySelector('.wf-node-connecting')?.classList.remove('wf-node-connecting');
             this._wfConnecting = null;
             document.getElementById('wf-canvas').style.cursor = 'default';
             this._wfUpdateSvgEdges();
@@ -3520,7 +3666,14 @@ const Ninko = {
 
     _wfUpdateNode(nodeId, field, value) {
         const node = this._wfNodes.find(n => n.id === nodeId);
-        if (node) { node[field] = value; this._wfRenderCanvas(); }
+        if (node) {
+            node[field] = value;
+            this._wfRenderCanvas();
+            if (field === 'label' && this._wfSelectedNode === nodeId) {
+                const titleEl = document.getElementById('wf-inspector-title');
+                if (titleEl) titleEl.innerHTML = `${this._wfNodeIcon(node.type)} ${this._escapeHtml(value)}`;
+            }
+        }
     },
     _wfUpdateNodeConfig(nodeId, key, value) {
         const node = this._wfNodes.find(n => n.id === nodeId);
@@ -3555,7 +3708,8 @@ const Ninko = {
         const saveBtn = document.querySelector('.wf-editor-toolbar .btn-primary');
         if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Speichern…'; }
         const wfId = document.getElementById('wf-edit-id').value;
-        const body = { name, description: '', nodes: this._wfNodes, edges: this._wfEdges, variables: [], enabled: true };
+        const description = document.getElementById('wf-desc-input')?.value.trim() || '';
+        const body = { name, description, nodes: this._wfNodes, edges: this._wfEdges, variables: [], enabled: true };
         try {
             const url = wfId ? `/api/workflows/${wfId}` : '/api/workflows/';
             const method = wfId ? 'PUT' : 'POST';
@@ -3563,7 +3717,7 @@ const Ninko = {
             if (res.ok) { showNotification(`Workflow "${name}" gespeichert`, 'success'); this.closeWorkflowEditor(); }
             else showNotification('Fehler beim Speichern', 'error');
         } catch { showNotification('Verbindungsfehler', 'error'); }
-        finally { if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Speichern'; } }
+        finally { if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Speichern'; } }
     },
 
     async deleteWorkflow(id, name) {
@@ -3595,24 +3749,47 @@ const Ninko = {
     async openRunHistory(wfId, name) {
         this._wfCurrentWorkflowId = wfId;
         this._wfCurrentRunId = null;
+        this._wfRunNodes = [];
+        this._wfRunEdges = [];
         document.getElementById('workflows-overview').classList.add('hidden');
         document.getElementById('workflow-run-dashboard').classList.remove('hidden');
         document.getElementById('run-dashboard-title').textContent = name;
         document.getElementById('run-dashboard-status').textContent = 'Historie';
         document.getElementById('run-dashboard-status').className = 'run-status-badge run-idle';
-        document.getElementById('run-steps-grid').innerHTML = '';
         document.getElementById('run-progress-fill').style.width = '0%';
         document.getElementById('run-progress-text').textContent = '';
+        document.getElementById('wf-node-inspector')?.classList.add('hidden');
+        try {
+            const res = await fetch(`/api/workflows/${wfId}`);
+            const wf = await res.json();
+            this._wfRunNodes = wf.nodes || [];
+            this._wfRunEdges = wf.edges || [];
+            this._wfRunRenderCanvas([]);
+            this._wfRunScrollToCentroid();
+        } catch {}
         await this._loadRunHistory(wfId);
     },
 
     openRunDashboard(wfId, name, runId) {
         this._wfCurrentWorkflowId = wfId;
         this._wfCurrentRunId = runId;
+        this._wfRunNodes = [];
+        this._wfRunEdges = [];
         document.getElementById('workflows-overview').classList.add('hidden');
         document.getElementById('workflow-editor').classList.add('hidden');
         document.getElementById('workflow-run-dashboard').classList.remove('hidden');
         document.getElementById('run-dashboard-title').textContent = name;
+        document.getElementById('run-dashboard-status').textContent = 'gestartet';
+        document.getElementById('run-dashboard-status').className = 'run-status-badge run-running';
+        document.getElementById('wf-node-inspector')?.classList.add('hidden');
+        fetch(`/api/workflows/${wfId}`)
+            .then(r => r.json())
+            .then(wf => {
+                this._wfRunNodes = wf.nodes || [];
+                this._wfRunEdges = wf.edges || [];
+                this._wfRunRenderCanvas([]);
+                this._wfRunScrollToCentroid();
+            }).catch(() => {});
         clearInterval(this._wfRunRefreshTimer);
         this._wfRunRefreshTimer = setInterval(() => this._refreshRunStatus(), 3000);
         this._refreshRunStatus();
@@ -3659,41 +3836,134 @@ const Ninko = {
         } catch { }
     },
 
+    _wfRunRenderCanvas(steps = []) {
+        const canvas = document.getElementById('wf-run-canvas');
+        const svg = document.getElementById('wf-run-edges-svg');
+        if (!canvas || !svg) return;
+        const stepMap = {};
+        steps.forEach(s => { stepMap[s.node_id] = s; });
+        canvas.innerHTML = '';
+        this._wfRunNodes.forEach(node => {
+            const step = stepMap[node.id] || {};
+            const status = step.status || 'pending';
+            const el = document.createElement('div');
+            el.className = `wf-node wf-node-${node.type} wf-run-node wf-run-node-${status}`;
+            el.id = `wf-run-node-${node.id}`;
+            el.style.left = `${node.position.x}px`;
+            el.style.top = `${node.position.y}px`;
+            const durHtml = step.duration_ms != null
+                ? `<span class="wf-run-node-dur">${step.duration_ms}ms</span>` : '';
+            el.innerHTML = `
+                <div class="wf-node-header">
+                    <span class="wf-node-icon">${this._wfNodeIcon(node.type)}</span>
+                    <span class="wf-node-label">${this._escapeHtml(node.label)}</span>
+                    <span class="wf-run-status-pip wf-run-pip-${status}"></span>
+                </div>
+                ${durHtml}
+            `;
+            if (step.status) {
+                el.style.cursor = 'pointer';
+                el.addEventListener('click', () => this._wfRunShowStepDetail(step, node));
+            }
+            canvas.appendChild(el);
+        });
+        this._wfRunUpdateEdges();
+    },
+
+    _wfRunGetPortPos(nodeId, side) {
+        const el = document.getElementById(`wf-run-node-${nodeId}`);
+        const canvas = document.getElementById('wf-run-canvas');
+        if (!el || !canvas) return null;
+        const x = canvas.offsetLeft + el.offsetLeft + el.offsetWidth / 2;
+        if (side === 'in') return { x, y: canvas.offsetTop + el.offsetTop };
+        return { x, y: canvas.offsetTop + el.offsetTop + el.offsetHeight };
+    },
+
+    _wfRunUpdateEdges() {
+        const svg = document.getElementById('wf-run-edges-svg');
+        if (!svg) return;
+        svg.innerHTML = `<defs>
+            <marker id="wf-run-arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+                <path d="M0,0 L10,5 L0,10 Z" fill="#3b82f6" />
+            </marker>
+        </defs>`;
+        this._wfRunEdges.forEach(edge => {
+            const src = this._wfRunGetPortPos(edge.source_id, 'out');
+            const tgt = this._wfRunGetPortPos(edge.target_id, 'in');
+            if (!src || !tgt) return;
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', `M${src.x},${src.y} L${tgt.x},${tgt.y}`);
+            path.setAttribute('stroke', '#3b82f6');
+            path.setAttribute('stroke-width', '2.5');
+            path.setAttribute('fill', 'none');
+            path.setAttribute('marker-end', 'url(#wf-run-arrow)');
+            path.style.pointerEvents = 'none';
+            svg.appendChild(path);
+        });
+    },
+
+    _wfRunScrollToCentroid() {
+        setTimeout(() => {
+            const container = document.getElementById('wf-run-canvas-container');
+            if (!container || !this._wfRunNodes.length) return;
+            const xs = this._wfRunNodes.map(n => n.position.x);
+            const ys = this._wfRunNodes.map(n => n.position.y);
+            const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+            const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+            container.scrollLeft = cx - container.clientWidth / 2 + 75;
+            container.scrollTop  = cy - container.clientHeight / 2 + 40;
+        }, 60);
+    },
+
+    _wfRunShowStepDetail(step, node) {
+        const inspector = document.getElementById('wf-run-inspector');
+        const content = document.getElementById('wf-run-inspector-content');
+        if (!inspector || !content) return;
+        inspector.classList.remove('hidden');
+        document.getElementById('wf-run-inspector-title').innerHTML =
+            `${this._wfNodeIcon(node.type)} ${this._escapeHtml(node.label)}`;
+        const outputHtml = step.output
+            ? `<pre class="wf-run-output">${this._escapeHtml(step.output)}</pre>`
+            : '<p style="font-size:0.85rem;color:var(--text-muted);margin:0;">Keine Ausgabe.</p>';
+        content.innerHTML = `
+            <div class="form-row">
+                <label class="form-label">Status</label>
+                <span class="run-status-badge run-${this._escapeHtml(step.status)}">${this._escapeHtml(step.status)}</span>
+            </div>
+            <div class="form-row">
+                <label class="form-label">Dauer</label>
+                <span style="font-size:0.85rem;">${step.duration_ms != null ? step.duration_ms + ' ms' : '–'}</span>
+            </div>
+            ${step.error ? `<div class="form-row"><label class="form-label" style="color:var(--error-color);">Fehler</label><div class="wf-run-error">${this._escapeHtml(step.error)}</div></div>` : ''}
+            <div class="form-row" style="flex:1;display:flex;flex-direction:column;min-height:0;">
+                <label class="form-label">Ausgabe</label>
+                ${outputHtml}
+            </div>
+        `;
+    },
+
+    _wfRunCloseInspector() {
+        document.getElementById('wf-run-inspector')?.classList.add('hidden');
+    },
+
     _showRunDetail(wfId, runId) {
         this._wfCurrentRunId = runId;
         this._loadRunHistory(wfId);
     },
 
     _renderRunSteps(run) {
-        const grid = document.getElementById('run-steps-grid');
         const statusEl = document.getElementById('run-dashboard-status');
         const progressFill = document.getElementById('run-progress-fill');
         const progressText = document.getElementById('run-progress-text');
-        if (!grid) return;
         if (statusEl) {
             statusEl.textContent = run.status;
             statusEl.className = `run-status-badge run-${run.status}`;
         }
         const steps = run.steps || [];
-        const done = steps.filter(s => s.status === 'succeeded' || s.status === 'failed' || s.status === 'skipped').length;
+        const done = steps.filter(s => ['succeeded', 'failed', 'skipped'].includes(s.status)).length;
         if (progressFill) progressFill.style.width = steps.length ? `${(done / steps.length) * 100}%` : '0%';
-        if (progressText) progressText.textContent = steps.length ? `${done} / ${steps.length} Schritte abgeschlossen` : '';
-
-        const icons = { pending: this._ic.hourglass, running: this._ic.loader, succeeded: this._ic.check, failed: this._ic.xcircle, skipped: this._ic.skip };
-        grid.innerHTML = steps.map((step, idx) => `
-            <div class="run-step-card run-step-${this._escapeHtml(step.status)}" data-step-idx="${idx}" style="cursor:pointer;">
-                <div class="run-step-icon">${icons[step.status] || '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>'}</div>
-                <div class="run-step-info">
-                    <span class="run-step-label">${this._escapeHtml(step.node_label || step.node_type || '')}</span>
-                    <span class="run-step-status">${this._escapeHtml(step.status)}${step.duration_ms ? ` (${Number(step.duration_ms)}ms)` : ''}</span>
-                    ${step.error ? `<span class="run-step-error">${this._escapeHtml(step.error)}</span>` : ''}
-                </div>
-            </div>
-        `).join('');
-        // Event-Delegation statt inline onclick mit serialisiertem Objektinhalt
-        grid.querySelectorAll('.run-step-card').forEach(card => {
-            card.addEventListener('click', () => this._showRunStepDetail(steps[+card.dataset.stepIdx]));
-        });
+        if (progressText) progressText.textContent = steps.length ? `${done} / ${steps.length} Schritte` : '';
+        this._wfRunRenderCanvas(steps);
     },
 
     _showRunStepDetail(step) {

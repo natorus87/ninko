@@ -11,7 +11,7 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.5.0-blue.svg" alt="Version"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.5.5-blue.svg" alt="Version"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-beta-orange.svg" alt="Status"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.12-blue.svg" alt="Python"></a>
   <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.115-green.svg" alt="FastAPI"></a>
@@ -34,6 +34,7 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 - **Skills system** – Reusable procedural knowledge as SKILL.md files
 - **TTS/STT** – Piper (local) + Whisper for voice input and output
 - **Telegram bot** – Full remote access via messenger including voice messages
+- **Safeguard** – LLM-based classifier that intercepts destructive or state-changing actions and prompts for confirmation before execution
 - **Multilingual** – 10 languages, automatically selected based on the user's language
 - **Plugin system** – ZIP-installable modules without restart
 
@@ -311,6 +312,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 - **Local AI**: All LLM calls stay within your network (Ollama/LM Studio). No data is sent to external services unless an OpenAI-compatible external provider is explicitly configured.
 - **Secrets**: Encrypted via HashiCorp Vault or local SQLite fallback. Never stored in plaintext on the filesystem.
+- **Safeguard middleware**: LLM-based classifier that runs before every user message. Flags destructive or state-changing requests and requires explicit confirmation. Per-agent toggle available in the agent editor. Can be globally disabled via `POST /api/safeguard/disable` if the LLM is unavailable.
 - **Destructive actions**: `PROXMOX_CONFIRM_DESTRUCTIVE=true` (default) — the agent asks for confirmation before executing.
 - **Internal network only**: Ninko is not designed for public exposure. Place Traefik/Nginx with TLS and optional auth middleware in front.
 - **Do not commit `.env`**: The file is included in `.gitignore`. Template: `.env.example`.

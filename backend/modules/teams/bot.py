@@ -324,7 +324,34 @@ async def handle_teams_turn(app: FastAPI, activity: dict[str, Any]) -> None:
     )
 
     try:
+        from core.safeguard import is_bot_confirmation, SAFEGUARD_PENDING_KEY
+
         orchestrator = app.state.orchestrator
+
+        # ── Safeguard-Check ────────────────────────────────────────────────────
+        safeguard = getattr(app.state, "safeguard", None)
+        pending_key = SAFEGUARD_PENDING_KEY.format(session_id=session_id)
+        pending_raw = await redis.connection.get(pending_key)
+
+        if pending_raw and is_bot_confirmation(clean_text):
+            # User hat bestätigt — gespeicherte Aktion ausführen
+            clean_text = pending_raw.decode() if isinstance(pending_raw, bytes) else pending_raw
+            await redis.connection.delete(pending_key)
+            logger.info("Safeguard: Teams-User bestätigte pending Aktion für %s.", session_id)
+        elif safeguard:
+            sg_result = await safeguard.check(clean_text)
+            if sg_result.requires_confirmation:
+                await redis.connection.set(pending_key, clean_text, ex=300)
+                await send_teams_message(
+                    service_url, conv_id, activity_id,
+                    f"⚠️ **Bestätigung erforderlich**\n\n"
+                    f"**Kategorie:** {sg_result.category.value}\n"
+                    f"**Begründung:** {sg_result.rationale}\n\n"
+                    f"Antworte mit **ja** um fortzufahren, oder schicke eine andere Nachricht um abzubrechen.",
+                    apply_format=False,
+                )
+                return
+
         history = await redis.get_chat_history(session_id)
 
         # Ggf. erkannte Sprache als Kontext mitgeben

@@ -157,6 +157,12 @@ class DynamicAgentPool:
 
         return None, ""
 
+    def get_agent_by_id(self, agent_id: str) -> tuple["BaseAgent | None", str]:
+        """Gibt einen Agenten anhand seiner ID zurück, oder (None, '') wenn nicht gefunden."""
+        agent = self._live_agents.get(agent_id)
+        name = self._meta.get(agent_id, {}).get("name", agent_id) if agent else ""
+        return agent, name
+
     # ──────────────────────────────────────────────────────────────────────
     # Registrierung
     # ──────────────────────────────────────────────────────────────────────

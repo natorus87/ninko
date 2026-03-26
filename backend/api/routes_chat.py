@@ -37,11 +37,37 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
     redis = get_redis()
     ctx_mgr = get_context_manager()
 
-    # Chat-History laden
-    history = await redis.get_chat_history(body.session_id)
-
     # Status-Queue vorab erstellen (damit SSE-Consumer sofort lesen kann)
     status_bus.get_queue(body.session_id)
+
+    # ── Safeguard-Check (vor dem 4-tier Routing) ──────────────────────────────
+    safeguard = getattr(request.app.state, "safeguard", None)
+    if safeguard and not body.confirmed:
+        sg_result = await safeguard.check(body.message)
+        if sg_result.requires_confirmation:
+            await status_bus.done(body.session_id)
+            return ChatResponse(
+                response=_t(
+                    f"⚠️ **Bestätigung erforderlich**\n\n"
+                    f"Diese Aktion erfordert eine explizite Bestätigung.\n\n"
+                    f"**Kategorie:** {sg_result.category.value}\n"
+                    f"**Begründung:** {sg_result.rationale}\n\n"
+                    f"Sende die Nachricht erneut mit `confirmed: true` um fortzufahren.",
+                    f"⚠️ **Confirmation Required**\n\n"
+                    f"This action requires explicit confirmation.\n\n"
+                    f"**Category:** {sg_result.category.value}\n"
+                    f"**Rationale:** {sg_result.rationale}\n\n"
+                    f"Resend the message with `confirmed: true` to proceed.",
+                ),
+                module_used=None,
+                session_id=body.session_id,
+                confirmation_required=True,
+                safeguard=sg_result.to_dict(),
+                timestamp=datetime.now(timezone.utc),
+            )
+
+    # Chat-History laden
+    history = await redis.get_chat_history(body.session_id)
 
     # Nachricht an Orchestrator routen
     response_text, module_used, did_compact = await orchestrator.route(

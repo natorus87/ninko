@@ -24,6 +24,10 @@ class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=10000)
     session_id: str = Field(default="default")
     language: str = Field(default="de")
+    confirmed: bool = Field(
+        default=False,
+        description="Explizite Bestätigung für destruktive/state-ändernde Aktionen (Safeguard)",
+    )
 
 
 class ChatResponse(BaseModel):
@@ -35,6 +39,8 @@ class ChatResponse(BaseModel):
     context_budget: dict | None = None
     compacted: bool = False
     timestamp: datetime = Field(default_factory=datetime.now)
+    confirmation_required: bool = False
+    safeguard: dict | None = None
 
 
 class ChatHistoryResponse(BaseModel):

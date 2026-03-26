@@ -17,6 +17,7 @@ class ScheduledTaskCreate(BaseModel):
     cron: str = Field(..., description="Cron-Ausdruck (z.B. '*/5 * * * *')")
     prompt: str = Field("", description="Natürlichsprachiger Auftrag an den Agenten")
     workflow_id: Optional[str] = Field(None, description="ID des auszuführenden Workflows")
+    agent_id: Optional[str] = Field(None, description="ID eines Dynamic Agent aus dem AgentPool")
     target_module: Optional[str] = Field(
         None, description="Optional: Zielmodul (z.B. 'kubernetes'). Leer = Orchestrator entscheidet."
     )
@@ -30,6 +31,7 @@ class ScheduledTaskUpdate(BaseModel):
     cron: Optional[str] = None
     prompt: Optional[str] = None
     workflow_id: Optional[str] = None
+    agent_id: Optional[str] = None
     target_module: Optional[str] = None
     enabled: Optional[bool] = None
 
@@ -42,6 +44,7 @@ class ScheduledTaskInfo(BaseModel):
     cron: str
     prompt: str = ""
     workflow_id: Optional[str] = None
+    agent_id: Optional[str] = None
     target_module: Optional[str] = None
     enabled: bool = True
     last_run: Optional[datetime] = None

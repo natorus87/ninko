@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=46">
+    <link rel="stylesheet" href="/static/style.css?v=47">
     <script>if(localStorage.getItem('ninko_theme')==='light')document.documentElement.classList.add('light-mode-pre');</script>
 </head>
 
@@ -253,6 +253,9 @@
                             </div>
                             <div class="chat-input-container">
                                 <div class="chat-input-wrapper">
+                                    <button class="btn-safeguard safeguard-on" id="btn-safeguard" onclick="Ninko.toggleSafeguard()" title="Safeguard: Aktiv – Klicken zum Deaktivieren">
+                                        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                                    </button>
                                     <textarea id="chat-input" class="chat-input" data-i18n-placeholder="chat.placeholder"
                                         placeholder="Frage stellen…" rows="3"
                                         onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();Ninko.sendMessage()}"></textarea>
@@ -331,6 +334,11 @@
                                             Agenten-Auftrag (Prompt)
                                         </label>
                                         <label class="radio-label">
+                                            <input type="radio" name="sched-type" value="agent"
+                                                onchange="Ninko.toggleSchedType()">
+                                            Custom Agent aufrufen
+                                        </label>
+                                        <label class="radio-label">
                                             <input type="radio" name="sched-type" value="workflow"
                                                 onchange="Ninko.toggleSchedType()">
                                             Workflow ausführen
@@ -342,6 +350,18 @@
                                     <textarea id="sched-prompt" class="form-input form-textarea"
                                         placeholder="Prüfe den Kubernetes-Cluster-Status und melde fehlerhafte Pods."
                                         rows="4"></textarea>
+                                </div>
+                                <div id="sched-agent-row" class="form-row hidden">
+                                    <label class="form-label" for="sched-agent">Agent auswählen</label>
+                                    <select id="sched-agent" class="form-select">
+                                        <option value="">Lade Agenten…</option>
+                                    </select>
+                                    <div class="form-row" style="margin-top:0.5rem;">
+                                        <label class="form-label" for="sched-agent-prompt">Auftrag (optional)</label>
+                                        <textarea id="sched-agent-prompt" class="form-input form-textarea"
+                                            placeholder="Optionaler Prompt für den Agenten. Leer = Agent nutzt seinen System-Prompt."
+                                            rows="3"></textarea>
+                                    </div>
                                 </div>
                                 <div id="sched-workflow-row" class="form-row hidden">
                                     <label class="form-label" for="sched-workflow">Workflow auswählen</label>
@@ -501,6 +521,13 @@
                                         <span class="toggle-slider"></span>
                                     </label>
                                 </div>
+                                <div class="form-row">
+                                    <label class="form-label" data-i18n="agent.safeguardLabel">Safeguard</label>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="agent-safeguard">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
                             </div>
                             <div class="setting-group">
                                 <h4>System-Prompt <span style="color:var(--error-color)">*</span></h4>
@@ -551,25 +578,29 @@
                 <!-- Workflow Editor -->
                 <div id="workflow-editor" class="wf-editor-layout hidden">
                     <div class="wf-editor-toolbar">
-                        <div style="display:flex;align-items:center;gap:0.75rem;">
-                            <button class="btn btn-icon" onclick="Ninko.closeWorkflowEditor()" title="Zurück">
-                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
-                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <line x1="19" y1="12" x2="5" y2="12"></line>
-                                    <polyline points="12 19 5 12 12 5"></polyline>
-                                </svg>
-                            </button>
-                            <input id="wf-name-input" type="text" class="form-input wf-title-input"
-                                placeholder="Workflow Name…">
+                        <div style="display:flex;flex-direction:column;gap:0.4rem;">
+                            <div style="display:flex;align-items:center;gap:0.75rem;">
+                                <button class="btn btn-icon" onclick="Ninko.closeWorkflowEditor()" title="Zurück zur Übersicht">
+                                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="19" y1="12" x2="5" y2="12"></line>
+                                        <polyline points="12 19 5 12 12 5"></polyline>
+                                    </svg>
+                                </button>
+                                <input id="wf-name-input" type="text" class="form-input wf-title-input"
+                                    placeholder="Workflow-Name…">
+                            </div>
+                            <input id="wf-desc-input" type="text" class="form-input wf-desc-input-field"
+                                placeholder="Kurze Beschreibung (optional)…">
                         </div>
                         <div class="wf-node-palette">
                             <span class="palette-label">Hinzufügen:</span>
-                            <button class="btn btn-sm wf-palette-btn" onclick="Ninko.wfAddNode('trigger')">Trigger</button>
-                            <button class="btn btn-sm wf-palette-btn" onclick="Ninko.wfAddNode('agent')">Agent</button>
-                            <button class="btn btn-sm wf-palette-btn" onclick="Ninko.wfAddNode('condition')">Bedingung</button>
-                            <button class="btn btn-sm wf-palette-btn" onclick="Ninko.wfAddNode('loop')">Loop</button>
-                            <button class="btn btn-sm wf-palette-btn" onclick="Ninko.wfAddNode('variable')">Variable</button>
-                            <button class="btn btn-sm wf-palette-btn" onclick="Ninko.wfAddNode('end')">Ende</button>
+                            <button class="btn btn-sm wf-palette-btn wf-palette-trigger" onclick="Ninko.wfAddNode('trigger')" title="Startet den Workflow">⚡ Trigger</button>
+                            <button class="btn btn-sm wf-palette-btn wf-palette-agent" onclick="Ninko.wfAddNode('agent')" title="Führt einen KI-Agenten aus">🤖 Agent</button>
+                            <button class="btn btn-sm wf-palette-btn wf-palette-condition" onclick="Ninko.wfAddNode('condition')" title="Verzweigt anhand einer Bedingung">🔀 Bedingung</button>
+                            <button class="btn btn-sm wf-palette-btn wf-palette-loop" onclick="Ninko.wfAddNode('loop')" title="Wiederholt einen Ablauf">🔁 Loop</button>
+                            <button class="btn btn-sm wf-palette-btn wf-palette-variable" onclick="Ninko.wfAddNode('variable')" title="Setzt eine Variable">📦 Variable</button>
+                            <button class="btn btn-sm wf-palette-btn wf-palette-end" onclick="Ninko.wfAddNode('end')" title="Beendet den Workflow">⏹ Ende</button>
                         </div>
                         <div style="display:flex;gap:0.5rem;">
                             <button class="btn btn-outline" onclick="Ninko.closeWorkflowEditor()">Abbrechen</button>
@@ -580,8 +611,7 @@
                         <div id="wf-canvas-container" class="wf-canvas-container">
                             <svg id="wf-edges-svg" class="wf-edges-svg"></svg>
                             <div id="wf-canvas" class="wf-canvas">
-                                <div class="wf-canvas-hint">Klicke auf „Node hinzufügen" und verbinde Nodes über die
-                                    Port-Punkte</div>
+                                <div class="wf-canvas-hint">Node-Typ aus der Palette oben wählen → Nodes per Drag verschieben<br>Port-Punkt (●) anklicken → Ziel-Node anklicken zum Verbinden</div>
                             </div>
                         </div>
                     </div>
@@ -600,27 +630,45 @@
                     </div>
                 </div>
                 <!-- Run Dashboard -->
-                <div id="workflow-run-dashboard" class="module-dashboard hidden">
-                    <div class="page-header">
-                        <button class="btn btn-icon" onclick="Ninko.closeRunDashboard()">
-                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
-                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <line x1="19" y1="12" x2="5" y2="12"></line>
-                                <polyline points="12 19 5 12 12 5"></polyline>
-                            </svg>
-                        </button>
-                        <h2 id="run-dashboard-title">Run</h2>
-                        <span id="run-dashboard-status" class="run-status-badge run-running">running</span>
+                <div id="workflow-run-dashboard" class="wf-run-layout hidden">
+                    <div class="wf-run-toolbar">
+                        <div style="display:flex;align-items:center;gap:0.75rem;">
+                            <button class="btn btn-icon" onclick="Ninko.closeRunDashboard()" title="Zurück zur Übersicht">
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="19" y1="12" x2="5" y2="12"></line>
+                                    <polyline points="12 19 5 12 12 5"></polyline>
+                                </svg>
+                            </button>
+                            <h2 id="run-dashboard-title" style="margin:0;font-size:1.1rem;font-weight:600;">Run</h2>
+                            <span id="run-dashboard-status" class="run-status-badge run-idle">idle</span>
+                        </div>
+                        <div class="wf-run-progress-area">
+                            <div class="run-progress-bar" style="width:180px;margin:0;">
+                                <div id="run-progress-fill" class="run-progress-fill"></div>
+                            </div>
+                            <span id="run-progress-text" class="run-progress-text"></span>
+                        </div>
+                        <div style="width:120px;"></div>
                     </div>
-                    <div class="run-progress-bar">
-                        <div id="run-progress-fill" class="run-progress-fill"></div>
+                    <div class="wf-run-body">
+                        <div id="wf-run-canvas-container" class="wf-run-canvas-area">
+                            <svg id="wf-run-edges-svg" class="wf-edges-svg"></svg>
+                            <div id="wf-run-canvas" class="wf-canvas">
+                                <div class="wf-canvas-hint">Workflow wird geladen…</div>
+                            </div>
+                        </div>
+                        <div id="wf-run-inspector" class="wf-run-inspector hidden">
+                            <div class="wf-inspector-header">
+                                <h4 id="wf-run-inspector-title">Step-Details</h4>
+                                <button class="btn-close" onclick="Ninko._wfRunCloseInspector()">✕</button>
+                            </div>
+                            <div id="wf-run-inspector-content" style="display:flex;flex-direction:column;flex:1;gap:0.75rem;overflow-y:auto;min-height:0;"></div>
+                        </div>
                     </div>
-                    <p id="run-progress-text"
-                        style="text-align:center;font-size:0.8rem;color:var(--text-muted);margin-top:0.25rem;"></p>
-                    <div id="run-steps-grid" class="run-steps-grid"></div>
-                    <div style="margin-top:1.5rem; padding:0 1rem;">
-                        <h3 class="section-title">Run-Historie</h3>
-                        <div id="run-history-list"></div>
+                    <div class="wf-run-history-bar">
+                        <span style="font-size:0.78rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Run-Historie</span>
+                        <div id="run-history-list" class="wf-run-history-list"></div>
                     </div>
                 </div>
             </div>

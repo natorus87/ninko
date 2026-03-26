@@ -1141,7 +1141,7 @@ body.light-mode .chat-bubble tbody tr:nth-child(even) td {
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     color: var(--text-primary);
-    padding: 0.875rem 6.5rem 0.875rem 1.25rem;
+    padding: 0.875rem 6.5rem 0.875rem 3rem;
     border-radius: 16px;
     font-size: 0.95rem;
     font-family: inherit;
@@ -1169,6 +1169,126 @@ body.light-mode .chat-input {
 
 .chat-input::placeholder {
     color: var(--text-muted);
+}
+
+/* ── Safeguard Toggle (bottom-left inside textarea) ── */
+.btn-safeguard {
+    position: absolute;
+    left: calc(0.75rem + 9px);
+    bottom: calc(1.25rem + 9px);
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color var(--transition-fast), transform var(--transition-fast);
+    flex-shrink: 0;
+    z-index: 1;
+}
+
+.btn-safeguard:hover {
+    transform: scale(1.12);
+}
+
+.btn-safeguard.safeguard-on {
+    color: #27ae60;
+}
+
+.btn-safeguard.safeguard-on:hover {
+    color: #2ecc71;
+}
+
+.btn-safeguard.safeguard-off {
+    color: var(--text-muted);
+    opacity: 0.45;
+}
+
+.btn-safeguard.safeguard-off:hover {
+    opacity: 0.9;
+    color: var(--text-secondary);
+}
+
+/* ── Safeguard Confirmation Prompt ── */
+.safeguard-confirm-prompt {
+    display: flex;
+    justify-content: flex-end;
+    padding: 0 1.5rem 0.5rem;
+    max-width: 760px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.safeguard-confirm-content {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: rgba(231, 76, 60, 0.08);
+    border: 1px solid rgba(231, 76, 60, 0.25);
+    border-radius: 10px;
+    padding: 0.5rem 0.875rem;
+    font-size: 0.85rem;
+}
+
+.safeguard-confirm-category {
+    font-weight: 600;
+    font-size: 0.78rem;
+    padding: 2px 7px;
+    border-radius: 4px;
+    letter-spacing: 0.03em;
+}
+
+.sg-destructive {
+    background: rgba(231, 76, 60, 0.18);
+    color: #e74c3c;
+}
+
+.sg-state_changing {
+    background: rgba(230, 126, 34, 0.18);
+    color: #e67e22;
+}
+
+.sg-unknown {
+    background: rgba(149, 165, 166, 0.18);
+    color: var(--text-secondary);
+}
+
+.safeguard-confirm-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.btn-confirm-action {
+    padding: 4px 12px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-family: inherit;
+    font-weight: 500;
+    transition: all var(--transition-fast);
+}
+
+.btn-confirm-run {
+    background: #e74c3c;
+    color: #fff;
+}
+
+.btn-confirm-run:hover {
+    background: #c0392b;
+}
+
+.btn-confirm-cancel {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+}
+
+.btn-confirm-cancel:hover {
+    color: var(--text-primary);
 }
 
 /* ── Inline action buttons (inside textarea) ── */
@@ -3070,6 +3190,19 @@ a:hover {
     margin-top: 0.5rem;
 }
 
+.task-badge-agent {
+    background: rgba(139, 92, 246, 0.2);
+    color: #a78bfa;
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-top: 0.5rem;
+}
+
 .workflow-card-header {
     display: flex;
     justify-content: space-between;
@@ -3204,9 +3337,30 @@ a:hover {
     background: rgba(var(--primary-color-rgb), 0.08);
 }
 
+.wf-palette-trigger { border-left: 3px solid #f59e0b; }
+.wf-palette-trigger:hover { border-color: #f59e0b; color: #f59e0b; background: rgba(245,158,11,0.08); }
+.wf-palette-agent { border-left: 3px solid #6366f1; }
+.wf-palette-agent:hover { border-color: #6366f1; color: #6366f1; background: rgba(99,102,241,0.08); }
+.wf-palette-condition { border-left: 3px solid #ec4899; }
+.wf-palette-condition:hover { border-color: #ec4899; color: #ec4899; background: rgba(236,72,153,0.08); }
+.wf-palette-loop { border-left: 3px solid #06b6d4; }
+.wf-palette-loop:hover { border-color: #06b6d4; color: #06b6d4; background: rgba(6,182,212,0.08); }
+.wf-palette-variable { border-left: 3px solid #8b5cf6; }
+.wf-palette-variable:hover { border-color: #8b5cf6; color: #8b5cf6; background: rgba(139,92,246,0.08); }
+.wf-palette-end { border-left: 3px solid #6b7280; }
+.wf-palette-end:hover { border-color: #6b7280; color: #6b7280; background: rgba(107,114,128,0.08); }
+
 .wf-title-input {
     width: 250px;
     font-weight: 600;
+}
+
+.wf-desc-input-field {
+    font-size: 0.78rem;
+    padding: 3px 10px;
+    color: var(--text-muted);
+    max-width: 350px;
+    margin-left: calc(18px + 0.75rem + 0.75rem);
 }
 
 .wf-editor-body {
@@ -3282,6 +3436,17 @@ a:hover {
 .wf-node-selected {
     border-color: var(--primary-color);
     box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb), 0.25);
+}
+
+.wf-node-connecting {
+    border-color: #f59e0b !important;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25) !important;
+    animation: wf-connecting-pulse 1s ease-in-out infinite;
+}
+
+@keyframes wf-connecting-pulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25) !important; }
+    50% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.1) !important; }
 }
 
 .wf-node-trigger {
@@ -3492,6 +3657,174 @@ a:hover {
 .run-history-item:hover {
     background: var(--bg-hover);
     border-left-color: var(--primary-color);
+}
+
+/* ═══════════════════════════════════════════════════════
+   Workflow Run Layout (Canvas-basiert)
+═══════════════════════════════════════════════════════ */
+
+.wf-run-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    flex: 1;
+}
+
+.wf-run-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.625rem 1rem;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.wf-run-progress-area {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex: 1;
+    justify-content: center;
+}
+
+.run-progress-text {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    margin: 0;
+}
+
+.wf-run-body {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+.wf-run-canvas-area {
+    flex: 1;
+    position: relative;
+    overflow: auto;
+    background: radial-gradient(circle, var(--border-color) 1px, transparent 1px) 0 0 / 32px 32px;
+}
+
+/* Run Inspector (inline right panel) */
+.wf-run-inspector {
+    width: 320px;
+    flex-shrink: 0;
+    background: var(--bg-secondary);
+    border-left: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 1.25rem;
+    gap: 0.75rem;
+}
+
+.wf-run-inspector.hidden { display: none; }
+
+.wf-run-output {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 6px;
+    padding: 0.75rem;
+    font-size: 0.78rem;
+    font-family: monospace;
+    white-space: pre-wrap;
+    overflow-y: auto;
+    word-break: break-all;
+    max-height: 360px;
+    flex: 1;
+    margin: 0;
+}
+
+.wf-run-error {
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+    color: #ef4444;
+    word-break: break-word;
+}
+
+.wf-run-history-bar {
+    border-top: 1px solid var(--border-color);
+    padding: 0.5rem 1rem 0.625rem;
+    max-height: 130px;
+    overflow-y: auto;
+    flex-shrink: 0;
+    background: var(--bg-body);
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.wf-run-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+/* Run canvas node status overlays */
+.wf-run-node { cursor: default !important; }
+.wf-run-node:hover { transform: none !important; }
+
+.wf-run-node-pending { opacity: 0.4; }
+
+.wf-run-node-running {
+    border-color: #f59e0b !important;
+    animation: wf-run-node-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes wf-run-node-pulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.3); }
+    50%       { box-shadow: 0 0 0 7px rgba(245, 158, 11, 0.08); }
+}
+
+.wf-run-node-succeeded {
+    border-color: #22c55e !important;
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.12);
+}
+
+.wf-run-node-failed {
+    border-color: #ef4444 !important;
+    background: rgba(239, 68, 68, 0.05);
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.12);
+}
+
+.wf-run-node-skipped {
+    opacity: 0.35;
+    filter: grayscale(0.5);
+}
+
+/* Status pip (small dot in node header, right-aligned) */
+.wf-run-status-pip {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.wf-run-pip-pending  { background: var(--text-muted); opacity: 0.4; }
+.wf-run-pip-running  { background: #f59e0b; animation: wf-run-pip-blink 0.9s ease-in-out infinite; }
+.wf-run-pip-succeeded { background: #22c55e; }
+.wf-run-pip-failed   { background: #ef4444; }
+.wf-run-pip-skipped  { background: var(--text-muted); opacity: 0.35; }
+
+@keyframes wf-run-pip-blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.25; }
+}
+
+/* Duration badge inside run node */
+.wf-run-node-dur {
+    display: block;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    margin-top: 0.2rem;
+    text-align: right;
 }
 
 /* ═══════════════════════════════════════════════════════

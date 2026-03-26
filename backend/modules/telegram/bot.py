@@ -455,9 +455,35 @@ class TelegramBot:
         typing_task = asyncio.create_task(self._keep_typing(token, chat_id))
 
         try:
+            from core.safeguard import is_bot_confirmation, SAFEGUARD_PENDING_KEY
+
             orchestrator = self.app.state.orchestrator
             redis = get_redis()
             session_id = f"telegram_{chat_id}"
+
+            # ── Safeguard-Check ────────────────────────────────────────────────
+            safeguard = getattr(self.app.state, "safeguard", None)
+            pending_key = SAFEGUARD_PENDING_KEY.format(session_id=session_id)
+            pending_raw = await redis.connection.get(pending_key)
+
+            if pending_raw and is_bot_confirmation(text):
+                # User hat bestätigt — gespeicherte Aktion ausführen
+                text = pending_raw.decode() if isinstance(pending_raw, bytes) else pending_raw
+                await redis.connection.delete(pending_key)
+                logger.info("Safeguard: Telegram-User bestätigte pending Aktion für %s.", session_id)
+            elif safeguard:
+                sg_result = await safeguard.check(text)
+                if sg_result.requires_confirmation:
+                    await redis.connection.set(pending_key, text, ex=300)
+                    await self._send(
+                        token, chat_id,
+                        f"⚠️ <b>Bestätigung erforderlich</b>\n\n"
+                        f"<b>Kategorie:</b> {sg_result.category.value}\n"
+                        f"<b>Begründung:</b> {sg_result.rationale}\n\n"
+                        f"Antworte mit <b>ja</b> um fortzufahren, oder schicke eine andere Nachricht um abzubrechen.",
+                        parse_mode="HTML",
+                    )
+                    return
 
             history = await redis.get_chat_history(session_id)
 

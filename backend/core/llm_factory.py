@@ -373,3 +373,31 @@ def get_embeddings() -> Embeddings:
             model=embed_model,
             check_embedding_ctx_length=False,
         )
+
+
+def get_safeguard_openai_client():
+    """
+    Gibt einen (AsyncOpenAI, model_name)-Tuple für den Safeguard-Classifier zurück.
+    Nutzt denselben LLM-Provider wie der Rest der App — kein separater Endpoint nötig.
+    """
+    from openai import AsyncOpenAI
+
+    settings = get_settings()
+
+    if settings.LLM_BACKEND == "openai_compatible":
+        base_url = _get_lmstudio_base_url(settings.OPENAI_BASE_URL)
+        api_key = settings.OPENAI_API_KEY or "sk-placeholder"
+        model = settings.OPENAI_MODEL
+    elif settings.LLM_BACKEND == "ollama":
+        # Ollama hat einen OpenAI-kompatiblen Endpoint unter /v1
+        base_url = settings.OLLAMA_BASE_URL.rstrip("/") + "/v1"
+        api_key = "ollama"
+        model = settings.OLLAMA_MODEL
+    else:
+        # lmstudio (Standard)
+        base_url = _get_lmstudio_base_url(settings.LMSTUDIO_BASE_URL)
+        api_key = "lm-studio"
+        model = settings.LMSTUDIO_MODEL
+
+    client = AsyncOpenAI(base_url=base_url, api_key=api_key)
+    return client, model
