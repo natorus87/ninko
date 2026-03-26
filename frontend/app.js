@@ -2359,6 +2359,31 @@ const Ninko = {
         if (typePrompt) { typePrompt.checked = true; this.toggleSchedType(); }
         const status = document.getElementById('sched-save-status');
         if (status) status.textContent = '';
+        // Dropdowns immer frisch befüllen wenn der Editor geöffnet wird
+        this._loadSchedDropdowns();
+    },
+
+    async _loadSchedDropdowns() {
+        const [wfRes, agRes] = await Promise.all([
+            fetch('/api/workflows/'),
+            fetch('/api/agents/'),
+        ]);
+        const wfSelect = document.getElementById('sched-workflow');
+        if (wfSelect && wfRes.ok) {
+            const wfData = await wfRes.json();
+            const workflows = wfData.workflows || [];
+            this._wfList = workflows;
+            wfSelect.innerHTML = '<option value="">Workflow auswählen…</option>' +
+                workflows.map(wf => `<option value="${this._escapeHtml(wf.id)}">${this._escapeHtml(wf.name)}</option>`).join('');
+        }
+        const agentSelect = document.getElementById('sched-agent');
+        if (agentSelect && agRes.ok) {
+            const agData = await agRes.json();
+            const agents = (agData.agents || []).filter(a => a.enabled !== false);
+            this._agentList = agents;
+            agentSelect.innerHTML = '<option value="">Agent auswählen…</option>' +
+                agents.map(a => `<option value="${this._escapeHtml(a.id)}">${this._escapeHtml(a.name)}</option>`).join('');
+        }
     },
 
     closeTaskEditor() {
@@ -2373,7 +2398,7 @@ const Ninko = {
         try {
             const [workflowsRes, agentsRes, tasksRes] = await Promise.all([
                 fetch('/api/workflows/'),
-                fetch('/api/agents'),
+                fetch('/api/agents/'),
                 fetch('/api/scheduler/tasks'),
             ]);
 
