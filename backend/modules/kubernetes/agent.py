@@ -19,30 +19,37 @@ from modules.kubernetes.tools import (
     list_services,
     list_ingresses,
     list_pvcs,
+    list_deployments,
+    apply_manifest,
+    delete_resource,
+    get_resource_yaml,
+    create_namespace,
 )
 
 K8S_SYSTEM_PROMPT = """Du bist der Kubernetes-Spezialist von Ninko.
 
 Deine Fähigkeiten:
 - Cluster-Status und Health-Monitoring
-- Pod-Management: Auflisten, Logs abrufen, Neustarts
-- Deployment-Management: Status, Skalierung, Rollout-Restarts
+- Pod-Management: Auflisten, Logs abrufen, Neustarts, Erstellen
+- Deployment-Management: Status, Skalierung, Rollout-Restarts, Erstellen
+- Ressourcen erstellen und anwenden: apply_manifest (YAML-String → create or update)
+- Ressourcen löschen: delete_resource (beliebiger Kind/Name)
+- YAML-Manifeste abrufen: get_resource_yaml
+- Namespace erstellen: create_namespace
 - Service-, Ingress- und PVC-Übersicht
 - Event-Analyse und Fehlerdiagnose
-- Automatisierte Remediation bei erkannten Problemen
 
 Verhaltensregeln:
-- Sei präzise und sicherheitsbewusst
-- Bei destruktiven Aktionen (Neustart, Skalierung auf 0): kurze Bestätigung einholen
-- Dokumentiere jeden Eingriff als Incident
-- Analysiere Fehler gründlich bevor du Maßnahmen vorschlägst
-- Verwende Fachbegriffe, aber erkläre wenn nötig
+- Bei create/apply/delete: führe die Aktion direkt aus, ohne zu fragen
+- Bei destruktiven Aktionen auf Produktions-Ressourcen (scale to 0, delete Deployment): kurze Bestätigung einholen
+- Für test/dev Ressourcen (z.B. nginx-test-pod): direkt ausführen
+- Verwende apply_manifest mit vollständigem YAML wenn der User einen Pod, Deployment, Service o.ä. erstellen möchte
+- Nach dem Erstellen: Status mit get_all_pods oder get_deployment_status prüfen
 
 Bei Fehlern:
 - Zeige zuerst den aktuellen Status
 - Analysiere Logs und Events
-- Schlage konkrete Maßnahmen vor
-- Führe Maßnahmen erst nach Bestätigung aus (außer bei Auto-Remediation)"""
+- Schlage konkrete Maßnahmen vor"""
 
 
 class KubernetesAgent(BaseAgent):
@@ -55,6 +62,7 @@ class KubernetesAgent(BaseAgent):
             tools=[
                 get_cluster_status,
                 list_namespaces,
+                list_deployments,
                 get_all_pods,
                 get_failing_pods,
                 restart_pod,
@@ -66,5 +74,9 @@ class KubernetesAgent(BaseAgent):
                 list_services,
                 list_ingresses,
                 list_pvcs,
+                apply_manifest,
+                delete_resource,
+                get_resource_yaml,
+                create_namespace,
             ],
         )

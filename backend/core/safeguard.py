@@ -1,79 +1,146 @@
 """
-Ninko Safeguard Middleware
-Modell-agnostisch: funktioniert mit jedem OpenAI-compatible LLM.
+Ninko Safeguard Middleware — model-agnostic safety classifier.
 
-Integration in routes_chat.py (vor dem 4-tier routing):
+Integrates into routes_chat.py before the 4-tier orchestrator routing:
+
     safeguard = request.app.state.safeguard
-    if safeguard:
-        result = await safeguard.check(user_message)
-        if result.requires_confirmation and not body.confirmed:
+    if safeguard and not body.confirmed:
+        result = await safeguard.check(body.message)
+        if result.requires_confirmation:
+            await status_bus.done(body.session_id)
             return ChatResponse(confirmation_required=True, safeguard=result.to_dict(), ...)
+
+Three-stage evaluation per message:
+  1. Disabled check   — returns SAFE immediately, no LLM call.
+  2. Keyword pre-filter — instant result for unambiguous short messages.
+  3. LLM classifier   — full JSON classification with robust parser.
+
+On any error (timeout, parse failure) → fail-safe: requires_confirmation=True.
 """
+
+from __future__ import annotations
 
 import json
 import re
 import logging
 from dataclasses import dataclass
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from openai import AsyncOpenAI
+
+if TYPE_CHECKING:
+    from core.agent_config_store import AgentConfigStore
 
 logger = logging.getLogger("ninko.core.safeguard")
 
 
-# ─── Classifier Prompt ────────────────────────────────────────────────────────
-# Dieser Prompt macht jedes OpenAI-compatible Modell zum Classifier.
-# Kein Harmony-Format nötig — funktioniert mit Llama, Qwen, Mistral, Gemma, etc.
+# ─── Compiled regex constants ─────────────────────────────────────────────────
+
+# Strips <think>...</think> blocks emitted by reasoning models (Qwen3.5, DeepSeek-R1)
+_RE_THINK    = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+# Strips markdown code fences the model may wrap around JSON
+_RE_MD_FENCE = re.compile(r"```(?:json)?\s*|\s*```")
+# Extracts the first {...} block when JSON is embedded in prose
+_RE_JSON_OBJ = re.compile(r"\{[^{}]+\}", re.DOTALL)
+
+
+# ─── LLM classifier prompt ────────────────────────────────────────────────────
 
 SAFEGUARD_SYSTEM_PROMPT = """You are a strict safety classifier for an IT automation platform.
 Your ONLY job is to classify user requests. You NEVER execute actions yourself.
 
-## YOUR TASK
-Analyze the user input and classify whether it requests a DESTRUCTIVE or STATE-CHANGING action
-that requires explicit user confirmation before execution.
+## CATEGORIES
 
-## CATEGORY DEFINITIONS
+**DESTRUCTIVE** — irreversible operations that cause permanent data loss or removal:
+- Delete, remove, drop, wipe, purge, truncate, destroy, kill, terminate, erase, clear, shred, nuke
+- kubectl delete, rm -rf, DROP TABLE, pvremove, format disk
+- German: lösche, entferne, vernichte, leere, bereinige, tilge
 
-**DESTRUCTIVE** — irreversible data loss:
-- Delete, remove, drop, wipe, purge, truncate, destroy
-- Examples: delete pod, drop database, rm -rf, kubectl delete, pvremove
+**STATE_CHANGING** — creates, modifies, or reconfigures resources (may be reversible):
+- Create, deploy, install, start, launch, run, apply, add, enable, disable
+- Update, modify, patch, overwrite, reset, change, edit, set, scale, restart, configure, migrate, rotate, revoke
+- German: erstelle, ändere, aktualisiere, skaliere, starte, installiere, deploye, konfiguriere, migriere
 
-**STATE_CHANGING** — modifies existing state:
-- Update, modify, patch, overwrite, reset, change, edit, set, apply
-- Examples: change password, update config, scale deployment, edit secret
+**SAFE** — read-only queries, informational, status, help, explanations:
+- Get, list, show, describe, status, logs, explain, how-to, what-is, check, monitor, search, find
+- German: zeige, liste, beschreibe, erkläre, prüfe, was ist, wie viele
 
-**SAFE** — read-only or informational:
-- Get, list, show, describe, status, logs, explain, how-to, what-is
-- Examples: get pods, show logs, describe node, how do I...
+## OUTPUT FORMAT
+Respond with ONLY a single JSON object — no explanation, no markdown, no preamble.
 
-## OUTPUT RULES
-You MUST respond with ONLY a single JSON object. No explanation, no markdown, no preamble.
-
-Format:
 {"violation": 0 or 1, "category": "SAFE" | "DESTRUCTIVE" | "STATE_CHANGING", "rationale": "one sentence"}
 
-violation=1 means confirmation required.
-violation=0 means safe to execute directly.
+- violation=1 → confirmation required before execution
+- violation=0 → safe to execute directly
+
+## RULES
+- DESTRUCTIVE and STATE_CHANGING always produce violation=1
+- SAFE always produces violation=0
+- Pronouns in context ("delete it", "lösche ihn", "restart that") inherit the action category
+  of the referenced resource — treat them as DESTRUCTIVE or STATE_CHANGING accordingly
+- Pure confirmation words ("yes", "ja", "ok", "confirm") without a new action → SAFE
+- Conversational messages ("hello", "thanks", "what can you do") → SAFE
+- How-to questions ("how do I create...") → SAFE (question, not execution request)
 
 ## EXAMPLES
 
 Input: "delete all pods in production namespace"
-Output: {"violation": 1, "category": "DESTRUCTIVE", "rationale": "Requests deletion of production pods, irreversible action."}
+Output: {"violation": 1, "category": "DESTRUCTIVE", "rationale": "Requests deletion of all production pods — irreversible."}
+
+Input: "drop the database users table"
+Output: {"violation": 1, "category": "DESTRUCTIVE", "rationale": "Irreversible deletion of a database table."}
+
+Input: "rm -rf /var/log on the linux server"
+Output: {"violation": 1, "category": "DESTRUCTIVE", "rationale": "Recursive file deletion — irreversible data loss."}
+
+Input: "lösche den nginx-test-pod"
+Output: {"violation": 1, "category": "DESTRUCTIVE", "rationale": "Requests deletion of a Kubernetes pod."}
+
+Input: "lösche ihn wieder"
+Output: {"violation": 1, "category": "DESTRUCTIVE", "rationale": "Pronoun refers to a previously created resource — deletion is irreversible."}
+
+Input: "entferne den alten Cronjob"
+Output: {"violation": 1, "category": "DESTRUCTIVE", "rationale": "Requests removal of a Kubernetes CronJob."}
 
 Input: "scale deployment frontend to 3 replicas"
 Output: {"violation": 1, "category": "STATE_CHANGING", "rationale": "Modifies deployment replica count."}
 
-Input: "show me all nodes in the cluster"
-Output: {"violation": 0, "category": "SAFE", "rationale": "Read-only query, no state change."}
+Input: "erstelle einen nginx test pod in kubernetes"
+Output: {"violation": 1, "category": "STATE_CHANGING", "rationale": "Creates a new pod resource in the cluster."}
 
-Input: "what is the CPU usage of my proxmox host?"
-Output: {"violation": 0, "category": "SAFE", "rationale": "Informational query, no action executed."}
+Input: "create a deployment with 3 replicas"
+Output: {"violation": 1, "category": "STATE_CHANGING", "rationale": "Creates a new Kubernetes deployment."}
 
 Input: "update the database password in all configmaps"
 Output: {"violation": 1, "category": "STATE_CHANGING", "rationale": "Modifies credentials across multiple resources."}
 
+Input: "restart the proxmox node"
+Output: {"violation": 1, "category": "STATE_CHANGING", "rationale": "Reboots a host — causes downtime."}
+
+Input: "disable the pi-hole blocking"
+Output: {"violation": 1, "category": "STATE_CHANGING", "rationale": "Changes DNS blocking state."}
+
+Input: "rotate the Kubernetes service account token"
+Output: {"violation": 1, "category": "STATE_CHANGING", "rationale": "Rotates a credential — existing token becomes invalid."}
+
+Input: "apply the updated ingress manifest"
+Output: {"violation": 1, "category": "STATE_CHANGING", "rationale": "Applies a manifest that modifies cluster state."}
+
+Input: "show me all nodes in the cluster"
+Output: {"violation": 0, "category": "SAFE", "rationale": "Read-only cluster query."}
+
+Input: "what is the CPU usage of my proxmox host?"
+Output: {"violation": 0, "category": "SAFE", "rationale": "Informational query — no action."}
+
 Input: "list all GLPI tickets with status open"
-Output: {"violation": 0, "category": "SAFE", "rationale": "Read-only query on ticket system."}
+Output: {"violation": 0, "category": "SAFE", "rationale": "Read-only ticket query."}
+
+Input: "get the logs of pod nginx-test-pod"
+Output: {"violation": 0, "category": "SAFE", "rationale": "Read-only log retrieval."}
+
+Input: "how do I create a kubernetes deployment?"
+Output: {"violation": 0, "category": "SAFE", "rationale": "How-to question — no action executed."}
 
 Input: "wipe the ceph pool data"
 Output: {"violation": 1, "category": "DESTRUCTIVE", "rationale": "Irreversible deletion of entire storage pool."}
@@ -81,13 +148,13 @@ Output: {"violation": 1, "category": "DESTRUCTIVE", "rationale": "Irreversible d
 Classify the user input now. Respond ONLY with the JSON object."""
 
 
-# ─── Dataclasses ──────────────────────────────────────────────────────────────
+# ─── Category and result types ────────────────────────────────────────────────
 
 class ActionCategory(str, Enum):
-    SAFE = "SAFE"
-    DESTRUCTIVE = "DESTRUCTIVE"
+    SAFE           = "SAFE"
+    DESTRUCTIVE    = "DESTRUCTIVE"
     STATE_CHANGING = "STATE_CHANGING"
-    UNKNOWN = "UNKNOWN"  # Fallback wenn Parse fehlschlägt
+    UNKNOWN        = "UNKNOWN"   # Only on parse/classifier failure
 
 
 @dataclass
@@ -105,15 +172,410 @@ class SafeguardResult:
         }
 
 
-# ─── Safeguard Middleware ─────────────────────────────────────────────────────
+# ─── Keyword pre-filter ───────────────────────────────────────────────────────
+#
+# Each entry is (keyword, word_boundary_required).
+# word_boundary=True  → matched only as a whole word (re \b) to avoid
+#                        false positives from substrings.
+# word_boundary=False → substring match (sufficient for longer stems).
+
+_DESTRUCTIVE_TERMS: tuple[tuple[str, bool], ...] = (
+    # ── German (DE) ──────────────────────────────────────────────────────────
+    ("lösch",          False),  # lösche/löschen/löscht/löschst
+    ("entfern",        False),  # entferne/entfernen/entfernt
+    ("vernicht",       False),  # vernichte/vernichten
+    ("bereinig",       False),  # bereinige/bereinigen
+    ("tilg",           False),  # tilge/tilgen
+    ("leere ",         True),   # leere den Cache — not "Leere" as noun
+    # ── English (EN) ─────────────────────────────────────────────────────────
+    ("delete",         False),
+    ("remove",         False),
+    ("destroy",        False),
+    ("wipe",           False),
+    ("purge",          False),
+    ("truncate",       False),
+    ("shred",          False),
+    ("erase",          False),
+    ("nuke",           False),
+    ("terminate",      False),
+    # ── French (FR) ──────────────────────────────────────────────────────────
+    ("supprim",        False),  # supprime/supprimer/supprimez/suppriment
+    ("efface",         False),  # efface/effacer/effacez
+    ("enlève",         False),  # enlève/enlever
+    ("enlever",        False),
+    ("détru",          False),  # détruis/détruit/détruire
+    ("effac",          False),  # effacer stem
+    ("vider",          False),  # vider (empty/clear)
+    ("vide ",          True),   # vide le cache — not "évident"
+    # ── Spanish (ES) ─────────────────────────────────────────────────────────
+    ("elimin",         False),  # elimina/eliminar/elimine/eliminad
+    ("borrar",         False),  # borrar
+    ("borra ",         True),   # borra el pod — not "aborra"
+    ("destruy",        False),  # destruye/destruyendo/destruir
+    ("destruir",       False),
+    ("suprimir",       False),
+    ("vaciar",         False),  # vaciar (empty)
+    ("vacía ",         True),   # vacía el disco
+    # ── Italian (IT) ─────────────────────────────────────────────────────────
+    ("cancell",        False),  # cancella/cancellare/cancellato
+    ("rimuovi",        False),
+    ("rimuover",       False),
+    ("svuota",         False),  # svuota/svuotare
+    ("distrug",        False),  # distruggi/distruggere
+    # ── Portuguese (PT) ──────────────────────────────────────────────────────
+    ("apagar",         False),  # apagar
+    ("apaga ",         True),   # apaga o pod
+    ("destrói",        False),
+    ("destruir",       False),
+    ("limpar",         False),
+    ("limpa ",         True),   # limpa o cache
+    # ── Dutch (NL) ───────────────────────────────────────────────────────────
+    ("verwijder",      False),  # verwijder/verwijderen/verwijderd
+    ("verniet",        False),  # vernietig/vernietigen
+    ("wissen",         False),  # wissen (erase)
+    ("wis ",           True),   # wis de data — not "wist"
+    ("leegmak",        False),  # leegmaken
+    # ── Polish (PL) ──────────────────────────────────────────────────────────
+    ("usuń",           False),  # usuń (delete, imperative)
+    ("skasuj",         False),  # skasuj (delete/wipe)
+    ("zniszcz",        False),  # zniszcz (destroy)
+    ("wyczyść",        False),  # wyczyść (clear/wipe)
+    ("usuwa",          False),  # usuwa (deletes)
+    # ── Chinese (ZH) ─────────────────────────────────────────────────────────
+    ("删除",            False),  # shānchú — delete
+    ("清除",            False),  # qīngchú — clear/purge
+    ("移除",            False),  # yíchú — remove
+    ("销毁",            False),  # xiāohuǐ — destroy
+    ("格式化",           False),  # géshìhuà — format
+    ("清空",            False),  # qīngkōng — empty/wipe
+    # ── Japanese (JA) ────────────────────────────────────────────────────────
+    ("削除",            False),  # sakujo — delete
+    ("消去",            False),  # shōkyo — erase
+    ("消して",           False),  # keshite — delete (te-form)
+    ("削除して",         False),  # sakujo shite — please delete
+    # ── CLI / SQL / IaC patterns ──────────────────────────────────────────────
+    ("rm -",           False),  # rm -rf / rm -r
+    ("drop ",          True),   # DROP TABLE — not "dropdown"
+    # "del" intentionally omitted: common article in ES/IT/FR ("del pod" = "of the pod")
+    ("kill ",          True),   # kill pod — not "skill"
+    ("kubectl delete", False),
+    ("pvremove",       False),
+    ("wipefs",         False),
+    ("mkfs",           False),
+    ("format ",        True),   # format disk — not "format string"
+    ("terraform destroy", False),
+)
+
+_STATE_TERMS: tuple[tuple[str, bool], ...] = (
+    # ── German (DE) — create ─────────────────────────────────────────────────
+    ("erstell",        False),  # erstelle/erstellen/erstellt
+    ("anlegen",        False),
+    ("lege an",        False),
+    ("deploye",        False),
+    ("installier",     False),
+    ("starte ",        True),   # starte den Pod — not "Neustart"
+    ("hochfahren",     False),
+    ("fahre hoch",     False),
+    # German — modify
+    ("ändere",         False),
+    ("ändert",         False),
+    ("ändern",         False),
+    ("aktualisier",    False),
+    ("skalier",        False),
+    ("konfiguriere",   False),
+    ("konfigurieren",  False),
+    ("bearbeite",      False),
+    ("migriere",       False),
+    ("neustart",       False),
+    ("neustarten",     False),
+    ("zurücksetzen",   False),
+    ("deaktiviere",    False),
+    ("aktiviere",      False),
+    ("rotiere",        False),  # rotiere das Zertifikat
+    ("widerrufe",      False),  # widerrufe den Token
+    # ── English (EN) — create / deploy ───────────────────────────────────────
+    ("create",         False),
+    ("deploy",         False),
+    ("install",        False),
+    ("launch",         False),
+    ("provision",      False),
+    ("enable",         False),
+    ("disable",        False),
+    # English — modify
+    ("update",         False),
+    ("upgrade",        False),
+    ("patch",          False),
+    ("modify",         False),
+    ("configure",      False),
+    ("reconfigure",    False),
+    ("overwrite",      False),
+    ("migrate",        False),
+    ("scale",          False),
+    ("resize",         False),
+    ("rotate",         False),
+    ("revoke",         False),
+    ("apply",          False),
+    ("edit",           False),
+    ("restart",        False),
+    ("reboot",         False),
+    ("reset",          False),
+    ("add ",           True),
+    ("set ",           True),
+    # ── French (FR) — create ─────────────────────────────────────────────────
+    ("créer",          False),  # créer
+    ("crée ",          True),   # crée un pod — not "recréer"
+    ("déploi",         False),  # déploie/déployer/déployez
+    ("lancer",         False),
+    ("lance ",         True),   # lance l'app
+    ("activer",        False),
+    ("active ",        True),   # active le module
+    ("désactiver",     False),
+    ("désactive",      False),
+    # French — modify
+    ("modifier",       False),
+    ("modifie",        False),
+    ("configurer",     False),
+    ("configure",      False),
+    ("mettre à jour",  False),  # mets à jour / mettre à jour
+    ("mets à jour",    False),
+    ("mise à jour",    False),
+    ("redémarr",       False),  # redémarre/redémarrer
+    ("redémarrage",    False),
+    ("migrer",         False),
+    # ── Spanish (ES) — create ────────────────────────────────────────────────
+    ("crear",          False),
+    ("crea ",          True),   # crea un pod — not "recrear"
+    ("desplegar",      False),
+    ("despleg",        False),  # despliega/desplegar
+    ("lanzar",         False),
+    ("lanza ",         True),
+    ("activar",        False),
+    ("activa ",        True),
+    ("desactivar",     False),
+    ("desactiva",      False),
+    # Spanish — modify
+    ("actualizar",     False),
+    ("actualiz",       False),
+    ("configurar",     False),
+    ("modificar",      False),
+    ("modific",        False),
+    ("reiniciar",      False),
+    ("reinici",        False),
+    ("escalar",        False),
+    ("aplicar",        False),
+    ("migrar",         False),
+    # ── Italian (IT) — create ────────────────────────────────────────────────
+    ("creare",         False),
+    ("crea ",          True),   # crea un pod
+    ("distribuire",    False),
+    ("avviare",        False),
+    ("avvia ",         True),
+    ("attivare",       False),
+    ("attiva ",        True),
+    ("disattivare",    False),
+    ("disattiva",      False),
+    # Italian — modify
+    ("aggiornare",     False),
+    ("aggior",         False),  # aggiorna/aggiornare
+    ("configurare",    False),
+    ("modificare",     False),
+    ("modifica ",      True),
+    ("riavviare",      False),
+    ("riavvia",        False),
+    ("migrare",        False),
+    # ── Portuguese (PT) — create ─────────────────────────────────────────────
+    ("criar",          False),
+    ("cria ",          True),   # cria um pod
+    ("implantar",      False),
+    ("implementar",    False),
+    ("lançar",         False),
+    ("lança ",         True),
+    ("ativar",         False),
+    ("ativa ",         True),
+    ("desativar",      False),
+    ("desativa",       False),
+    # Portuguese — modify
+    ("atualizar",      False),
+    ("atualiz",        False),
+    ("configurar",     False),
+    ("modificar",      False),
+    ("reiniciar",      False),
+    ("migrar",         False),
+    # ── Dutch (NL) — create ──────────────────────────────────────────────────
+    ("aanmaken",       False),
+    ("maak aan",       False),
+    ("maak ",          True),   # maak een pod aan — "maak aan" may be non-contiguous
+    ("implementeren",  False),
+    ("implementeer",   False),
+    ("installeren",    False),
+    ("installeer",     False),
+    ("activeren",      False),
+    ("activeer",       False),
+    ("deactiveren",    False),
+    ("deactiveer",     False),
+    # Dutch — modify
+    ("bijwerken",      False),
+    ("configureren",   False),
+    ("configureer",    False),
+    ("wijzigen",       False),
+    ("wijzig ",        True),
+    ("herstarten",     False),
+    ("herstart",       False),
+    ("migreren",       False),
+    # ── Polish (PL) — create ─────────────────────────────────────────────────
+    ("utwórz",         False),  # create
+    ("wdróż",          False),  # deploy
+    ("zainstaluj",     False),  # install
+    ("uruchom",        False),  # start/run
+    ("włącz",          False),  # enable
+    ("wyłącz",         False),  # disable
+    # Polish — modify
+    ("zaktualizuj",    False),
+    ("skonfiguruj",    False),
+    ("zmodyfiku",      False),
+    ("zrestartuj",     False),
+    ("zmigruj",        False),
+    # ── Chinese (ZH) — create ────────────────────────────────────────────────
+    ("创建",             False),  # chuàngjiàn — create
+    ("部署",             False),  # bùshǔ — deploy
+    ("安装",             False),  # ānzhuāng — install
+    ("启动",             False),  # qǐdòng — start
+    ("启用",             False),  # qǐyòng — enable
+    ("禁用",             False),  # jìnyòng — disable
+    # Chinese — modify
+    ("更新",             False),  # gēngxīn — update
+    ("配置",             False),  # pèizhì — configure
+    ("修改",             False),  # xiūgǎi — modify
+    ("重启",             False),  # chóngqǐ — restart
+    ("扩展",             False),  # kuòzhǎn — scale out
+    ("缩减",             False),  # suōjiǎn — scale in
+    ("应用",             False),  # yīngyòng — apply
+    ("编辑",             False),  # biānjí — edit
+    ("迁移",             False),  # qiānyí — migrate
+    # ── Japanese (JA) — create ───────────────────────────────────────────────
+    ("作成",             False),  # sakusei — create
+    ("デプロイ",          False),  # depuroi — deploy
+    ("インストール",       False),  # insutōru — install
+    ("起動",             False),  # kidō — start
+    ("有効化",            False),  # yūkōka — enable
+    ("無効化",            False),  # mukōka — disable
+    # Japanese — modify
+    ("更新",             False),  # kōshin — update
+    ("設定",             False),  # settei — configure/set
+    ("変更",             False),  # henkō — change/modify
+    ("再起動",            False),  # saikidō — restart
+    ("スケール",          False),  # sukēru — scale
+    ("適用",             False),  # tekiyō — apply
+    ("移行",             False),  # ikō — migrate
+    # ── CLI / IaC patterns ───────────────────────────────────────────────────
+    ("kubectl apply",  False),
+    ("kubectl create", False),
+    ("kubectl patch",  False),
+    ("kubectl edit",   False),
+    ("kubectl scale",  False),
+    ("kubectl label",  False),
+    ("kubectl annotate", False),
+    ("kubectl taint",  False),
+    ("helm install",   False),
+    ("helm upgrade",   False),
+    ("helm uninstall", False),
+    ("terraform apply",False),
+    ("ansible-playbook", False),
+)
+
+# Unambiguously read-only patterns — return SAFE without any LLM call.
+# Checked against start and interior of the lowercased message.
+_SAFE_PATTERNS: tuple[str, ...] = (
+    # English
+    "show ", "list", "get ", "describe ", "status",
+    "logs ",                            # trailing space avoids matching "/var/log"
+    "what ", "how ", "which ", "explain", "help", "search", "find ", "check ", "monitor",
+    # German
+    "zeige ", "zeig ", "liste", "was ", "wie ", "welche", "wieviel", "wie viele",
+    "erkläre", "hilfe", "suche", "finde ", "prüfe ",
+    # French
+    "montre ", "affiche ", "liste ", "décris ", "statut", "qu'est-ce", "comment ", "vérif",
+    # Spanish
+    "muestra ", "lista ", "describe ", "estado", "qué es", "cómo ", "verif",
+    # Italian
+    "mostra ", "elenca ", "descrivi ", "stato", "cos'è", "come ", "controlla ",
+    # Portuguese
+    "mostra ", "lista ", "descreve ", "estado", "o que é", "como ", "verifica ",
+    # Dutch
+    "toon ", "lijst", "beschrijf ", "status", "wat is", "hoe ", "controleer ",
+    # Polish
+    "pokaż ", "wylistuj ", "opisz ", "status", "co to", "jak ", "sprawdź ",
+    # Chinese
+    "显示", "列出", "查看", "状态", "检查", "描述", "获取",
+    # Japanese
+    "表示", "一覧", "確認", "ステータス", "調べ", "教えて", "状態",
+)
+
+
+def _keyword_prefilter(text: str) -> SafeguardResult | None:
+    """
+    Fast-path classifier that skips the LLM call for short, unambiguous messages.
+
+    Priority order:
+      1. Safe pattern match  → SAFE (violation=0)
+      2. Destructive keyword → DESTRUCTIVE (violation=1)
+      3. State-changing keyword → STATE_CHANGING (violation=1)
+      4. No match → None (fall through to LLM classifier)
+    """
+    lower = text.lower().strip()
+    spaced = f" {lower} "   # wrap for word-boundary substring matching
+
+    # 1. Clearly read-only — no confirmation needed
+    for pat in _SAFE_PATTERNS:
+        if lower.startswith(pat) or pat in spaced:
+            return SafeguardResult(
+                requires_confirmation=False,
+                category=ActionCategory.SAFE,
+                rationale="Read-only keyword detected — safe to execute directly.",
+            )
+
+    # 2. Destructive keywords
+    for kw, need_wb in _DESTRUCTIVE_TERMS:
+        if need_wb:
+            hit = bool(re.search(rf"\b{re.escape(kw.strip())}\b", lower))
+        else:
+            hit = kw in lower
+        if hit:
+            return SafeguardResult(
+                requires_confirmation=True,
+                category=ActionCategory.DESTRUCTIVE,
+                rationale=f"Destructive keyword '{kw.strip()}' detected — confirmation required.",
+            )
+
+    # 3. State-changing keywords
+    for kw, need_wb in _STATE_TERMS:
+        if need_wb:
+            hit = bool(re.search(rf"\b{re.escape(kw.strip())}\b", lower))
+        else:
+            hit = kw in lower
+        if hit:
+            return SafeguardResult(
+                requires_confirmation=True,
+                category=ActionCategory.STATE_CHANGING,
+                rationale=f"State-changing keyword '{kw.strip()}' detected — confirmation required.",
+            )
+
+    return None
+
+
+# ─── Safeguard middleware ─────────────────────────────────────────────────────
 
 class SafeguardMiddleware:
     """
-    Modell-agnostischer Safeguard mit globalem und per-Agent State.
+    Model-agnostic safeguard with global and per-agent state.
 
-    - Global:    safeguard.enabled        → gilt für interaktiven Chat
-    - Per-Agent: safeguard.check(..., agent_id="xyz")
-                 liest den gespeicherten State aus dem AgentConfigStore (Redis)
+    Evaluation order per message:
+      1. If safeguard is disabled  → SAFE, no LLM call.
+      2. Keyword pre-filter        → instant result (no LLM call).
+      3. LLM classifier            → JSON response, robust parser.
+
+    Per-agent config (Redis via AgentConfigStore) takes priority over
+    the global toggle.
     """
 
     def __init__(
@@ -124,62 +586,70 @@ class SafeguardMiddleware:
         timeout: float = 8.0,
         enabled: bool = True,
         agent_store: "AgentConfigStore | None" = None,
-    ):
-        self.client = client
-        self.model = model
-        self.policy = policy or SAFEGUARD_SYSTEM_PROMPT
-        self.timeout = timeout
-        self.enabled = enabled          # globaler Toggle (Chat)
-        self.agent_store = agent_store  # None = kein per-Agent Persistence
+    ) -> None:
+        self.client      = client
+        self.model       = model
+        self.policy      = policy or SAFEGUARD_SYSTEM_PROMPT
+        self.timeout     = timeout
+        self.enabled     = enabled
+        self.agent_store = agent_store
 
-    # ── Global Toggle ──────────────────────────────────────────────────────────
-    def enable(self):
+    # ── Global toggle ──────────────────────────────────────────────────────────
+
+    def enable(self) -> None:
         self.enabled = True
-        logger.info("[Safeguard] Global aktiviert.")
+        logger.info("[Safeguard] Globally enabled.")
 
-    def disable(self):
+    def disable(self) -> None:
         self.enabled = False
-        logger.warning("[Safeguard] Global DEAKTIVIERT — Autonomer Modus aktiv.")
+        logger.warning("[Safeguard] Globally DISABLED — autonomous mode active.")
 
-    # ── Per-Agent Toggle (persistiert via AgentConfigStore in Redis) ───────────
-    async def enable_for_agent(self, agent_id: str):
+    # ── Per-agent toggle ───────────────────────────────────────────────────────
+
+    async def enable_for_agent(self, agent_id: str) -> None:
         if self.agent_store:
             await self.agent_store.set_safeguard(agent_id, enabled=True)
-        logger.info("[Safeguard] Für Agent '%s' aktiviert.", agent_id)
+        logger.info("[Safeguard] Enabled for agent '%s'.", agent_id)
 
-    async def disable_for_agent(self, agent_id: str):
+    async def disable_for_agent(self, agent_id: str) -> None:
         if self.agent_store:
             await self.agent_store.set_safeguard(agent_id, enabled=False)
-        logger.warning("[Safeguard] Für Agent '%s' DEAKTIVIERT — Autonomer Modus.", agent_id)
+        logger.warning("[Safeguard] DISABLED for agent '%s' — autonomous mode.", agent_id)
 
     async def _is_enabled_for(self, agent_id: str | None) -> bool:
-        """
-        Priorität: per-Agent Config > globaler Toggle.
-        Kein agent_id → globaler State gilt.
-        """
+        """Per-agent config takes priority over the global toggle."""
         if agent_id and self.agent_store:
             state = await self.agent_store.get_safeguard(agent_id)
             if state is not None:
                 return state
         return self.enabled
 
+    # ── Main entry point ───────────────────────────────────────────────────────
+
     async def check(self, user_input: str, agent_id: str | None = None) -> SafeguardResult:
         """
-        Klassifiziert den User-Input via LLM.
+        Classify a user message.
 
-        agent_id=None  → globaler State wird geprüft
-        agent_id="xyz" → per-Agent gespeicherter State wird geprüft
+        Stage 1 — disabled:  returns SAFE immediately.
+        Stage 2 — prefilter: keyword match on messages < 200 chars.
+        Stage 3 — LLM:       full classifier call.
 
-        Wenn disabled → SAFE ohne LLM-Call.
-        Im Fehlerfall (Timeout, Parse-Error) → fail-safe: requires_confirmation=True.
+        Always returns a SafeguardResult — never raises.
         """
         if not await self._is_enabled_for(agent_id):
             return SafeguardResult(
                 requires_confirmation=False,
                 category=ActionCategory.SAFE,
-                rationale="Safeguard deaktiviert — autonomer Modus aktiv.",
+                rationale="Safeguard disabled — autonomous mode active.",
             )
 
+        # Pre-filter: fast path for short, unambiguous messages
+        if len(user_input) < 200:
+            prefilter_result = _keyword_prefilter(user_input)
+            if prefilter_result is not None:
+                return prefilter_result
+
+        # LLM classifier
         try:
             response = await self.client.chat.completions.create(
                 model=self.model,
@@ -187,87 +657,108 @@ class SafeguardMiddleware:
                     {"role": "system", "content": self.policy},
                     {"role": "user",   "content": user_input},
                 ],
-                temperature=0.0,   # deterministisch, kein kreatives Output
-                max_tokens=150,    # Classifier braucht nicht mehr
+                temperature=0.0,
+                max_tokens=150,
                 timeout=self.timeout,
             )
-
             raw = response.choices[0].message.content.strip()
             return self._parse(raw)
 
-        except Exception as e:
+        except Exception as exc:
             logger.warning(
-                "[Safeguard] Classifier-Aufruf fehlgeschlagen: %s — fail-safe: Bestätigung erforderlich",
-                e,
+                "[Safeguard] Classifier call failed: %s — fail-safe: confirmation required.", exc,
             )
             return SafeguardResult(
                 requires_confirmation=True,
                 category=ActionCategory.UNKNOWN,
-                rationale=f"Classifier nicht erreichbar ({type(e).__name__}) — Bestätigung als Fallback erforderlich.",
-                raw_response=str(e),
+                rationale=f"Classifier unreachable ({type(exc).__name__}) — confirmation required as fallback.",
+                raw_response=str(exc),
             )
+
+    # ── Response parser ────────────────────────────────────────────────────────
 
     def _parse(self, raw: str) -> SafeguardResult:
         """
-        Parst den JSON-Output des Classifiers.
-        Robust gegen Markdown-Wrapping (```json ... ```) und Whitespace.
+        Parse the LLM classifier response robustly.
+
+        Handles:
+        - <think>...</think> blocks from reasoning models (Qwen3.5, DeepSeek-R1)
+        - Markdown code fences (```json ... ```)
+        - JSON embedded inside prose (regex extraction fallback)
+        - Missing, null, or unexpected field values
+        - Enforces category/violation consistency (DESTRUCTIVE/STATE → violation=1,
+          SAFE → violation=0) regardless of what the model outputs
         """
-        # Markdown-Fences entfernen falls Modell sie trotzdem setzt
-        cleaned = re.sub(r"```(?:json)?\s*|\s*```", "", raw).strip()
+        # Strip thinking blocks
+        cleaned = _RE_THINK.sub("", raw).strip()
+        # Strip markdown fences
+        cleaned = _RE_MD_FENCE.sub("", cleaned).strip()
+        # If JSON is not at the start, extract first {...} block
+        if not cleaned.startswith("{"):
+            m = _RE_JSON_OBJ.search(cleaned)
+            cleaned = m.group(0) if m else cleaned
 
         try:
-            data = json.loads(cleaned)
-            violation = int(data.get("violation", 1))  # Default: Bestätigung erforderlich
-            category_str = data.get("category", "UNKNOWN").upper()
-            rationale = data.get("rationale", "Keine Begründung angegeben.")
+            data         = json.loads(cleaned)
+            violation    = int(data.get("violation", 1))
+            category_raw = str(data.get("category", "UNKNOWN")).upper()
+            rationale    = str(data.get("rationale", "No rationale provided."))
 
             try:
-                category = ActionCategory(category_str)
+                category = ActionCategory(category_raw)
             except ValueError:
                 category = ActionCategory.UNKNOWN
 
+            # Enforce consistency regardless of what the model output
+            if category in (ActionCategory.DESTRUCTIVE, ActionCategory.STATE_CHANGING):
+                violation = 1
+            elif category == ActionCategory.SAFE:
+                violation = 0
+
             return SafeguardResult(
-                requires_confirmation=violation == 1,
+                requires_confirmation=bool(violation),
                 category=category,
                 rationale=rationale,
                 raw_response=raw,
             )
 
-        except (json.JSONDecodeError, KeyError, ValueError) as e:
-            logger.warning("[Safeguard] Parse-Fehler: %s | raw='%s'", e, raw)
+        except (json.JSONDecodeError, KeyError, ValueError, TypeError) as exc:
+            logger.warning("[Safeguard] Parse error: %s | raw='%.200s'", exc, raw)
             return SafeguardResult(
                 requires_confirmation=True,
                 category=ActionCategory.UNKNOWN,
-                rationale="Parse-Fehler — Bestätigung als Fallback erforderlich.",
+                rationale="Parse error — confirmation required as fallback.",
                 raw_response=raw,
             )
 
 
-# ─── Bot-Confirmation Helper ──────────────────────────────────────────────────
+# ─── Bot confirmation helper ──────────────────────────────────────────────────
 
-# Schlüssel-Pattern für pending Bot-Nachrichten (TTL 300s)
+# Redis key for pending bot messages (Telegram / Teams), TTL 300s
 SAFEGUARD_PENDING_KEY = "ninko:safeguard_pending:{session_id}"
 
-# Bestätigungswörter (DE + EN)
+# Words accepted as confirmation in bot channels (single-word or short replies only)
 _CONFIRMATION_WORDS: frozenset[str] = frozenset({
-    "ja", "jo", "jep", "jup", "yes", "yep", "y",
+    # German
+    "ja", "jo", "jep", "jup", "jawohl", "klar", "natürlich",
     "bestätige", "bestätigen", "bestätigt",
-    "confirm", "confirmed", "ok", "okay",
-    "weiter", "ausführen", "run",
+    "weiter", "ausführen", "durchführen",
+    "ok", "okay",
+    # English
+    "yes", "yep", "yup", "y", "sure", "absolutely",
+    "confirm", "confirmed", "proceed", "continue", "run", "go",
 })
 
 
 def is_bot_confirmation(text: str) -> bool:
     """
-    Prüft ob der Text eine Bestätigung für eine pending Safeguard-Aktion ist.
-    Unterstützt kurze Einzel-Wort-Antworten (DE + EN).
+    Returns True if the text is a confirmation response for a pending
+    safeguard action in a bot channel (Telegram, Teams).
+
+    Only matches short replies (≤ 3 words) to avoid false positives from
+    regular messages that happen to contain a confirmation word mid-sentence.
     """
-    normalized = text.strip().lower().rstrip("!.")
+    normalized = text.strip().lower().rstrip("!. ")
+    if len(normalized.split()) > 3:
+        return False
     return normalized in _CONFIRMATION_WORDS
-
-
-# ─── Type alias für Forward Reference ─────────────────────────────────────────
-# (AgentConfigStore wird in agent_config_store.py definiert)
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from core.agent_config_store import AgentConfigStore

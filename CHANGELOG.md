@@ -7,6 +7,47 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.5.6] – 2026-03-26
+
+### Features
+
+- **Kubernetes write operations** (`backend/modules/kubernetes/`) — Module extended with full create/apply/delete/inspect capabilities:
+  - `apply_manifest(yaml_content, namespace)` — create or update any resource from a YAML string via server-side apply; supports multi-document YAML (`---`)
+  - `delete_resource(kind, name, namespace, api_version)` — delete any resource by kind/name using the dynamic client
+  - `get_resource_yaml(kind, name, namespace, api_version)` — retrieve the live YAML of any resource (managed fields stripped)
+  - `create_namespace(name, labels)` — create a new namespace
+  - `list_deployments(namespace)` — list deployments with replica counts and image info
+  - Agent system prompt updated: instructs the agent to use `apply_manifest` for creation requests and to act directly on test/dev resources without asking
+
+### Improvements
+
+- **Safeguard: multilingual keyword pre-filter** (`backend/core/safeguard.py`) — Pre-filter extended from DE/EN to all 10 supported languages. 41/41 test cases pass without LLM call:
+  - FR: `supprim/efface/enlève` (destructive), `crée/déploi/modifie/mets à jour` (state-changing), `montre/affiche` (safe)
+  - ES: `elimin/borrar/destruy` (destructive), `crea/despleg/actualiz/reinici` (state-changing), `muestra/lista` (safe)
+  - IT: `cancell/rimuovi/svuota` (destructive), `crea/aggior/modifica/riavvia` (state-changing), `mostra/elenca` (safe)
+  - PT: `apagar/destrói/limpar` (destructive), `cria/atualiz/reinici` (state-changing), `mostra/lista` (safe)
+  - NL: `verwijder/verniet/wis` (destructive), `aanmaken/maak/implementeer` (state-changing), `toon/lijst` (safe)
+  - PL: `usuń/skasuj/zniszcz` (destructive), `utwórz/wdróż/zaktualizuj` (state-changing), `pokaż/wylistuj` (safe)
+  - ZH: `删除/清除/移除/销毁` (destructive), `创建/部署/更新/配置` (state-changing), `显示/列出/查看` (safe)
+  - JA: `削除/消去/削除して` (destructive), `作成/デプロイ/設定/変更` (state-changing), `表示/一覧/確認` (safe)
+- **Safeguard: full English rewrite** — All comments, docstrings, and log messages translated to English. Import order fixed (previously `_keyword_prefilter` referenced `SafeguardResult` before it was defined).
+- **Safeguard: hardened parser** — `_parse()` strips `<think>` blocks, markdown fences, and extracts JSON from prose. Enforces category/violation consistency: `DESTRUCTIVE`/`STATE_CHANGING` always set `violation=1`, `SAFE` always `violation=0`.
+- **Safeguard: `del` false-positive removed** — `"del"` removed from destructive terms; it is a common preposition in ES/IT/FR ("del pod" = "of the pod").
+- **Safeguard: pre-filter threshold raised** — Short-message fast-path raised from 120 to 200 chars.
+
+### Bug Fixes
+
+- **K8s Redis migration** — All `kumio:*` Redis keys copied to `ninko:*` after project rename. Affected: all module connections (11), agents, souls, settings (5), workflows.
+- **K8s env vars** — Live cluster still had `KUMIO_MODULE_*` environment variables; patched to `NINKO_MODULE_*` via `kubectl patch`. FritzBox and all other modules are now visible again.
+
+### Infra
+
+- Docker build + DEV deploy (docker-compose) ✅
+- Push `natorus87/ninko-backend:latest` + `natorus87/kumio-backend:latest` ✅
+- K8s rollout `kumio-backend` in namespace `kumio` ✅
+
+---
+
 ## [0.5.5] – 2026-03-26
 
 ### Features

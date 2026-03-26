@@ -9,7 +9,10 @@ import logging
 import os
 from datetime import datetime, timezone, timedelta
 
-from kubernetes import client, config
+import yaml as _yaml
+from kubernetes import client, config, dynamic
+from kubernetes.client import api_client as _api_client
+from kubernetes.utils import create_from_dict
 from langchain_core.tools import tool
 
 logger = logging.getLogger("ninko.modules.kubernetes.tools")
@@ -70,6 +73,13 @@ async def _get_k8s_client(
         raise ValueError(f"Ungültige Kubeconfig für Verbindung '{conn.name}'. Bitte überprüfe die Datei.")
 
     return client.CoreV1Api(), client.AppsV1Api(), client.NetworkingV1Api()
+
+
+async def _get_dynamic_client(connection_id: str = "") -> dynamic.DynamicClient:
+    """Returns a DynamicClient for apply/delete of any resource kind."""
+    # Re-use _get_k8s_client to trigger config loading
+    await _get_k8s_client(connection_id)
+    return dynamic.DynamicClient(_api_client.ApiClient())
 
 
 def _pod_age(creation_timestamp) -> str:
@@ -427,3 +437,176 @@ async def list_pvcs(namespace: str = "default", connection_id: str = "") -> list
         }
         for pvc in pvcs.items
     ]
+
+
+@tool
+async def list_deployments(namespace: str = "default", connection_id: str = "") -> list[dict]:
+    """Lists all Deployments in a namespace with replica counts and image info."""
+    _, apps_v1, _ = await _get_k8s_client(connection_id)
+    deps = apps_v1.list_namespaced_deployment(namespace=namespace)
+    return [
+        {
+            "name": d.metadata.name,
+            "namespace": d.metadata.namespace,
+            "ready": f"{d.status.ready_replicas or 0}/{d.spec.replicas}",
+            "available": d.status.available_replicas or 0,
+            "image": d.spec.template.spec.containers[0].image if d.spec.template.spec.containers else "",
+            "age": _pod_age(d.metadata.creation_timestamp),
+        }
+        for d in deps.items
+    ]
+
+
+@tool
+async def apply_manifest(yaml_content: str, namespace: str = "default", connection_id: str = "") -> dict:
+    """Create or update any Kubernetes resource from a YAML manifest string.
+
+    Accepts a YAML string describing one or more resources (Pod, Deployment, Service,
+    ConfigMap, etc.). Uses server-side apply semantics: creates the resource if it does
+    not exist, patches it if it does. Multi-document YAML (---) is supported.
+
+    Args:
+        yaml_content: Full YAML manifest as a string.
+        namespace: Target namespace if not specified in the manifest metadata.
+        connection_id: Optional Kubernetes connection ID.
+    """
+    dyn = await _get_dynamic_client(connection_id)
+    results = []
+    for doc in _yaml.safe_load_all(yaml_content):
+        if not doc:
+            continue
+        api_version = doc.get("apiVersion", "v1")
+        kind = doc.get("kind", "")
+        name = doc.get("metadata", {}).get("name", "")
+        ns = doc.get("metadata", {}).get("namespace", namespace)
+
+        try:
+            resource = dyn.resources.get(api_version=api_version, kind=kind)
+            # server-side apply: creates or patches transparently
+            resp = resource.server_side_apply(
+                body=doc,
+                name=name,
+                namespace=ns if resource.namespaced else None,
+                field_manager="ninko",
+            )
+            results.append({
+                "kind": kind,
+                "name": name,
+                "namespace": ns,
+                "status": "applied",
+                "resource_version": resp.metadata.resourceVersion,
+            })
+        except Exception as e:
+            results.append({
+                "kind": kind,
+                "name": name,
+                "namespace": ns,
+                "status": "error",
+                "detail": str(e),
+            })
+    return {"applied": len([r for r in results if r["status"] == "applied"]), "results": results}
+
+
+@tool
+async def delete_resource(
+    kind: str,
+    name: str,
+    namespace: str = "default",
+    api_version: str = "v1",
+    connection_id: str = "",
+) -> dict:
+    """Delete any Kubernetes resource by kind, name and namespace.
+
+    Args:
+        kind: Resource kind, e.g. 'Pod', 'Deployment', 'Service', 'ConfigMap'.
+        name: Name of the resource to delete.
+        namespace: Namespace of the resource (ignored for cluster-scoped resources).
+        api_version: API version, e.g. 'v1', 'apps/v1'. Defaults to 'v1'.
+        connection_id: Optional Kubernetes connection ID.
+    """
+    dyn = await _get_dynamic_client(connection_id)
+    try:
+        resource = dyn.resources.get(api_version=api_version, kind=kind)
+        resource.delete(
+            name=name,
+            namespace=namespace if resource.namespaced else None,
+        )
+        return {
+            "action": "delete",
+            "kind": kind,
+            "name": name,
+            "namespace": namespace,
+            "status": "deleted",
+        }
+    except Exception as e:
+        return {
+            "action": "delete",
+            "kind": kind,
+            "name": name,
+            "namespace": namespace,
+            "status": "error",
+            "detail": str(e),
+        }
+
+
+@tool
+async def get_resource_yaml(
+    kind: str,
+    name: str,
+    namespace: str = "default",
+    api_version: str = "v1",
+    connection_id: str = "",
+) -> str:
+    """Returns the live YAML manifest of any Kubernetes resource.
+
+    Useful for inspecting the current state, editing, or debugging a resource.
+
+    Args:
+        kind: Resource kind, e.g. 'Pod', 'Deployment', 'Service'.
+        name: Resource name.
+        namespace: Namespace (ignored for cluster-scoped resources).
+        api_version: API version, e.g. 'v1', 'apps/v1'.
+        connection_id: Optional Kubernetes connection ID.
+    """
+    dyn = await _get_dynamic_client(connection_id)
+    try:
+        resource = dyn.resources.get(api_version=api_version, kind=kind)
+        obj = resource.get(
+            name=name,
+            namespace=namespace if resource.namespaced else None,
+        )
+        # Strip managed fields to keep output readable
+        obj_dict = obj.to_dict()
+        obj_dict.get("metadata", {}).pop("managedFields", None)
+        return _yaml.dump(obj_dict, default_flow_style=False, allow_unicode=True)
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@tool
+async def create_namespace(name: str, labels: dict | None = None, connection_id: str = "") -> dict:
+    """Creates a new Kubernetes namespace.
+
+    Args:
+        name: Name of the namespace to create.
+        labels: Optional dict of labels to attach.
+        connection_id: Optional Kubernetes connection ID.
+    """
+    v1, _, _ = await _get_k8s_client(connection_id)
+    body = client.V1Namespace(
+        metadata=client.V1ObjectMeta(name=name, labels=labels or {})
+    )
+    try:
+        ns = v1.create_namespace(body=body)
+        return {
+            "action": "create_namespace",
+            "name": ns.metadata.name,
+            "status": "created",
+        }
+    except client.ApiException as e:
+        return {
+            "action": "create_namespace",
+            "name": name,
+            "status": "error",
+            "detail": f"{e.reason} ({e.status})",
+        }
