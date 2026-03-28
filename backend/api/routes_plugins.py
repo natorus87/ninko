@@ -384,25 +384,48 @@ async def list_repo_modules(request: Request, repo_id: str) -> JSONResponse:
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            url = f"https://api.github.com/repos/{owner}/{repo_name}/contents/{modules_path}?ref={branch}"
-            resp = await client.get(url, headers=headers)
+            raw_base = f"https://raw.githubusercontent.com/{owner}/{repo_name}/{branch}"
+
+            # 1. Try catalog.json via raw.githubusercontent.com — no API rate limit
+            catalog_url = f"{raw_base}/{modules_path}/catalog.json"
+            cat_resp = await client.get(catalog_url, timeout=10.0)
+            if cat_resp.status_code == 200:
+                try:
+                    all_modules = cat_resp.json().get("modules", [])
+                    _marketplace_cache[cache_key] = {"ts": time.time(), "modules": all_modules}
+                    return JSONResponse(content=_build_module_list(all_modules, registry, plugins_dir))
+                except Exception:
+                    pass  # fall through to API
+
+            # 2. Fallback: GitHub API (subject to rate limit)
+            tree_url = f"https://api.github.com/repos/{owner}/{repo_name}/git/trees/{branch}?recursive=1"
+            resp = await client.get(tree_url, headers=headers)
             if resp.status_code == 404:
-                return JSONResponse(content={"modules": [], "updates": [], "error": f"Pfad '{modules_path}' nicht gefunden."})
-            if resp.status_code in (401, 403):
-                return JSONResponse(content={"modules": [], "updates": [], "error": "Zugriff verweigert – Token ungültig oder fehlt."})
+                return JSONResponse(content={"modules": [], "updates": [], "error": f"Branch '{branch}' oder Repo nicht gefunden."})
+            if resp.status_code == 401:
+                return JSONResponse(content={"modules": [], "updates": [], "error": "Zugriff verweigert – Token ungültig."})
+            if resp.status_code == 403:
+                if resp.headers.get("X-RateLimit-Remaining") == "0":
+                    return JSONResponse(content={"modules": [], "updates": [], "error": "GitHub API Rate Limit erreicht (60 req/h ohne Token). Bitte ein GitHub Token in den Repo-Einstellungen hinterlegen."})
+                return JSONResponse(content={"modules": [], "updates": [], "error": "GitHub Zugriff verweigert. Bei privaten Repos bitte Token hinterlegen."})
             resp.raise_for_status()
 
-            dirs = [item["name"] for item in resp.json() if item["type"] == "dir"]
-            all_modules: list[dict[str, str]] = []
-
-            # Fetch manifests in parallel via raw.githubusercontent.com (no API rate limit)
-            raw_base = f"https://raw.githubusercontent.com/{owner}/{repo_name}/{branch}"
-            raw_headers = {"Cache-Control": "no-cache"}
+            tree = resp.json().get("tree", [])
+            prefix = modules_path.rstrip("/") + "/"
+            dirs = sorted({
+                item["path"][len(prefix):].split("/")[0]
+                for item in tree
+                if item["path"].startswith(prefix)
+                and item["path"][len(prefix):].count("/") == 0
+                and item["type"] == "tree"
+                and not item["path"][len(prefix):].startswith("_")
+            })
+            all_modules = []
 
             async def _fetch_manifest(mod_name: str) -> dict[str, str]:
                 raw_url = f"{raw_base}/{modules_path}/{mod_name}/manifest.py"
                 try:
-                    m_resp = await client.get(raw_url, headers=raw_headers, timeout=10.0)
+                    m_resp = await client.get(raw_url, timeout=10.0)
                     if m_resp.status_code == 200:
                         return _extract_manifest_info(m_resp.text)
                 except Exception:
@@ -410,7 +433,6 @@ async def list_repo_modules(request: Request, repo_id: str) -> JSONResponse:
                 return {"display_name": mod_name, "description": "", "version": "", "author": ""}
 
             manifests = await asyncio.gather(*[_fetch_manifest(n) for n in dirs])
-
             for mod_name, info in zip(dirs, manifests):
                 all_modules.append({
                     "name": mod_name,

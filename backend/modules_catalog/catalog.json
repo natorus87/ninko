@@ -1,0 +1,123 @@
+{
+  "modules": [
+    {
+      "name": "checkmk",
+      "display_name": "Checkmk",
+      "description": "Checkmk Monitoring – Hosts, Services, Status, Alerts und Probleme.",
+      "version": "1.0.0",
+      "author": "Ninko Team"
+    },
+    {
+      "name": "docker",
+      "display_name": "Docker",
+      "description": "Docker Host Management – Container, Images, Volumes, System-Info",
+      "version": "1.0.0",
+      "author": "Ninko Team"
+    },
+    {
+      "name": "email",
+      "display_name": "Email (SMTP/IMAP)",
+      "description": "E-Mail Client für Ninko. Senden via SMTP und Lesen/Verwalten via IMAP. Unterstützt Basic Auth und MSAL (Microsoft 365 OAuth2).",
+      "version": "1.0.0",
+      "author": "Ninko"
+    },
+    {
+      "name": "fritzbox",
+      "display_name": "FritzBox",
+      "description": "Integration und Steuerung von AVM FritzBox Routern via TR-064 und AHA",
+      "version": "1.0.0",
+      "author": "Ninko"
+    },
+    {
+      "name": "glpi",
+      "display_name": "GLPI Helpdesk",
+      "description": "GLPI Helpdesk Integration – Tickets, Incidents, SLA-Tracking",
+      "version": "1.0.0",
+      "author": "Ninko Team"
+    },
+    {
+      "name": "homeassistant",
+      "display_name": "Home Assistant",
+      "description": "Steuerung und Abfrage von Smart Home Geräten in Home Assistant.",
+      "version": "1.0.0",
+      "author": "Ninko"
+    },
+    {
+      "name": "ionos",
+      "display_name": "IONOS DNS",
+      "description": "IONOS DNS Zonen und Records Management.",
+      "version": "1.0.0",
+      "author": "Ninko"
+    },
+    {
+      "name": "kubernetes",
+      "display_name": "Kubernetes",
+      "description": "Kubernetes Cluster Management – Pods, Deployments, Services, Health-Monitoring",
+      "version": "1.0.0",
+      "author": "Ninko Team"
+    },
+    {
+      "name": "linux_server",
+      "display_name": "Linux Server",
+      "description": "Linux Server Management über SSH – Befehle, Services, Monitoring, Dateien",
+      "version": "1.0.0",
+      "author": "Ninko Team"
+    },
+    {
+      "name": "opnsense",
+      "display_name": "OPNsense",
+      "description": "Management und Monitoring einer OPNsense Firewall via REST API.",
+      "version": "1.0.0",
+      "author": "Ninko"
+    },
+    {
+      "name": "pihole",
+      "display_name": "Pi-hole",
+      "description": "Pi-hole DNS-Server Management – Blocking, Queries, Domains, Statistiken",
+      "version": "1.0.0",
+      "author": "Ninko Team"
+    },
+    {
+      "name": "proxmox",
+      "display_name": "Proxmox",
+      "description": "Proxmox VE Management – VMs, Container, Nodes, Snapshots",
+      "version": "1.0.0",
+      "author": "Ninko Team"
+    },
+    {
+      "name": "qdrant",
+      "display_name": "Qdrant Knowledge Bank",
+      "description": "",
+      "version": "1.0.0",
+      "author": "Ninko Team"
+    },
+    {
+      "name": "tasmota",
+      "display_name": "Tasmota",
+      "description": "Steuerung und Monitoring von Tasmota-Geräten (ESP8266/ESP32) via HTTP REST API.",
+      "version": "1.0.0",
+      "author": "Ninko"
+    },
+    {
+      "name": "teams",
+      "display_name": "Microsoft Teams",
+      "description": "Ermöglicht das Chatten mit dem Ninko Orchestrator über Microsoft Teams",
+      "version": "1.0.0",
+      "author": "Ninko Team"
+    },
+    {
+      "name": "telegram",
+      "display_name": "Telegram Bot",
+      "description": "Ermöglicht das Chatten mit dem Ninko Orchestrator über Telegram",
+      "version": "1.0.0",
+      "author": "Ninko Team"
+    },
+    {
+      "name": "wordpress",
+      "display_name": "WordPress",
+      "description": "WordPress-Verwaltung – Plugins, Seiten, Beiträge, Benutzer, Einstellungen",
+      "version": "1.0.0",
+      "author": "Ninko Team"
+    }
+  ]
+}
