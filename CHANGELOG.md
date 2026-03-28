@@ -7,6 +7,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.6.8] – 2026-03-28
+
+### Changed
+
+- **Routing simplified to 2 tiers** — removed all intermediate LLM routing calls and the hardcoded pipeline planner:
+  - **Tier 2 (keyword fast-path)**: Single unambiguous keyword match → direct to module agent. No LLM overhead.
+  - **Tier 1 (orchestrator ReAct loop)**: Everything else → `self.invoke()`. The LLM decides via `call_module_agent`, `run_pipeline`, `create_custom_agent`, or direct answer.
+  - Removed: `_llm_classify_module()`, `_plan_and_execute_pipeline()`, `_route_tier3()`, `_has_multistep_indicators()`, `_has_workflow_intent()`, `_is_simple_query()`, `_build_module_descriptions()`, `_MULTISTEP_PATTERNS`, `_ACTION_VERBS`, LLM routing cache
+  - `orchestrator.py`: 1066 → 575 lines (−491 lines)
+- **`RoutingConfig` simplified**: Removed `tier3_enabled`, `tier4_enabled`, `llm_routing_enabled`, `llm_routing_timeout`, `llm_routing_cache_ttl`, `multistep_detection_enabled`, `simple_query_max_chars`. Only `tier1_enabled`, `tier2_enabled`, `preset` remain.
+- **`SYSTEM_PROMPT` rewritten**: Replaced "4 Verarbeitungsstufen" framing with clear decision logic: when to use `call_module_agent` vs `run_pipeline` vs `create_custom_agent` vs direct answer.
+- **`configure_routing` tool simplified**: Only `preset`, `tier1_enabled`, `tier2_enabled` parameters. Removed irrelevant LLM routing controls.
+
+---
+
 ## [0.6.7] – 2026-03-28
 
 ### Fixed

@@ -734,25 +734,19 @@ async def configure_routing(
     preset: str = "",
     tier1_enabled: bool | None = None,
     tier2_enabled: bool | None = None,
-    tier3_enabled: bool | None = None,
-    tier4_enabled: bool | None = None,
-    simple_query_max_chars: int | None = None,
-    llm_routing_enabled: bool | None = None,
-    llm_routing_timeout: float | None = None,
-    multistep_detection_enabled: bool | None = None,
 ) -> str:
     """Passt das Routing-Verhalten des Orchestrators für die aktuelle Session an.
 
     Die Änderung gilt NUR für diese Session — nach Session-Ende zurück zu Defaults.
-    Ninko ruft dieses Tool auch proaktiv auf, wenn Speed-Signale oder Modul-Fokus erkannt wird.
+
+    Zwei Routing-Tiers:
+    - Tier 2 (Keyword-Fast-Path): Genau ein Modul eindeutig per Keyword erkannt → direkt delegieren.
+    - Tier 1 (ReAct-Loop): Alles andere → LLM entscheidet selbst via call_module_agent / run_pipeline.
 
     Nutze dieses Tool wenn:
-    - Das aktuelle Routing suboptimale Ergebnisse liefert
-    - Der User schnellere Antworten möchte (preset='fast')
-    - LLM-Klassifikation langsam ist (llm_routing_enabled=False)
-    - Tier 3 nicht benötigt wird (tier3_enabled=False)
-    - Alle Anfragen zu Modulen sollen (tier1_enabled=False, preset='module-only')
-    - Routing zurückgesetzt werden soll (preset='default')
+    - Routing zurückgesetzt werden soll → preset='default'
+    - Keyword-Fast-Path deaktivieren (alles durch ReAct-Loop) → tier2_enabled=False
+    - ReAct-Loop für nicht-gematchte Anfragen deaktivieren → tier1_enabled=False
 
     Preset-Kurzformen: 'default' (reset), 'fast', 'module-only'
     """
@@ -761,10 +755,9 @@ async def configure_routing(
         get_session_routing_config, set_session_routing_config, clear_session_routing_config,
     )
 
-    orch = get_orchestrator()
+    get_orchestrator()  # Validierung: Orchestrator muss initialisiert sein
     session_id = status_bus.get_session_id()
 
-    # Reset auf Defaults
     if preset == "default":
         clear_session_routing_config(session_id)
         return _t(
@@ -772,32 +765,17 @@ async def configure_routing(
             "Routing reset to default configuration (for this session).",
         )
 
-    # Aktuelle Session-Config laden (oder Defaults)
     current = get_session_routing_config(session_id) or RoutingConfig()
 
-    # Preset anwenden
     if preset:
         if preset not in ROUTING_PRESETS:
             return _t(
                 f"Unbekanntes Preset '{preset}'. Verfügbar: {', '.join(ROUTING_PRESETS.keys())}",
                 f"Unknown preset '{preset}'. Available: {', '.join(ROUTING_PRESETS.keys())}",
             )
-        overrides = ROUTING_PRESETS[preset]
-        current = RoutingConfig.from_dict({**RoutingConfig().to_dict(), **overrides})
+        current = RoutingConfig.from_dict({**RoutingConfig().to_dict(), **ROUTING_PRESETS[preset]})
 
-    # Einzelne Felder überschreiben
-    updates = {
-        k: v for k, v in {
-            "tier1_enabled": tier1_enabled,
-            "tier2_enabled": tier2_enabled,
-            "tier3_enabled": tier3_enabled,
-            "tier4_enabled": tier4_enabled,
-            "simple_query_max_chars": simple_query_max_chars,
-            "llm_routing_enabled": llm_routing_enabled,
-            "llm_routing_timeout": llm_routing_timeout,
-            "multistep_detection_enabled": multistep_detection_enabled,
-        }.items() if v is not None
-    }
+    updates = {k: v for k, v in {"tier1_enabled": tier1_enabled, "tier2_enabled": tier2_enabled}.items() if v is not None}
     if updates:
         current = RoutingConfig.from_dict({**current.to_dict(), **updates})
 
@@ -806,10 +784,8 @@ async def configure_routing(
     cfg_dict = current.to_dict()
     lines = [
         f"  Preset: {cfg_dict['preset']}",
-        f"  Tier 1: {'✓' if cfg_dict['tier1_enabled'] else '✗'} | max {cfg_dict['simple_query_max_chars']} Zeichen",
-        f"  Tier 2: {'✓' if cfg_dict['tier2_enabled'] else '✗'} | LLM-Routing: {'✓' if cfg_dict['llm_routing_enabled'] else '✗'} ({cfg_dict['llm_routing_timeout']}s)",
-        f"  Tier 3: {'✓' if cfg_dict['tier3_enabled'] else '✗'}",
-        f"  Tier 4: {'✓' if cfg_dict['tier4_enabled'] else '✗'} | Mehrstufige Erkennung: {'✓' if cfg_dict['multistep_detection_enabled'] else '✗'}",
+        f"  Tier 1 (ReAct-Loop): {'✓' if cfg_dict['tier1_enabled'] else '✗'}",
+        f"  Tier 2 (Keyword-Fast-Path): {'✓' if cfg_dict['tier2_enabled'] else '✗'}",
     ]
     return _t(
         "Routing-Konfiguration aktualisiert:\n" + "\n".join(lines),
