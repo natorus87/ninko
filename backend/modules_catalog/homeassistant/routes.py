@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import Dict, Any
 import httpx
 
-from modules.homeassistant.tools import _get_api_client
+from .tools import _get_api_client
 
 router = APIRouter()
 

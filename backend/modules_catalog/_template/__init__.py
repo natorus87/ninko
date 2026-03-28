@@ -1,8 +1,8 @@
 """Template Modul – Package Init."""
 
-from modules._template.manifest import module_manifest
-from modules._template.agent import TemplateAgent
-from modules._template.routes import router
+from .manifest import module_manifest
+from .agent import TemplateAgent
+from .routes import router
 
 # Ninko erwartet diese 3 Exporte pro Modul:
 # 1. module_manifest (Metadaten & UI Infos)

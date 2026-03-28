@@ -1,5 +1,5 @@
 from core.module_registry import ModuleManifest
-from modules.homeassistant.tools import _get_api_client
+from .tools import _get_api_client
 
 async def check_homeassistant_health() -> dict:
     """

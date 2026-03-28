@@ -1,6 +1,6 @@
 import logging
 from fastapi import APIRouter
-from modules.ionos.tools import _ionos_request
+from .tools import _ionos_request
 
 logger = logging.getLogger("ninko.modules.ionos.routes")
 router = APIRouter()

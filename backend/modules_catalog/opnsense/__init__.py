@@ -1,8 +1,8 @@
 """OPNsense Modul – Package Init."""
 
-from modules.opnsense.manifest import module_manifest
-from modules.opnsense.agent import OPNsenseAgent
-from modules.opnsense.routes import router
+from .manifest import module_manifest
+from .agent import OPNsenseAgent
+from .routes import router
 
 agent = OPNsenseAgent()
 

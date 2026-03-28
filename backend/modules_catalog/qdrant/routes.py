@@ -9,14 +9,14 @@ import logging
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from modules.qdrant.schemas import (
+from .schemas import (
     AddEntryRequest,
     BatchAddRequest,
     CreateCollectionRequest,
     DeleteEntryRequest,
     SearchRequest,
 )
-from modules.qdrant.tools import (
+from .tools import (
     add_knowledge,
     delete_knowledge_by_id,
     get_collection_stats,
@@ -59,7 +59,7 @@ async def collection_stats(name: str, connection_id: str = ""):
 async def create_collection(req: CreateCollectionRequest, connection_id: str = ""):
     """Neue leere Collection erstellen."""
     try:
-        from modules.qdrant.tools import _get_qdrant_client, _ensure_collection
+        from .tools import _get_qdrant_client, _ensure_collection
 
         client, _ = await _get_qdrant_client(connection_id)
         await _ensure_collection(client, req.name)
@@ -153,7 +153,7 @@ async def delete_by_filter(req: DeleteEntryRequest, connection_id: str = ""):
     """Mehrere Einträge per Payload-Filter löschen (Kategorie oder Quelle)."""
     try:
         from qdrant_client.models import Filter, FieldCondition, MatchValue
-        from modules.qdrant.tools import _get_qdrant_client
+        from .tools import _get_qdrant_client
 
         if not req.category and not req.source:
             return _error("Mindestens category oder source muss angegeben werden.", 400)
@@ -189,7 +189,7 @@ async def list_entries(
     """Einträge aus einer Collection auflisten (mit Pagination und optionalem Kategorie-Filter)."""
     try:
         from qdrant_client.models import Filter, FieldCondition, MatchValue
-        from modules.qdrant.tools import _get_qdrant_client
+        from .tools import _get_qdrant_client
 
         client, default_collection = await _get_qdrant_client(connection_id)
         target = collection or default_collection

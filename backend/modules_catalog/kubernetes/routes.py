@@ -8,7 +8,7 @@ import logging
 
 from fastapi import APIRouter
 
-from modules.kubernetes.tools import (
+from .tools import (
     get_cluster_status,
     get_all_pods,
     get_failing_pods,
@@ -20,7 +20,7 @@ from modules.kubernetes.tools import (
     scale_deployment as scale_deployment_tool,
     rollout_restart as rollout_restart_tool,
 )
-from modules.kubernetes.remediation_plans import auto_remediate_failing_pods
+from .remediation_plans import auto_remediate_failing_pods
 
 logger = logging.getLogger("ninko.modules.kubernetes.routes")
 router = APIRouter()

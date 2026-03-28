@@ -18,7 +18,7 @@ import msal
 
 from core.connections import ConnectionManager
 from core.vault import get_vault
-from modules.email.schemas import (
+from .schemas import (
     SendEmailRequest, FilterEmailRequest, MoveEmailRequest, DeleteEmailRequest
 )
 

@@ -5,7 +5,7 @@ Linux Server Modul – Spezialist-Agent für SSH-basiertes Server-Management.
 from __future__ import annotations
 
 from agents.base_agent import BaseAgent
-from modules.linux_server.tools import (
+from .tools import (
     run_command,
     get_system_info,
     get_disk_usage,

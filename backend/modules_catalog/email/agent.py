@@ -1,6 +1,6 @@
 import logging
 from agents.base_agent import BaseAgent
-from modules.email.tools import send_email, read_emails, move_email, delete_email
+from .tools import send_email, read_emails, move_email, delete_email
 
 logger = logging.getLogger("ninko.modules.email.agent")
 

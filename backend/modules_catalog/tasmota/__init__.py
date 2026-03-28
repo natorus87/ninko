@@ -1,8 +1,8 @@
 """Tasmota Modul – Package Init."""
 
-from modules.tasmota.manifest import module_manifest
-from modules.tasmota.agent import TasmotaAgent
-from modules.tasmota.routes import router
+from .manifest import module_manifest
+from .agent import TasmotaAgent
+from .routes import router
 
 agent = TasmotaAgent()
 

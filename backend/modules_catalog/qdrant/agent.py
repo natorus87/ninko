@@ -3,7 +3,7 @@ Qdrant Modul – Knowledge-Bank-Agent.
 """
 
 from agents.base_agent import BaseAgent
-from modules.qdrant.tools import (
+from .tools import (
     search_knowledge,
     add_knowledge,
     delete_knowledge_by_id,

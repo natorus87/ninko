@@ -1,5 +1,5 @@
-from modules.fritzbox.manifest import module_manifest
-from modules.fritzbox.agent import FritzBoxAgent
-from modules.fritzbox.routes import router
+from .manifest import module_manifest
+from .agent import FritzBoxAgent
+from .routes import router
 
 agent = FritzBoxAgent()

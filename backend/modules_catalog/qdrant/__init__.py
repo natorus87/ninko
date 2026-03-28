@@ -2,9 +2,9 @@
 Qdrant Modul – Initialisierung für ModuleRegistry.
 """
 
-from modules.qdrant.manifest import module_manifest
-from modules.qdrant.agent import QdrantAgent
-from modules.qdrant.routes import router
+from .manifest import module_manifest
+from .agent import QdrantAgent
+from .routes import router
 
 agent = QdrantAgent()
 

@@ -8,7 +8,7 @@ import logging
 
 from fastapi import APIRouter
 
-from modules.checkmk.tools import (
+from .tools import (
     checkmk_get_alerts,
     checkmk_get_hosts,
     checkmk_get_services,

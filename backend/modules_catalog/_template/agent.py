@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 
 from agents.base_agent import BaseAgent, _t
-from modules._template.tools import beispiel_tool, lade_daten
+from .tools import beispiel_tool, lade_daten
 
 logger = logging.getLogger("ninko.modules.template.agent")
 

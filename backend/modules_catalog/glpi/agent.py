@@ -12,7 +12,7 @@ import os
 
 from agents.base_agent import BaseAgent
 from core.redis_client import get_redis
-from modules.glpi.tools import (
+from .tools import (
     create_ticket,
     get_ticket,
     search_tickets,

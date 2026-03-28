@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 
 from agents.base_agent import BaseAgent, _t
-from modules.tasmota.tools import (
+from .tools import (
     get_tasmota_status,
     get_tasmota_power,
     set_tasmota_power,

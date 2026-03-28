@@ -15,7 +15,7 @@ logger = logging.getLogger("ninko.modules.opnsense")
 async def check_opnsense_health(connection_id: str = "") -> dict:
     """Health-Check für OPNsense via API."""
     import httpx
-    from modules.opnsense.tools import _get_opnsense_auth
+    from .tools import _get_opnsense_auth
 
     try:
         host, auth = await _get_opnsense_auth(connection_id)

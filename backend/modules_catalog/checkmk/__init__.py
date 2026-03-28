@@ -1,8 +1,8 @@
 """Checkmk Modul – Package Init."""
 
-from modules.checkmk.manifest import module_manifest
-from modules.checkmk.agent import CheckmkAgent
-from modules.checkmk.routes import router
+from .manifest import module_manifest
+from .agent import CheckmkAgent
+from .routes import router
 
 agent = CheckmkAgent()
 

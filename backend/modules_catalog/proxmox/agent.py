@@ -5,7 +5,7 @@ Proxmox Modul – Spezialist-Agent.
 from __future__ import annotations
 
 from agents.base_agent import BaseAgent
-from modules.proxmox.tools import (
+from .tools import (
     get_nodes,
     get_node_status,
     list_all_vms,

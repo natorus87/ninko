@@ -5,7 +5,7 @@ Kubernetes Modul – Spezialist-Agent.
 from __future__ import annotations
 
 from agents.base_agent import BaseAgent
-from modules.kubernetes.tools import (
+from .tools import (
     get_cluster_status,
     list_namespaces,
     get_all_pods,

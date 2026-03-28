@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from modules.opnsense.tools import get_opnsense_system_status, get_opnsense_interfaces, get_opnsense_services
+from .tools import get_opnsense_system_status, get_opnsense_interfaces, get_opnsense_services
 
 logger = logging.getLogger("ninko.modules.opnsense.routes")
 router = APIRouter()

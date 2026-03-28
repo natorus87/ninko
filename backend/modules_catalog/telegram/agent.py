@@ -5,7 +5,7 @@ Telegram Agent – empfängt Anfragen, die Telegram-Nachrichten versenden sollen
 from __future__ import annotations
 
 from agents.base_agent import BaseAgent
-from modules.telegram.tools import send_telegram_message
+from .tools import send_telegram_message
 
 SYSTEM_PROMPT = """Du bist der Telegram-Agent von Ninko.
 Deine Aufgabe: Telegram-Nachrichten an Benutzer senden, wenn sie darum bitten.

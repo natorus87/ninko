@@ -5,7 +5,7 @@ Pi-hole Modul – Spezialist-Agent.
 from __future__ import annotations
 
 from agents.base_agent import BaseAgent
-from modules.pihole.tools import (
+from .tools import (
     get_pihole_summary,
     get_query_log,
     get_top_domains,

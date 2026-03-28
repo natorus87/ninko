@@ -9,7 +9,7 @@ import logging
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from modules.pihole.tools import (
+from .tools import (
     get_pihole_summary,
     get_query_log,
     get_top_domains,

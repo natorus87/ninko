@@ -14,7 +14,7 @@ logger = logging.getLogger("ninko.modules.ionos")
 async def check_ionos_health() -> dict:
     """Health-Check für IONOS-Verbindung."""
     try:
-        from modules.ionos.tools import _ionos_request
+        from .tools import _ionos_request
 
         result = await _ionos_request("GET", "zones")
         if isinstance(result, list):

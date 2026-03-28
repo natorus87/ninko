@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 from core.memory import get_memory
 from core.redis_client import get_redis
-from modules.kubernetes.tools import (
+from .tools import (
     scale_deployment,
     get_deployment_status,
     get_failing_pods,
@@ -151,7 +151,7 @@ async def ordered_namespace_restart(
 
         try:
             # Rollout Restart
-            from modules.kubernetes.tools import rollout_restart
+            from .tools import rollout_restart
             result = await rollout_restart.ainvoke({
                 "namespace": namespace,
                 "deployment_name": deployment_name,

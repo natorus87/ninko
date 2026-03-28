@@ -15,7 +15,7 @@ async def check_pihole_health() -> dict:
     """Health-Check für Pi-hole-Verbindung."""
     try:
         from core.connections import ConnectionManager
-        from modules.pihole.tools import get_pihole_summary
+        from .tools import get_pihole_summary
 
         # Prüfen ob überhaupt eine Default-Verbindung existiert
         conn = await ConnectionManager.get_default_connection("pihole")

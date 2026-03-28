@@ -1,8 +1,8 @@
 """IONOS DNS Modul – Package Init."""
 
-from modules.ionos.manifest import module_manifest
-from modules.ionos.agent import IonosAgent
-from modules.ionos.routes import router
+from .manifest import module_manifest
+from .agent import IonosAgent
+from .routes import router
 
 agent = IonosAgent()
 

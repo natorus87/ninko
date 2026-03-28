@@ -1,8 +1,8 @@
 """GLPI Modul – Package Init."""
 
-from modules.glpi.manifest import module_manifest
-from modules.glpi.agent import GlpiAgent
-from modules.glpi.routes import router
+from .manifest import module_manifest
+from .agent import GlpiAgent
+from .routes import router
 
 agent = GlpiAgent()
 

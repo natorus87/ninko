@@ -1,8 +1,8 @@
 """Docker Modul – Package Init."""
 
-from modules.docker.manifest import module_manifest
-from modules.docker.agent import DockerAgent
-from modules.docker.routes import router
+from .manifest import module_manifest
+from .agent import DockerAgent
+from .routes import router
 
 agent = DockerAgent()
 

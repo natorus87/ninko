@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 import logging
-from modules.fritzbox.tools import (
+from .tools import (
     get_fritz_devices,
     get_fritz_wan_status,
     get_fritz_bandwidth,

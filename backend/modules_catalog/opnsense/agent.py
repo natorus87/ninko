@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 
 from agents.base_agent import BaseAgent, _t
-from modules.opnsense.tools import (
+from .tools import (
     get_opnsense_system_status,
     get_opnsense_interfaces,
     get_opnsense_gateways,

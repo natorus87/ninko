@@ -1,7 +1,7 @@
 import os
 import uuid
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from modules.email.tools import check_connection
+from .tools import check_connection
 
 router = APIRouter()
 

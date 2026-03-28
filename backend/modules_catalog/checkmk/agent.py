@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 
 from agents.base_agent import BaseAgent, _t
-from modules.checkmk.tools import (
+from .tools import (
     checkmk_get_alerts,
     checkmk_get_host_details,
     checkmk_get_host_status,

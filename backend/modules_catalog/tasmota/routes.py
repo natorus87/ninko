@@ -8,7 +8,7 @@ import logging
 
 from fastapi import APIRouter
 
-from modules.tasmota.tools import get_tasmota_status, get_tasmota_sensors, get_tasmota_power
+from .tools import get_tasmota_status, get_tasmota_sensors, get_tasmota_power
 
 logger = logging.getLogger("ninko.modules.tasmota.routes")
 router = APIRouter()

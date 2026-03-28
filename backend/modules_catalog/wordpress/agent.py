@@ -5,7 +5,7 @@ WordPress Modul – Spezialist-Agent für WordPress-Verwaltung.
 from __future__ import annotations
 
 from agents.base_agent import BaseAgent
-from modules.wordpress.tools import (
+from .tools import (
     get_site_info,
     get_updates_info,
     list_plugins,

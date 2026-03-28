@@ -5,7 +5,7 @@ IONOS DNS Modul – Spezialist-Agent.
 from __future__ import annotations
 
 from agents.base_agent import BaseAgent
-from modules.ionos.tools import (
+from .tools import (
     get_ionos_zones,
     get_ionos_records,
     add_ionos_record,

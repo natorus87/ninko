@@ -1,8 +1,8 @@
 """WordPress Modul – Package Init."""
 
-from modules.wordpress.manifest import module_manifest
-from modules.wordpress.agent import WordPressAgent
-from modules.wordpress.routes import router
+from .manifest import module_manifest
+from .agent import WordPressAgent
+from .routes import router
 
 agent = WordPressAgent()
 

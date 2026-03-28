@@ -9,7 +9,7 @@ import os
 
 from fastapi import APIRouter
 
-from modules.glpi.tools import (
+from .tools import (
     get_ticket,
     search_tickets,
     create_ticket as create_ticket_tool,

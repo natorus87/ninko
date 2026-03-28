@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Optional
 from langchain_core.tools import tool
 from pydantic import ValidationError
 
-from modules.fritzbox.schemas import (
+from .schemas import (
     FritzDevice, FritzWanStatus, FritzBandwidth, FritzWlanStatus,
     FritzSmartHomeDevice, FritzCallEntry, FritzSystemInfo
 )

@@ -1,6 +1,6 @@
-from modules.homeassistant.manifest import module_manifest
-from modules.homeassistant.agent import HomeAssistantAgent
-from modules.homeassistant.routes import router
+from .manifest import module_manifest
+from .agent import HomeAssistantAgent
+from .routes import router
 
 agent = HomeAssistantAgent()
 

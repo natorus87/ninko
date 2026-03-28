@@ -15,7 +15,7 @@ async def check_checkmk_health() -> dict:
     """Health-Check für Checkmk-Verbindung."""
     try:
         from core.connections import ConnectionManager
-        from modules.checkmk.tools import checkmk_get_hosts
+        from .tools import checkmk_get_hosts
 
         conn = await ConnectionManager.get_default_connection("checkmk")
         if not conn or not conn.config.get("url"):

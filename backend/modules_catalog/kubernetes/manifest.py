@@ -15,7 +15,7 @@ async def check_k8s_health() -> dict:
     """Health-Check für Kubernetes-Cluster-Verbindung."""
     try:
         from kubernetes import client, config
-        from modules.kubernetes.tools import _get_k8s_client
+        from .tools import _get_k8s_client
 
         v1, _, _ = await _get_k8s_client()
         version = client.VersionApi().get_code()

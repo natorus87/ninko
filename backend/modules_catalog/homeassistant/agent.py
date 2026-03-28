@@ -1,6 +1,6 @@
 import logging
 from agents.base_agent import BaseAgent
-from modules.homeassistant.tools import (
+from .tools import (
     ha_get_entity_state,
     ha_get_entity_details,
     ha_find_device,

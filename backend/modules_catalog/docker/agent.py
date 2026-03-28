@@ -5,7 +5,7 @@ Docker Modul – Spezialist-Agent für Docker Host Management.
 from __future__ import annotations
 
 from agents.base_agent import BaseAgent
-from modules.docker.tools import (
+from .tools import (
     list_containers,
     inspect_container,
     start_container,

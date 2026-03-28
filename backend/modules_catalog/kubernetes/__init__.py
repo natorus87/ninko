@@ -1,8 +1,8 @@
 """Kubernetes Modul – Package Init."""
 
-from modules.kubernetes.manifest import module_manifest
-from modules.kubernetes.agent import KubernetesAgent
-from modules.kubernetes.routes import router
+from .manifest import module_manifest
+from .agent import KubernetesAgent
+from .routes import router
 
 agent = KubernetesAgent()
 

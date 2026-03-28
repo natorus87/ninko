@@ -1,8 +1,8 @@
 """Proxmox Modul – Package Init."""
 
-from modules.proxmox.manifest import module_manifest
-from modules.proxmox.agent import ProxmoxAgent
-from modules.proxmox.routes import router
+from .manifest import module_manifest
+from .agent import ProxmoxAgent
+from .routes import router
 
 agent = ProxmoxAgent()
 

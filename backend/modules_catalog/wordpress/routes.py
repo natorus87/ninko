@@ -8,7 +8,7 @@ import logging
 
 from fastapi import APIRouter
 
-from modules.wordpress.tools import (
+from .tools import (
     get_site_info,
     list_plugins,
     list_pages,

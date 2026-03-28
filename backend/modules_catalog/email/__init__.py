@@ -1,6 +1,6 @@
-from modules.email.manifest import module_manifest
-from modules.email.agent import EmailAgent
-from modules.email.routes import router
+from .manifest import module_manifest
+from .agent import EmailAgent
+from .routes import router
 
 agent = EmailAgent()
 
