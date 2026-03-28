@@ -130,6 +130,9 @@ spec:
           volumeMounts:
             - name: backend-data
               mountPath: /app/data
+            - name: backend-data
+              mountPath: /app/plugins
+              subPath: plugins
 
       volumes:
         - name: backend-data
