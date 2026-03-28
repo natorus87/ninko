@@ -1,0 +1,85 @@
+<!-- Checkmk Dashboard Tab -->
+<style>
+#checkmk-tab-content .cl-select { position:relative; display:inline-block; user-select:none; }
+#checkmk-tab-content .cl-select-btn {
+    display:flex; align-items:center; justify-content:space-between; gap:0.5rem;
+    padding:0.45rem 0.75rem; border-radius:4px; cursor:pointer;
+    border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-primary);
+    font-size:0.875rem; white-space:nowrap; min-width:200px;
+}
+#checkmk-tab-content .cl-select-btn:hover { border-color:var(--accent-blue); }
+#checkmk-tab-content .cl-select-arrow { font-size:0.65rem; opacity:0.7; transition:transform 0.15s; }
+#checkmk-tab-content .cl-select.open .cl-select-arrow { transform:rotate(180deg); }
+#checkmk-tab-content .cl-select-dropdown {
+    display:none; position:absolute; top:calc(100% + 4px); left:0; min-width:100%;
+    background:var(--bg-card); border:1px solid var(--border-color);
+    border-radius:4px; box-shadow:0 4px 16px rgba(0,0,0,0.4);
+    z-index:999; overflow:hidden; max-height:260px; overflow-y:auto;
+}
+#checkmk-tab-content .cl-select.open .cl-select-dropdown { display:block; }
+#checkmk-tab-content .cl-select-option {
+    padding:0.45rem 0.75rem; cursor:pointer; font-size:0.875rem;
+    color:var(--text-primary); white-space:nowrap;
+}
+#checkmk-tab-content .cl-select-option:hover { background:rgba(255,255,255,0.07); }
+#checkmk-tab-content .cl-select-option.selected { color:var(--accent-blue); }
+#checkmk-tab-content .status-card {
+    background:var(--bg-card); border:1px solid var(--border-color); border-radius:8px;
+    padding:1rem; margin-bottom:1rem;
+}
+#checkmk-tab-content .status-card h4 { margin:0 0 0.5rem 0; font-size:0.9rem; opacity:0.8; }
+#checkmk-tab-content .status-card .count { font-size:1.5rem; font-weight:bold; }
+#checkmk-tab-content .status-card.crit .count { color:#ff5555; }
+#checkmk-tab-content .status-card.warn .count { color:#f1fa8c; }
+#checkmk-tab-content .status-card.ok .count { color:#50fa7b; }
+#checkmk-tab-content .alert-item {
+    padding:0.5rem; border-bottom:1px solid var(--border-color); font-size:0.85rem;
+}
+#checkmk-tab-content .alert-item:last-child { border-bottom:none; }
+#checkmk-tab-content .alert-crit { color:#ff5555; }
+#checkmk-tab-content .alert-warn { color:#f1fa8c; }
+</style>
+
+<div id="checkmk-tab-content" class="module-tab-content">
+
+    <div class="checkmk-controls"
+        style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1.5rem;">
+
+        <div class="cl-select" id="checkmk-conn-select">
+            <div class="cl-select-btn" onclick="CheckmkTab.toggleSelect('checkmk-conn-select')">
+                <span class="cl-select-label">Lade Verbindungen…</span>
+                <span class="cl-select-arrow">▼</span>
+            </div>
+            <div class="cl-select-dropdown" id="checkmk-conn-options"></div>
+        </div>
+
+        <button class="btn btn-refresh" data-action="checkmk-refresh">🔄 Aktualisieren</button>
+    </div>
+
+    <div id="checkmk-summary" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:1rem; margin-bottom:1.5rem;">
+        <div class="status-card ok">
+            <h4>Hosts</h4>
+            <div class="count" id="checkmk-host-count">-</div>
+        </div>
+        <div class="status-card ok">
+            <h4>Services</h4>
+            <div class="count" id="checkmk-service-count">-</div>
+        </div>
+        <div class="status-card crit">
+            <h4>Critical</h4>
+            <div class="count" id="checkmk-crit-count">-</div>
+        </div>
+        <div class="status-card warn">
+            <h4>Warning</h4>
+            <div class="count" id="checkmk-warn-count">-</div>
+        </div>
+    </div>
+
+    <div class="checkmk-section">
+        <h3 class="section-title">🚨 Aktuelle Probleme</h3>
+        <div id="checkmk-alerts" class="nodes-grid">
+            <p class="empty-state">Keine Daten geladen. Bitte Verbindung wählen und aktualisieren.</p>
+        </div>
+    </div>
+
+</div>

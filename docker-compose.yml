@@ -61,20 +61,8 @@ services:
       # Secrets – SQLite (persistent, kein Vault-Neustart-Verlust)
       VAULT_FALLBACK: "sqlite"
       SQLITE_SECRETS_KEY: "${SQLITE_SECRETS_KEY}"
-      # Module
-      NINKO_MODULE_KUBERNETES: "false"
-      NINKO_MODULE_PROXMOX: "true"
-      NINKO_MODULE_GLPI: "true"
-      NINKO_MODULE_IONOS: "true"
-      NINKO_MODULE_FRITZBOX: "true"
-      NINKO_MODULE_HOMEASSISTANT: "true"
-      NINKO_MODULE_PIHOLE: "true"
+      # Core-Module (immer verfügbar)
       NINKO_MODULE_WEB_SEARCH: "true"
-      NINKO_MODULE_DOCKER: "true"
-      NINKO_MODULE_LINUX_SERVER: "true"
-      NINKO_MODULE_WORDPRESS: "true"
-      NINKO_MODULE_TELEGRAM: "false"
-      NINKO_MODULE_EMAIL: "false"
       NINKO_MODULE_CODELAB: "true"
       NINKO_MODULE_IMAGE_GEN: "false"
       PIHOLE_URL: "${PIHOLE_URL:-http://192.168.1.10}"

@@ -219,11 +219,22 @@ async def lifespan(app: FastAPI):
     scheduler_task = asyncio.create_task(scheduler.start_loop())
     app.state.scheduler = scheduler
 
-    # ── Telegram Polling Bot ──────────────────────────
-    from modules.telegram.bot import init_telegram_bot
-    telegram_bot = init_telegram_bot(app)
-    app.state.telegram_bot = telegram_bot
-    await telegram_bot.start()
+    # ── Telegram Polling Bot (optional – catalog module) ──
+    telegram_bot = None
+    try:
+        from modules.telegram.bot import init_telegram_bot as _init_tg
+        telegram_bot = _init_tg(app)
+        app.state.telegram_bot = telegram_bot
+        await telegram_bot.start()
+    except ModuleNotFoundError:
+        # Telegram is a catalog module; only available when installed via Marketplace
+        try:
+            from plugins.telegram.bot import init_telegram_bot as _init_tg
+            telegram_bot = _init_tg(app)
+            app.state.telegram_bot = telegram_bot
+            await telegram_bot.start()
+        except ModuleNotFoundError:
+            logger.info("Telegram-Bot nicht verfügbar (Modul nicht installiert)")
 
     # ── Frontend Static Files ────────────────────────
     # MUST mount AFTER module routes, otherwise the catch-all
@@ -258,8 +269,9 @@ async def lifespan(app: FastAPI):
     # ── Shutdown ──────────────────────────────────────
     logger.info("Ninko wird heruntergefahren…")
     
-    # Telegram Bot stoppen
-    await telegram_bot.stop()
+    # Telegram Bot stoppen (falls geladen)
+    if telegram_bot is not None:
+        await telegram_bot.stop()
     
     await monitor.stop()
     monitor_task.cancel()

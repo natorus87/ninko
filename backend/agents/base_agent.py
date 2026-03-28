@@ -92,6 +92,15 @@ _TOOL_LABELS: dict[str, tuple[str, str]] = {
     "fetch_emails":             ("Lade E-Mails",                  "Fetching emails"),
     "send_telegram_message":    ("Sende Telegram-Nachricht",      "Sending Telegram message"),
     "generate_image":           ("Generiere Bild",                "Generating image"),
+    "checkmk_get_hosts":        ("Lade Hosts",                   "Loading hosts"),
+    "checkmk_get_services":    ("Lade Services",                "Loading services"),
+    "checkmk_get_host_status": ("Prüfe Host-Status",            "Checking host status"),
+    "checkmk_get_service_status": ("Prüfe Service-Status",       "Checking service status"),
+    "checkmk_get_alerts":       ("Lade Alarme",                 "Loading alerts"),
+    "checkmk_get_host_details": ("Lade Host-Details",           "Loading host details"),
+    "checkmk_get_service_details": ("Lade Service-Details",     "Loading service details"),
+    "checkmk_search_hosts":     ("Suche Hosts",                  "Searching hosts"),
+    "checkmk_search_services": ("Suche Services",               "Searching services"),
 }
 
 

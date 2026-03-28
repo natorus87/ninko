@@ -798,6 +798,53 @@
                                     style="margin-top: 0.5rem; display: block;"></div>
                             </div>
 
+                            <!-- Marketplace Section -->
+                            <div class="setting-group" style="margin-bottom: 2rem; border: 1px solid var(--border-color); border-radius: var(--border-radius); padding: 1rem;">
+                                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
+                                    <h4 style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+                                        <span data-i18n="marketplace.title">Modul-Marketplace</span>
+                                    </h4>
+                                    <button class="btn btn-outline" onclick="Ninko.showAddRepoForm()" id="marketplace-add-btn" style="font-size:0.8rem; padding:0.25rem 0.7rem;" data-i18n="marketplace.addRepo">+ Repo hinzufügen</button>
+                                </div>
+                                <p class="text-muted" style="font-size: 0.82rem; margin: 0 0 1rem;" data-i18n="marketplace.desc">Installiere Module direkt aus GitHub-Repositories. Jedes Repo kann eigene Module anbieten.</p>
+
+                                <!-- Add-Repo-Form (hidden) -->
+                                <div id="marketplace-add-form" style="display:none; background: var(--bg-body); border: 1px solid var(--border-color); border-radius: var(--border-radius); padding: 0.75rem; margin-bottom: 1rem;">
+                                    <h5 style="margin: 0 0 0.75rem; font-size: 0.85rem;" data-i18n="marketplace.addRepoTitle">Neues Repo hinzufügen</h5>
+                                    <div class="form-row form-row-sm">
+                                        <label class="form-label" data-i18n="marketplace.repoName">Name</label>
+                                        <input id="add-repo-name" type="text" class="form-input" data-i18n-placeholder="marketplace.namePlaceholder" placeholder="z.B. Meine Community-Module">
+                                    </div>
+                                    <div class="form-row form-row-sm">
+                                        <label class="form-label" data-i18n="marketplace.repoUrl">GitHub-URL</label>
+                                        <input id="add-repo-url" type="text" class="form-input" data-i18n-placeholder="marketplace.urlPlaceholder" placeholder="https://github.com/owner/repo">
+                                    </div>
+                                    <div class="form-row form-row-sm">
+                                        <label class="form-label" data-i18n="marketplace.repoBranch">Branch</label>
+                                        <input id="add-repo-branch" type="text" class="form-input" data-i18n-placeholder="marketplace.branchPlaceholder" placeholder="main" style="max-width:130px;">
+                                    </div>
+                                    <div class="form-row form-row-sm">
+                                        <label class="form-label" data-i18n="marketplace.repoPath">Module-Pfad</label>
+                                        <input id="add-repo-path" type="text" class="form-input" data-i18n-placeholder="marketplace.pathPlaceholder" placeholder="backend/modules_catalog">
+                                    </div>
+                                    <div class="form-row form-row-sm">
+                                        <label class="form-label"><span data-i18n="marketplace.repoToken">Token</span> <span class="text-muted" data-i18n="marketplace.repoTokenOptional">(optional)</span></label>
+                                        <input id="add-repo-token" type="password" class="form-input" data-i18n-placeholder="marketplace.tokenPlaceholder" placeholder="ghp_…">
+                                    </div>
+                                    <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+                                        <button class="btn btn-primary" onclick="Ninko.addRepo()" style="font-size:0.82rem;" data-i18n="marketplace.add">Hinzufügen</button>
+                                        <button class="btn btn-outline" onclick="Ninko.hideAddRepoForm()" style="font-size:0.82rem;" data-i18n="marketplace.cancel">Abbrechen</button>
+                                        <span id="add-repo-status" class="save-status" style="display:inline; align-self:center;"></span>
+                                    </div>
+                                </div>
+
+                                <!-- Repo-Liste -->
+                                <div id="marketplace-repos-list">
+                                    <p class="text-muted" style="font-size:0.85rem;" data-i18n="marketplace.loadingRepos">Lade Repos…</p>
+                                </div>
+                            </div>
+
                             <h3>Installierte Module</h3>
                             <div id="settings-modules-list" class="modules-grid">
                                 <p class="text-muted">Lade Module…</p>

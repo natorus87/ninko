@@ -7,6 +7,33 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.6.0] – 2026-03-28
+
+### Added
+
+- **Module Marketplace** (`backend/api/routes_plugins.py`, `frontend/app.js`, `frontend/index.html`) — Install and update catalog modules at runtime without rebuilding the Docker image:
+  - Multi-repo support: `GET/POST/PUT/DELETE /api/plugins/marketplace/repos` manage a list of GitHub repos stored in Redis (`ninko:settings:marketplace_repos`).
+  - Official repo (`https://github.com/natorus87/ninko`, branch `main`, path `backend/modules_catalog`) is pre-configured and cannot be deleted.
+  - Community repos can be added with name, URL, branch, modules path, and optional GitHub token.
+  - `GET /api/plugins/marketplace/repos/{id}/modules` — fetches module metadata from GitHub Contents API (5-min cache per repo). Returns two lists: `modules` (available to install) and `updates` (already-installed plugins with a newer version in the repo).
+  - `POST /api/plugins/install-from-repo/{module_name}?repo_id={id}` — downloads module directory recursively into an in-memory ZIP, extracts to `backend/plugins/`, runs `pip install requirements.txt` if present, and hot-loads via `ModuleRegistry.hot_load_plugin()`.
+  - Tokens never returned by the API (`_mask_repo()` replaces with `github_token_set: bool`).
+  - Version comparison via `_version_tuple()` — only installed plugins (not core modules) show an "Update" button.
+  - All marketplace UI text uses the i18n system (45 new `marketplace.*` keys in all 10 language files).
+
+- **`backend/modules_catalog/`** — New directory for all non-core modules. Excluded from the Docker image via `.dockerignore`. Tracked in git as the official marketplace source.
+
+- **Checkmk module** (`backend/modules_catalog/checkmk/`) — Monitoring integration:
+  - `get_checkmk_hosts`, `list_checkmk_services`, `get_checkmk_service_status`, `get_checkmk_alerts`, `acknowledge_checkmk_alert`, `get_checkmk_host_details`, `schedule_checkmk_downtime`, `get_checkmk_site_status`, `run_checkmk_service_discovery` — 9 tools (read-only tools registered in `_TOOL_READONLY`).
+  - Basic auth via connection manager (`CHECKMK_URL`, `CHECKMK_USERNAME`, `CHECKMK_PASSWORD`).
+
+### Changed
+
+- **Core/Catalog split** — Only `web_search`, `image_gen`, and `codelab` remain as core modules in `backend/modules/` (baked into the image). All 17 other modules moved to `backend/modules_catalog/`: `kubernetes`, `proxmox`, `glpi`, `ionos`, `fritzbox`, `homeassistant`, `pihole`, `telegram`, `email`, `wordpress`, `opnsense`, `tasmota`, `docker`, `linux_server`, `qdrant`, `teams`.
+- **`docker-compose.yml` and `k8s/backend/deployment.yaml`** — Removed all `NINKO_MODULE_*` env vars except the three core modules (`WEB_SEARCH`, `CODELAB`, `IMAGE_GEN`). Catalog modules are enabled automatically when installed via the marketplace.
+
+---
+
 ## [0.5.12] – 2026-03-28
 
 ### Fixed

@@ -289,6 +289,7 @@ def _get_env_connection(module_name: str, prefix: str) -> dict:
         "docker": ["DOCKER_HOST", "DOCKER_PORT", "DOCKER_TLS", "DOCKER_API_VERSION"],
         "linux_server": ["LINUX_SERVER_HOST", "LINUX_SERVER_PORT", "LINUX_SERVER_USER"],
         "wordpress": ["WORDPRESS_URL", "WORDPRESS_USERNAME"],
+        "checkmk": ["CHECKMK_URL", "CHECKMK_SITE", "CHECKMK_API_USERNAME"],
     }
     for key in mappings.get(module_name, []):
         val = os.environ.get(key, "")
@@ -310,6 +311,7 @@ def _get_secret_keys(module_name: str) -> list[str]:
         "docker": ["DOCKER_TLS_CERT", "DOCKER_TLS_KEY"],
         "linux_server": ["LINUX_SERVER_PASSWORD", "LINUX_SERVER_SSH_KEY"],
         "wordpress": ["WORDPRESS_APP_PASSWORD"],
+        "checkmk": ["CHECKMK_API_PASSWORD", "CHECKMK_API_TOKEN"],
     }.get(module_name, [])
 
 

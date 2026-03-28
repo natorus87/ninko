@@ -11,7 +11,7 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.5.12-blue.svg" alt="Version"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.6.0-blue.svg" alt="Version"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-beta-orange.svg" alt="Status"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.12-blue.svg" alt="Python"></a>
   <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.115-green.svg" alt="FastAPI"></a>
@@ -25,7 +25,9 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 ## Features
 
 - **Chat Interface** – Control your entire IT infrastructure in natural language
-- **19 built-in modules** – Kubernetes, Proxmox, GLPI, FritzBox, Pi-hole, Home Assistant, IONOS DNS, Docker, WordPress, Teams, Qdrant, Tasmota, OPNsense, and more
+- **Module Marketplace** – Install any module from GitHub with one click, no rebuild required; supports multiple repos (official + community)
+- **3 core modules** always available: `web_search`, `image_gen`, `codelab`
+- **20+ catalog modules** installable on demand: Kubernetes, Proxmox, Checkmk, Pi-hole, Home Assistant, and more
 - **4-tier orchestrator routing** – Direct / Module Agent / Dynamic Agent / Pipeline
 - **Long-term memory** – ChromaDB-backed semantic memory across all sessions
 - **Local LLMs** – Ollama, LM Studio, or any OpenAI-compatible API (no cloud required)
@@ -130,7 +132,7 @@ On first start, configure your LLM backend under **Settings → LLM Provider** (
 │        Auto-Discovery · backend/modules/             │
 └──────┬──────────┬──────────┬──────────┬─────────────┘
        │          │          │          │
-   Kubernetes  Proxmox     GLPI      + 16 more modules
+    Kubernetes  Proxmox     GLPI      + 17 more modules
        │          │          │
 ┌──────▼──────────▼──────────▼──────────────────────┐
 │  LLM-Factory  │  ChromaDB  │  Redis  │  Vault/SQLite │
@@ -146,6 +148,16 @@ The core code contains **no module names**. Every module registers itself at sta
 
 ## Modules
 
+### Core modules (always available, baked into the image)
+
+| Module | Description |
+|---|---|
+| `web_search` | SearXNG-based web search (Bing, Mojeek, Qwant) |
+| `image_gen` | AI image generation |
+| `codelab` | Code execution and debugging |
+
+### Catalog modules (installable via the Marketplace)
+
 | Module | Description |
 |---|---|
 | `kubernetes` | Cluster management, pods, deployments, logs, auto-remediation |
@@ -155,26 +167,18 @@ The core code contains **no module names**. Every module registers itself at sta
 | `fritzbox` | Network status, external IP, Wi-Fi, connected devices |
 | `homeassistant` | Smart home: lights, heating, sensors, automations |
 | `pihole` | Pi-hole v6: blocking, statistics, query log, custom DNS |
-| `web_search` | SearXNG-based web search (Bing, Mojeek, Qwant) |
 | `telegram` | Bot with voice transcription and TTS replies |
 | `teams` | Microsoft Teams messaging with webhooks |
 | `email` | SMTP sending and IMAP retrieval |
 | `wordpress` | Posts, media, pages via WordPress REST API |
-| `codelab` | Code execution and debugging |
+| `checkmk` | Monitoring: hosts, services, alerts, status checks |
 | `docker` | Container management via Docker API |
 | `linux_server` | Server administration via SSH |
-| `image_gen` | AI image generation |
 | `qdrant` | Vector database management |
 | `tasmota` | Tasmota IoT device control |
 | `opnsense` | OPNsense firewall management |
 
-Modules are enabled via environment variables:
-
-```env
-NINKO_MODULE_KUBERNETES=true
-NINKO_MODULE_PROXMOX=true
-# etc.
-```
+Catalog modules are installed at runtime via **Settings → Marketplace** — no image rebuild required. The official module source is `https://github.com/natorus87/ninko` (pre-configured); additional community repos can be added in the same settings panel.
 
 ---
 
@@ -202,7 +206,7 @@ Full template: [.env.example](.env.example)
 Every module consists of:
 
 ```
-backend/modules/mymodule/
+backend/modules_catalog/mymodule/
 ├── __init__.py       ← exports module_manifest, agent, router
 ├── manifest.py       ← ModuleManifest with routing_keywords
 ├── agent.py          ← BaseAgent subclass
@@ -212,6 +216,8 @@ backend/modules/mymodule/
     ├── tab.html
     └── tab.js
 ```
+
+Place catalog modules under `backend/modules_catalog/` — this directory is excluded from the Docker image (`.dockerignore`) and served via the Marketplace. Core modules that must always be available go into `backend/modules/`.
 
 **manifest.py** (minimal example):
 

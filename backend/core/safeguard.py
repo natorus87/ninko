@@ -574,6 +574,10 @@ _TOOL_READONLY: frozenset[str] = frozenset({
     "search_knowledge", "list_knowledge_collections", "get_collection_stats",
     # Codelab read-only
     "get_available_languages",
+    # Checkmk read-only
+    "checkmk_get_hosts", "checkmk_get_services", "checkmk_get_host_status",
+    "checkmk_get_service_status", "checkmk_get_alerts", "checkmk_get_host_details",
+    "checkmk_get_service_details", "checkmk_search_hosts", "checkmk_search_services",
 })
 
 

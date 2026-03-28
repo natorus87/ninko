@@ -52,37 +52,11 @@ spec:
                   name: ninko-secrets
                   key: SQLITE_SECRETS_KEY
 
-            # ─── Module ───
-            - name: NINKO_MODULE_KUBERNETES
-              value: "true"
-            - name: K8S_IN_CLUSTER
-              value: "true"
-            - name: NINKO_MODULE_IONOS
-              value: "true"
-            - name: NINKO_MODULE_FRITZBOX
-              value: "true"
-            - name: NINKO_MODULE_HOMEASSISTANT
-              value: "true"
-            - name: NINKO_MODULE_PROXMOX
-              value: "true"
-            - name: NINKO_MODULE_GLPI
-              value: "true"
+            # ─── Core-Module (immer verfügbar) ───
             - name: NINKO_MODULE_WEB_SEARCH
               value: "true"
             - name: SEARXNG_URL
               value: "http://searxng:8080"
-            - name: NINKO_MODULE_PIHOLE
-              value: "true"
-            - name: NINKO_MODULE_DOCKER
-              value: "false"
-            - name: NINKO_MODULE_LINUX_SERVER
-              value: "true"
-            - name: NINKO_MODULE_WORDPRESS
-              value: "true"
-            - name: NINKO_MODULE_TELEGRAM
-              value: "false"
-            - name: NINKO_MODULE_EMAIL
-              value: "false"
             - name: NINKO_MODULE_CODELAB
               value: "true"
             - name: NINKO_MODULE_IMAGE_GEN
