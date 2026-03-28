@@ -7,6 +7,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.6.6] – 2026-03-28
+
+### Changed
+
+- **Session-scoped routing config**: Routing adaptations are now session-scoped only — changes via `configure_routing` or proactive heuristics apply only for the current session and reset to defaults automatically afterward. No Redis persistence.
+- **Proactive routing heuristics**: Three built-in synchronous heuristics (no LLM call) adapt routing automatically:
+  - Speed signals (`schnell`, `quick`, `fast`, `brief`, etc.) in the message → auto-apply `fast` preset for the session
+  - Reset signals (`default`, `normal`, `reset`, `zurück`, etc.) → restore default routing
+  - Module focus (last 5+ consecutive Tier-2 requests to the same module) → disable LLM routing for the session
+- **`_update_session_stats()`**: Tracks last 20 tier/module entries per session for heuristic analysis
+- **`get_routing_info` tool**: Now reads from session-scoped config instead of Redis, shows `Source: Session | Default`
+- Fixed `words` variable scope bug in `_proactive_routing_adjust()` — `words` is now computed before all heuristic checks
+
+---
+
 ## [0.6.5] – 2026-03-28
 
 ### Added

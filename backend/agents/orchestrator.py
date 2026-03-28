@@ -77,7 +77,7 @@ class RoutingConfig:
     """Laufzeit-Konfiguration für die 4-Tier-Routing-Logik des Orchestrators.
 
     Alle Felder haben Defaults, die das bisherige Verhalten 1:1 reproduzieren.
-    Wird über AgentConfigStore in Redis persistiert (key: "routing").
+    Session-scoped: Änderungen gelten nur für die aktuelle Session, danach Defaults.
     """
     tier1_enabled: bool = True
     tier2_enabled: bool = True
@@ -114,6 +114,44 @@ ROUTING_PRESETS: dict[str, dict] = {
         "tier4_enabled": False,
     },
 }
+
+# ── Session-scoped Routing State ──────────────────────────────────────────────
+# Routing-Configs gelten nur für die aktuelle Session — nach Session-Ende zurück zu Defaults.
+# session_id → (RoutingConfig, last_updated_monotonic)
+_session_routing_configs: dict[str, tuple[RoutingConfig, float]] = {}
+# session_id → {"tiers": [2,2,1,2], "modules": ["k8s","k8s",None,"k8s"]}
+_session_stats: dict[str, dict] = {}
+_SESSION_ROUTING_TTL = 86400.0  # 24h, matching Redis chat-history TTL
+
+# Speed signals that trigger auto-fast preset for a session (DE + EN)
+_SPEED_SIGNALS = frozenset({
+    "schnell", "schnelle", "schneller", "schnelles", "quick", "fast",
+    "kurz", "kurze", "kurzer", "kurzes", "brief", "knapp", "simplified",
+    "einfach", "kürzer", "kürze",
+})
+
+
+def get_session_routing_config(session_id: str) -> RoutingConfig | None:
+    """Gibt die session-scoped Routing-Config zurück, falls vorhanden und nicht abgelaufen."""
+    if not session_id or session_id not in _session_routing_configs:
+        return None
+    cfg, ts = _session_routing_configs[session_id]
+    if time.monotonic() - ts > _SESSION_ROUTING_TTL:
+        _session_routing_configs.pop(session_id, None)
+        return None
+    return cfg
+
+
+def set_session_routing_config(session_id: str, cfg: RoutingConfig) -> None:
+    """Setzt die session-scoped Routing-Config (überschreibt Defaults für diese Session)."""
+    if session_id:
+        _session_routing_configs[session_id] = (cfg, time.monotonic())
+
+
+def clear_session_routing_config(session_id: str) -> None:
+    """Löscht die session-scoped Routing-Config → nächste Anfrage nutzt wieder Defaults."""
+    _session_routing_configs.pop(session_id, None)
+
 
 SYSTEM_PROMPT = """Du bist Ninko – ein intelligenter IT-Operations-Assistent mit 4 Verarbeitungsstufen.
 
@@ -237,23 +275,94 @@ class OrchestratorAgent(BaseAgent):
 
         return "\n\n".join(parts)
 
-    async def _load_routing_config(self) -> RoutingConfig:
-        """Lädt die Routing-Konfiguration aus Redis (mit 10s In-Process-Cache)."""
-        now = time.monotonic()
-        if now - self._routing_config_loaded_at < 10.0:
-            return self._routing_config
-        try:
-            from core.agent_config_store import AgentConfigStore
-            raw = await AgentConfigStore().get_config("orchestrator")
-            self._routing_config = RoutingConfig.from_dict(raw.get("routing", {}))
-        except Exception as exc:
-            logger.warning("Routing-Config konnte nicht geladen werden: %s – nutze Defaults", exc)
-        self._routing_config_loaded_at = now
-        return self._routing_config
+    async def _load_routing_config(self, session_id: str = "") -> RoutingConfig:
+        """Gibt die Routing-Config für die Session zurück.
+
+        Priorität: session-scoped config > RoutingConfig() Defaults.
+        Session-Config wird durch configure_routing-Tool oder proaktive Heuristiken gesetzt.
+        """
+        session_cfg = get_session_routing_config(session_id)
+        if session_cfg is not None:
+            return session_cfg
+        return RoutingConfig()
 
     def _invalidate_routing_cache(self) -> None:
-        """Erzwingt beim nächsten route()-Aufruf ein Neuladen der Routing-Config aus Redis."""
-        self._routing_config_loaded_at = 0.0
+        """Kein-Op – bleibt für Kompatibilität mit configure_routing-Tool."""
+        pass
+
+    def _proactive_routing_adjust(
+        self,
+        session_id: str,
+        message: str,
+        chat_history: list[dict] | None,
+        cfg: RoutingConfig,
+    ) -> RoutingConfig:
+        """Proaktive Heuristiken: passt die Session-Routing-Config ohne expliziten User-Befehl an.
+
+        Läuft synchron und ohne LLM-Call — nur Pattern-Matching und Session-Stats.
+        """
+        msg_lower = message.lower()
+        stats = _session_stats.get(session_id, {"tiers": [], "modules": []})
+        words = set(re.sub(r"[^\w\s]", " ", msg_lower).split())
+
+        # ── Heuristik 1: Speed-Signale → Fast-Preset für diese Session ──────
+        if cfg.preset != "fast" and words & _SPEED_SIGNALS:
+            new_cfg = RoutingConfig.from_dict({
+                **RoutingConfig().to_dict(),
+                "preset": "fast",
+                "llm_routing_enabled": False,
+                "tier3_enabled": False,
+            })
+            set_session_routing_config(session_id, new_cfg)
+            logger.info(
+                "Proaktives Routing: Speed-Signal erkannt → Fast-Preset für Session '%s'", session_id
+            )
+            return new_cfg
+
+        # ── Heuristik 2: Reset-Signale → zurück zu Defaults ─────────────────
+        _RESET_SIGNALS = {"default", "normal", "reset", "zurück", "standard", "alles", "wieder"}
+        if words & _RESET_SIGNALS and cfg.preset != "default":
+            clear_session_routing_config(session_id)
+            logger.info(
+                "Proaktives Routing: Reset-Signal erkannt → Defaults für Session '%s'", session_id
+            )
+            return RoutingConfig()
+
+        # ── Heuristik 3: Modul-Fokus → LLM-Routing deaktivieren wenn unnötig ─
+        recent_tiers = stats.get("tiers", [])[-6:]
+        recent_modules = [m for m in stats.get("modules", [])[-6:] if m]
+        if (
+            len(recent_tiers) >= 5
+            and all(t == 2 for t in recent_tiers)        # alle letzten Anfragen Tier 2
+            and len(set(recent_modules)) == 1             # immer dasselbe Modul
+            and cfg.llm_routing_enabled                   # LLM-Routing noch aktiv
+        ):
+            dominant = recent_modules[0]
+            new_cfg = RoutingConfig.from_dict({
+                **cfg.to_dict(),
+                "llm_routing_enabled": False,
+                "preset": f"focus:{dominant}",
+            })
+            set_session_routing_config(session_id, new_cfg)
+            logger.info(
+                "Proaktives Routing: Modul-Fokus '%s' erkannt → LLM-Routing deaktiviert für Session '%s'",
+                dominant, session_id,
+            )
+            return new_cfg
+
+        return cfg
+
+    def _update_session_stats(self, session_id: str, tier: int, module: str | None) -> None:
+        """Trackt Tier-Nutzung und Modul-Verteilung pro Session für proaktive Heuristiken."""
+        if not session_id:
+            return
+        stats = _session_stats.setdefault(session_id, {"tiers": [], "modules": []})
+        stats["tiers"].append(tier)
+        stats["modules"].append(module)
+        # Nur die letzten 20 Einträge behalten
+        if len(stats["tiers"]) > 20:
+            stats["tiers"] = stats["tiers"][-20:]
+            stats["modules"] = stats["modules"][-20:]
 
     def _refresh_routing_map(self) -> None:
         """Routing-Map aus der Registry aktualisieren (nur wenn dirty)."""
@@ -832,7 +941,8 @@ class OrchestratorAgent(BaseAgent):
         await status_bus.emit(session_id, _t("Analysiere deine Anfrage…", "Analyzing your request…"))
 
         self._refresh_routing_map()
-        cfg = await self._load_routing_config()
+        cfg = await self._load_routing_config(session_id)
+        cfg = self._proactive_routing_adjust(session_id, message, chat_history, cfg)
 
         # ── Direktes Modul-Routing (force_module) ────────────────────────────
         if force_module:
@@ -873,6 +983,7 @@ class OrchestratorAgent(BaseAgent):
 
         tier, target_module, is_compound = await self._classify_tier(message, chat_history, cfg)
         self._last_tier_used = tier
+        self._update_session_stats(session_id, tier, target_module)
         logger.info("Routing-Stufe %d gewählt für: %s…", tier, message[:80])
 
         # ── Stufe 4: Workflow-Orchestrierung ─────────────────────────────

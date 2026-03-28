@@ -741,28 +741,39 @@ async def configure_routing(
     llm_routing_timeout: float | None = None,
     multistep_detection_enabled: bool | None = None,
 ) -> str:
-    """Passt das Routing-Verhalten des Orchestrators an.
+    """Passt das Routing-Verhalten des Orchestrators für die aktuelle Session an.
+
+    Die Änderung gilt NUR für diese Session — nach Session-Ende zurück zu Defaults.
+    Ninko ruft dieses Tool auch proaktiv auf, wenn Speed-Signale oder Modul-Fokus erkannt wird.
 
     Nutze dieses Tool wenn:
-    - Das aktuelle Routing wiederholt suboptimale Ergebnisse liefert
-    - Der User explizit schnellere Antworten möchte (preset='fast')
-    - LLM-Klassifikation langsam oder fehleranfällig ist (llm_routing_enabled=False)
-    - Tier 3 (dynamische Agenten) nicht benötigt wird (tier3_enabled=False)
-    - Alle Anfragen immer zu Modulen sollen, keine Direktantworten (tier1_enabled=False)
-    - Das Routing zurückgesetzt werden soll (preset='default')
+    - Das aktuelle Routing suboptimale Ergebnisse liefert
+    - Der User schnellere Antworten möchte (preset='fast')
+    - LLM-Klassifikation langsam ist (llm_routing_enabled=False)
+    - Tier 3 nicht benötigt wird (tier3_enabled=False)
+    - Alle Anfragen zu Modulen sollen (tier1_enabled=False, preset='module-only')
+    - Routing zurückgesetzt werden soll (preset='default')
 
-    Preset-Kurzformen: 'default', 'fast', 'module-only'
-    Einzelne Felder überschreiben den Preset wenn beide angegeben werden.
+    Preset-Kurzformen: 'default' (reset), 'fast', 'module-only'
     """
-    from core.agent_config_store import AgentConfigStore
-    from agents.orchestrator import get_orchestrator, RoutingConfig, ROUTING_PRESETS
+    from agents.orchestrator import (
+        get_orchestrator, RoutingConfig, ROUTING_PRESETS,
+        get_session_routing_config, set_session_routing_config, clear_session_routing_config,
+    )
 
     orch = get_orchestrator()
-    store = AgentConfigStore()
+    session_id = status_bus.get_session_id()
 
-    # Aktuelle Config laden
-    raw = await store.get_config("orchestrator")
-    current = RoutingConfig.from_dict(raw.get("routing", {}))
+    # Reset auf Defaults
+    if preset == "default":
+        clear_session_routing_config(session_id)
+        return _t(
+            "Routing zurückgesetzt auf Standard-Konfiguration (gilt für diese Session).",
+            "Routing reset to default configuration (for this session).",
+        )
+
+    # Aktuelle Session-Config laden (oder Defaults)
+    current = get_session_routing_config(session_id) or RoutingConfig()
 
     # Preset anwenden
     if preset:
@@ -790,9 +801,7 @@ async def configure_routing(
     if updates:
         current = RoutingConfig.from_dict({**current.to_dict(), **updates})
 
-    await store.set_config("orchestrator", "routing", current.to_dict())
-    if orch:
-        orch._invalidate_routing_cache()
+    set_session_routing_config(session_id, current)
 
     cfg_dict = current.to_dict()
     lines = [
@@ -815,15 +824,14 @@ async def get_routing_info() -> str:
     Nützlich um zu prüfen welche Routing-Einstellungen aktiv sind — z.B. bevor
     configure_routing aufgerufen wird oder um die Routing-Performance zu beurteilen.
     """
-    from core.agent_config_store import AgentConfigStore
-    from agents.orchestrator import get_orchestrator, RoutingConfig
+    from agents.orchestrator import get_orchestrator, RoutingConfig, get_session_routing_config
 
     orch = get_orchestrator()
-    store = AgentConfigStore()
-    raw = await store.get_config("orchestrator")
-    cfg = RoutingConfig.from_dict(raw.get("routing", {}))
+    session_id = status_bus.get_session_id()
+    session_cfg = get_session_routing_config(session_id)
+    cfg = session_cfg if session_cfg is not None else RoutingConfig()
     last_tier = getattr(orch, "_last_tier_used", "?") if orch else "?"
-    source = "Redis" if raw.get("routing") else "Default"
+    source = "Session" if session_cfg is not None else "Default"
 
     return (
         f"Routing-Konfiguration (Quelle: {source}):\n"
