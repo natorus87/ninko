@@ -7,6 +7,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.6.7] – 2026-03-28
+
+### Fixed
+
+- **Kubernetes log queries no longer misrouted to Tier 4 pipeline**: Three-part fix:
+  1. Added `"logs"`, `"log"`, `"node"`, `"nodes"`, `"configmap"`, `"secret"`, `"volume"`, `"pvc"`, `"helm"`, `"kube-system"`, `"statefulset"` to kubernetes `routing_keywords` — `kubectl logs <pod>` queries now match directly in Stage 1 without history fallback
+  2. Tightened compound detection threshold: second module now requires score ≥ 2 AND ≥ 40% of first module's score (was: ≥ 1). Prevents Tier 4 activation when one module clearly dominates (e.g. kubernetes:10, linux_server:1 from history)
+  3. Improved pipeline planner prompt: constrains to minimum steps, max 3, and explicitly excludes web_search/image_gen/telegram/teams unless requested — eliminates hallucinated irrelevant module steps
+
+---
+
 ## [0.6.6] – 2026-03-28
 
 ### Changed

@@ -689,8 +689,14 @@ class OrchestratorAgent(BaseAgent):
             return llm_module, False
 
         # LLM-Fallback: altes Keyword-Verhalten — Compound-Signal prüfen
+        # Compound nur wenn zweites Modul mindestens 40% des ersten Scores hat UND Score >= 2.
+        # Verhindert Fehlklassifikation wenn ein Modul klar dominiert (z.B. kubernetes:10, linux_server:1).
         sorted_modules = sorted(module_scores.items(), key=lambda x: x[1], reverse=True)
-        if len(sorted_modules) > 1 and sorted_modules[1][1] >= 1:
+        if (
+            len(sorted_modules) > 1
+            and sorted_modules[1][1] >= 2
+            and sorted_modules[1][1] >= sorted_modules[0][1] * 0.4
+        ):
             logger.info(
                 "Compound-Anfrage erkannt (LLM+Keyword Fallback): %s", module_scores,
             )
@@ -732,12 +738,20 @@ class OrchestratorAgent(BaseAgent):
         planning_prompt = _t(
             f"Aufgabe des Benutzers:\n\"{message}\"{history_context}\n\n"
             f"Verfügbare Module: {modules_str}\n\n"
-            "Erstelle eine Pipeline-Schrittliste in der richtigen Ausführungsreihenfolge.\n"
+            "Erstelle eine minimale Pipeline-Schrittliste. Wichtige Regeln:\n"
+            "- Nur Module einbeziehen, die für diese Aufgabe DIREKT notwendig sind\n"
+            "- Wenn EIN Modul ausreicht, genau 1 Schritt zurückgeben\n"
+            "- Maximal 3 Schritte außer bei sehr komplexen Aufgaben\n"
+            "- Kein web_search, kein image_gen, kein telegram, kein teams sofern nicht explizit gefordert\n"
             "Antwort AUSSCHLIESSLICH als JSON-Array ohne weiteren Text:\n"
             "[{\"module\": \"<modul_name>\", \"task\": \"<präzise, vollständige Aufgabe für dieses Modul>\"}, ...]",
             f"User task:\n\"{message}\"{history_context}\n\n"
             f"Available modules: {modules_str}\n\n"
-            "Create a pipeline step list in the correct execution order.\n"
+            "Create a minimal pipeline step list. Important rules:\n"
+            "- Only include modules that are DIRECTLY needed for this task\n"
+            "- If ONE module is sufficient, return exactly 1 step\n"
+            "- Maximum 3 steps except for very complex tasks\n"
+            "- Do not include web_search, image_gen, telegram, or teams unless explicitly requested\n"
             "Respond EXCLUSIVELY as a JSON array without any other text:\n"
             "[{\"module\": \"<module_name>\", \"task\": \"<precise, complete task for this module>\"}, ...]",
         )
