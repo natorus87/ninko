@@ -7,6 +7,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.6.4] – 2026-03-28
+
+### Changed
+
+- **Sub-navigation relocated to sidebar**: The sub-navigation menus for Automatisierung (Tasks/Agents/Workflows), Modules, and Settings are now displayed inside the sidebar (where the chat history was) instead of as a second column within the main content area. The sidebar dynamically switches between showing chat history (in the chat tab) and showing the contextual sub-navigation (in the other tabs). All three content areas (auto-content, modules-content, settings-main) now fill the full width of the main panel.
+
+---
+
 ## [0.6.3] – 2026-03-28
 
 ### Changed

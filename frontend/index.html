@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=49">
+    <link rel="stylesheet" href="/static/style.css?v=50">
     <script>if(localStorage.getItem('ninko_theme')==='light')document.documentElement.classList.add('light-mode-pre');</script>
 </head>
 
@@ -78,6 +78,57 @@
                     <div class="sidebar-history-section" id="sidebar-history-section">
                         <div class="history-list" id="history-list">
                             <!-- Filled dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- Sub-Navigation (shown instead of history for auto/modules/settings) -->
+                    <div id="sidebar-subnav" class="sidebar-subnav" style="display:none">
+                        <div id="subnav-automatisierung" class="subnav-section" style="display:none">
+                            <button class="settings-tab" data-auto-tab="tasks" onclick="Ninko.switchAutoTab('tasks')">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                <span data-i18n="nav.tasks">Aufgaben</span>
+                            </button>
+                            <button class="settings-tab" data-auto-tab="agents" onclick="Ninko.switchAutoTab('agents')">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg>
+                                <span data-i18n="nav.agents">Agenten</span>
+                            </button>
+                            <button class="settings-tab" data-auto-tab="workflows" onclick="Ninko.switchAutoTab('workflows')">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="5" height="5" rx="1"></rect><rect x="16" y="3" width="5" height="5" rx="1"></rect><rect x="9.5" y="16" width="5" height="5" rx="1"></rect><path d="M5.5 8v3a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8"></path><line x1="12" y1="13" x2="12" y2="16"></line></svg>
+                                <span data-i18n="nav.workflows">Workflows</span>
+                            </button>
+                        </div>
+                        <div id="subnav-modules" class="subnav-section" style="display:none">
+                            <!-- Populated dynamically by loadModules() -->
+                        </div>
+                        <div id="subnav-settings" class="subnav-section" style="display:none">
+                            <button class="settings-tab active" data-settings-tab="llm" onclick="Ninko.switchSettingsTab('llm')">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                                LLM Provider
+                            </button>
+                            <button class="settings-tab" data-settings-tab="modules" onclick="Ninko.switchSettingsTab('modules')">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                                Module
+                            </button>
+                            <button class="settings-tab" data-settings-tab="system" onclick="Ninko.switchSettingsTab('system')">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                                <span data-i18n="settings.system">System</span>
+                            </button>
+                            <button class="settings-tab" data-settings-tab="language" onclick="Ninko.switchSettingsTab('language')">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                                <span data-i18n="settings.language">Sprache</span>
+                            </button>
+                            <button class="settings-tab" data-settings-tab="tts" onclick="Ninko.switchSettingsTab('tts')">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                                <span data-i18n="settings.tts">Sprachausgabe</span>
+                            </button>
+                            <button class="settings-tab" data-settings-tab="imagegen" onclick="Ninko.switchSettingsTab('imagegen')">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                                Bildgenerierung
+                            </button>
+                            <button class="settings-tab" data-settings-tab="logs" onclick="Ninko.switchSettingsTab('logs')">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                                <span data-i18n="nav.logs">Logs</span>
+                            </button>
                         </div>
                     </div>
 
@@ -180,35 +231,14 @@
                 </div>
             </div>
 
-            <!-- Automatisierung Tab (two-column layout, content moved here dynamically) -->
+            <!-- Automatisierung Tab -->
             <div id="tab-automatisierung" class="tab-panel">
-                <div class="settings-layout">
-                    <div class="settings-sidebar" id="auto-sidebar">
-                        <button class="settings-tab" data-auto-tab="tasks" onclick="Ninko.switchAutoTab('tasks')">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                            <span data-i18n="nav.tasks">Aufgaben</span>
-                        </button>
-                        <button class="settings-tab" data-auto-tab="agents" onclick="Ninko.switchAutoTab('agents')">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg>
-                            <span data-i18n="nav.agents">Agenten</span>
-                        </button>
-                        <button class="settings-tab" data-auto-tab="workflows" onclick="Ninko.switchAutoTab('workflows')">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="5" height="5" rx="1"></rect><rect x="16" y="3" width="5" height="5" rx="1"></rect><rect x="9.5" y="16" width="5" height="5" rx="1"></rect><path d="M5.5 8v3a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8"></path><line x1="12" y1="13" x2="12" y2="16"></line></svg>
-                            <span data-i18n="nav.workflows">Workflows</span>
-                        </button>
-                    </div>
-                    <div id="auto-content" class="auto-content"></div>
-                </div>
+                <div id="auto-content" class="auto-content"></div>
             </div>
 
-            <!-- Modules Tab (two-column layout, module panels moved here dynamically) -->
+            <!-- Modules Tab -->
             <div id="tab-modules" class="tab-panel">
-                <div class="settings-layout">
-                    <div class="settings-sidebar" id="modules-nav-sidebar">
-                        <!-- Populated dynamically by loadModules() -->
-                    </div>
-                    <div id="modules-content" class="auto-content"></div>
-                </div>
+                <div id="modules-content" class="auto-content"></div>
             </div>
 
             <!-- Tasks Tab -->
@@ -614,80 +644,6 @@
 
             <!-- Settings Tab -->
             <div id="tab-settings" class="tab-panel">
-                <div class="settings-layout">
-                    <!-- Settings Tab Nav (Sidebar) -->
-                    <div class="settings-sidebar">
-                        <button class="settings-tab active" data-settings-tab="llm"
-                            onclick="Ninko.switchSettingsTab('llm')">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M12 2v20"></path>
-                                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-                            </svg> LLM Provider
-                        </button>
-                        <button class="settings-tab" data-settings-tab="modules"
-                            onclick="Ninko.switchSettingsTab('modules')">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line>
-                                <path
-                                    d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z">
-                                </path>
-                                <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
-                                <line x1="12" y1="22.08" x2="12" y2="12"></line>
-                            </svg> Module
-                        </button>
-                        <button class="settings-tab" data-settings-tab="system"
-                            onclick="Ninko.switchSettingsTab('system')">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                                <line x1="8" y1="21" x2="16" y2="21"></line>
-                                <line x1="12" y1="17" x2="12" y2="21"></line>
-                            </svg> <span data-i18n="settings.system">System</span>
-                        </button>
-                        <button class="settings-tab" data-settings-tab="language"
-                            onclick="Ninko.switchSettingsTab('language')">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <line x1="2" y1="12" x2="22" y2="12"></line>
-                                <path
-                                    d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z">
-                                </path>
-                            </svg> <span data-i18n="settings.language">Sprache</span>
-                        </button>
-                        <button class="settings-tab" data-settings-tab="tts"
-                            onclick="Ninko.switchSettingsTab('tts')">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-                                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
-                                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-                            </svg> <span data-i18n="settings.tts">Sprachausgabe</span>
-                        </button>
-                        <button class="settings-tab" data-settings-tab="imagegen"
-                            onclick="Ninko.switchSettingsTab('imagegen')">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                                <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                                <polyline points="21 15 16 10 5 21"></polyline>
-                            </svg> Bildgenerierung
-                        </button>
-                        <button class="settings-tab" data-settings-tab="logs"
-                            onclick="Ninko.switchSettingsTab('logs')">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                                <polyline points="14 2 14 8 20 8"></polyline>
-                                <line x1="16" y1="13" x2="8" y2="13"></line>
-                                <line x1="16" y1="17" x2="8" y2="17"></line>
-                                <polyline points="10 9 9 9 8 9"></polyline>
-                            </svg> <span data-i18n="nav.logs">Logs</span>
-                        </button>
-                    </div>
-
                     <div class="settings-main">
                         <!-- LLM Tab -->
                         <div class="settings-panel active" id="settings-panel-llm">
@@ -1147,8 +1103,7 @@
                             </div>
                         </div>
                     </div>
-                </div> <!-- End settings-main -->
-            </div> <!-- End settings-layout -->
+                    </div> <!-- End settings-main -->
             </div> <!-- End tab-settings -->
 
             <!-- Dynamic module tabs are injected here -->

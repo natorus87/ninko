@@ -233,7 +233,7 @@ const Ninko = {
             if (!res.ok) throw new Error(res.statusText);
             this.modules = await res.json();
 
-            const modulesSidebar = document.getElementById('modules-nav-sidebar');
+            const modulesSidebar = document.getElementById('subnav-modules');
             const mainContent = document.getElementById('main-content');
 
             for (const mod of this.modules) {
@@ -397,6 +397,20 @@ const Ninko = {
             historySection.style.display = tabId === 'chat' ? '' : 'none';
         }
 
+        // Show/hide sidebar sub-navigation for automatisierung / modules / settings
+        const subnavPanel = document.getElementById('sidebar-subnav');
+        const subnavSections = ['automatisierung', 'modules', 'settings'];
+        if (subnavPanel) {
+            if (subnavSections.includes(tabId)) {
+                subnavPanel.style.display = '';
+                document.querySelectorAll('.subnav-section').forEach(s => s.style.display = 'none');
+                const activeSection = document.getElementById(`subnav-${tabId}`);
+                if (activeSection) activeSection.style.display = '';
+            } else {
+                subnavPanel.style.display = 'none';
+            }
+        }
+
         // Tab-specific init
         if (tabId === 'automatisierung') {
             // Show last active sub-tab, default to tasks
@@ -439,8 +453,8 @@ const Ninko = {
         }
 
         // Update sidebar active state
-        document.querySelectorAll('#auto-sidebar .settings-tab').forEach(t => t.classList.remove('active'));
-        document.querySelector(`#auto-sidebar .settings-tab[data-auto-tab="${tabId}"]`)?.classList.add('active');
+        document.querySelectorAll('#subnav-automatisierung .settings-tab').forEach(t => t.classList.remove('active'));
+        document.querySelector(`#subnav-automatisierung .settings-tab[data-auto-tab="${tabId}"]`)?.classList.add('active');
 
         // Move panel into auto-content and activate
         const autoContent = document.getElementById('auto-content');
@@ -470,8 +484,8 @@ const Ninko = {
         }
 
         // Update sidebar active state
-        document.querySelectorAll('#modules-nav-sidebar .settings-tab').forEach(t => t.classList.remove('active'));
-        document.querySelector(`#modules-nav-sidebar .settings-tab[data-module-tab="${tabId}"]`)?.classList.add('active');
+        document.querySelectorAll('#subnav-modules .settings-tab').forEach(t => t.classList.remove('active'));
+        document.querySelector(`#subnav-modules .settings-tab[data-module-tab="${tabId}"]`)?.classList.add('active');
 
         // Move panel into modules-content and activate
         const modContent = document.getElementById('modules-content');
@@ -1419,10 +1433,10 @@ const Ninko = {
         // Stop log polling when leaving logs sub-panel
         this.stopLogPolling();
 
-        document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('#subnav-settings .settings-tab').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
 
-        document.querySelector(`.settings-tab[data-settings-tab="${tabId}"]`)?.classList.add('active');
+        document.querySelector(`#subnav-settings .settings-tab[data-settings-tab="${tabId}"]`)?.classList.add('active');
         document.getElementById(`settings-panel-${tabId}`)?.classList.add('active');
 
         // Load content when switching tabs

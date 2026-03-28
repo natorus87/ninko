@@ -422,6 +422,21 @@ body.resizing {
     flex-shrink: 0;
 }
 
+/* ─── Sidebar Sub-Navigation (Automatisierung / Module / Einstellungen) ─── */
+.sidebar-subnav {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    padding: 0.5rem 0;
+}
+
+.subnav-section {
+    display: flex;
+    flex-direction: column;
+}
+
 .status-dot {
     width: 8px;
     height: 8px;
@@ -2311,6 +2326,12 @@ body.light-mode .btn-primary:hover {
 /* ─── Settings Tab Panel ─── */
 #tab-settings {
     flex-direction: column;
+    overflow: hidden;
+}
+
+#tab-automatisierung,
+#tab-modules {
+    overflow: hidden;
 }
 
 /* ─── Settings Layout (Two-Column) ─── */
