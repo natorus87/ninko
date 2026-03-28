@@ -395,18 +395,23 @@ async def list_repo_modules(request: Request, repo_id: str) -> JSONResponse:
             dirs = [item["name"] for item in resp.json() if item["type"] == "dir"]
             all_modules: list[dict[str, str]] = []
 
-            for mod_name in dirs:
-                manifest_url = (
-                    f"https://api.github.com/repos/{owner}/{repo_name}/contents/"
-                    f"{modules_path}/{mod_name}/manifest.py?ref={branch}"
-                )
-                m_resp = await client.get(manifest_url, headers=headers)
-                if m_resp.status_code == 200:
-                    raw_content = base64.b64decode(m_resp.json().get("content", "")).decode("utf-8", errors="replace")
-                    info = _extract_manifest_info(raw_content)
-                else:
-                    info = {"display_name": mod_name, "description": "", "version": "", "author": ""}
+            # Fetch manifests in parallel via raw.githubusercontent.com (no API rate limit)
+            raw_base = f"https://raw.githubusercontent.com/{owner}/{repo_name}/{branch}"
+            raw_headers = {"Cache-Control": "no-cache"}
 
+            async def _fetch_manifest(mod_name: str) -> dict[str, str]:
+                raw_url = f"{raw_base}/{modules_path}/{mod_name}/manifest.py"
+                try:
+                    m_resp = await client.get(raw_url, headers=raw_headers, timeout=10.0)
+                    if m_resp.status_code == 200:
+                        return _extract_manifest_info(m_resp.text)
+                except Exception:
+                    pass
+                return {"display_name": mod_name, "description": "", "version": "", "author": ""}
+
+            manifests = await asyncio.gather(*[_fetch_manifest(n) for n in dirs])
+
+            for mod_name, info in zip(dirs, manifests):
                 all_modules.append({
                     "name": mod_name,
                     "display_name": info.get("display_name") or mod_name,
