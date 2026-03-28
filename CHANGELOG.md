@@ -7,6 +7,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.6.5] – 2026-03-28
+
+### Added
+
+- **Self-adaptive routing**: The orchestrator can now dynamically adjust its own routing logic at runtime via two new tools:
+  - `configure_routing(preset, tier1_enabled, tier2_enabled, tier3_enabled, tier4_enabled, simple_query_max_chars, llm_routing_enabled, llm_routing_timeout, multistep_detection_enabled)` — the LLM reasons when to call this and which flags to change
+  - `get_routing_info()` — read-only: returns current config + last tier used (registered as safe in `_TOOL_READONLY`)
+- **`RoutingConfig` dataclass** in `orchestrator.py` with all routing parameters as typed fields and `from_dict`/`to_dict` helpers
+- **`ROUTING_PRESETS`** dict: `default` (all tiers, LLM routing on), `fast` (no LLM routing, no Tier 3/4), `module-only` (no Tier 1, no Tier 3/4)
+- **In-process 10s cache** for routing config — no Redis round-trip per message; `_invalidate_routing_cache()` forces immediate reload after tool call
+- Orchestrator `SYSTEM_PROMPT` extended with guidance on when and how to adapt routing
+- `_classify_tier()` now respects all config flags; Tier 3 disabled → fallback to Tier 1
+
+---
+
 ## [0.6.4] – 2026-03-28
 
 ### Changed

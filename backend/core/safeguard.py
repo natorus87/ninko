@@ -524,7 +524,7 @@ _TOOL_READONLY: frozenset[str] = frozenset({
     # Orchestration / meta
     "create_custom_agent", "install_skill",
     "create_linear_workflow", "execute_workflow", "run_pipeline",
-    "generate_image",
+    "generate_image", "get_routing_info",
     # Search
     "perform_web_search",
     # Kubernetes read-only

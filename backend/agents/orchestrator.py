@@ -17,12 +17,13 @@ import json as _json
 import logging
 import re
 import time
+from dataclasses import dataclass, fields as _dc_fields
 from typing import TYPE_CHECKING
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from agents.base_agent import BaseAgent, _t
-from agents.core_tools import execute_cli_command, create_custom_agent, install_skill, create_linear_workflow, execute_workflow, remember_fact, recall_memory, forget_fact, confirm_forget, call_module_agent, run_pipeline
+from agents.core_tools import execute_cli_command, create_custom_agent, install_skill, create_linear_workflow, execute_workflow, remember_fact, recall_memory, forget_fact, confirm_forget, call_module_agent, run_pipeline, configure_routing, get_routing_info
 from modules.image_gen.tools import generate_image
 from core import status_bus
 
@@ -69,6 +70,51 @@ _llm_routing_cache: dict[str, tuple[str | None, float]] = {}  # hash → (module
 _LLM_ROUTING_CACHE_TTL = 60.0  # seconds
 _LLM_ROUTING_TIMEOUT = 8.0     # seconds – kurzer Timeout für Routing-Call
 
+# ── Routing-Konfiguration ─────────────────────────────────────────────────────
+
+@dataclass
+class RoutingConfig:
+    """Laufzeit-Konfiguration für die 4-Tier-Routing-Logik des Orchestrators.
+
+    Alle Felder haben Defaults, die das bisherige Verhalten 1:1 reproduzieren.
+    Wird über AgentConfigStore in Redis persistiert (key: "routing").
+    """
+    tier1_enabled: bool = True
+    tier2_enabled: bool = True
+    tier3_enabled: bool = True
+    tier4_enabled: bool = True
+    simple_query_max_chars: int = 120
+    llm_routing_enabled: bool = True
+    llm_routing_timeout: float = 8.0
+    llm_routing_cache_ttl: float = 60.0
+    multistep_detection_enabled: bool = True
+    preset: str = "default"
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "RoutingConfig":
+        known = {f.name for f in _dc_fields(cls)}
+        return cls(**{k: v for k, v in d.items() if k in known})
+
+    def to_dict(self) -> dict:
+        return {f.name: getattr(self, f.name) for f in _dc_fields(self)}
+
+
+ROUTING_PRESETS: dict[str, dict] = {
+    "default": {},
+    "fast": {
+        "preset": "fast",
+        "llm_routing_enabled": False,
+        "tier3_enabled": False,
+        "tier4_enabled": False,
+    },
+    "module-only": {
+        "preset": "module-only",
+        "tier1_enabled": False,
+        "tier3_enabled": False,
+        "tier4_enabled": False,
+    },
+}
+
 SYSTEM_PROMPT = """Du bist Ninko – ein intelligenter IT-Operations-Assistent mit 4 Verarbeitungsstufen.
 
 Deine Aufgabe:
@@ -93,7 +139,17 @@ MODULÜBERGREIFENDE AUFGABEN:
   - "Prüfe K8s auf Fehler und erstelle GLPI-Ticket" → run_pipeline([{"module":"kubernetes","task":"..."},{"module":"glpi","task":"..."}])
 - `call_module_agent` nur für EINZELNE isolierte Modul-Aufrufe ohne Folgeschritte verwenden.
 
-Verhalte dich professionell, proaktiv und sicherheitsbewusst."""
+Verhalte dich professionell, proaktiv und sicherheitsbewusst.
+
+**Routing-Selbstoptimierung**: Du kannst dein eigenes Routing-Verhalten dynamisch anpassen.
+- Nutze `get_routing_info` um die aktuelle Konfiguration und das zuletzt genutzte Tier zu prüfen.
+- Nutze `configure_routing` wenn:
+  - LLM-Klassifikation wiederholt langsam oder falsch ist → llm_routing_enabled=False
+  - Der User explizit schnellere Antworten möchte → preset='fast'
+  - Tier-3-Agenten immer irrelevant sind → tier3_enabled=False
+  - Alle Anfragen immer zu Modulen sollen (keine Direktantworten) → tier1_enabled=False
+  - Der User preset='default' möchte, um das Routing zurückzusetzen → preset='default'
+- Ändere das Routing nur wenn du einen klaren Grund hast. Kommuniziere kurz, was du geändert hast."""
 
 
 class OrchestratorAgent(BaseAgent):
@@ -107,12 +163,16 @@ class OrchestratorAgent(BaseAgent):
         super().__init__(
             name="orchestrator",
             system_prompt=SYSTEM_PROMPT,
-            tools=[execute_cli_command, create_custom_agent, install_skill, create_linear_workflow, execute_workflow, remember_fact, recall_memory, forget_fact, confirm_forget, call_module_agent, run_pipeline, generate_image],
+            tools=[execute_cli_command, create_custom_agent, install_skill, create_linear_workflow, execute_workflow, remember_fact, recall_memory, forget_fact, confirm_forget, call_module_agent, run_pipeline, generate_image, configure_routing, get_routing_info],
         )
         self.registry = registry
         self._routing_map: dict[str, str] = {}
         self._routing_dirty = True
         self._refresh_routing_map()
+        # ── Self-adaptive routing config ──
+        self._routing_config: RoutingConfig = RoutingConfig()
+        self._routing_config_loaded_at: float = 0.0
+        self._last_tier_used: int = 0
 
     async def _dynamic_prompt_appendix(self) -> str:
         """Fügt eine Übersicht aller verfügbaren Module und konfigurierten Verbindungen an."""
@@ -177,6 +237,24 @@ class OrchestratorAgent(BaseAgent):
 
         return "\n\n".join(parts)
 
+    async def _load_routing_config(self) -> RoutingConfig:
+        """Lädt die Routing-Konfiguration aus Redis (mit 10s In-Process-Cache)."""
+        now = time.monotonic()
+        if now - self._routing_config_loaded_at < 10.0:
+            return self._routing_config
+        try:
+            from core.agent_config_store import AgentConfigStore
+            raw = await AgentConfigStore().get_config("orchestrator")
+            self._routing_config = RoutingConfig.from_dict(raw.get("routing", {}))
+        except Exception as exc:
+            logger.warning("Routing-Config konnte nicht geladen werden: %s – nutze Defaults", exc)
+        self._routing_config_loaded_at = now
+        return self._routing_config
+
+    def _invalidate_routing_cache(self) -> None:
+        """Erzwingt beim nächsten route()-Aufruf ein Neuladen der Routing-Config aus Redis."""
+        self._routing_config_loaded_at = 0.0
+
     def _refresh_routing_map(self) -> None:
         """Routing-Map aus der Registry aktualisieren (nur wenn dirty)."""
         if not self._routing_dirty:
@@ -207,14 +285,26 @@ class OrchestratorAgent(BaseAgent):
             lines.append(f"- {manifest.name}: {desc}{kw_part}")
         return "\n".join(lines)
 
-    async def _llm_classify_module(self, message: str) -> str | None:
+    async def _llm_classify_module(
+        self,
+        message: str,
+        timeout: float | None = None,
+        cache_ttl: float | None = None,
+    ) -> str | None:
         """
         LLM-basierte Modul-Klassifikation — Fallback wenn Keyword-Matching
         keinen eindeutigen Treffer liefert (Score=0 oder Ambiguität).
 
+        Args:
+            timeout: LLM-Timeout in Sekunden (Default: _LLM_ROUTING_TIMEOUT)
+            cache_ttl: Cache-TTL in Sekunden (Default: _LLM_ROUTING_CACHE_TTL)
+
         Returns:
             Modulname (exakt aus Registry) oder None (kein passendes Modul / Fehler).
         """
+        _timeout = timeout if timeout is not None else _LLM_ROUTING_TIMEOUT
+        _cache_ttl = cache_ttl if cache_ttl is not None else _LLM_ROUTING_CACHE_TTL
+
         global _llm_routing_cache
 
         # Cache-Check (verhindert Doppel-Calls bei schnellen Folgenachrichten)
@@ -222,7 +312,7 @@ class OrchestratorAgent(BaseAgent):
         now = time.monotonic()
         if msg_hash in _llm_routing_cache:
             cached_module, cached_ts = _llm_routing_cache[msg_hash]
-            if now - cached_ts < _LLM_ROUTING_CACHE_TTL:
+            if now - cached_ts < _cache_ttl:
                 logger.info(
                     "LLM-Routing Cache-Treffer: '%s…' → '%s'",
                     message[:50], cached_module,
@@ -231,7 +321,7 @@ class OrchestratorAgent(BaseAgent):
 
         # Alte Cache-Einträge bereinigen
         if len(_llm_routing_cache) > 500:
-            cutoff = now - _LLM_ROUTING_CACHE_TTL
+            cutoff = now - _cache_ttl
             _llm_routing_cache = {
                 k: v for k, v in _llm_routing_cache.items() if v[1] > cutoff
             }
@@ -264,7 +354,7 @@ class OrchestratorAgent(BaseAgent):
                     SystemMessage(content=system_prompt),
                     HumanMessage(content=user_prompt),
                 ]),
-                timeout=_LLM_ROUTING_TIMEOUT,
+                timeout=_timeout,
             )
             raw = result.content.strip() if hasattr(result, "content") else str(result).strip()
             # Thinking-Tags entfernen (Qwen3.5 etc.)
@@ -283,7 +373,7 @@ class OrchestratorAgent(BaseAgent):
         except asyncio.TimeoutError:
             logger.warning(
                 "LLM-Routing: Timeout nach %.0fs für '%s…' – Fallback auf Keyword-Matching",
-                _LLM_ROUTING_TIMEOUT, message[:60],
+                _timeout, message[:60],
             )
         except Exception as exc:
             logger.warning(
@@ -296,13 +386,14 @@ class OrchestratorAgent(BaseAgent):
     # Tier-Klassifikation
     # ──────────────────────────────────────────────────────────────────────
 
-    def _is_simple_query(self, message: str) -> bool:
+    def _is_simple_query(self, message: str, cfg: RoutingConfig | None = None) -> bool:
         """
         Stufe 1: Erkennt einfache Fragen / Konversation, die direkt
         beantwortet werden können (ohne Agent-Overhead).
         Kurze Nachrichten ohne operative Action-Verben.
         """
-        if len(message) > 120:
+        max_chars = cfg.simple_query_max_chars if cfg else 120
+        if len(message) > max_chars:
             return False
         msg_lower = message.lower()
         if any(re.search(rf'\b{re.escape(v)}\b', msg_lower) for v in _ACTION_VERBS):
@@ -341,6 +432,7 @@ class OrchestratorAgent(BaseAgent):
         self,
         message: str,
         chat_history: list[dict] | None,
+        cfg: RoutingConfig | None = None,
     ) -> tuple[int, str | None, bool]:
         """
         Klassifiziert eine Anfrage in Tier 1–4.
@@ -352,21 +444,24 @@ class OrchestratorAgent(BaseAgent):
             - tier 3: Dynamischer Agent
             - tier 4: Workflow-Orchestrierung    (is_compound oder multistep)
         """
+        if cfg is None:
+            cfg = RoutingConfig()
+
         # Kontext-Präfixe (Telegram/Teams) vor dem Routing entfernen,
         # damit z. B. "[Telegram Chat-ID: 123]" nicht das telegram-Modul triggert.
         routing_message = self._strip_bot_context(message)
-        target_module, is_compound = await self._detect_module(routing_message, chat_history)
+        target_module, is_compound = await self._detect_module(routing_message, chat_history, cfg)
 
         # Tier 4: Compound (multi-modul) oder explizit mehrstufig
-        if is_compound or self._has_multistep_indicators(routing_message):
+        if cfg.tier4_enabled and (is_compound or (cfg.multistep_detection_enabled and self._has_multistep_indicators(routing_message))):
             return 4, None, True
 
         # Tier 2: Modul erkannt
-        if target_module:
+        if cfg.tier2_enabled and target_module:
             return 2, target_module, False
 
         # Tier 1: Einfache Direktfrage
-        if self._is_simple_query(routing_message):
+        if cfg.tier1_enabled and self._is_simple_query(routing_message, cfg):
             return 1, None, False
 
         # Workflow-Erstellung → Orchestrator mit Core-Tools (Tier 1),
@@ -375,9 +470,13 @@ class OrchestratorAgent(BaseAgent):
             return 1, None, False
 
         # Tier 3: Komplex, aber kein passendes Modul → dynamischer Agent
-        return 3, None, False
+        if cfg.tier3_enabled:
+            return 3, None, False
 
-    async def _detect_module(self, message: str, chat_history: list[dict] | None = None) -> tuple[str | None, bool]:
+        # Tier 3 deaktiviert → Fallback auf direkte LLM-Antwort
+        return 1, None, False
+
+    async def _detect_module(self, message: str, chat_history: list[dict] | None = None, cfg: RoutingConfig | None = None) -> tuple[str | None, bool]:
         """
         Erkennt welches Modul zuständig ist — zweistufig:
         1. Keyword-Matching (Schnellpfad, kein LLM-Call)
@@ -448,18 +547,34 @@ class OrchestratorAgent(BaseAgent):
         # --- STUFE 2: LLM-KLASSIFIKATION (bei Score=0 oder Ambiguität) ---
         if not module_scores:
             # Kein Keyword-Treffer → LLM könnte semantisch matchen
+            if cfg and not cfg.llm_routing_enabled:
+                logger.info("LLM-Routing deaktiviert → kein Modul erkannt für: '%s…'", message[:60])
+                return None, False
             logger.info("Kein Keyword-Treffer → LLM-Klassifikation für: '%s…'", message[:60])
-            llm_module = await self._llm_classify_module(message)
+            llm_module = await self._llm_classify_module(
+                message,
+                timeout=cfg.llm_routing_timeout if cfg else None,
+                cache_ttl=cfg.llm_routing_cache_ttl if cfg else None,
+            )
             if llm_module:
                 return llm_module, False
             return None, False
 
         # Mehrere Module erkannt → Ambiguität → LLM entscheidet: einzelnes Modul oder Compound?
+        if cfg and not cfg.llm_routing_enabled:
+            # Keyword-Ambiguität ohne LLM → bestes Keyword-Ergebnis nehmen
+            logger.info("LLM-Routing deaktiviert bei Ambiguität → nehme Keyword-Spitzenreiter für: '%s…'", message[:60])
+            sorted_m = sorted(module_scores.items(), key=lambda x: x[1], reverse=True)
+            return sorted_m[0][0], False
         logger.info(
             "Keyword-Ambiguität (%s) → LLM-Klassifikation für: '%s…'",
             module_scores, message[:60],
         )
-        llm_module = await self._llm_classify_module(message)
+        llm_module = await self._llm_classify_module(
+            message,
+            timeout=cfg.llm_routing_timeout if cfg else None,
+            cache_ttl=cfg.llm_routing_cache_ttl if cfg else None,
+        )
         if llm_module:
             # LLM hat eindeutig ein Modul identifiziert → kein Compound
             return llm_module, False
@@ -717,6 +832,7 @@ class OrchestratorAgent(BaseAgent):
         await status_bus.emit(session_id, _t("Analysiere deine Anfrage…", "Analyzing your request…"))
 
         self._refresh_routing_map()
+        cfg = await self._load_routing_config()
 
         # ── Direktes Modul-Routing (force_module) ────────────────────────────
         if force_module:
@@ -755,7 +871,8 @@ class OrchestratorAgent(BaseAgent):
                     False,
                 )
 
-        tier, target_module, is_compound = await self._classify_tier(message, chat_history)
+        tier, target_module, is_compound = await self._classify_tier(message, chat_history, cfg)
+        self._last_tier_used = tier
         logger.info("Routing-Stufe %d gewählt für: %s…", tier, message[:80])
 
         # ── Stufe 4: Workflow-Orchestrierung ─────────────────────────────

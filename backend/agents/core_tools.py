@@ -725,3 +725,112 @@ async def speak(text: str, lang: str = "", voice: str = "") -> str:
     except Exception as exc:
         logger.error("speak-Tool Fehler: %s", exc)
         return _t(f"TTS-Fehler: {exc}", f"TTS error: {exc}")
+
+
+# ── Self-Adaptive Routing Tools ───────────────────────────────────────────────
+
+@tool
+async def configure_routing(
+    preset: str = "",
+    tier1_enabled: bool | None = None,
+    tier2_enabled: bool | None = None,
+    tier3_enabled: bool | None = None,
+    tier4_enabled: bool | None = None,
+    simple_query_max_chars: int | None = None,
+    llm_routing_enabled: bool | None = None,
+    llm_routing_timeout: float | None = None,
+    multistep_detection_enabled: bool | None = None,
+) -> str:
+    """Passt das Routing-Verhalten des Orchestrators an.
+
+    Nutze dieses Tool wenn:
+    - Das aktuelle Routing wiederholt suboptimale Ergebnisse liefert
+    - Der User explizit schnellere Antworten möchte (preset='fast')
+    - LLM-Klassifikation langsam oder fehleranfällig ist (llm_routing_enabled=False)
+    - Tier 3 (dynamische Agenten) nicht benötigt wird (tier3_enabled=False)
+    - Alle Anfragen immer zu Modulen sollen, keine Direktantworten (tier1_enabled=False)
+    - Das Routing zurückgesetzt werden soll (preset='default')
+
+    Preset-Kurzformen: 'default', 'fast', 'module-only'
+    Einzelne Felder überschreiben den Preset wenn beide angegeben werden.
+    """
+    from core.agent_config_store import AgentConfigStore
+    from agents.orchestrator import get_orchestrator, RoutingConfig, ROUTING_PRESETS
+
+    orch = get_orchestrator()
+    store = AgentConfigStore()
+
+    # Aktuelle Config laden
+    raw = await store.get_config("orchestrator")
+    current = RoutingConfig.from_dict(raw.get("routing", {}))
+
+    # Preset anwenden
+    if preset:
+        if preset not in ROUTING_PRESETS:
+            return _t(
+                f"Unbekanntes Preset '{preset}'. Verfügbar: {', '.join(ROUTING_PRESETS.keys())}",
+                f"Unknown preset '{preset}'. Available: {', '.join(ROUTING_PRESETS.keys())}",
+            )
+        overrides = ROUTING_PRESETS[preset]
+        current = RoutingConfig.from_dict({**RoutingConfig().to_dict(), **overrides})
+
+    # Einzelne Felder überschreiben
+    updates = {
+        k: v for k, v in {
+            "tier1_enabled": tier1_enabled,
+            "tier2_enabled": tier2_enabled,
+            "tier3_enabled": tier3_enabled,
+            "tier4_enabled": tier4_enabled,
+            "simple_query_max_chars": simple_query_max_chars,
+            "llm_routing_enabled": llm_routing_enabled,
+            "llm_routing_timeout": llm_routing_timeout,
+            "multistep_detection_enabled": multistep_detection_enabled,
+        }.items() if v is not None
+    }
+    if updates:
+        current = RoutingConfig.from_dict({**current.to_dict(), **updates})
+
+    await store.set_config("orchestrator", "routing", current.to_dict())
+    if orch:
+        orch._invalidate_routing_cache()
+
+    cfg_dict = current.to_dict()
+    lines = [
+        f"  Preset: {cfg_dict['preset']}",
+        f"  Tier 1: {'✓' if cfg_dict['tier1_enabled'] else '✗'} | max {cfg_dict['simple_query_max_chars']} Zeichen",
+        f"  Tier 2: {'✓' if cfg_dict['tier2_enabled'] else '✗'} | LLM-Routing: {'✓' if cfg_dict['llm_routing_enabled'] else '✗'} ({cfg_dict['llm_routing_timeout']}s)",
+        f"  Tier 3: {'✓' if cfg_dict['tier3_enabled'] else '✗'}",
+        f"  Tier 4: {'✓' if cfg_dict['tier4_enabled'] else '✗'} | Mehrstufige Erkennung: {'✓' if cfg_dict['multistep_detection_enabled'] else '✗'}",
+    ]
+    return _t(
+        "Routing-Konfiguration aktualisiert:\n" + "\n".join(lines),
+        "Routing configuration updated:\n" + "\n".join(lines),
+    )
+
+
+@tool
+async def get_routing_info() -> str:
+    """Gibt die aktuelle Routing-Konfiguration und das zuletzt genutzte Tier zurück.
+
+    Nützlich um zu prüfen welche Routing-Einstellungen aktiv sind — z.B. bevor
+    configure_routing aufgerufen wird oder um die Routing-Performance zu beurteilen.
+    """
+    from core.agent_config_store import AgentConfigStore
+    from agents.orchestrator import get_orchestrator, RoutingConfig
+
+    orch = get_orchestrator()
+    store = AgentConfigStore()
+    raw = await store.get_config("orchestrator")
+    cfg = RoutingConfig.from_dict(raw.get("routing", {}))
+    last_tier = getattr(orch, "_last_tier_used", "?") if orch else "?"
+    source = "Redis" if raw.get("routing") else "Default"
+
+    return (
+        f"Routing-Konfiguration (Quelle: {source}):\n"
+        f"  Preset: {cfg.preset}\n"
+        f"  Tier 1 (direkt): {'✓' if cfg.tier1_enabled else '✗'} | max {cfg.simple_query_max_chars} Zeichen\n"
+        f"  Tier 2 (Modul): {'✓' if cfg.tier2_enabled else '✗'} | LLM-Fallback: {'✓' if cfg.llm_routing_enabled else '✗'} ({cfg.llm_routing_timeout}s timeout)\n"
+        f"  Tier 3 (dynamisch): {'✓' if cfg.tier3_enabled else '✗'}\n"
+        f"  Tier 4 (Pipeline): {'✓' if cfg.tier4_enabled else '✗'} | Mehrstufige Erkennung: {'✓' if cfg.multistep_detection_enabled else '✗'}\n"
+        f"  Zuletzt genutztes Tier: {last_tier}"
+    )
