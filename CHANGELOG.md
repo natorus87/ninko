@@ -7,6 +7,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.6.1] – 2026-03-28
+
+### Fixed
+
+- **Marketplace: GitHub API rate limit during installation** (`backend/api/routes_plugins.py`) — Three separate GitHub API calls were exhausting the 60 req/h unauthenticated limit:
+  1. Module existence check: replaced `GET /repos/.../contents/{path}` with a `raw.githubusercontent.com` fetch of `__init__.py` (no rate limit).
+  2. File tree listing: replaced `GET /repos/.../git/trees/{branch}?recursive=1` (Git Trees API, still rate-limited) with a full repo tarball download from `https://github.com/{owner}/{repo}/archive/refs/heads/{branch}.tar.gz` — no API at all, no authentication required. Only the relevant module subdirectory is extracted from the tarball.
+  3. Result: the entire install flow now makes **zero** `api.github.com` calls.
+
+- **Installed plugins with `enabled_by_default=False` not loading** (`backend/core/module_registry.py`) — `_load_module()` checked `manifest.enabled_by_default` for plugins too. Modules like `fritzbox`, `homeassistant`, `opnsense`, `wordpress` have `enabled_by_default=False` (since they require explicit configuration before use). When installed via the Marketplace, they were silently blocked at startup. Fix: when `is_plugin=True`, default to `enabled=True` regardless of `enabled_by_default`; an explicit `NINKO_MODULE_<NAME>=false` env var still overrides.
+
+- **Hot-loaded plugin routes shadowed by StaticFiles catch-all** (`backend/core/module_registry.py`) — FastAPI registers a `Mount("/", StaticFiles(...))` at the end of startup. Routes added at startup by `register_routes()` are inserted before this mount. Routes added later by `hot_load_plugin()` via `app.include_router()` were appended after the mount, so Starlette's route iteration hit the `StaticFiles` handler first — returning 404 for every `/api/{plugin}/*` endpoint. Fix: after calling `app.include_router()`, the newly appended routes are detected, removed from the end of `app.router.routes`, and re-inserted immediately before the `StaticFiles` mount.
+
+---
+
 ## [0.6.0] – 2026-03-28
 
 ### Added

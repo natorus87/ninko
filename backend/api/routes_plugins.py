@@ -15,6 +15,7 @@ import re
 import shutil
 import time
 import uuid
+import tarfile
 import zipfile
 from pathlib import Path
 from tempfile import mkdtemp
@@ -115,20 +116,36 @@ async def _download_dir_to_zip(
     zf: zipfile.ZipFile,
     zip_prefix: str,
 ) -> None:
-    """Lädt ein GitHub-Verzeichnis rekursiv in ein ZIP herunter."""
-    url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}?ref={branch}"
-    resp = await client.get(url, headers=headers)
+    """Lädt ein GitHub-Verzeichnis ohne API-Rate-Limit herunter.
+
+    Verwendet den Repo-Tarball (github.com/archive) – kein api.github.com-Aufruf,
+    daher kein Rate-Limit. Extrahiert nur das gewünschte Unterverzeichnis.
+    """
+    tarball_url = f"https://github.com/{owner}/{repo}/archive/refs/heads/{branch}.tar.gz"
+    resp = await client.get(tarball_url, timeout=120.0, follow_redirects=True)
+    if resp.status_code == 404:
+        raise HTTPException(status_code=404, detail=f"Repo '{owner}/{repo}' oder Branch '{branch}' nicht gefunden.")
     resp.raise_for_status()
-    for item in resp.json():
-        if item["type"] == "file":
-            file_resp = await client.get(item["download_url"])
-            file_resp.raise_for_status()
-            zf.writestr(f"{zip_prefix}/{item['name']}", file_resp.content)
-        elif item["type"] == "dir":
-            await _download_dir_to_zip(
-                client, owner, repo, item["path"], branch, headers,
-                zf, f"{zip_prefix}/{item['name']}"
-            )
+
+    prefix = path.rstrip("/") + "/"
+    # Tarball root dir is "{repo}-{branch}/"
+    tar_root = f"{repo}-{branch}/"
+
+    with tarfile.open(fileobj=io.BytesIO(resp.content), mode="r:gz") as tar:
+        for member in tar.getmembers():
+            if not member.isfile():
+                continue
+            # Strip leading "{repo}-{branch}/"
+            rel_to_root = member.name[len(tar_root):] if member.name.startswith(tar_root) else member.name
+            if not rel_to_root.startswith(prefix):
+                continue
+            rel = rel_to_root[len(prefix):]
+            if not rel:
+                continue
+            f = tar.extractfile(member)
+            if f is None:
+                continue
+            zf.writestr(f"{zip_prefix}/{rel}", f.read())
 
 
 def _build_module_list(
@@ -482,14 +499,15 @@ async def install_from_repo(
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
-            check_url = (
-                f"https://api.github.com/repos/{owner}/{repo_name}/contents/"
-                f"{modules_path}/{module_name}?ref={branch}"
+            # Existence check via raw.githubusercontent.com (no API rate limit)
+            raw_base = f"https://raw.githubusercontent.com/{owner}/{repo_name}/{branch}"
+            check_resp = await client.get(
+                f"{raw_base}/{modules_path}/{module_name}/__init__.py", timeout=10.0
             )
-            check_resp = await client.get(check_url, headers=headers)
             if check_resp.status_code == 404:
                 raise HTTPException(status_code=404, detail=f"Modul '{module_name}' nicht im Repo gefunden.")
-            check_resp.raise_for_status()
+            if check_resp.status_code != 200:
+                raise HTTPException(status_code=502, detail=f"Zugriff auf Repo fehlgeschlagen (HTTP {check_resp.status_code}).")
 
             zip_buffer = io.BytesIO()
             with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:

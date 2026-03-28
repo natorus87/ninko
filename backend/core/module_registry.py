@@ -131,11 +131,14 @@ class ModuleRegistry:
             return
 
         # Prüfe ob per Env aktiviert/deaktiviert
+        # Plugins (vom Marketplace installiert) sind immer aktiv, außer eine Env-Var sagt explizit false
         env_key = f"NINKO_MODULE_{manifest.name.upper()}"
         env_val = os.environ.get(env_key)
 
         if env_val is not None:
             enabled = env_val.lower() in ("true", "1", "yes")
+        elif is_plugin:
+            enabled = True  # Installierte Plugins sind standardmäßig aktiv
         else:
             enabled = manifest.enabled_by_default
 
@@ -200,11 +203,28 @@ class ModuleRegistry:
         # Wenn erfolgreich geladen, Route direkt an app hängen
         mod = self._modules.get(modname)
         if mod and mod.router and mod.manifest.api_prefix:
+            # Merke aktuelle Route-Anzahl, um neu hinzugefügte Routen zu identifizieren
+            routes_before = len(app.router.routes)
             app.include_router(
                 mod.router,
                 prefix=mod.manifest.api_prefix,
                 tags=[mod.manifest.display_name],
             )
+            # Neu hinzugefügte Routen vor den StaticFiles-Catch-all-Mount verschieben,
+            # damit sie nicht vom Mount("/") abgefangen werden.
+            new_routes = app.router.routes[routes_before:]
+            if new_routes:
+                from starlette.routing import Mount
+                from fastapi.staticfiles import StaticFiles
+                static_idx = next(
+                    (i for i, r in enumerate(app.router.routes)
+                     if isinstance(r, Mount) and isinstance(getattr(r, "app", None), StaticFiles)),
+                    None,
+                )
+                if static_idx is not None:
+                    del app.router.routes[routes_before:]
+                    for route in reversed(new_routes):
+                        app.router.routes.insert(static_idx, route)
             # Rebuild Middleware Stack to force FastAPI to notice runtime changes
             app.middleware_stack = app.build_middleware_stack()
             logger.info("Hot-Load Router registriert: %s", mod.manifest.api_prefix)
