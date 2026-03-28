@@ -7,6 +7,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.6.3] – 2026-03-28
+
+### Changed
+
+- **Typography: Lora replaces Inter as the UI typeface** (`frontend/style.css`, `frontend/index.html`) — Lora (Google Fonts, serif) is now loaded as the global body font. Monospace code blocks retain their explicit stack (`SF Mono`, `Fira Code`, `Cascadia Code`). All `font-family: inherit` elements inherit Lora automatically.
+- **Logo: Reiko font** (`frontend/style.css`) — The "Ninko" wordmark uses Reiko, a futuristic geometric typeface. Loaded via `@font-face` from `frontend/fonts/Reiko.woff2`. Place the font file there after downloading from https://fontesk.com/reiko-font/ (free for commercial use). Until the file is present, falls back to Georgia/serif.
+
+---
+
 ## [0.6.2] – 2026-03-28
 
 ### Added
