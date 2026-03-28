@@ -7,6 +7,19 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.6.2] – 2026-03-28
+
+### Changed
+
+- **UI: Base font size increased from 14px to 16px** (`frontend/style.css`) — The previous 14px base caused all rem-based measurements to render too small, especially in submenu panels (Automatisierung, Einstellungen, Workflows), settings forms, and task cards. Increasing to the industry-standard 16px scales all rem values proportionally (~14% increase) without breaking any absolute-pixel layout values (sidebar width 250px, header height 60px, etc.).
+- **Buttons: larger padding and font size** — `.btn` padding increased from `0.5rem 1.125rem` to `0.6rem 1.35rem`, font-size from `0.875rem` to `0.9rem`. `.btn-sm` padding from `0.25rem 0.5rem` to `0.35rem 0.75rem`.
+- **Form inputs/selects: taller hit area** — `.form-input`/`.form-select` padding increased to `0.55rem 0.875rem` (previously `0.5rem 0.75rem`).
+- **Form labels: more readable** — `.form-label` font-size from `0.8rem` to `0.85rem`, bottom margin from `0.25rem` to `0.3rem`.
+- **Settings tabs: better touch target** — `.settings-tab` vertical padding from `0.75rem` to `0.85rem`.
+- **Task cards: more breathing room** — `.task-card-header` and `.task-card-body` padding from `0.75rem 1rem` to `0.9rem 1.1rem`. `.task-prompt` font-size `0.875rem`, `.task-meta` `0.8rem`, `.task-badge` font-size `0.75rem` and padding `0.2rem 0.55rem`.
+
+---
+
 ## [0.6.1] – 2026-03-28
 
 ### Fixed
