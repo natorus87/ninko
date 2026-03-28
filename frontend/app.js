@@ -1973,6 +1973,19 @@ const Ninko = {
             { key: 'WORDPRESS_APP_PASSWORD', label: 'Application Password', placeholder: 'xxxx xxxx xxxx xxxx', type: 'password', isSecret: true },
             { key: 'verify_ssl', label: 'SSL verifizieren (Nein bei selbst-signierten Zertifikaten)', type: 'checkbox' },
         ],
+        opnsense: [
+            { key: 'host', label: 'Host / IP (ohne https://)', placeholder: '192.168.1.1:4443' },
+            { key: 'api_key', label: 'API Key', placeholder: '••••••', type: 'password', isSecret: true },
+            { key: 'OPNSENSE_API_SECRET', label: 'API Secret', placeholder: '••••••', type: 'password', isSecret: true },
+        ],
+        qdrant: [
+            { key: 'url', label: 'Qdrant URL', placeholder: 'http://qdrant:6333' },
+            { key: 'QDRANT_API_KEY', label: 'API Key (optional)', placeholder: '••••••', type: 'password', isSecret: true },
+            { key: 'default_collection', label: 'Default Collection (optional)', placeholder: 'ninko_knowledge' },
+        ],
+        tasmota: [
+            { key: 'host', label: 'Host / IP', placeholder: '192.168.1.50' },
+        ],
     },
 
     async loadModulesSettings() {
