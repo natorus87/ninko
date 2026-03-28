@@ -9,6 +9,29 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [0.6.2] – 2026-03-28
 
+### Added
+
+- **Helm Chart** (`charts/ninko/`) — Full Helm chart for the complete Ninko stack, published to `https://natorus87.github.io/ninko/`:
+  - Backend (FastAPI): Deployment, Service, PVC (2 Gi), ServiceAccount, ClusterRole + ClusterRoleBinding
+  - Redis 7-alpine: Deployment, Service, PVC (1 Gi)
+  - ChromaDB 0.4.24 (pinned): Deployment, Service, PVC (5 Gi)
+  - SearXNG (optional): Deployment, Service, ConfigMap with settings.yml
+  - Standard Kubernetes Ingress and Traefik IngressRoute — both optional, both off by default
+  - All resource names are Helm-release-scoped for multi-release coexistence
+  - `secrets.sqliteSecretsKey` is required and validated at install time with a helpful error message
+- **GitHub Actions workflow** (`.github/workflows/helm-release.yml`) — `chart-releaser-action` v1.6.0 auto-packages and publishes the chart on every push to `main` that touches `charts/**`. Updates `index.yaml` on the `gh-pages` branch automatically.
+- **Helm repository** live at `https://natorus87.github.io/ninko/`:
+  ```bash
+  helm repo add ninko https://natorus87.github.io/ninko
+  helm repo update
+  helm install ninko ninko/ninko \
+    --set secrets.sqliteSecretsKey=$(python3 -c "import secrets; print(secrets.token_hex(32))") \
+    --set backend.llm.baseUrl=http://YOUR_LMSTUDIO_HOST:1234 \
+    --set backend.llm.model=YOUR_MODEL \
+    --set ingressRoute.enabled=true \
+    --set ingressRoute.host=ninko.your-domain.local
+  ```
+
 ### Changed
 
 - **UI: Base font size increased from 14px to 16px** (`frontend/style.css`) — The previous 14px base caused all rem-based measurements to render too small, especially in submenu panels (Automatisierung, Einstellungen, Workflows), settings forms, and task cards. Increasing to the industry-standard 16px scales all rem values proportionally (~14% increase) without breaking any absolute-pixel layout values (sidebar width 250px, header height 60px, etc.).
