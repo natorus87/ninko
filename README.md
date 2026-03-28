@@ -11,7 +11,7 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.5.6-blue.svg" alt="Version"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.5.12-blue.svg" alt="Version"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-beta-orange.svg" alt="Status"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.12-blue.svg" alt="Python"></a>
   <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.115-green.svg" alt="FastAPI"></a>
@@ -25,7 +25,7 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 ## Features
 
 - **Chat Interface** – Control your entire IT infrastructure in natural language
-- **15 built-in modules** – Kubernetes, Proxmox, GLPI, FritzBox, Pi-hole, Home Assistant, IONOS DNS, Docker, WordPress, and more
+- **19 built-in modules** – Kubernetes, Proxmox, GLPI, FritzBox, Pi-hole, Home Assistant, IONOS DNS, Docker, WordPress, Teams, Qdrant, Tasmota, OPNsense, and more
 - **4-tier orchestrator routing** – Direct / Module Agent / Dynamic Agent / Pipeline
 - **Long-term memory** – ChromaDB-backed semantic memory across all sessions
 - **Local LLMs** – Ollama, LM Studio, or any OpenAI-compatible API (no cloud required)
@@ -130,7 +130,7 @@ On first start, configure your LLM backend under **Settings → LLM Provider** (
 │        Auto-Discovery · backend/modules/             │
 └──────┬──────────┬──────────┬──────────┬─────────────┘
        │          │          │          │
-  Kubernetes  Proxmox     GLPI      + 12 more modules
+   Kubernetes  Proxmox     GLPI      + 16 more modules
        │          │          │
 ┌──────▼──────────▼──────────▼──────────────────────┐
 │  LLM-Factory  │  ChromaDB  │  Redis  │  Vault/SQLite │
@@ -157,12 +157,16 @@ The core code contains **no module names**. Every module registers itself at sta
 | `pihole` | Pi-hole v6: blocking, statistics, query log, custom DNS |
 | `web_search` | SearXNG-based web search (Bing, Mojeek, Qwant) |
 | `telegram` | Bot with voice transcription and TTS replies |
+| `teams` | Microsoft Teams messaging with webhooks |
 | `email` | SMTP sending and IMAP retrieval |
 | `wordpress` | Posts, media, pages via WordPress REST API |
 | `codelab` | Code execution and debugging |
 | `docker` | Container management via Docker API |
 | `linux_server` | Server administration via SSH |
 | `image_gen` | AI image generation |
+| `qdrant` | Vector database management |
+| `tasmota` | Tasmota IoT device control |
+| `opnsense` | OPNsense firewall management |
 
 Modules are enabled via environment variables:
 
