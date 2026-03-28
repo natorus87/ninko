@@ -2040,7 +2040,7 @@ const Ninko = {
             `).join('');
 
             // Load connections for enabled modules
-            for (const mod of this.modules) {
+            for (const mod of modules) {
                 if (mod.enabled && this.ACTION_FIELDS[mod.name]) {
                     await this.loadModuleConnections(mod.name);
                 } else if (mod.enabled) {
@@ -2058,7 +2058,11 @@ const Ninko = {
     toggleModuleSettings(name) {
         const connContainer = document.getElementById(`mod-connections-container-${name}`);
         if (connContainer) {
-            connContainer.style.display = connContainer.style.display === 'none' ? 'block' : 'none';
+            const opening = connContainer.style.display === 'none';
+            connContainer.style.display = opening ? 'block' : 'none';
+            if (opening && this.ACTION_FIELDS[name]) {
+                this.loadModuleConnections(name);
+            }
         }
     },
 
