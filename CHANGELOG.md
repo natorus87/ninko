@@ -7,6 +7,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.5.12] – 2026-03-28
+
+### Fixed
+
+- **OPNsense `tools.py`: API key never retrieved from Vault** — `_get_opnsense_auth()` only loaded `OPNSENSE_API_SECRET` from Vault; `api_key` (stored via `isSecret: true` in the connection form) was silently ignored, so all API calls were unauthenticated. Added Vault lookup for `api_key` via `conn.vault_keys.get("api_key")`.
+- **OPNsense `get_opnsense_system_status`: wrong endpoint** — `/api/core/system/status` returns only plugin metadata (`{"metadata": {...}}`), not system metrics. Replaced with `asyncio.gather` of four correct endpoints: `systemTime` (uptime, loadavg), `firmware/info` (version), `systemResources` (memory used/total), `systemDisk` (disk usage %). Return value now contains `uptime` as a human-readable string and `cpu` as a float (1-minute load average, not %).
+- **OPNsense `tab.js`: uptime rendered as raw seconds** — `formatUptime(status.uptime)` converted an integer seconds value that no longer exists; `status.uptime` is now a string like `"6 days, 14:38:16"`. Fixed to `${status.uptime || '-'}`. Removed the now-unused `formatUptime` helper.
+- **OPNsense `tab.js`: CPU label and format** — Label was `CPU` and value was `${status.cpu || 0}%`. Since the backend now returns a 1-minute load average float, the label is changed to `Load (1m)` and the value uses `.toFixed(2)` instead of appending `%`.
+- **OPNsense `tab.js`: services always showing "Inaktiv"** — Template used `svc.enabled` but `tools.py` was changed (v0.5.11) to return `svc.running` (bool). Updated to `svc.running`.
+- **`app.js`: "Lade Verbindungen..." stuck for OPNsense, Qdrant, Tasmota** — Missing `ACTION_FIELDS` entries caused the connection settings panel to spin forever. Added form field definitions for all three modules.
+- **`k8s-conbro/backend/deployment.yaml`: wrong deployment name** — `metadata.name` was `ninko-backend` instead of `kumio-backend`, causing `kubectl apply` to create a second spurious deployment rather than updating the live one. Corrected name and added explicit `namespace: kumio`. Spurious `ninko-backend` deployment removed from cluster.
+- **`k8s-conbro/backend/deployment.yaml`: Qdrant module enabled** — Added `NINKO_MODULE_QDRANT: "true"` env var.
+
+---
+
 ## [0.5.11] – 2026-03-28
 
 ### Fixed

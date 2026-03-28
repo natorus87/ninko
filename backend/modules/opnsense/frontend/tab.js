@@ -157,14 +157,6 @@ const OPNsenseTab = {
             const interfaces = interfacesData.data || [];
             const services = servicesData.data || [];
 
-            const formatUptime = (secs) => {
-                if (!secs) return '-';
-                const d = Math.floor(secs / 86400);
-                const h = Math.floor((secs % 86400) / 3600);
-                const m = Math.floor((secs % 3600) / 60);
-                return `${d}d ${h}h ${m}m`;
-            };
-
             const getStatusClass = (st) => {
                 if (st === 'online' || st === 'up') return 'status-online';
                 if (st === 'down' || st === 'offline') return 'status-offline';
@@ -184,11 +176,11 @@ const OPNsenseTab = {
                     </div>
                     <div class="opnsense-stat">
                         <span class="opnsense-stat-label">Uptime</span>
-                        <span class="opnsense-stat-value">${formatUptime(status.uptime)}</span>
+                        <span class="opnsense-stat-value">${status.uptime || '-'}</span>
                     </div>
                     <div class="opnsense-stat">
-                        <span class="opnsense-stat-label">CPU</span>
-                        <span class="opnsense-stat-value">${status.cpu || 0}%</span>
+                        <span class="opnsense-stat-label">Load (1m)</span>
+                        <span class="opnsense-stat-value">${status.cpu !== undefined ? status.cpu.toFixed(2) : '-'}</span>
                     </div>
                     <div class="opnsense-stat">
                         <span class="opnsense-stat-label">Memory</span>
@@ -216,7 +208,7 @@ const OPNsenseTab = {
                     ${services.slice(0, 8).map(svc => `
                         <div class="opnsense-stat">
                             <span class="opnsense-stat-label">${svc.description || svc.name}</span>
-                            <span class="opnsense-stat-value ${svc.enabled ? 'status-online' : 'status-offline'}">${svc.enabled ? 'Aktiv' : 'Inaktiv'}</span>
+                            <span class="opnsense-stat-value ${svc.running ? 'status-online' : 'status-offline'}">${svc.running ? 'Aktiv' : 'Inaktiv'}</span>
                         </div>
                     `).join('')}
                 </div>

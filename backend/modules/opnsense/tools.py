@@ -4,6 +4,7 @@ OPNsense Modul – LangGraph @tool-Funktionen.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from typing import Any, Dict, List, Optional
@@ -35,9 +36,12 @@ async def _get_opnsense_auth(connection_id: str = "") -> tuple:
         api_secret = conn.config.get("api_secret", "")
 
         vault = get_vault()
-        secret_key = conn.vault_keys.get("OPNSENSE_API_SECRET")
-        if secret_key:
-            api_secret = await vault.get_secret(secret_key) or api_secret
+        api_key_vk = conn.vault_keys.get("api_key")
+        if api_key_vk:
+            api_key = await vault.get_secret(api_key_vk) or api_key
+        secret_vk = conn.vault_keys.get("OPNSENSE_API_SECRET")
+        if secret_vk:
+            api_secret = await vault.get_secret(secret_vk) or api_secret
 
         return host, (api_key, api_secret)
 
@@ -91,20 +95,32 @@ async def get_opnsense_system_status(connection_id: str = "") -> Dict:
     """
     try:
         host, _ = await _get_opnsense_auth(connection_id)
-        result = await _opnsense_request("/api/core/system/status", connection_id)
 
-        sys = result.get("system", {})
-        cpu = sys.get("cpu", 0)
-        mem = sys.get("mem", 0)
-        disk = sys.get("disk", 0)
+        time_data, fw_data, mem_data, disk_data = await asyncio.gather(
+            _opnsense_request("/api/diagnostics/system/systemTime", connection_id),
+            _opnsense_request("/api/core/firmware/info", connection_id),
+            _opnsense_request("/api/diagnostics/system/systemResources", connection_id),
+            _opnsense_request("/api/diagnostics/system/systemDisk", connection_id),
+        )
+
+        mem = mem_data.get("memory", {})
+        mem_total = int(mem.get("total") or 1)
+        mem_used = int(mem.get("used") or 0)
+        mem_pct = round(mem_used / mem_total * 100)
+
+        devices = disk_data.get("devices", [])
+        disk_pct = devices[0].get("used_pct", 0) if devices else 0
+
+        loadavg = time_data.get("loadavg", "0, 0, 0")
+        load_1m = float(loadavg.split(",")[0].strip()) if loadavg else 0.0
 
         return {
-            "firmware": sys.get("firmware"),
-            "version": sys.get("version"),
-            "uptime": sys.get("uptime"),
-            "cpu": cpu,
-            "memory": mem,
-            "disk": disk,
+            "version": fw_data.get("product_version", ""),
+            "firmware": fw_data.get("product_id", "OPNsense"),
+            "uptime": time_data.get("uptime", ""),
+            "cpu": load_1m,
+            "memory": mem_pct,
+            "disk": disk_pct,
             "host": host,
         }
     except Exception as e:
