@@ -28,6 +28,10 @@ class ChatRequest(BaseModel):
         default=False,
         description="Explizite Bestätigung für destruktive/state-ändernde Aktionen (Safeguard)",
     )
+    force_module: str | None = Field(
+        default=None,
+        description="Wenn gesetzt, wird die Nachricht direkt an dieses Modul geroutet (bypasses 4-Tier-Analyse).",
+    )
 
 
 class ChatResponse(BaseModel):

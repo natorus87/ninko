@@ -82,6 +82,7 @@ const Ninko = {
     _safeguardEnabled: true,
     _safeguardPendingMessage: null,
     _confirmedPending: false,
+    _forcedModule: null,
 
     // ─── SVG Icon Library (Lucide-style, currentColor) ───
     _ic: {
@@ -219,8 +220,8 @@ const Ninko = {
 
     // ─── Modules ───
     async loadModules() {
-        // Fix: All sidebar tabs need click handlers (top, bottom, automatisierung)
-        document.querySelectorAll('#nav-tabs-top .nav-tab[data-tab], #nav-tabs-bottom .nav-tab[data-tab], #nav-tabs-automatisierung .nav-tab[data-tab]').forEach(tab => {
+        // Register click handlers for all primary nav tabs
+        document.querySelectorAll('#nav-tabs-top .nav-tab[data-tab], #nav-tabs-bottom .nav-tab[data-tab]').forEach(tab => {
             const tabId = tab.dataset.tab;
             if (tabId) {
                 tab.addEventListener('click', () => this.switchTab(tabId));
@@ -232,7 +233,7 @@ const Ninko = {
             if (!res.ok) throw new Error(res.statusText);
             this.modules = await res.json();
 
-            const navTabsSec = document.getElementById('nav-tabs-secondary');
+            const modulesSidebar = document.getElementById('modules-nav-sidebar');
             const mainContent = document.getElementById('main-content');
 
             for (const mod of this.modules) {
@@ -241,18 +242,15 @@ const Ninko = {
                 const tab = mod.dashboard_tab || {};
                 const tabId = tab.id || mod.name;
 
-                // Nav Tab
-                const li = document.createElement('li');
-                li.className = 'nav-tab';
-                li.dataset.tab = tabId;
-                li.innerHTML = `
-                    <span class="tab-icon">${tab.icon || '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>'}</span>
-                    <span class="tab-label">${tab.label || mod.display_name}</span>
-                `;
-                li.addEventListener('click', () => {
-                    this.switchTab(tabId);
+                // Nav Button in modules sidebar
+                const btn = document.createElement('button');
+                btn.className = 'settings-tab';
+                btn.dataset.moduleTab = tabId;
+                btn.innerHTML = `${tab.icon || '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>'}<span>${tab.label || mod.display_name}</span>`;
+                btn.addEventListener('click', () => {
+                    this.switchModuleTab(tabId);
                 });
-                navTabsSec.appendChild(li);
+                modulesSidebar.appendChild(btn);
 
                 // Tab Panel
                 const panel = document.createElement('div');
@@ -285,75 +283,108 @@ const Ninko = {
                     // JS optional
                 }
             }
+            this._buildModulePicker();
         } catch (err) {
             console.error('Module konnten nicht geladen werden:', err);
         }
     },
 
+    _buildModulePicker() {
+        const dropdown = document.getElementById('module-picker-dropdown');
+        if (!dropdown) return;
+        const enabledMods = this.modules.filter(m => m.enabled);
+        const autoLabel = t('chat.moduleAuto');
+        const items = [
+            `<button class="module-picker-item${this._forcedModule === null ? ' selected' : ''}" onclick="Ninko.setForcedModule(null)">
+                ${autoLabel}
+            </button>`,
+            enabledMods.length ? '<div class="module-picker-divider"></div>' : '',
+            ...enabledMods.map(m => {
+                const icon = m.dashboard_tab?.icon || '';
+                const label = m.display_name || m.name;
+                return `<button class="module-picker-item${this._forcedModule === m.name ? ' selected' : ''}" onclick="Ninko.setForcedModule('${m.name}')">
+                    ${icon ? icon + ' ' : ''}${label}
+                </button>`;
+            }),
+        ];
+        dropdown.innerHTML = items.join('');
+    },
+
+    toggleModulePicker(event) {
+        event.stopPropagation();
+        const picker = document.getElementById('module-picker');
+        const dropdown = document.getElementById('module-picker-dropdown');
+        if (!dropdown) return;
+        const isOpen = dropdown.style.display !== 'none';
+        if (isOpen) {
+            dropdown.style.display = 'none';
+            picker.classList.remove('open');
+        } else {
+            dropdown.style.display = 'block';
+            picker.classList.add('open');
+            const close = (e) => {
+                if (!picker.contains(e.target)) {
+                    dropdown.style.display = 'none';
+                    picker.classList.remove('open');
+                    document.removeEventListener('click', close);
+                }
+            };
+            setTimeout(() => document.addEventListener('click', close), 0);
+        }
+    },
+
+    setForcedModule(name) {
+        this._forcedModule = name;
+        const btn = document.getElementById('module-picker-btn');
+        const label = document.getElementById('module-picker-label');
+        if (name === null) {
+            label.textContent = t('chat.moduleAuto');
+            btn.classList.remove('active');
+        } else {
+            const mod = this.modules.find(m => m.name === name);
+            label.textContent = mod ? (mod.display_name || name) : name;
+            btn.classList.add('active');
+        }
+        this._buildModulePicker();
+        const dropdown = document.getElementById('module-picker-dropdown');
+        const picker = document.getElementById('module-picker');
+        if (dropdown) dropdown.style.display = 'none';
+        if (picker) picker.classList.remove('open');
+    },
+
     initSidebarTransitions() {
-        const panels = document.getElementById('sidebar-panels');
-
-        // Automatisierung trigger
-        const autoTrigger = document.getElementById('nav-automatisierung-trigger');
-        const autoBackBtn = document.getElementById('btn-auto-back');
-        if (autoTrigger && panels) {
-            autoTrigger.addEventListener('click', () => {
-                panels.classList.remove('show-secondary');
-                panels.classList.add('show-automatisierung');
-            });
-        }
-        if (autoBackBtn && panels) {
-            autoBackBtn.addEventListener('click', () => {
-                panels.classList.remove('show-automatisierung');
-            });
-        }
-
-        // Module trigger
-        const modTrigger = document.getElementById('nav-modules-trigger');
-        const modBackBtn = document.getElementById('btn-sidebar-back');
-        if (modTrigger && panels) {
-            modTrigger.addEventListener('click', () => {
-                panels.classList.remove('show-automatisierung');
-                panels.classList.add('show-secondary');
-            });
-        }
-        if (modBackBtn && panels) {
-            modBackBtn.addEventListener('click', () => {
-                panels.classList.remove('show-secondary');
-            });
-        }
+        // Slide panels removed — Automatisierung and Modules are now full tab panels
     },
 
 
     // ─── Tab Switching ───
     switchTab(tabId) {
-        // Deactivate old
+        // Redirect tasks/agents/workflows through the automatisierung tab
+        if (['tasks', 'agents', 'workflows'].includes(tabId)) {
+            if (this.activeTab !== 'automatisierung') {
+                this._doSwitchTab('automatisierung');
+            }
+            this.switchAutoTab(tabId);
+            return;
+        }
+        this._doSwitchTab(tabId);
+    },
+
+    _doSwitchTab(tabId) {
+        // Deactivate all nav tabs and tab panels
         document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
 
-        // Slide back sidebar panels when switching to a tab
-        const panels = document.getElementById('sidebar-panels');
-        if (panels) {
-            const autoTabs = ['tasks', 'agents', 'workflows'];
-            if (autoTabs.includes(tabId)) {
-                panels.classList.remove('show-automatisierung');
-            } else if (tabId !== 'chat') {
-                // Module tab or logs — close any open panel
-                panels.classList.remove('show-automatisierung');
-                panels.classList.remove('show-secondary');
-            }
-        }
-
-        // If leaving logs, stop polling
-        if (this.activeTab === 'logs' && tabId !== 'logs') {
+        // Stop log polling when leaving settings
+        if (this.activeTab === 'settings' && tabId !== 'settings') {
             this.stopLogPolling();
         }
-        // If leaving workflows, stop run refresh timer
-        if (this.activeTab === 'workflows' && tabId !== 'workflows') {
+        // Stop workflows run-refresh timer when leaving automatisierung while on workflows
+        if (this.activeTab === 'automatisierung' && this._activeAutoTab === 'workflows') {
             clearInterval(this._wfRunRefreshTimer);
         }
 
-        // Activate new
+        // Activate new nav tab and panel
         document.querySelector(`.nav-tab[data-tab="${tabId}"]`)?.classList.add('active');
         const panel = document.getElementById(`tab-${tabId}`);
         if (panel) panel.classList.add('active');
@@ -366,19 +397,91 @@ const Ninko = {
             historySection.style.display = tabId === 'chat' ? '' : 'none';
         }
 
-        // Initialize tasks (Aufgaben) tab
-        if (tabId === 'tasks') {
-            this.loadScheduledTasks();
+        // Tab-specific init
+        if (tabId === 'automatisierung') {
+            // Show last active sub-tab, default to tasks
+            this.switchAutoTab(this._activeAutoTab || 'tasks');
+        }
+        if (tabId === 'modules') {
+            // Re-show active module panel, or select first module
+            if (this._activeModuleTab) {
+                this.switchModuleTab(this._activeModuleTab);
+            } else if (this.modules?.length) {
+                const first = this.modules.find(m => m.enabled);
+                if (first) this.switchModuleTab((first.dashboard_tab?.id) || first.name);
+            }
+        }
+        if (tabId === 'logs') this.startLogPolling();
+        if (tabId === 'settings') this.loadSettingsContent();
+
+        // Init module tab if navigated directly (e.g. from chat toolbar)
+        const tabObj = this.getTabObject(tabId);
+        if (tabObj && typeof tabObj.init === 'function' && !tabObj._initialized) {
+            tabObj.init();
+            tabObj._initialized = true;
+        }
+    },
+
+    // ─── Automatisierung Sub-Tab Switching ───
+    switchAutoTab(tabId) {
+        // Stop workflows timer when leaving workflows sub-tab
+        if (this._activeAutoTab === 'workflows' && tabId !== 'workflows') {
+            clearInterval(this._wfRunRefreshTimer);
         }
 
-        // Initialize agents tab
-        if (tabId === 'agents') {
-            this.loadAgents();
-        } else if (tabId === 'workflows') {
-            this.loadWorkflows();
-        } else if (tabId === 'logs') {
-            this.startLogPolling();
+        // Restore previous panel back to main-content (hidden)
+        if (this._activeAutoTab && this._activeAutoTab !== tabId) {
+            const prev = document.getElementById(`tab-${this._activeAutoTab}`);
+            if (prev) {
+                document.getElementById('main-content')?.appendChild(prev);
+                prev.classList.remove('active');
+            }
         }
+
+        // Update sidebar active state
+        document.querySelectorAll('#auto-sidebar .settings-tab').forEach(t => t.classList.remove('active'));
+        document.querySelector(`#auto-sidebar .settings-tab[data-auto-tab="${tabId}"]`)?.classList.add('active');
+
+        // Move panel into auto-content and activate
+        const autoContent = document.getElementById('auto-content');
+        const panel = document.getElementById(`tab-${tabId}`);
+        if (autoContent && panel) {
+            autoContent.appendChild(panel);
+            panel.classList.add('active');
+        }
+
+        this._activeAutoTab = tabId;
+
+        // Load content
+        if (tabId === 'tasks') this.loadScheduledTasks();
+        if (tabId === 'agents') this.loadAgents();
+        if (tabId === 'workflows') this.loadWorkflows();
+    },
+
+    // ─── Module Sub-Tab Switching ───
+    switchModuleTab(tabId) {
+        // Restore previous module panel back to main-content
+        if (this._activeModuleTab && this._activeModuleTab !== tabId) {
+            const prev = document.getElementById(`tab-${this._activeModuleTab}`);
+            if (prev) {
+                document.getElementById('main-content')?.appendChild(prev);
+                prev.classList.remove('active');
+            }
+        }
+
+        // Update sidebar active state
+        document.querySelectorAll('#modules-nav-sidebar .settings-tab').forEach(t => t.classList.remove('active'));
+        document.querySelector(`#modules-nav-sidebar .settings-tab[data-module-tab="${tabId}"]`)?.classList.add('active');
+
+        // Move panel into modules-content and activate
+        const modContent = document.getElementById('modules-content');
+        const panel = document.getElementById(`tab-${tabId}`);
+        if (modContent && panel) {
+            modContent.appendChild(panel);
+            panel.classList.add('active');
+        }
+
+        this._activeModuleTab = tabId;
 
         // Init module tab if it has an init function
         const tabObj = this.getTabObject(tabId);
@@ -406,6 +509,8 @@ const Ninko = {
             'linux_server': typeof LinuxServerTab !== 'undefined' ? LinuxServerTab : null,
             'wordpress': typeof WordPressTab !== 'undefined' ? WordPressTab : null,
             'qdrant': typeof QdrantTab !== 'undefined' ? QdrantTab : null,
+            'tasmota': typeof TasmotaTab !== 'undefined' ? TasmotaTab : null,
+            'opnsense': typeof OPNsenseTab !== 'undefined' ? OPNsenseTab : null,
         };
         // Fallback: dynamisch registrierte Plugin-Tabs (via Ninko._pluginTabs)
         return map[tabId] || this._pluginTabs[tabId] || null;
@@ -558,8 +663,12 @@ const Ninko = {
         const text = input.value.trim();
         if (!text) return;
 
+        const isConfirmation = this._confirmedPending;
+
         input.value = '';
-        this.addChatMessage('user', text);
+        if (!isConfirmation) {
+            this.addChatMessage('user', text);
+        }
         this.showTyping();
         this._setChatBusy(true);
 
@@ -601,6 +710,7 @@ const Ninko = {
                     message: text,
                     session_id: this.sessionId,
                     confirmed: confirmedNow,
+                    ...(this._forcedModule ? { force_module: this._forcedModule } : {}),
                 }),
                 signal: this._abortController.signal,
             });
@@ -914,7 +1024,6 @@ const Ninko = {
         div.className = `chat-message ${role}`;
         div.dataset.msgId = msgId;
         div.innerHTML = `
-            <div class="chat-avatar">${avatar}</div>
             <div class="chat-bubble-group">
                 <div class="chat-bubble">${this.formatText(text)}</div>
                 <div class="chat-actions">
@@ -1157,7 +1266,6 @@ const Ninko = {
         div.className = 'chat-message ai';
         div.id = 'typing-indicator';
         div.innerHTML = `
-            <div class="chat-avatar"><img src="/static/images/chat_fox.png" class="chat-avatar-fox" alt="AI"></div>
             <div class="chat-bubble typing-bubble">
                 <div class="typing-steps" id="typing-steps">
                     <div class="typing-step typing-step-active">
@@ -1303,15 +1411,13 @@ const Ninko = {
 
     // ─── Settings ───
     toggleSettings() {
-        const modal = document.getElementById('settings-modal');
-        modal.classList.toggle('hidden');
-
-        if (!modal.classList.contains('hidden')) {
-            this.loadSettingsContent();
-        }
+        this.switchTab('settings');
     },
 
     switchSettingsTab(tabId) {
+        // Stop log polling when leaving logs sub-panel
+        this.stopLogPolling();
+
         document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
 
@@ -1325,6 +1431,7 @@ const Ninko = {
         if (tabId === 'language') this.renderLanguageTab();
         if (tabId === 'tts') { this.loadSttSettings(); this.loadTtsSettings(); this.loadTtsVoices(); }
         if (tabId === 'imagegen') this.loadImageGenProvider();
+        if (tabId === 'logs') this.startLogPolling();
     },
 
     // ─── Language ───

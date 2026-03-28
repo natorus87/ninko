@@ -235,6 +235,7 @@ body.resizing {
     padding: 0 1.25rem;
     display: flex;
     align-items: center;
+    justify-content: space-between;
     border-bottom: 1px solid var(--border-color);
 }
 
@@ -583,11 +584,114 @@ body.resizing {
     white-space: nowrap;
 }
 
+.chat-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-width: 0;
+    flex: 1;
+}
+
 .chat-toolbar-actions {
     display: flex;
     align-items: center;
     gap: 0.25rem;
     flex-shrink: 0;
+}
+
+/* ─── Module Picker ─── */
+.module-picker {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.module-picker-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.32rem 0.75rem 0.32rem 0.6rem;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.84rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    white-space: nowrap;
+    line-height: 1.2;
+}
+
+.module-picker-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--border-hover, var(--accent-blue));
+}
+
+.module-picker-btn.active {
+    background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
+    border-color: var(--accent-blue);
+    color: var(--accent-blue);
+}
+
+.module-picker-chevron {
+    opacity: 0.6;
+    transition: transform 0.15s;
+}
+
+.module-picker.open .module-picker-chevron {
+    transform: rotate(180deg);
+}
+
+.module-picker-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    min-width: 180px;
+    max-height: 320px;
+    overflow-y: auto;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+    z-index: 200;
+    padding: 4px 0;
+}
+
+.module-picker-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0.8rem;
+    font-size: 0.82rem;
+    color: var(--text-primary);
+    cursor: pointer;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+    transition: background 0.1s;
+}
+
+.module-picker-item:hover {
+    background: var(--bg-hover);
+}
+
+.module-picker-item.selected {
+    color: var(--accent-blue);
+    font-weight: 500;
+}
+
+.module-picker-item.selected::after {
+    content: "✓";
+    margin-left: auto;
+    font-size: 0.75rem;
+}
+
+.module-picker-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: 4px 0;
 }
 
 /* ─── Chat Container ─── */
@@ -690,6 +794,9 @@ body.resizing {
     overflow-y: auto;
     padding: 1.5rem 2rem;
     scroll-behavior: smooth;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
 
 .welcome-message {
@@ -849,9 +956,9 @@ body.light-mode .welcome-illustration {
 /* Chat Messages */
 .chat-message {
     display: flex;
-    gap: 1rem;
     margin-bottom: 1.5rem;
-    max-width: 850px;
+    width: 100%;
+    max-width: 760px;
     animation: messageIn 300ms ease;
 }
 
@@ -859,11 +966,13 @@ body.light-mode .welcome-illustration {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
-    max-width: 70%;
+    max-width: 100%;
+    width: 100%;
 }
 
-.chat-message.ai .chat-bubble-group {
-    max-width: 90%;
+.chat-message.user .chat-bubble-group {
+    max-width: 70%;
+    width: auto;
 }
 
 .chat-actions {
@@ -926,7 +1035,7 @@ body.light-mode .welcome-illustration {
 
 .chat-message.user {
     flex-direction: row-reverse;
-    margin-left: auto;
+    justify-content: flex-start;
 }
 
 .chat-avatar {
@@ -1047,20 +1156,23 @@ body.light-mode .chat-bubble tbody tr:nth-child(even) td {
 }
 
 .chat-message.ai .chat-bubble {
-    background: var(--bg-chat-ai);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-lg);
-    border-bottom-left-radius: var(--radius-sm);
-    box-shadow: var(--shadow-sm);
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0.25rem 0;
+    border-radius: 0;
 }
 
 #typing-indicator .chat-bubble {
-    padding: 0.6rem 1rem;
+    padding: 0.25rem 0;
     min-width: unset;
     max-width: fit-content;
     width: fit-content;
     white-space: normal;
     overflow: hidden;
+    background: transparent;
+    border: none;
+    box-shadow: none;
 }
 
 .chat-bubble code {
@@ -2183,6 +2295,11 @@ body.light-mode .btn-primary:hover {
     max-width: 960px;
 }
 
+/* ─── Settings Tab Panel ─── */
+#tab-settings {
+    flex-direction: column;
+}
+
 /* ─── Settings Layout (Two-Column) ─── */
 .settings-layout {
     display: flex;
@@ -2284,6 +2401,37 @@ body.light-mode .btn-primary:hover {
 
 .settings-panel.active {
     display: block;
+}
+
+/* Logs panel in settings: negate padding, fill height */
+#tab-settings:has(#settings-panel-logs.active) .settings-main {
+    padding: 0;
+    overflow: hidden;
+}
+#settings-panel-logs {
+    height: 100%;
+    overflow: hidden;
+}
+#settings-panel-logs .logs-layout {
+    height: 100%;
+}
+
+/* ─── Automatisierung / Modules two-column content area ─── */
+.auto-content {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.auto-content .tab-panel {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+.auto-content .tab-panel.active {
+    display: flex;
+    flex-direction: column;
 }
 
 /* ─── Form Elements ─── */

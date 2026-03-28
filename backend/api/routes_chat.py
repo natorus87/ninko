@@ -21,10 +21,46 @@ from schemas.chat import (
 from core.redis_client import get_redis
 from core.context_manager import get_context_manager
 from core import status_bus
-from agents.base_agent import _t
+from agents.base_agent import _t, _TOOL_SAFEGUARD_SENTINEL
 
 logger = logging.getLogger("ninko.api.chat")
 router = APIRouter(prefix="/api/chat", tags=["Chat"])
+
+
+def _parse_sentinel(response_text: str) -> dict:
+    """Extrahiert Tool-Infos aus dem Safeguard-Sentinel-String."""
+    try:
+        return json.loads(response_text[len(_TOOL_SAFEGUARD_SENTINEL):])
+    except Exception:
+        return {}
+
+
+def _tool_confirmation_response(info: dict, session_id: str) -> ChatResponse:
+    """Baut eine ChatResponse für eine Tool-Level Safeguard Confirmation."""
+    tool_name = info.get("tool_name", "unbekannt")
+    category  = info.get("category", "UNKNOWN")
+    rationale = info.get("rationale", "")
+    return ChatResponse(
+        response=_t(
+            f"⚠️ **Tool-Bestätigung erforderlich**\n\n"
+            f"Der Agent möchte folgendes Tool ausführen:\n\n"
+            f"**Tool:** `{tool_name}`\n"
+            f"**Kategorie:** {category}\n"
+            f"**Begründung:** {rationale}\n\n"
+            f"Sende die Nachricht erneut mit `confirmed: true` um fortzufahren.",
+            f"⚠️ **Tool Confirmation Required**\n\n"
+            f"The agent wants to execute a tool:\n\n"
+            f"**Tool:** `{tool_name}`\n"
+            f"**Category:** {category}\n"
+            f"**Rationale:** {rationale}\n\n"
+            f"Resend the message with `confirmed: true` to proceed.",
+        ),
+        module_used=None,
+        session_id=session_id,
+        confirmation_required=True,
+        safeguard=info,
+        timestamp=datetime.now(timezone.utc),
+    )
 
 
 @router.post("/", response_model=ChatResponse)
@@ -39,6 +75,42 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
 
     # Status-Queue vorab erstellen (damit SSE-Consumer sofort lesen kann)
     status_bus.get_queue(body.session_id)
+
+    # ── Tool-Level Safeguard: Resume nach Bestätigung ─────────────────────────
+    # Wenn confirmed=True und ein Tool-Call auf Bestätigung wartet → resumieren
+    if body.confirmed:
+        pending_raw = await redis.connection.get(
+            f"ninko:safeguard_tool_pending:{body.session_id}"
+        )
+        if pending_raw:
+            # Redis-Key nicht löschen — resume_tool_execution() macht das selbst
+            response_text, did_compact = await orchestrator.resume_tool_execution(
+                body.session_id
+            )
+            await status_bus.done(body.session_id)
+
+            # Resume hat weiteren Tool-Call aufgedeckt → nochmals Bestätigung
+            if response_text.startswith(_TOOL_SAFEGUARD_SENTINEL):
+                info = _parse_sentinel(response_text)
+                return _tool_confirmation_response(info, body.session_id)
+
+            # Normales Ergebnis nach Resume → History speichern und zurückgeben
+            await redis.store_chat_message(
+                session_id=body.session_id, role="user", content=body.message
+            )
+            await redis.store_chat_message(
+                session_id=body.session_id, role="assistant", content=response_text
+            )
+            updated_history = await redis.get_chat_history(body.session_id)
+            budget = ctx_mgr.get_budget_info(updated_history)
+            return ChatResponse(
+                response=response_text,
+                module_used=None,
+                session_id=body.session_id,
+                context_budget=budget,
+                compacted=did_compact,
+                timestamp=datetime.now(timezone.utc),
+            )
 
     # ── Safeguard-Check (vor dem 4-tier Routing) ──────────────────────────────
     safeguard = getattr(request.app.state, "safeguard", None)
@@ -74,7 +146,16 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
         message=body.message,
         chat_history=history,
         session_id=body.session_id,
+        confirmed=body.confirmed,
+        force_module=body.force_module,
     )
+
+    # ── Tool-Level Safeguard Sentinel prüfen ─────────────────────────────────
+    # Wenn ein Tool-Call während der Route-Ausführung Bestätigung braucht
+    if response_text.startswith(_TOOL_SAFEGUARD_SENTINEL):
+        await status_bus.done(body.session_id)
+        info = _parse_sentinel(response_text)
+        return _tool_confirmation_response(info, body.session_id)
 
     # SSE-Consumer signalisieren: Verarbeitung abgeschlossen
     await status_bus.done(body.session_id)

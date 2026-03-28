@@ -9,7 +9,7 @@ data:
     server:
       port: 8080
       bind_address: "0.0.0.0"
-      secret_key: "searxng-secret-key-for-ninko"
+      secret_key: "REPLACE_WITH_RANDOM_SECRET_KEY"
     search:
       formats:
         - html

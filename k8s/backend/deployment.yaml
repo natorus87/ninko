@@ -27,11 +27,11 @@ spec:
             - name: LLM_BACKEND
               value: "lmstudio"
             - name: LMSTUDIO_BASE_URL
-              value: "http://10.11.12.6:1234"
+              value: "http://YOUR_LMSTUDIO_HOST:1234"
             - name: LMSTUDIO_MODEL
-              value: "openai/gpt-oss-20b"
+              value: "YOUR_MODEL_NAME"
             - name: LMSTUDIO_EMBED_MODEL
-              value: "nomic-ai/nomic-embed-text-v1.5-GGUF"
+              value: "YOUR_EMBED_MODEL_NAME"
 
             # ─── ChromaDB ───
             - name: CHROMA_HOST

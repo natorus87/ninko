@@ -512,6 +512,71 @@ _SAFE_PATTERNS: tuple[str, ...] = (
 )
 
 
+# ─── Tool-level: always-safe tools (skip LLM classifier) ─────────────────────
+#
+# These tools are either purely read-only or represent benign meta-operations
+# (memory, agent creation, pipeline coordination). Checking them against the
+# LLM classifier would add latency without security benefit.
+
+_TOOL_READONLY: frozenset[str] = frozenset({
+    # Memory / knowledge operations
+    "recall_memory", "remember_fact", "forget_fact", "confirm_forget",
+    # Orchestration / meta
+    "create_custom_agent", "install_skill",
+    "create_linear_workflow", "execute_workflow", "run_pipeline",
+    "generate_image",
+    # Search
+    "perform_web_search",
+    # Kubernetes read-only
+    "get_cluster_status", "get_all_pods", "get_failing_pods",
+    "list_namespaces", "list_services", "get_recent_events",
+    "get_resource_yaml", "get_pod_logs",
+    "list_ingresses", "list_pvcs", "list_deployments", "get_deployment_status",
+    # Proxmox read-only
+    "get_nodes", "get_node_status", "list_all_vms", "list_vms",
+    "get_vm_status", "get_vm_config", "get_recent_tasks",
+    # PiHole read-only
+    "get_pihole_summary", "get_query_log", "get_top_domains", "get_top_clients",
+    "get_blocklists", "get_pihole_system", "get_custom_dns_records",
+    "get_cname_records", "get_dhcp_leases", "get_system_messages",
+    # FritzBox read-only
+    "get_fritz_system_info", "get_fritz_devices", "get_fritz_wan_status",
+    "get_fritz_bandwidth", "get_fritz_wlan_status", "get_fritz_smarthome_devices",
+    "get_fritz_call_list",
+    # Home Assistant read-only
+    "ha_get_entity_state", "ha_list_entities", "ha_find_device", "ha_get_entity_details",
+    # IONOS DNS read-only
+    "get_ionos_zones", "get_ionos_records",
+    # Email read-only
+    "read_emails",
+    # GLPI read-only
+    "get_ticket", "search_tickets", "search_users", "list_groups",
+    "list_categories", "get_ticket_stats",
+    # WordPress read-only
+    "get_site_info", "get_updates_info", "list_plugins", "search_plugins",
+    "list_posts", "get_post", "list_pages", "get_page",
+    "list_tags", "list_users", "get_current_user", "get_site_settings", "list_media",
+    # Docker read-only
+    "list_containers", "inspect_container", "get_container_logs",
+    "get_container_stats", "list_images", "list_volumes",
+    "get_docker_info", "get_docker_version", "get_docker_disk_usage",
+    # Linux Server read-only
+    "get_system_info", "get_disk_usage", "get_top_processes",
+    "get_journal", "get_logfile", "read_file", "list_directory",
+    "get_network_info", "check_port", "check_last_logins",
+    # OPNsense read-only
+    "get_opnsense_system_status", "get_opnsense_interfaces", "get_opnsense_gateways",
+    "get_opnsense_firewall_rules", "get_opnsense_nat_rules", "get_opnsense_services",
+    "get_opnsense_dhcp_leases", "get_opnsense_logs",
+    # Tasmota read-only
+    "get_tasmota_status", "get_tasmota_power", "get_tasmota_sensors", "get_tasmota_wifi_info",
+    # Qdrant read-only
+    "search_knowledge", "list_knowledge_collections", "get_collection_stats",
+    # Codelab read-only
+    "get_available_languages",
+})
+
+
 def _keyword_prefilter(text: str) -> SafeguardResult | None:
     """
     Fast-path classifier that skips the LLM call for short, unambiguous messages.
@@ -674,6 +739,46 @@ class SafeguardMiddleware:
                 rationale=f"Classifier unreachable ({type(exc).__name__}) — confirmation required as fallback.",
                 raw_response=str(exc),
             )
+
+    # ── Tool-call classifier ───────────────────────────────────────────────────
+
+    async def check_tool_call(
+        self,
+        tool_name: str,
+        tool_args: dict,
+    ) -> SafeguardResult:
+        """
+        Klassifiziert einen einzelnen Tool-Aufruf, bevor er ausgeführt wird.
+
+        Fast-path: bekannte read-only Tools → SAFE sofort, kein LLM-Call.
+        Routing-Tools (call_module_agent, execute_cli_command): relevantes Argument
+        wird extrahiert und durch check() geleitet.
+        Alle anderen Tools: tool_name + Argument-Vorschau → check().
+
+        Beachte: Safeguard-Deaktivierung (global/per-agent) wird durch check() gehandhabt.
+        """
+        # Known safe tools — no LLM call needed
+        if tool_name in _TOOL_READONLY:
+            return SafeguardResult(
+                requires_confirmation=False,
+                category=ActionCategory.SAFE,
+                rationale=f"Read-only / benign tool '{tool_name}' — safe to execute.",
+            )
+
+        # For call_module_agent: the "message" arg describes the action
+        if tool_name == "call_module_agent":
+            text = tool_args.get("message", tool_name)
+            return await self.check(text)
+
+        # For execute_cli_command: the command itself
+        if tool_name == "execute_cli_command":
+            text = tool_args.get("command", tool_name)
+            return await self.check(text)
+
+        # Generic fallback: tool_name + short args preview
+        args_preview = str(tool_args)[:300] if tool_args else ""
+        text = f"{tool_name}: {args_preview}" if args_preview else tool_name
+        return await self.check(text)
 
     # ── Response parser ────────────────────────────────────────────────────────
 

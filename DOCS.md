@@ -462,7 +462,7 @@ Ninko supports **multi-connection** per module: one module (e.g., Kubernetes) ca
 
 ### Creating a Connection
 
-1. Click the **gear icon** (Settings) in the top right.
+1. Click **Settings** in the left sidebar (bottom nav).
 2. Select a module from the left navigation (e.g., `kubernetes`, `proxmox`, `pihole`).
 3. Click the **Connections** tab.
 4. Fill in the fields:
@@ -493,6 +493,20 @@ The orchestrator extracts connection hints from the message and passes them to t
 ---
 
 ## 10. Chat Interface
+
+### Navigation
+
+The left sidebar has three sections:
+
+| Area | Items |
+|---|---|
+| Top nav | **New Chat** (opens a fresh session), **Automation** (Tasks, Agents, Workflows) |
+| Bottom nav | **Modules**, **Settings** |
+| History | Chat history list — directly below the top nav, no header bar |
+
+**Connection status** — a single green/red dot in the top-right corner of the sidebar header. No label text is shown.
+
+**Settings** contains: LLM Provider, Modules, System, Language, TTS, Image Generation, and **Logs**.
 
 ### Sending Messages
 

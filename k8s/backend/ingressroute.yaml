@@ -10,7 +10,7 @@ spec:
     - web
     - websecure
   routes:
-    - match: Host(`ninko.conbro.local`)
+    - match: Host(`ninko.your-domain.local`)
       kind: Rule
       services:
         - name: ninko-backend

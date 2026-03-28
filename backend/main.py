@@ -191,6 +191,8 @@ async def lifespan(app: FastAPI):
             agent_store=AgentConfigStore(),
         )
         app.state.safeguard = safeguard
+        from agents.base_agent import set_global_safeguard
+        set_global_safeguard(safeguard)
         logger.info("Safeguard-Middleware initialisiert (Modell: %s, aktiviert: %s).", _sg_model, _sg_enabled)
     except Exception as _sg_exc:
         logger.warning("Safeguard-Middleware konnte nicht initialisiert werden: %s", _sg_exc)
@@ -324,6 +326,6 @@ async def health():
     return {
         "status": "ok",
         "service": "ninko",
-        "version": "0.5.6",
+        "version": "0.5.10",
     }
 

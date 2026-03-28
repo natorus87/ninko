@@ -1,0 +1,84 @@
+<!-- Tasmota Dashboard Tab -->
+<style>
+#tasmota-tab-content .cl-select { position:relative; display:inline-block; user-select:none; }
+#tasmota-tab-content .cl-select-btn {
+    display:flex; align-items:center; justify-content:space-between; gap:0.5rem;
+    padding:0.45rem 0.75rem; border-radius:4px; cursor:pointer;
+    border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-primary);
+    font-size:0.875rem; white-space:nowrap; min-width:200px;
+}
+#tasmota-tab-content .cl-select-btn:hover { border-color:var(--accent-blue); }
+#tasmota-tab-content .cl-select-arrow { font-size:0.65rem; opacity:0.7; transition:transform 0.15s; }
+#tasmota-tab-content .cl-select.open .cl-select-arrow { transform:rotate(180deg); }
+#tasmota-tab-content .cl-select-dropdown {
+    display:none; position:absolute; top:calc(100% + 4px); left:0; min-width:100%;
+    background:var(--bg-card); border:1px solid var(--border-color);
+    border-radius:4px; box-shadow:0 4px 16px rgba(0,0,0,0.4);
+    z-index:999; overflow:hidden; max-height:260px; overflow-y:auto;
+}
+#tasmota-tab-content .cl-select.open .cl-select-dropdown { display:block; }
+#tasmota-tab-content .cl-select-option {
+    padding:0.45rem 0.75rem; cursor:pointer; font-size:0.875rem;
+    color:var(--text-primary); white-space:nowrap;
+}
+#tasmota-tab-content .cl-select-option:hover { background:rgba(255,255,255,0.07); }
+#tasmota-tab-content .cl-select-option.selected { color:var(--accent-blue); }
+
+#tasmota-tab-content .tasmota-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+#tasmota-tab-content .tasmota-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1rem;
+}
+#tasmota-tab-content .tasmota-card h4 {
+    margin: 0 0 0.75rem 0;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+#tasmota-tab-content .tasmota-stat {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.3rem 0;
+    font-size: 0.85rem;
+}
+#tasmota-tab-content .tasmota-stat-label { color: var(--text-secondary); }
+#tasmota-tab-content .tasmota-stat-value { font-weight: 500; }
+#tasmota-tab-content .power-on { color: #4ade80; }
+#tasmota-tab-content .power-off { color: #f87171; }
+</style>
+
+<div id="tasmota-tab-content" class="module-tab-content">
+
+    <!-- Connection Selector -->
+    <div class="tasmota-controls"
+        style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1.5rem;">
+
+        <div class="cl-select" id="tasmota-conn-select">
+            <div class="cl-select-btn" onclick="TasmotaTab.toggleSelect('tasmota-conn-select')">
+                <span class="cl-select-label">Lade Verbindungen…</span>
+                <span class="cl-select-arrow">▼</span>
+            </div>
+            <div class="cl-select-dropdown" id="tasmota-conn-options"></div>
+        </div>
+
+        <button class="btn btn-refresh" data-action="tasmota-refresh">🔄 Aktualisieren</button>
+    </div>
+
+    <!-- Content Area -->
+    <div class="tasmota-section">
+        <h3 class="section-title">📊 Status</h3>
+        <div id="tasmota-content" class="tasmota-grid">
+            <p class="empty-state">Keine Daten geladen. Bitte Verbindung wählen und aktualisieren.</p>
+        </div>
+    </div>
+
+</div>

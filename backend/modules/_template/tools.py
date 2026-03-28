@@ -68,6 +68,14 @@ async def _get_api_client(connection_id: str = "") -> dict:
 # eintragen:
 #   "beispiel_tool": ("Führe Beispiel aus", "Running example"),
 #   "lade_daten":    ("Lade Daten",         "Loading data"),
+#
+# SAFEGUARD – _TOOL_READONLY (backend/core/safeguard.py):
+# Alle rein lesenden Tools (get_*, list_*, search_*, inspect_*, check_*)
+# MÜSSEN in _TOOL_READONLY eingetragen werden, damit der Safeguard-LLM
+# nicht bei jeder Status-Abfrage anschlägt.
+# Faustregel:
+#   READ-ONLY  → get_*/list_*/search_*/inspect_*/check_*/ha_get_* → in _TOOL_READONLY eintragen
+#   WRITE/ACTION → start_*/stop_*/restart_*/delete_*/create_*/set_*/add_*/update_* → NICHT eintragen
 # ═══════════════════════════════════════════════════════
 
 @tool

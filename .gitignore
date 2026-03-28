@@ -43,6 +43,9 @@ data/searxng/
 # Lokale K8s-Secret-Overrides (mit echten Keys)
 k8s/**/*.local.yaml
 
+# Lokale K8s-Deployments (persönliche Infrastruktur-Konfiguration)
+k8s-conbro/
+
 # Node (falls mal Frontend-Build-Tools)
 node_modules/
 
@@ -56,6 +59,7 @@ htmlcov/
 
 # Temporäre Dateien
 *.tmp
+*.todo
 *.bak
 changes/
 

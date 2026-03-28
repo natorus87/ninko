@@ -563,6 +563,7 @@ class OrchestratorAgent(BaseAgent):
         message: str,
         chat_history: list[dict] | None,
         session_id: str,
+        confirmed: bool = False,
     ) -> tuple[str, str | None, bool]:
         """
         Stufe 3 – Dynamischer Agent:
@@ -581,7 +582,8 @@ class OrchestratorAgent(BaseAgent):
             logger.info("Stufe 3: Vorhandener dynamischer Agent '%s' gefunden.", agent_name)
             await status_bus.emit(session_id, f"Delegiere an {agent_name}…")
             response, did_compact = await agent.invoke(
-                message=message, chat_history=chat_history, session_id=session_id
+                message=message, chat_history=chat_history, session_id=session_id,
+                confirmed=confirmed,
             )
             return response, f"dynamic:{agent_name}", did_compact
 
@@ -625,7 +627,8 @@ class OrchestratorAgent(BaseAgent):
                 )
                 await status_bus.emit(session_id, f"Delegiere an {agent_label}…")
                 response, did_compact = await agent.invoke(
-                    message=message, chat_history=chat_history, session_id=session_id
+                    message=message, chat_history=chat_history, session_id=session_id,
+                    confirmed=confirmed,
                 )
                 return response, f"dynamic:{agent_label}", did_compact
 
@@ -637,15 +640,67 @@ class OrchestratorAgent(BaseAgent):
         # Fallback: direkte LLM-Antwort
         logger.info("Stufe 3 Fallback → direkte LLM-Antwort.")
         response, did_compact = await self.invoke(
-            message=message, chat_history=chat_history, session_id=session_id
+            message=message, chat_history=chat_history, session_id=session_id,
+            confirmed=confirmed,
         )
         return response, None, did_compact
+
+    async def resume_tool_execution(self, session_id: str) -> tuple[str, bool]:
+        """
+        Setzt einen pausierten Tool-Call nach Safeguard-Bestätigung fort.
+
+        Liest den wartenden Agent-Namen aus dem Redis-Key, sucht die Instanz
+        und delegiert an agent.resume_safeguard_tool(session_id).
+        """
+        from core.redis_client import get_redis
+        redis = get_redis()
+        pending_raw = await redis.connection.get(
+            f"ninko:safeguard_tool_pending:{session_id}"
+        )
+        if not pending_raw:
+            return _t(
+                "Fehler: Kein ausstehender Tool-Aufruf für diese Session.",
+                "Error: No pending tool call for this session.",
+            ), False
+
+        try:
+            pending = _json.loads(pending_raw)
+        except Exception:
+            pending = {}
+
+        agent_name = pending.get("agent", "orchestrator")
+
+        # Redis-Key löschen (agent re-erstellt ihn falls weiterer Call Bestätigung braucht)
+        await redis.connection.delete(f"ninko:safeguard_tool_pending:{session_id}")
+
+        # Richtige Agent-Instanz finden
+        if agent_name in ("orchestrator", self.name):
+            agent = self
+        else:
+            agent = self.registry.get_agent(agent_name)
+            if agent is None:
+                try:
+                    from core.agent_pool import get_agent_pool
+                    pool = get_agent_pool()
+                    agent = pool.get_agent_by_id(agent_name)
+                except Exception:
+                    agent = None
+
+        if agent is None:
+            return _t(
+                f"Fehler: Agent '{agent_name}' nicht gefunden.",
+                f"Error: Agent '{agent_name}' not found.",
+            ), False
+
+        return await agent.resume_safeguard_tool(session_id)
 
     async def route(
         self,
         message: str,
         chat_history: list[dict] | None = None,
         session_id: str = "",
+        confirmed: bool = False,
+        force_module: str | None = None,
     ) -> tuple[str, str | None, bool]:
         """
         4-stufiges Hauptrouting:
@@ -662,6 +717,43 @@ class OrchestratorAgent(BaseAgent):
         await status_bus.emit(session_id, _t("Analysiere deine Anfrage…", "Analyzing your request…"))
 
         self._refresh_routing_map()
+
+        # ── Direktes Modul-Routing (force_module) ────────────────────────────
+        if force_module:
+            agent = self.registry.get_agent(force_module)
+            if agent is None:
+                return (
+                    _t(
+                        f"Fehler: Modul '{force_module}' ist nicht verfügbar oder nicht aktiviert.",
+                        f"Error: Module '{force_module}' is not available or not enabled.",
+                    ),
+                    force_module,
+                    False,
+                )
+            manifests = {m.name: m for m in self.registry.list_modules()}
+            display = manifests.get(
+                force_module, type("", (), {"display_name": force_module})()
+            ).display_name
+            await status_bus.emit(session_id, _t(f"Rufe {display} direkt auf…", f"Calling {display} directly…"))
+            logger.info("Direktes Routing an Modul '%s': %s…", force_module, message[:80])
+            try:
+                response, did_compact = await agent.invoke(
+                    message=message,
+                    chat_history=chat_history,
+                    session_id=session_id,
+                    confirmed=confirmed,
+                )
+                return response, force_module, did_compact
+            except Exception as exc:
+                logger.error("Direktes Routing: Modul '%s' Fehler: %s", force_module, exc, exc_info=True)
+                return (
+                    _t(
+                        f"Fehler: Modul '{force_module}' hat einen Fehler gemeldet: {exc}.",
+                        f"Error: Module '{force_module}' reported an error: {exc}.",
+                    ),
+                    force_module,
+                    False,
+                )
 
         tier, target_module, is_compound = await self._classify_tier(message, chat_history)
         logger.info("Routing-Stufe %d gewählt für: %s…", tier, message[:80])
@@ -687,6 +779,7 @@ class OrchestratorAgent(BaseAgent):
                         message=message,
                         chat_history=chat_history,
                         session_id=session_id,
+                        confirmed=confirmed,
                     )
                     return response, target_module, did_compact
                 except Exception as exc:
@@ -706,13 +799,14 @@ class OrchestratorAgent(BaseAgent):
         if tier == 1:
             logger.info("Stufe 1: Direkte LLM-Antwort: %s…", message[:80])
             response, did_compact = await self.invoke(
-                message=message, chat_history=chat_history, session_id=session_id
+                message=message, chat_history=chat_history, session_id=session_id,
+                confirmed=confirmed,
             )
             return response, None, did_compact
 
         # ── Stufe 3: Dynamischer Agent ───────────────────────────────────
         logger.info("Stufe 3: Dynamischer Agent für: %s…", message[:80])
-        return await self._route_tier3(message, chat_history, session_id)
+        return await self._route_tier3(message, chat_history, session_id, confirmed=confirmed)
 
 
 # ── Globaler Singleton (gesetzt von main.py) ─────────────────────────────────

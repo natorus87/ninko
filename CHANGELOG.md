@@ -7,6 +7,103 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.5.10] – 2026-03-28
+
+### Changed
+
+- **Sidebar navigation redesign** (`frontend/index.html`, `frontend/app.js`, `frontend/style.css`) — Streamlined sidebar layout:
+  - **"New Chat" nav button** — The top "Chat" tab is now labelled "New Chat" (i18n: `chat.newChatBtn`) and clicking it always opens a fresh conversation instead of just switching to the chat view.
+  - **Removed "History" section header** — The "Verlauf" label and the pencil icon button have been removed; the chat history list now fills the sidebar directly without a header bar.
+  - **Status indicator moved to header** — The connection status dot (`status-dot`) is now displayed in the top-right corner of the primary sidebar header. The status text label and the sidebar footer have been removed entirely.
+  - **Settings in main nav** — The "Settings" entry replaces "Logs" in the bottom navigation (gear icon, i18n key `nav.settings`). All 10 language files updated.
+  - **Logs moved into Settings** — Logs are now accessible via **Settings → Logs** in the settings sidebar. The logs panel renders full-height inside the settings layout (CSS `:has()` override). Log polling starts/stops correctly when switching into or away from the logs settings sub-panel (`switchSettingsTab` + `switchTab` updated in `app.js`).
+- **Automatisierung and Modules two-column layout** (`frontend/index.html`, `frontend/app.js`, `frontend/style.css`) — Both navigation entries now open a settings-style two-column layout instead of slide-in secondary sidebar panels:
+  - Clicking "Automatisierung" shows a left sidebar with Tasks / Agents / Workflows sub-items and loads the selected panel into the right content area.
+  - Clicking "Modules" shows a left sidebar with all enabled module tabs (dynamically built by `loadModules()`) and loads the selected module panel into the right content area.
+  - Existing `#tab-tasks`, `#tab-agents`, `#tab-workflows`, and module tab panels are physically moved via `appendChild` into `#auto-content` / `#modules-content` — preserving all existing event listeners without duplicating HTML.
+  - Old slide-in sidebar panels (`sidebar-panel-automatisierung`, `sidebar-panel-secondary`) and their back-button logic removed entirely.
+  - `switchTab()` now delegates `tasks`/`agents`/`workflows` calls through `switchAutoTab()`; `switchModuleTab()` manages module panel activation. Workflow run-refresh timer cleaned up on both sub-tab and main-tab switches.
+  - CSS: `.auto-content` flex container with `min-height: 0` ensures Workflow canvas retains correct full-height behaviour.
+
+---
+
+## [0.5.9] – 2026-03-28
+
+### Added
+
+- **Module Pre-Selection Button** (`frontend/index.html`, `frontend/app.js`, `frontend/style.css`, `backend/schemas/chat.py`, `backend/agents/orchestrator.py`, `backend/api/routes_chat.py`) — Pill button next to the "New Chat" title in the chat toolbar:
+  - Dropdown lists all enabled modules; "Auto" option resets to standard orchestrator routing
+  - When a module is pre-selected, the button is highlighted in blue and all messages in the session are routed directly to that module (bypasses the full Tier 1–4 analysis)
+  - Backend: `ChatRequest.force_module: str | None` — new optional field; `orchestrator.route(force_module=...)` checks for direct module routing before `_classify_tier()`
+  - Safeguard still fires before `force_module` routing takes effect
+  - i18n: `chat.modulePickerTitle` + `chat.moduleAuto` in all 10 language files (DE/EN/FR/ES/IT/PT/NL/PL/ZH/JA)
+
+### Fixed
+
+- **Safeguard false-positive on read-only tool calls** (`backend/core/safeguard.py`) — `_TOOL_READONLY` frozenset was incomplete and contained stale tool names from older module versions. Every status query (e.g. `get_fritz_system_info`, `ha_list_entities`, `read_emails`) was blocked by the safeguard LLM classifier. Comprehensive overhaul: all 6 missing modules added (Docker, Linux Server, OPNsense, Tasmota, Qdrant, Codelab), all wrong names corrected across all existing modules (Proxmox, Home Assistant, IONOS, Email, GLPI, WordPress, Kubernetes, Pi-hole). Rule documented in `_template/tools.py`: `get_*`, `list_*`, `search_*`, `inspect_*`, `check_*` → read-only → must be in `_TOOL_READONLY`.
+- **Duplicate user message on safeguard confirmation** (`frontend/app.js`) — When the user confirmed a safeguard warning and `sendMessage()` was called a second time, `addChatMessage('user', text)` was called again, inserting a second user bubble. Fixed by reading `_confirmedPending` before the DOM update and skipping `addChatMessage` for confirmation re-sends.
+- **Module picker button too small** (`frontend/style.css`, `frontend/index.html`) — Button padding increased from `0.2rem/0.5rem` to `0.32rem/0.75rem`, font size from `0.78rem` to `0.84rem`, icons from 13 px to 15 px.
+
+---
+
+## [0.5.8] – 2026-03-28
+
+### Security
+
+- **Tool-level safeguard** (`backend/core/safeguard.py`, `backend/agents/base_agent.py`, `backend/agents/orchestrator.py`, `backend/api/routes_chat.py`, `backend/main.py`) — The safeguard now also intercepts LLM tool calls, not just user messages:
+  - All agents (module agents, orchestrator, dynamic agents) run with `interrupt_before=["tools"]` + LangGraph `MemorySaver` when safeguard is enabled
+  - Before each tool execution, `check_tool_call(tool_name, tool_args)` classifies the call using the same SAFE / STATE_CHANGING / DESTRUCTIVE pipeline as user messages
+  - Read-only tools (`_TOOL_READONLY` frozenset) are always allowed instantly without an LLM classifier call — no latency overhead for safe operations
+  - For `call_module_agent`: the delegated `message` argument is classified (not the tool name), catching dangerous actions delegated through the orchestrator
+  - For `execute_cli_command`: the `command` string is classified directly
+  - If a tool requires confirmation: execution pauses, the agent state is held in `_paused_sg_agents` (module-level dict), a Redis key `ninko:safeguard_tool_pending:{session_id}` (TTL 300s) is written, and a `__TOOL_SAFEGUARD__` sentinel is returned
+  - The chat route detects the sentinel and returns `confirmation_required=True` with tool details
+  - On the next request with `confirmed=true`, the route checks for a pending tool key first and resumes the paused agent via `orchestrator.resume_tool_execution(session_id)`
+  - Multiple consecutive dangerous tool calls each trigger their own confirmation round
+  - Pipeline sub-steps (Tier 4) remain unprotected at tool level — consistent with the existing design (safeguard guards the initial user message for pipelines)
+
+### New Modules
+
+- **OPNsense module** (`backend/modules/opnsense/`) — Firewall management and monitoring via OPNsense REST API:
+  - `get_opnsense_system_status` — system info, uptime, version
+  - `get_opnsense_interfaces` — all interface configurations and states
+  - `get_opnsense_gateways` — gateway status and latency
+  - `get_opnsense_firewall_rules` — firewall rules, optionally filtered by interface
+  - `get_opnsense_nat_rules` — NAT / port-forward rules
+  - `get_opnsense_services` — running service states (unbound, haproxy, etc.)
+  - `get_opnsense_dhcp_leases` — DHCP lease table with IP/MAC/hostname
+  - `restart_opnsense_service` — restart a named OPNsense service
+  - `get_opnsense_logs` — recent system log lines
+  - Authentication: API key + API secret via Vault; HTTPS with optional cert verification skip
+  - Routing keywords: `opnsense`, `firewall`, `nat`, `portforward`, `wan`, `lan`, `dhcp`, `vpn`, `ipsec`, `wireguard`, `pf`, …
+
+- **Tasmota module** (`backend/modules/tasmota/`) — Control and monitoring of Tasmota-flashed IoT devices (ESP8266/ESP32) via HTTP REST API:
+  - `get_tasmota_status` — full device status (firmware, uptime, IP, signal)
+  - `get_tasmota_power` — current power state of all relays
+  - `set_tasmota_power(state, relay)` — switch relay on/off/toggle
+  - `get_tasmota_sensors` — temperature, humidity, energy/power readings
+  - `get_tasmota_wifi_info` — Wi-Fi SSID, RSSI, channel, IP
+  - `send_tasmota_command(command)` — send arbitrary Tasmota console command
+  - Authentication: plain HTTP (optional username/password configurable)
+  - Routing keywords: `tasmota`, `esp8266`, `esp32`, `sonoff`, `shelly`, `steckdose`, `relais`, `stromverbrauch`, `sensor`, …
+
+---
+
+## [0.5.7] – 2026-03-27
+
+### UI/UX
+
+- **Settings as tab instead of modal** (`frontend/index.html`, `frontend/app.js`, `frontend/style.css`) — The settings menu no longer opens in a separate modal window but renders directly in the main content area, just like Chat, Logs, and all other tabs. The gear button now calls `switchTab('settings')`; `toggleSettings()` is kept as a backwards-compatible alias.
+
+- **Chat layout: centered, no avatars** (`frontend/app.js`, `frontend/style.css`) — Redesigned chat layout inspired by modern chat interfaces:
+  - User and AI avatars/icons removed entirely (no fox icon, no user SVG)
+  - AI responses rendered as plain flowing text with no bubble background or border
+  - User messages displayed as compact bubbles (max 70% width), right-aligned within the centered column
+  - All messages laid out in a centered column (max 760px) — no more left-aligned sidebar-style layout
+  - Typing indicator also removed avatar and box styling
+
+---
+
 ## [0.5.6] – 2026-03-26
 
 ### Features
@@ -59,6 +156,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - Docker build + DEV deploy (docker-compose) ✅
 - Push `natorus87/ninko-backend:latest` + `natorus87/kumio-backend:latest` ✅
 - K8s rollout `kumio-backend` in namespace `kumio` ✅
+
+---
+
+## [0.5.6-r1] – 2026-03-27
+
+### Repo
+
+- **K8s manifest split** — `k8s/` cleaned of personal data (private IP, internal hostname, model names, SearXNG secret); all replaced with neutral placeholders. New `k8s-conbro/` folder holds the personal live-cluster configuration and is excluded via `.gitignore`. The public `k8s/` folder remains the canonical template for new deployments.
 
 ---
 

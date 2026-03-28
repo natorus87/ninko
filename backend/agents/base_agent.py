@@ -6,9 +6,13 @@ Nutzt LangGraph für Tool-Calling und Conversation-Management.
 from __future__ import annotations
 
 import asyncio
+import json as _json
 import logging
 import re
-from typing import Any, Sequence
+from typing import Any, Sequence, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.safeguard import SafeguardMiddleware
 
 from langchain_core.callbacks import AsyncCallbackHandler
 from langchain_core.messages import (
@@ -125,6 +129,24 @@ _MEMORIZE_EXCLUDED_AGENTS = {"monitor", "scheduler"}
 _MEMORIZE_STOP_WORDS = {
     "NICHTS", "NOTHING", "RIEN", "NADA", "NULLA", "NIETS", "NIC", "何もない", "没有"
 }
+
+# ── Tool-level Safeguard (global, gesetzt von main.py via set_global_safeguard) ──
+# Sentinel-String der in routes_chat.py erkannt wird wenn ein Tool-Call Bestätigung braucht
+_TOOL_SAFEGUARD_SENTINEL = "__TOOL_SAFEGUARD__"
+
+# Paused safeguard agents: session_id → (sg_agent, thread_config)
+# Hält den unterbrochenen LangGraph-Agenten für den Resume-Aufruf am Leben.
+_paused_sg_agents: dict[str, tuple] = {}
+
+_global_safeguard: "SafeguardMiddleware | None" = None
+
+
+def set_global_safeguard(sg: "SafeguardMiddleware") -> None:
+    """Setzt die globale Safeguard-Instanz (wird von main.py aufgerufen)."""
+    global _global_safeguard
+    _global_safeguard = sg
+    logger.info("Globale Safeguard-Instanz registriert.")
+
 
 # Sprachanweisungen für Language-Injection am Ende jedes System-Prompts
 _LANG_INSTRUCTIONS: dict[str, str] = {
@@ -280,6 +302,7 @@ class BaseAgent:
         message: str,
         chat_history: list[dict] | None = None,
         session_id: str = "",
+        confirmed: bool = False,
     ) -> tuple[str, bool]:
         """
         Führt den Agenten mit einer Nachricht aus.
@@ -423,13 +446,31 @@ class BaseAgent:
         if session_id:
             run_config["callbacks"] = [_StatusEmitter(session_id)]
         try:
-            result = await asyncio.wait_for(
-                jit_agent.ainvoke(
-                    {"messages": messages},
-                    config=run_config,
-                ),
-                timeout=AGENT_TIMEOUT,
+            # Safeguard-Pfad: interrupt_before=["tools"] + MemorySaver wenn aktiv
+            use_safeguard = (
+                _global_safeguard is not None
+                and _global_safeguard.enabled
+                and not confirmed
+                and bool(session_id)
+                and bool(active_tools)
             )
+
+            if use_safeguard:
+                raw_result = await self._run_with_safeguard(
+                    messages, active_tools, run_config, session_id
+                )
+                # Sentinel-String → Tool-Call braucht Bestätigung
+                if isinstance(raw_result, str):
+                    return raw_result, did_compact
+                result = raw_result
+            else:
+                result = await asyncio.wait_for(
+                    jit_agent.ainvoke(
+                        {"messages": messages},
+                        config=run_config,
+                    ),
+                    timeout=AGENT_TIMEOUT,
+                )
 
             # Letzte AI-Nachricht extrahieren
             all_messages = result.get("messages", [])
@@ -514,6 +555,166 @@ class BaseAgent:
                 "Agent '%s' Fehler: %s", self.name, exc, exc_info=True
             )
             return user_msg, False
+
+    def _extract_result_response(self, result: dict) -> str:
+        """Extrahiert den Antwort-Text aus einem LangGraph-Ergebnis-Dict."""
+        all_messages = result.get("messages", [])
+        ai_messages = [m for m in all_messages if isinstance(m, AIMessage) and m.content]
+
+        if ai_messages:
+            raw = _extract_text(ai_messages[-1].content)
+            response = _strip_thinking(raw)
+            if response:
+                return response
+            # Thinking-only: Fallback auf ToolMessages
+        tool_messages = [m for m in all_messages if isinstance(m, ToolMessage) and m.content]
+        if tool_messages:
+            return _extract_text(tool_messages[-1].content)
+        return _t("Keine Antwort generiert.", "No response generated.")
+
+    async def _sg_loop(
+        self,
+        sg_agent: Any,
+        thread_config: dict,
+        input_data: dict | None,
+        session_id: str,
+    ) -> "dict | str":
+        """
+        Kern-Schleife für den Safeguard-Interrupt-Mechanismus.
+
+        Führt den Agenten aus und pausiert vor jedem Tool-Call. Gibt das
+        LangGraph-Ergebnis-Dict zurück wenn die Ausführung abgeschlossen ist,
+        oder einen Sentinel-String wenn ein Tool-Call Bestätigung benötigt.
+        """
+        AGENT_TIMEOUT = 1800
+
+        while True:
+            result = await asyncio.wait_for(
+                sg_agent.ainvoke(input_data, config=thread_config),
+                timeout=AGENT_TIMEOUT,
+            )
+            input_data = None  # Folge-Iterationen = Resume vom Checkpoint
+
+            # Prüfen ob der Graph vor einem Tool-Call pausiert ist
+            state = sg_agent.get_state(thread_config)
+            if not (state.next and "tools" in state.next):
+                # Ausführung abgeschlossen
+                return result
+
+            # Paused — pending Tool-Calls aus dem State lesen
+            all_msgs = state.values.get("messages", [])
+            ai_with_tools = [
+                m for m in all_msgs
+                if isinstance(m, AIMessage) and getattr(m, "tool_calls", None)
+            ]
+            if not ai_with_tools:
+                # Sollte nicht vorkommen, aber sicher resumieren
+                continue
+
+            last_ai = ai_with_tools[-1]
+
+            # Alle pending Tool-Calls prüfen (Parallel-Tool-Calls möglich)
+            dangerous_call = None
+            for tool_call in last_ai.tool_calls:
+                tool_name = tool_call["name"]
+                tool_args = tool_call.get("args", {})
+                sg_result = await _global_safeguard.check_tool_call(tool_name, tool_args)
+                if sg_result.requires_confirmation:
+                    dangerous_call = (tool_name, tool_args, sg_result)
+                    break  # Ersten gefährlichen Call als Confirmation-Request nehmen
+
+            if dangerous_call is None:
+                # Alle Tools sind SAFE → sofort resumieren (transparent)
+                continue
+
+            tool_name, tool_args, sg_result = dangerous_call
+
+            # Pausiert: Zustand im Modul-Dict speichern + in Redis vermerken
+            _paused_sg_agents[session_id] = (sg_agent, thread_config)
+            from core.redis_client import get_redis
+            redis = get_redis()
+            await redis.connection.setex(
+                f"ninko:safeguard_tool_pending:{session_id}",
+                300,
+                _json.dumps({
+                    "tool_name": tool_name,
+                    "tool_args": tool_args,
+                    "agent": self.name,
+                    "category": sg_result.category.value,
+                    "rationale": sg_result.rationale,
+                }),
+            )
+
+            logger.info(
+                "[Safeguard] Tool-Call '%s' pausiert (Agent: '%s', Session: '%s').",
+                tool_name, self.name, session_id,
+            )
+            return (
+                f"{_TOOL_SAFEGUARD_SENTINEL}"
+                + _json.dumps({
+                    "tool_name": tool_name,
+                    "category": sg_result.category.value,
+                    "rationale": sg_result.rationale,
+                })
+            )
+
+    async def _run_with_safeguard(
+        self,
+        messages: list,
+        active_tools: list,
+        run_config: dict,
+        session_id: str,
+    ) -> "dict | str":
+        """
+        Führt den Agenten mit aktivem Safeguard-Interrupt aus.
+        Erstellt einen temporären Agenten mit MemorySaver + interrupt_before=["tools"].
+        """
+        from langgraph.checkpoint.memory import MemorySaver
+
+        checkpointer = MemorySaver()
+        sg_agent = create_react_agent(
+            model=self._llm,
+            tools=active_tools,
+            checkpointer=checkpointer,
+            interrupt_before=["tools"],
+        )
+        thread_config = {**run_config, "configurable": {"thread_id": session_id}}
+        return await self._sg_loop(sg_agent, thread_config, {"messages": messages}, session_id)
+
+    async def resume_safeguard_tool(self, session_id: str) -> tuple[str, bool]:
+        """
+        Setzt die Ausführung nach Safeguard-Bestätigung durch den User fort.
+        Holt den pausierten Agenten aus _paused_sg_agents und resumiert den Graph.
+        """
+        if session_id not in _paused_sg_agents:
+            logger.warning(
+                "[Safeguard] Resume angefragt, aber kein pausierter Agent für Session '%s'.",
+                session_id,
+            )
+            return _t(
+                "Fehler: Kein ausstehender Tool-Aufruf für diese Session.",
+                "Error: No pending tool call for this session.",
+            ), False
+
+        sg_agent, thread_config = _paused_sg_agents.pop(session_id)
+
+        try:
+            result = await self._sg_loop(sg_agent, thread_config, None, session_id)
+        except asyncio.TimeoutError:
+            logger.warning("Agent '%s' Timeout beim Resume (Session: %s).", self.name, session_id)
+            return _t(
+                "Die Ausführung hat zu lange gedauert und wurde abgebrochen.",
+                "Execution timed out and was aborted.",
+            ), False
+        except Exception as exc:
+            logger.error("Agent '%s' Fehler beim Resume: %s", self.name, exc, exc_info=True)
+            return _t(f"Fehler: {exc}", f"Error: {exc}"), False
+
+        # Weiterer Sentinel? (nächster gefährlicher Tool-Call)
+        if isinstance(result, str):
+            return result, False
+
+        return self._extract_result_response(result), False
 
     async def store_incident(
         self,
