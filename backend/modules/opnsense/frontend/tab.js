@@ -20,6 +20,7 @@ const OPNsenseTab = {
 
         if (this.currentConnectionId) {
             await this.refresh();
+            this.startPolling();
         }
     },
 

@@ -7,6 +7,29 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.5.11] – 2026-03-28
+
+### Fixed
+
+- **OPNsense module: all six API endpoints corrected** (`backend/modules/opnsense/tools.py`) — Verified live against OPNsense 24.x; all original endpoints returned 404:
+  - `get_opnsense_interfaces`: `GET /api/interfaces/overview/get` → `POST /api/interfaces/overview/interfacesInfo`; field mapping updated (`device`, `description`, `addr4`, `macaddr`)
+  - `get_opnsense_firewall_rules`: `/api/filter/rule/searchRule` → `/api/firewall/filter/searchRule`
+  - `get_opnsense_nat_rules`: `/api/nat/rule/searchRule` → `/api/firewall/filter/searchRule?type=nat`
+  - `get_opnsense_services`: `/api/service/searchService` → `/api/core/service/search`; field mapping updated (`running` int instead of `enabled` string)
+  - `get_opnsense_logs`: `/api/filter/log/filter/{n}` → `/api/diagnostics/firewall/log`; response is a direct JSON array (not a dict); return type changed from `List[str]` to `List[Dict]`
+  - `restart_opnsense_service`: `/api/service/service/restart/{n}` → `/api/core/service/restart/{n}`
+  - `_opnsense_request` return type changed from `Dict` to `Any` to correctly handle list responses
+- **OPNsense `tab.js`: garbage text in innerHTML template** (`frontend/tab.js`) — Tool description text was accidentally embedded inside the System card template literal, rendering as visible plaintext in the browser
+- **OPNsense `tab.js`: auto-refresh never started** — `startPolling()` was defined but never called in `init()`; added call after first `refresh()`
+- **OPNsense `tools.py`: mixed f-string + `%s` logging** — `logger.error(f"...: %s", e)` in `restart_opnsense_service` left the `%s` unreplaced; corrected to `logger.error("...: %s", e)`
+- **OPNsense `tools.py`: mutable default argument** — `json_data: dict = None` → `json_data: dict | None = None`
+- **OPNsense `tools.py`: redundant host check** — `if not host: raise` after `_get_opnsense_auth()` was dead code (helper already raises); removed
+- **OPNsense `manifest.py`: duplicated auth logic in health check** — `check_opnsense_health()` now calls `_get_opnsense_auth()` from `tools.py` instead of re-implementing Vault secret loading
+- **OPNsense `manifest.py`: routing keyword conflicts** — Removed short generic keywords (`pf`, `wan`, `lan`, `opt`, `routing`, `dhcp`, `dns`, `vpn`, `blockieren`, `erlauben`, `regel`, `rules`, `filter`) that conflicted with FritzBox/HomeAssistant modules; replaced with specific multi-word phrases (`firewall regel`, `opnsense dhcp`, `nat regel`, etc.)
+- **OPNsense `routes.py`: untyped dict responses** — All three route handlers now return a typed `ApiResponse` Pydantic model with `response_model` annotations
+
+---
+
 ## [0.5.10] – 2026-03-28
 
 ### Changed

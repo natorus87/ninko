@@ -55,7 +55,7 @@ async def _get_opnsense_auth(connection_id: str = "") -> tuple:
     return host, (api_key, api_secret)
 
 
-async def _opnsense_request(endpoint: str, connection_id: str = "", method: str = "GET", json_data: dict = None) -> Dict:
+async def _opnsense_request(endpoint: str, connection_id: str = "", method: str = "GET", json_data: dict | None = None) -> Any:
     """Sendet eine Anfrage an die OPNsense API."""
     host, auth = await _get_opnsense_auth(connection_id)
 
@@ -78,7 +78,7 @@ async def _opnsense_request(endpoint: str, connection_id: str = "", method: str 
             resp.raise_for_status()
             return resp.json()
     except httpx.HTTPError as e:
-        logger.error(f"OPNsense API Error: {e}")
+        logger.error("OPNsense API Error: %s", e)
         raise ValueError(f"OPNsense API Fehler: {e}")
 
 
@@ -91,9 +91,6 @@ async def get_opnsense_system_status(connection_id: str = "") -> Dict:
     """
     try:
         host, _ = await _get_opnsense_auth(connection_id)
-        if not host:
-            raise ValueError("Keine OPNsense-Verbindung konfiguriert.")
-
         result = await _opnsense_request("/api/core/system/status", connection_id)
 
         sys = result.get("system", {})
@@ -123,19 +120,19 @@ async def get_opnsense_interfaces(connection_id: str = "") -> List[Dict]:
     Use this tool to get network interface information.
     """
     try:
-        result = await _opnsense_request("/api/interfaces/overview/get", connection_id)
-        interfaces = result.get("interfaces", [])
+        result = await _opnsense_request("/api/interfaces/overview/interfacesInfo", connection_id, method="POST", json_data={})
+        interfaces = result.get("rows", [])
 
         return [
             {
-                "name": iface.get("name", ""),
-                "descr": iface.get("descr", ""),
-                "ipaddr": iface.get("ipaddr", ""),
-                "subnet": iface.get("subnet"),
+                "name": iface.get("device", ""),
+                "descr": iface.get("description", ""),
+                "ipaddr": iface.get("addr4", ""),
+                "ipv6": iface.get("addr6", ""),
                 "macaddr": iface.get("macaddr", ""),
                 "status": iface.get("status", ""),
                 "media": iface.get("media", ""),
-                "speed": iface.get("speed"),
+                "enabled": iface.get("enabled", False),
             }
             for iface in interfaces
         ]
@@ -178,7 +175,7 @@ async def get_opnsense_firewall_rules(connection_id: str = "", interface: str = 
     Use this tool to list active firewall rules.
     """
     try:
-        result = await _opnsense_request("/api/filter/rule/searchRule", connection_id)
+        result = await _opnsense_request("/api/firewall/filter/searchRule", connection_id)
         rules = result.get("rows", [])
 
         if interface:
@@ -211,7 +208,7 @@ async def get_opnsense_nat_rules(connection_id: str = "") -> List[Dict]:
     Use this tool to list NAT rules.
     """
     try:
-        result = await _opnsense_request("/api/nat/rule/searchRule", connection_id)
+        result = await _opnsense_request("/api/firewall/filter/searchRule?type=nat", connection_id)
         rules = result.get("rows", [])
 
         return [
@@ -242,15 +239,15 @@ async def get_opnsense_services(connection_id: str = "") -> List[Dict]:
     Use this tool to check which services are running.
     """
     try:
-        result = await _opnsense_request("/api/service/searchService", connection_id)
+        result = await _opnsense_request("/api/core/service/search", connection_id)
         services = result.get("rows", [])
 
         return [
             {
                 "name": s.get("name", ""),
                 "description": s.get("description", ""),
-                "enabled": s.get("enabled") == "1",
-                "status": s.get("status", ""),
+                "running": bool(s.get("running", 0)),
+                "locked": bool(s.get("locked", 0)),
             }
             for s in services
         ]
@@ -295,7 +292,7 @@ async def restart_opnsense_service(service_name: str, connection_id: str = "") -
     """
     try:
         result = await _opnsense_request(
-            f"/api/service/service/restart/{service_name}",
+            f"/api/core/service/restart/{service_name}",
             connection_id,
             method="POST"
         )
@@ -304,25 +301,36 @@ async def restart_opnsense_service(service_name: str, connection_id: str = "") -
             return f"Service '{service_name}' wurde neu gestartet."
         return f"Fehler beim Neustart: {result}"
     except Exception as e:
-        logger.error(f"Fehler beim Neustarten des OPNsense Service: %s", e)
+        logger.error("Fehler beim Neustarten des OPNsense Service: %s", e)
         return f"Fehler: {e}"
 
 
 @tool
-async def get_opnsense_logs(lines: int = 50, connection_id: str = "") -> List[str]:
+async def get_opnsense_logs(lines: int = 50, connection_id: str = "") -> List[Dict]:
     """
-    Ruft die Firewall-Logs ab (letzte einträge).
+    Ruft die Firewall-Logs ab (letzte Einträge).
     Benutze dieses Tool, um Firewall-Blockierungen und Verbindungen zu sehen.
     Use this tool to see firewall logs.
     """
     try:
-        result = await _opnsense_request(
-            f"/api/filter/log/filter/{lines}",
-            connection_id
-        )
+        result = await _opnsense_request("/api/diagnostics/firewall/log", connection_id)
+        # API returns a list directly
+        entries = result if isinstance(result, list) else result.get("rows", [])
 
-        logs = result.get("logs", [])
-        return logs
+        return [
+            {
+                "timestamp": e.get("__timestamp__", ""),
+                "action": e.get("action", ""),
+                "interface": e.get("interface", ""),
+                "src": e.get("src", ""),
+                "dst": e.get("dst", ""),
+                "srcport": e.get("srcport", ""),
+                "dstport": e.get("dstport", ""),
+                "proto": e.get("protoname", ""),
+                "label": e.get("label", ""),
+            }
+            for e in entries[:lines]
+        ]
     except Exception as e:
         logger.error("Fehler beim Abrufen der OPNsense Logs: %s", e)
-        return [f"Fehler: {str(e)}"]
+        return [{"error": str(e)}]
