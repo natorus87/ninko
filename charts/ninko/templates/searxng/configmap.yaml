@@ -1,0 +1,21 @@
+{{- if .Values.searxng.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ninko.searxng.fullname" . }}-settings
+  namespace: {{ include "ninko.namespace" . }}
+  labels:
+    {{- include "ninko.labels" . | nindent 4 }}
+    app.kubernetes.io/component: searxng
+data:
+  settings.yml: |
+    use_default_settings: true
+    server:
+      port: 8080
+      bind_address: "0.0.0.0"
+      secret_key: "{{ .Values.searxng.secretKey | default (randAlphaNum 32) }}"
+    search:
+      formats:
+        - html
+        - json
+{{- end }}

@@ -1,0 +1,152 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ninko.backend.fullname" . }}
+  namespace: {{ include "ninko.namespace" . }}
+  labels:
+    {{- include "ninko.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  replicas: {{ .Values.backend.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "ninko.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: backend
+  template:
+    metadata:
+      labels:
+        {{- include "ninko.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: backend
+    spec:
+      {{- if .Values.serviceAccount.create }}
+      serviceAccountName: {{ include "ninko.serviceAccountName" . }}
+      {{- end }}
+      containers:
+        - name: backend
+          image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            # ─── LLM / Embeddings ───────────────────────────
+            - name: LLM_BACKEND
+              value: {{ .Values.backend.llm.backend | quote }}
+            {{- if eq .Values.backend.llm.backend "lmstudio" }}
+            - name: LMSTUDIO_BASE_URL
+              value: {{ .Values.backend.llm.baseUrl | quote }}
+            - name: LMSTUDIO_MODEL
+              value: {{ .Values.backend.llm.model | quote }}
+            - name: LMSTUDIO_EMBED_MODEL
+              value: {{ .Values.backend.llm.embedModel | quote }}
+            {{- else if eq .Values.backend.llm.backend "ollama" }}
+            - name: OLLAMA_BASE_URL
+              value: {{ .Values.backend.llm.baseUrl | quote }}
+            - name: OLLAMA_MODEL
+              value: {{ .Values.backend.llm.model | quote }}
+            - name: EMBED_MODEL
+              value: {{ .Values.backend.llm.embedModel | quote }}
+            {{- else if eq .Values.backend.llm.backend "openai_compatible" }}
+            - name: OPENAI_BASE_URL
+              value: {{ .Values.backend.llm.baseUrl | quote }}
+            - name: OPENAI_MODEL
+              value: {{ .Values.backend.llm.model | quote }}
+            - name: EMBED_MODEL
+              value: {{ .Values.backend.llm.embedModel | quote }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ninko.fullname" . }}-secrets
+                  key: LLM_API_KEY
+            {{- end }}
+
+            # ─── ChromaDB ───────────────────────────────────
+            {{- if .Values.chromadb.enabled }}
+            - name: CHROMA_HOST
+              value: {{ include "ninko.chromadb.fullname" . | quote }}
+            - name: CHROMA_PORT
+              value: "8000"
+            {{- end }}
+
+            # ─── Redis ──────────────────────────────────────
+            {{- if .Values.redis.enabled }}
+            - name: REDIS_URL
+              value: "redis://{{ include "ninko.redis.fullname" . }}:6379/0"
+            {{- end }}
+
+            # ─── Secrets Store ──────────────────────────────
+            - name: VAULT_FALLBACK
+              value: "sqlite"
+            - name: SQLITE_SECRETS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ninko.fullname" . }}-secrets
+                  key: SQLITE_SECRETS_KEY
+
+            # ─── Core Modules ───────────────────────────────
+            - name: NINKO_MODULE_WEB_SEARCH
+              value: {{ .Values.backend.modules.webSearch | toString | quote }}
+            {{- if .Values.backend.modules.webSearch }}
+            - name: SEARXNG_URL
+              value: "http://{{ include "ninko.searxng.fullname" . }}:8080"
+            {{- end }}
+            - name: NINKO_MODULE_CODELAB
+              value: {{ .Values.backend.modules.codelab | toString | quote }}
+            - name: NINKO_MODULE_IMAGE_GEN
+              value: {{ .Values.backend.modules.imageGen | toString | quote }}
+
+            # ─── Monitoring ─────────────────────────────────
+            - name: MONITOR_INTERVAL_SECONDS
+              value: {{ .Values.backend.monitoring.intervalSeconds | toString | quote }}
+            - name: MONITOR_AUTO_REMEDIATE
+              value: {{ .Values.backend.monitoring.autoRemediate | toString | quote }}
+
+            # ─── Logging & Language ─────────────────────────
+            - name: LOG_LEVEL
+              value: {{ .Values.backend.logLevel | quote }}
+            - name: LANGUAGE
+              value: {{ .Values.backend.language | quote }}
+
+            # ─── TTS (Piper) ────────────────────────────────
+            - name: TTS_ENABLED
+              value: {{ .Values.backend.tts.enabled | toString | quote }}
+            {{- if .Values.backend.tts.enabled }}
+            - name: PIPER_BINARY
+              value: "piper"
+            - name: VOICES_DIR
+              value: "/app/data/voices"
+            - name: TTS_DEFAULT_LANG
+              value: {{ .Values.backend.tts.defaultLang | quote }}
+            - name: TTS_DEFAULT_VOICE
+              value: {{ .Values.backend.tts.defaultVoice | quote }}
+            {{- end }}
+
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: {{ .Values.backend.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.backend.livenessProbe.periodSeconds }}
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: {{ .Values.backend.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.backend.readinessProbe.periodSeconds }}
+
+          volumeMounts:
+            - name: backend-data
+              mountPath: /app/data
+            - name: backend-data
+              mountPath: /app/plugins
+              subPath: plugins
+
+      volumes:
+        - name: backend-data
+          persistentVolumeClaim:
+            claimName: {{ include "ninko.backend.fullname" . }}-data

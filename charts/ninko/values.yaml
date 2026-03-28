@@ -1,0 +1,184 @@
+# ─────────────────────────────────────────────
+#  Ninko Helm Chart – Default Values
+#  https://github.com/natorus87/ninko
+# ─────────────────────────────────────────────
+
+# Override the release name used in resource names
+nameOverride: ""
+fullnameOverride: ""
+
+# Kubernetes namespace to deploy into
+namespace: ninko
+
+# ─── Service Account & RBAC ───────────────────
+serviceAccount:
+  # Creates a dedicated ServiceAccount for the backend pod.
+  # Required if you use the Kubernetes module (pod/deployment management).
+  create: true
+  name: ""
+  annotations: {}
+
+rbac:
+  # Creates ClusterRole + ClusterRoleBinding for the Kubernetes module.
+  # The role grants read access to pods/services/namespaces and
+  # patch/update access to deployments.
+  create: true
+
+# ─── Secrets ──────────────────────────────────
+secrets:
+  # AES encryption key for the SQLite-backed secrets store (Vault fallback).
+  # Generate with: python3 -c "import secrets; print(secrets.token_hex(32))"
+  # REQUIRED – helm install will fail if left empty.
+  sqliteSecretsKey: ""
+
+# ─── Backend (FastAPI) ────────────────────────
+backend:
+  image:
+    repository: natorus87/ninko-backend
+    # Pin to a specific release tag in production, e.g. "0.6.2"
+    tag: "latest"
+    pullPolicy: Always
+
+  replicaCount: 1
+
+  # ── LLM Provider ──
+  llm:
+    # Supported backends: lmstudio | ollama | openai_compatible
+    backend: lmstudio
+    # Base URL of the LLM API (auto-appends /v1 if missing)
+    baseUrl: "http://YOUR_LMSTUDIO_HOST:1234"
+    # Model name as returned by /v1/models
+    model: "YOUR_MODEL_NAME"
+    # Embedding model – must be available on the same provider
+    embedModel: "YOUR_EMBED_MODEL_NAME"
+    # Only required when backend=openai_compatible (e.g. OpenRouter, Groq)
+    apiKey: ""
+
+  # ── Core Modules ──
+  modules:
+    webSearch: true   # Requires searxng.enabled=true
+    codelab: true
+    imageGen: false
+
+  # ── Monitoring ──
+  monitoring:
+    intervalSeconds: 120
+    autoRemediate: false
+
+  # ── TTS (Piper – baked into image) ──
+  tts:
+    enabled: true
+    defaultLang: de
+    defaultVoice: thorsten-medium
+
+  logLevel: INFO
+  language: de
+
+  persistence:
+    size: 2Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "4Gi"
+      cpu: "2"
+
+  livenessProbe:
+    initialDelaySeconds: 15
+    periodSeconds: 30
+
+  readinessProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+# ─── Redis ────────────────────────────────────
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: "7-alpine"
+
+  persistence:
+    size: 1Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "100m"
+    limits:
+      memory: "768Mi"
+      cpu: "500m"
+
+# ─── ChromaDB ─────────────────────────────────
+chromadb:
+  enabled: true
+  image:
+    repository: chromadb/chroma
+    # IMPORTANT: Ninko requires exactly 0.4.24. Do not upgrade without
+    # testing – the client library is pinned to the same version.
+    tag: "0.4.24"
+
+  persistence:
+    size: 5Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "1"
+
+# ─── SearXNG ──────────────────────────────────
+searxng:
+  # Enable only if backend.modules.webSearch=true
+  enabled: true
+  image:
+    repository: searxng/searxng
+    tag: "latest"
+
+  # SearXNG instance secret key (used internally by SearXNG, not exposed).
+  # Leave empty to auto-generate on first install.
+  # NOTE: Changing this value invalidates existing SearXNG sessions.
+  secretKey: ""
+
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+# ─── Ingress (standard Kubernetes Ingress) ────
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    # nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+  host: ninko.your-domain.local
+  tls: []
+  #  - secretName: ninko-tls
+  #    hosts:
+  #      - ninko.your-domain.local
+
+# ─── Traefik IngressRoute ─────────────────────
+ingressRoute:
+  # Use this for Traefik-based clusters (e.g. MicroK8s with Traefik addon,
+  # k3s, or Rancher). Disable if using standard ingress above.
+  enabled: false
+  host: ninko.your-domain.local
+  entryPoints:
+    - web
+    - websecure
+  # Set to a Traefik TLS resolver name to enable HTTPS
+  # tlsResolver: ""

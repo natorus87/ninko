@@ -1,0 +1,51 @@
+╔══════════════════════════════════════════════════════════════╗
+║          Ninko – AI-powered IT Operations Platform           ║
+╚══════════════════════════════════════════════════════════════╝
+
+Ninko {{ .Chart.AppVersion }} has been deployed to namespace {{ include "ninko.namespace" . }}.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Access:
+  ──────
+{{- if .Values.ingressRoute.enabled }}
+  Traefik IngressRoute: http://{{ .Values.ingressRoute.host }}
+{{- else if .Values.ingress.enabled }}
+  Ingress: http://{{ .Values.ingress.host }}
+{{- else }}
+  Port-forward (no ingress configured):
+
+    kubectl port-forward -n {{ include "ninko.namespace" . }} \
+      svc/{{ include "ninko.backend.fullname" . }} 8000:8000
+
+  Then open: http://localhost:8000
+{{- end }}
+
+  Components:
+  ───────────
+  ✓ Backend (FastAPI)  → {{ include "ninko.backend.fullname" . }}:8000
+{{- if .Values.redis.enabled }}
+  ✓ Redis              → {{ include "ninko.redis.fullname" . }}:6379
+{{- end }}
+{{- if .Values.chromadb.enabled }}
+  ✓ ChromaDB 0.4.24   → {{ include "ninko.chromadb.fullname" . }}:8000
+{{- end }}
+{{- if .Values.searxng.enabled }}
+  ✓ SearXNG            → {{ include "ninko.searxng.fullname" . }}:8080
+{{- end }}
+
+  LLM Backend:
+  ────────────
+  Provider : {{ .Values.backend.llm.backend }}
+  URL      : {{ .Values.backend.llm.baseUrl }}
+  Model    : {{ .Values.backend.llm.model }}
+
+  Helm Repo:
+  ──────────
+  helm repo add ninko https://natorus87.github.io/ninko
+  helm repo update
+  helm upgrade ninko ninko/ninko -f your-values.yaml
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Docs: https://github.com/natorus87/ninko
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
