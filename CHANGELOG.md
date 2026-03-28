@@ -11,7 +11,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- **Typography: Lora replaces Inter as the UI typeface** (`frontend/style.css`, `frontend/index.html`) — Lora (Google Fonts, serif) is now loaded as the global body font. Monospace code blocks retain their explicit stack (`SF Mono`, `Fira Code`, `Cascadia Code`). All `font-family: inherit` elements inherit Lora automatically.
+- **Typography: Manrope replaces Lora as the UI typeface** (`frontend/style.css`, `frontend/index.html`) — Manrope (Google Fonts, geometric sans-serif, weights 300–800) is loaded as the global body font. Better fit for a technical dashboard than the serif Lora.
 - **Logo: Reiko font** (`frontend/style.css`) — The "Ninko" wordmark uses Reiko, a futuristic geometric typeface. Loaded via `@font-face` from `frontend/fonts/Reiko.woff2`. Place the font file there after downloading from https://fontesk.com/reiko-font/ (free for commercial use). Until the file is present, falls back to Georgia/serif.
 
 ---

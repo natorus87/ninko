@@ -135,7 +135,7 @@ html.light-mode-pre body {
 }
 
 body {
-    font-family: 'Lora', Georgia, 'Times New Roman', serif;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     background: var(--bg-primary);
     color: var(--text-primary);
     line-height: 1.6;
