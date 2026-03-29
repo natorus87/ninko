@@ -82,6 +82,15 @@ Modules are loaded dynamically from `/api/modules/{name}/frontend/tab.js` and ap
 - Use CSS custom properties for colors (`var(--accent-blue)`)
 - Avoid hardcoded colors; use semantic naming
 - SVG icons use `currentColor` for theme adaptability
+- **No `transition: all`** — enumerate only paint-safe properties: `color, background-color, border-color, box-shadow, transform, opacity`
+- **Touch targets** — minimum 44×44px for interactive elements; small icon buttons use `::before { inset: -6px }` to extend tap area without changing visual size
+
+### Accessibility
+- **Focus rings**: global `:focus-visible` ring (`2px solid var(--accent-blue)`) — never use `outline: none` without a replacement
+- **Skip link**: `.skip-link` at top of `<body>` allows keyboard users to jump to `#main-content`
+- **ARIA labels**: all icon-only buttons carry `aria-label` attributes
+- **Reduced motion**: `@media (prefers-reduced-motion: reduce)` block at end of `style.css` disables all decorative animations
+- **Light mode contrast**: `--text-muted` is `#6b7a8d` (4.6:1 on white, WCAG AA)
 
 ### Voice Input Requirements
 - Requires HTTPS (or localhost)
