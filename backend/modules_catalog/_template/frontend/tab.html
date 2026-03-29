@@ -1,12 +1,89 @@
+<!-- ╔══════════════════════════════════════════════════════════════════════╗
+     ║  NINKO MODULE TEMPLATE — tab.html                                    ║
+     ║  Design & Accessibility Guidelines (enforced since v0.7.1)           ║
+     ╠══════════════════════════════════════════════════════════════════════╣
+     ║                                                                      ║
+     ║  COLORS — always use CSS variables, never hardcode:                  ║
+     ║    Background  var(--bg-primary / --bg-secondary / --bg-card)        ║
+     ║    Text        var(--text-primary / --text-secondary / --text-muted)  ║
+     ║    Borders     var(--border-color / --border-active)                  ║
+     ║    Accents     var(--accent-blue / --accent-green / --accent-red /    ║
+     ║                    --accent-yellow / --accent-orange / --accent-purple)║
+     ║    Actions     var(--primary-color)                                   ║
+     ║                                                                      ║
+     ║  ICONS — inline SVG only, NO emoji as structural icons:              ║
+     ║    ✓  <svg ... stroke="currentColor">...</svg>                       ║
+     ║    ✗  🔄 ❌ ✅ as navigation/action icons                            ║
+     ║    Emoji is only allowed in free-form label text, never as a button  ║
+     ║    icon or status indicator. Reason: emoji size is font-dependent    ║
+     ║    and cannot be styled with CSS color/size tokens.                  ║
+     ║                                                                      ║
+     ║  BUTTONS — rules for every <button>:                                 ║
+     ║    • Always add type="button" to prevent accidental form submit       ║
+     ║    • Icon-only buttons MUST have aria-label="Descriptive action"     ║
+     ║    • Use existing CSS classes (.btn, .btn-primary, .btn-sm, etc.)    ║
+     ║    • Min tap target: 44×44px — .btn satisfies this automatically      ║
+     ║    • Refresh button: class="btn btn-refresh" (not a custom class)    ║
+     ║                                                                      ║
+     ║  CSS TRANSITIONS — never use `transition: all`:                      ║
+     ║    ✓  transition: color 0.15s, background-color 0.15s, ...           ║
+     ║    ✗  transition: all 0.15s  (triggers layout reflows)               ║
+     ║    Safe props: color, background-color, border-color, box-shadow,    ║
+     ║                transform, opacity                                    ║
+     ║                                                                      ║
+     ║  STATUS CARDS — use the established .status-card pattern:            ║
+     ║    <div class="status-card [running|failing|warning]">               ║
+     ║        <span class="status-icon"><svg ...></svg></span>              ║
+     ║        <span class="status-value" id="...">-</span>                  ║
+     ║        <span class="status-label">Label</span>                       ║
+     ║    </div>                                                             ║
+     ║    Modifier classes: .running (green), .failing (red),               ║
+     ║    .warning (yellow). Default = neutral/muted.                       ║
+     ║    Number values: add style="font-variant-numeric: tabular-nums"     ║
+     ║                                                                      ║
+     ║  SECTION LAYOUT — standard structure:                                ║
+     ║    Outer section:  <div class="k8s-section"> (reused across modules) ║
+     ║    Section header: <h3 class="section-title">Title</h3>              ║
+     ║    Sub-header:     <h4 class="subsection-title">Sub</h4>             ║
+     ║    Content grids:  class="nodes-grid" / "agents-grid"                ║
+     ║    Data tables:    class="data-table"                                 ║
+     ║                                                                      ║
+     ║  STATE CLASSES — always represent feedback visually:                 ║
+     ║    Empty state:  <p class="empty-state">No data yet.</p>             ║
+     ║    Error state:  <p class="empty-state text-error">Error msg.</p>    ║
+     ║    Loading text: "Lade…" (German) / "Loading…" (English)            ║
+     ║    Status badge: <span class="status-badge status-ok">OK</span>      ║
+     ║    Badge states: status-ok / status-warning / status-error /         ║
+     ║                  status-new / status-processing / status-pending      ║
+     ║                                                                      ║
+     ║  DROPDOWN SELECTS — never use native <select> for primary controls: ║
+     ║    Use the .cl-select div pattern (already in this template).        ║
+     ║    Native <select> is only acceptable for inline form fields         ║
+     ║    inside Settings forms where .form-select class handles theming.   ║
+     ║                                                                      ║
+     ║  CONTROLS TOOLBAR — standard flex row above content:                 ║
+     ║    style="display:flex; gap:1rem; align-items:center;                ║
+     ║            flex-wrap:wrap; margin-bottom:1.5rem;"                    ║
+     ║    This ensures the toolbar wraps gracefully at narrow widths.       ║
+     ║                                                                      ║
+     ║  HEADING TEXT WRAP:                                                  ║
+     ║    Add text-wrap:balance to h2/h3 headings for balanced line breaks  ║
+     ║                                                                      ║
+     ╚══════════════════════════════════════════════════════════════════════╝ -->
+
 <!-- Template Dashboard Tab -->
 <style>
-/* ── Custom Select (Dark/Light-Theme-safe, kein nativer <select>) ── */
+/* ── Scope all styles under the tab content ID to avoid leaking into other tabs ── */
+
+/* ── Custom Select (Dark/Light-Theme-safe, no native <select>) ── */
 #template-tab-content .cl-select { position:relative; display:inline-block; user-select:none; }
 #template-tab-content .cl-select-btn {
     display:flex; align-items:center; justify-content:space-between; gap:0.5rem;
-    padding:0.45rem 0.75rem; border-radius:4px; cursor:pointer;
+    padding:0.45rem 0.75rem; border-radius:4px; cursor:pointer; touch-action:manipulation;
     border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-primary);
     font-size:0.875rem; white-space:nowrap; min-width:200px;
+    /* ✓ specific transition props only — no "transition: all" */
+    transition: border-color 0.15s;
 }
 #template-tab-content .cl-select-btn:hover { border-color:var(--accent-blue); }
 #template-tab-content .cl-select-arrow { font-size:0.65rem; opacity:0.7; transition:transform 0.15s; }
@@ -16,11 +93,14 @@
     background:var(--bg-card); border:1px solid var(--border-color);
     border-radius:4px; box-shadow:0 4px 16px rgba(0,0,0,0.4);
     z-index:999; overflow:hidden; max-height:260px; overflow-y:auto;
+    /* Prevent scroll bleed when dropdown is open on mobile */
+    overscroll-behavior: contain;
 }
 #template-tab-content .cl-select.open .cl-select-dropdown { display:block; }
 #template-tab-content .cl-select-option {
     padding:0.45rem 0.75rem; cursor:pointer; font-size:0.875rem;
     color:var(--text-primary); white-space:nowrap;
+    transition: background-color 0.1s;
 }
 #template-tab-content .cl-select-option:hover { background:rgba(255,255,255,0.07); }
 #template-tab-content .cl-select-option.selected { color:var(--accent-blue); }
@@ -28,28 +108,117 @@
 
 <div id="template-tab-content" class="module-tab-content">
 
-    <!-- Connection Selector -->
+    <!-- ── Status Cards ──────────────────────────────────────────────────
+         Use .status-card[.running/.failing/.warning] pattern.
+         Icon: inline SVG with stroke="currentColor" (not emoji).
+         Number value: add font-variant-numeric:tabular-nums.
+         ──────────────────────────────────────────────────────────────── -->
+    <div class="k8s-cluster-status" id="template-stats">
+        <div class="status-card">
+            <!-- ✓ Inline SVG icon with currentColor — not emoji -->
+            <span class="status-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                     stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round"
+                     aria-hidden="true">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+            </span>
+            <span class="status-value" id="template-stat-1"
+                  style="font-variant-numeric: tabular-nums">-</span>
+            <span class="status-label">Items</span>
+        </div>
+        <div class="status-card running">
+            <span class="status-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                     stroke="var(--accent-green)" stroke-width="2.5"
+                     stroke-linecap="round" stroke-linejoin="round"
+                     aria-hidden="true">
+                    <polyline points="20 6 9 17 4 12"/>
+                </svg>
+            </span>
+            <span class="status-value" id="template-stat-ok"
+                  style="font-variant-numeric: tabular-nums">-</span>
+            <span class="status-label">OK</span>
+        </div>
+        <div class="status-card failing">
+            <span class="status-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                     stroke="var(--accent-red)" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round"
+                     aria-hidden="true">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </span>
+            <span class="status-value" id="template-stat-err"
+                  style="font-variant-numeric: tabular-nums">-</span>
+            <span class="status-label">Error</span>
+        </div>
+    </div>
+
+    <!-- ── Controls Toolbar ──────────────────────────────────────────────
+         Standard flex row above content sections.
+         All buttons need type="button".
+         Icon-only buttons need aria-label.
+         ──────────────────────────────────────────────────────────────── -->
     <div class="template-controls"
-        style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1.5rem;">
+         style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap; margin-bottom:1.5rem;">
 
-        <!-- cl-select statt nativer <select> (Dark-Theme-safe) -->
+        <!-- cl-select instead of native <select> (Dark/Light-Theme-safe) -->
         <div class="cl-select" id="template-conn-select">
-            <div class="cl-select-btn" onclick="TemplateTab.toggleSelect('template-conn-select')">
+            <div class="cl-select-btn" onclick="TemplateTab.toggleSelect('template-conn-select')"
+                 role="button" aria-haspopup="listbox" aria-label="Connection auswählen">
                 <span class="cl-select-label">Lade Verbindungen…</span>
-                <span class="cl-select-arrow">▼</span>
+                <span class="cl-select-arrow" aria-hidden="true">▼</span>
             </div>
-            <div class="cl-select-dropdown" id="template-conn-options"></div>
+            <div class="cl-select-dropdown" id="template-conn-options" role="listbox"></div>
         </div>
 
-        <button class="btn btn-refresh" data-action="template-refresh">🔄 Aktualisieren</button>
+        <!-- ✓ type="button" — always required outside a <form> -->
+        <button type="button" class="btn btn-refresh" data-action="template-refresh">
+            <!-- ✓ SVG icon — not emoji -->
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
+                 stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round"
+                 aria-hidden="true">
+                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                <path d="M21 3v5h-5"/>
+                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                <path d="M8 16H3v5"/>
+            </svg>
+            Aktualisieren
+        </button>
+
+        <!-- Example: icon-only action button — needs aria-label -->
+        <!-- <button type="button" class="btn btn-icon" aria-label="Export as CSV"
+                data-action="template-export">
+            <svg ...></svg>
+        </button> -->
     </div>
 
-    <!-- Content Area -->
-    <div class="template-section">
-        <h3 class="section-title">📊 Status</h3>
+    <!-- ── Content Section ───────────────────────────────────────────────
+         Use .k8s-section as outer wrapper (shared across all modules).
+         Section header: h3.section-title with text-wrap:balance.
+         Data tables:    .data-table
+         Empty state:    <p class="empty-state">
+         Error state:    <p class="empty-state text-error">
+         ──────────────────────────────────────────────────────────────── -->
+    <div class="k8s-section">
+        <h3 class="section-title" style="text-wrap:balance">Status</h3>
         <div id="template-content" class="nodes-grid">
-            <p class="empty-state">Keine Daten geladen. Bitte Verbindung wählen und aktualisieren.</p>
+            <!-- Loading placeholder — replaced by JS on refresh() -->
+            <p class="empty-state">Keine Daten geladen. Verbindung wählen und aktualisieren.</p>
         </div>
     </div>
+
+    <!-- ── Status Badge Example ──────────────────────────────────────────
+         <span class="status-badge status-ok">Running</span>
+         <span class="status-badge status-warning">Degraded</span>
+         <span class="status-badge status-error">Failed</span>
+         <span class="status-badge status-processing">Pending</span>
+         ──────────────────────────────────────────────────────────────── -->
 
 </div>

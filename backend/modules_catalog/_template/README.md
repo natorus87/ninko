@@ -133,6 +133,233 @@ The key (`'mymodule'`) must match `dashboard_tab.id` in `manifest.py`.
 
 ---
 
+## Frontend Design Guidelines
+
+All module tabs must follow these rules. They are enforced in the template since v0.7.1.
+
+---
+
+### Colors — CSS Variables Only
+
+Never hardcode colors. Always use semantic CSS custom properties:
+
+| Token | Purpose |
+|-------|---------|
+| `var(--bg-primary)` / `--bg-secondary` / `--bg-card` | Backgrounds (page, panel, card) |
+| `var(--text-primary)` / `--text-secondary` / `--text-muted` | Text hierarchy |
+| `var(--border-color)` / `--border-active` | Borders and dividers |
+| `var(--accent-blue)` | Primary interaction / active state |
+| `var(--accent-green)` | Success / running state |
+| `var(--accent-red)` | Error / failing state |
+| `var(--accent-yellow)` | Warning / degraded state |
+| `var(--accent-orange)` | Pending / caution state |
+| `var(--primary-color)` | Primary CTA buttons |
+
+```css
+/* ✓ Correct */
+color: var(--text-primary);
+border-color: var(--accent-blue);
+
+/* ✗ Wrong */
+color: #ffffff;
+border-color: #4a9eff;
+```
+
+---
+
+### Icons — Inline SVG Only, No Emoji as Icons
+
+Emoji cannot be themed, sized consistently, or made accessible. Use inline SVG with `currentColor`.
+
+```html
+<!-- ✓ Correct: inline SVG, currentColor, aria-hidden on decorative icons -->
+<svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+     stroke="currentColor" stroke-width="2"
+     stroke-linecap="round" stroke-linejoin="round"
+     aria-hidden="true">
+    <polyline points="20 6 9 17 4 12"/>
+</svg>
+
+<!-- ✗ Wrong: emoji as icon -->
+🔄 Aktualisieren
+✅ Running
+```
+
+Emoji is only acceptable inside free-form text labels, not as structural icons.
+
+Define reusable SVG strings as module-level constants in `tab.js` to avoid repetition.
+
+---
+
+### Buttons — Accessibility Requirements
+
+Every `<button>` element must have:
+
+1. **`type="button"`** — prevents accidental form submission
+2. **`aria-label`** — required on icon-only buttons (no visible text label)
+3. **Touch target ≥ 44px** — use `.btn` class which satisfies this automatically
+
+```html
+<!-- ✓ Text button -->
+<button type="button" class="btn btn-refresh" data-action="template-refresh">
+    <svg ...></svg> Aktualisieren
+</button>
+
+<!-- ✓ Icon-only button — needs aria-label -->
+<button type="button" class="btn btn-icon" aria-label="Export als CSV"
+        data-action="template-export">
+    <svg ...></svg>
+</button>
+
+<!-- ✗ Missing type, missing aria-label -->
+<button onclick="fn()">🔄</button>
+```
+
+Available button classes: `.btn`, `.btn-primary`, `.btn-outline`, `.btn-sm`, `.btn-danger`, `.btn-refresh`, `.btn-icon`, `.btn-icon-sm`.
+
+---
+
+### CSS Transitions — No `transition: all`
+
+`transition: all` animates layout-affecting properties (width, height, padding) and causes layout reflows on every interaction.
+
+```css
+/* ✓ Correct — enumerate paint-safe props only */
+transition: color 0.15s, background-color 0.15s, border-color 0.15s,
+            box-shadow 0.15s, transform 0.15s, opacity 0.15s;
+
+/* ✗ Wrong */
+transition: all 0.15s;
+```
+
+This applies to both CSS in `tab.html` and any `el.style.transition` set in `tab.js`.
+
+---
+
+### Status Cards
+
+Use the shared `.status-card` pattern for metric headers:
+
+```html
+<div class="k8s-cluster-status">
+    <!-- neutral -->
+    <div class="status-card">
+        <span class="status-icon"><svg ...></svg></span>
+        <span class="status-value" style="font-variant-numeric:tabular-nums" id="my-stat">-</span>
+        <span class="status-label">Label</span>
+    </div>
+    <!-- positive -->
+    <div class="status-card running"> ... </div>
+    <!-- negative -->
+    <div class="status-card failing"> ... </div>
+    <!-- cautionary -->
+    <div class="status-card warning"> ... </div>
+</div>
+```
+
+Always add `font-variant-numeric: tabular-nums` to numeric `.status-value` elements so numbers don't jump horizontally during updates.
+
+---
+
+### Status Badges
+
+```html
+<span class="status-badge status-ok">Running</span>
+<span class="status-badge status-warning">Degraded</span>
+<span class="status-badge status-error">Failed</span>
+<span class="status-badge status-new">New</span>
+<span class="status-badge status-processing">Processing</span>
+<span class="status-badge status-pending">Pending</span>
+```
+
+---
+
+### State Classes — Always Show Feedback
+
+Never leave a container blank after an async operation. Always render one of these states:
+
+```html
+<!-- Loading -->
+<p class="empty-state">Lade…</p>
+
+<!-- Empty result -->
+<p class="empty-state">Keine Einträge gefunden.</p>
+
+<!-- Error -->
+<p class="empty-state text-error">Fehler beim Laden der Daten.</p>
+```
+
+---
+
+### Section Structure
+
+```html
+<div class="k8s-section">
+    <h3 class="section-title" style="text-wrap:balance">Section Title</h3>
+    <!-- content: .nodes-grid / .agents-grid / .data-table -->
+</div>
+```
+
+Add `text-wrap: balance` to `h2`/`h3` headings to prevent orphaned single words on the last line.
+
+---
+
+### Controls Toolbar
+
+Standard layout for the connection selector + action buttons row:
+
+```html
+<div style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap; margin-bottom:1.5rem;">
+    <!-- connection selector, filter dropdowns, action buttons -->
+</div>
+```
+
+`flex-wrap: wrap` ensures the toolbar doesn't overflow at narrow widths.
+
+---
+
+### Dropdowns — No Native `<select>` for Primary Controls
+
+Use the `cl-select` div pattern for connection selectors and filter dropdowns. It renders correctly in both dark and light mode. Native `<select>` is only acceptable for inline form fields inside Settings forms where `.form-select` handles the theming.
+
+---
+
+### Safe HTML Generation in JavaScript
+
+Always escape user-supplied values before inserting into `innerHTML`:
+
+```js
+function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = String(s ?? '');
+    return d.innerHTML;
+}
+
+// ✓ Safe
+container.innerHTML = `<div>${esc(item.name)}</div>`;
+
+// ✗ XSS risk
+container.innerHTML = `<div>${item.name}</div>`;
+```
+
+Use `data-action` attributes for event delegation — never inline `onclick="..."` in JS-generated HTML strings.
+
+---
+
+### CSS Scoping
+
+All `<style>` rules in `tab.html` **must be scoped** to the tab's root ID to avoid leaking into other tabs:
+
+```css
+/* ✓ Scoped */
+#mymodule-tab-content .my-class { ... }
+
+/* ✗ Global — leaks into other tabs */
+.my-class { ... }
+```
+
+---
+
 ## Architecture Principles
 
 - **Relative imports only**: `from .tools import …`, never `from modules.name.tools import …`
