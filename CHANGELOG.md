@@ -7,6 +7,46 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.7.0] – 2026-03-29
+
+### Added
+
+- **Tier-4 re-introduced and hardened** — the multi-module pipeline planner is back, now with robust false-positive protection:
+  - **`_get_module_scores(text)`** extracted as a standalone method, reused by both `_detect_module_fast()` and `_has_multistep_indicators()`
+  - **`_has_multistep_indicators(message, current_scores)`** — new method detecting explicit sequential multi-module intent via `_MULTISTEP_PATTERNS` (14 patterns: `und dann`, `danach`, `anschließend`, `as nächstes`, `zuerst…dann`, `then`, `followed by`, etc.). **Single-module guard**: returns `False` if fewer than 2 modules have score ≥ 2 in the *current* message — "logs anzeigen und dann neustart" stays Tier 2
+  - **`_plan_and_execute_pipeline()`** — hardened LLM planner with validation:
+    - Max 4 steps enforced post-parse
+    - Each step validated against live registry — unknown modules discarded
+    - Utility modules (`web_search`, `image_gen`, `telegram`, `email`, `teams`) stripped unless explicitly mentioned by name in the user message
+    - Thinking-block stripping (`<think>…</think>`) before JSON parsing
+    - Timeout 10s with Tier-1 ReAct fallback on failure
+    - Fallback to Tier 1 if 0 valid steps remain after filtering
+  - **`_detect_module_fast()`** refactored to return `tuple[str | None, bool]` (module, is_compound)
+  - **Compound detection hardened**: both top modules need score ≥ 3 AND second ≥ 40% of first (was: second ≥ 1). Utility modules excluded from compound scoring unless explicitly named. History fallback never triggers compound — only single-module detection from history
+  - **`_UTILITY_MODULES` frozenset**: `{"web_search", "image_gen", "telegram", "email", "teams"}` — these modules are disqualified from compound scoring and pipeline steps unless the user explicitly names them
+  - **`tier4_enabled: bool = True`** added to `RoutingConfig`; `fast` and `module-only` presets now set `tier4_enabled: False`
+  - **`configure_routing`** tool: new `tier4_enabled` parameter
+  - **`get_routing_info`** tool: cleaned up stale field references, shows Tier 4 status
+  - **`_classify_tier()` updated to 3-tier order**: Tier 4 → Tier 2 → Tier 1
+
+### Changed
+
+- `orchestrator.py`: module-level docstring updated from "4-stufige Routing-Logik" to reflect current architecture
+- `SYSTEM_PROMPT`: clarification that Tier-4 auto-detects explicit multi-module requests — avoids manual `run_pipeline` duplication from the ReAct loop
+
+---
+
+## [0.6.9] – 2026-03-28
+
+### Fixed
+
+- **Image display regression after v0.6.8**: Images no longer appeared inline in chat — they showed as "📷 Link: Klick hier" instead of rendered `<img>` tags. Three-part fix:
+  1. **`frontend/app.js`** — Extended `[KUMIO_IMAGE:]` regex from `/api/images/...`-only to any URL (`[^\]]+`). External providers (Together AI, DALL-E, Google Imagen) return `https://` URLs, not local `/api/images/` paths — these were silently ignored by the old pattern.
+  2. **`backend/modules/image_gen/agent.py`** — System prompt now explicitly instructs the LLM to preserve the `[KUMIO_IMAGE:url]` tag verbatim in its response. The previous instruction "Zeige dem User die Bild-URL" caused the LLM to reformat the tag into a markdown link.
+  3. **`backend/agents/orchestrator.py`** — Added `BILD-TAGS` rule to the orchestrator system prompt: `[KUMIO_IMAGE:url]` from tool results must be passed through unchanged. Prevents the orchestrator LLM from reformatting the tag when handling image generation in its ReAct loop (Tier 1).
+
+---
+
 ## [0.6.8] – 2026-03-28
 
 ### Changed

@@ -11,12 +11,15 @@ Kennt KEINE Modul-Namen hardcodiert, arbeitet ausschließlich mit der Registry.
 
 from __future__ import annotations
 
+import asyncio
 import json as _json
 import logging
 import re
 import time
 from dataclasses import dataclass, fields as _dc_fields
 from typing import TYPE_CHECKING
+
+from langchain_core.messages import HumanMessage
 
 from agents.base_agent import BaseAgent, _t
 from agents.core_tools import execute_cli_command, create_custom_agent, install_skill, create_linear_workflow, execute_workflow, remember_fact, recall_memory, forget_fact, confirm_forget, call_module_agent, run_pipeline, configure_routing, get_routing_info
@@ -27,6 +30,34 @@ if TYPE_CHECKING:
     from core.module_registry import ModuleRegistry
 
 logger = logging.getLogger("ninko.agents.orchestrator")
+
+# ── Tier-4 Konstanten ─────────────────────────────────────────────────────────
+
+# Utility-Module zählen für Compound-Scoring nur wenn explizit erwähnt
+_UTILITY_MODULES: frozenset[str] = frozenset({
+    "web_search", "image_gen", "telegram", "email", "teams",
+})
+
+# Sequentielle Verknüpfungs-Muster (word-boundary-gesichert)
+_MULTISTEP_PATTERNS: list[re.Pattern] = [re.compile(p, re.IGNORECASE) for p in [
+    r'\bund\s+dann\b',
+    r'\bund\s+danach\b',
+    r'\bdanach\b',
+    r'\banschlie[ßs]end\b',
+    r'\bals\s+n[äa]chstes\b',
+    r'\bzuerst\b.{1,80}\bdann\b',
+    r'\berst\b.{1,80}\bdann\b',
+    r'\bnachdem\b',
+    r'\bwenn\s+fertig\b',
+    r'\bim\s+anschluss\b',
+    r'\bthen\b',
+    r'\bafter\s+that\b',
+    r'\bfollowed\s+by\b',
+    r'\bwhen\s+done\b',
+]]
+
+# Timeout für den Pipeline-Planner-LLM-Call
+_LLM_ROUTING_TIMEOUT: float = 10.0
 
 # ── Routing-Konfiguration ─────────────────────────────────────────────────────
 
@@ -41,6 +72,7 @@ class RoutingConfig:
     """
     tier1_enabled: bool = True   # ReAct-Loop für alles ohne eindeutigen Keyword-Match
     tier2_enabled: bool = True   # Keyword-Fast-Path direkt zum Modul-Agent
+    tier4_enabled: bool = True   # Multi-Modul-Pipeline-Planner
     preset: str = "default"
 
     @classmethod
@@ -54,11 +86,10 @@ class RoutingConfig:
 
 ROUTING_PRESETS: dict[str, dict] = {
     "default": {},
-    # fast: Tier-2-Fast-Path bleibt, alles andere → ReAct-Loop ohne Einschränkung
-    "fast": {"preset": "fast"},
-    # module-only: Tier 1 (direkte LLM-Antwort ohne Tools) deaktiviert —
-    # alles geht durch invoke() damit der Agent aktiv Tools nutzt
-    "module-only": {"preset": "module-only", "tier1_enabled": False},
+    # fast: kein Pipeline-Overhead, direkte Antworten priorisiert
+    "fast": {"preset": "fast", "tier4_enabled": False},
+    # module-only: Tier 1 (direkte Antwort) und Tier 4 (Pipeline) deaktiviert
+    "module-only": {"preset": "module-only", "tier1_enabled": False, "tier4_enabled": False},
 }
 
 # ── Session-scoped Routing State ──────────────────────────────────────────────
@@ -125,7 +156,9 @@ WEITERE FÄHIGKEITEN:
 
 VERFÜGBARE MODULE: Siehe VERFÜGBARE MODULE weiter unten — nutze `call_module_agent` mit exaktem Modulnamen.
 
-WICHTIG: `call_module_agent` für EINZELNE Modul-Aufrufe. `run_pipeline` wenn Ergebnisse zwischen Modulen fließen müssen.
+WICHTIG: `call_module_agent` für EINZELNE Modul-Aufrufe. `run_pipeline` wenn Ergebnisse zwischen Modulen fließen müssen. Multi-Modul-Anfragen mit explizit sequentiellem Intent (z.B. "restart X und schick dann Telegram-Nachricht") werden automatisch als Tier-4-Pipeline erkannt und benötigen KEIN manuelles `run_pipeline` im ReAct-Loop — vermeide Doppel-Routing.
+
+BILD-TAGS: Wenn ein Tool-Ergebnis `[KUMIO_IMAGE:url]` enthält, übernimm diesen Tag EXAKT und UNVERÄNDERT in deine Antwort. Ersetze ihn NIEMALS durch einen Markdown-Link, eine URL oder ein Emoji. Der Tag muss wörtlich `[KUMIO_IMAGE:https://...]` im Antworttext erscheinen.
 
 Verhalte dich professionell, proaktiv und sicherheitsbewusst."""
 
@@ -319,14 +352,50 @@ class OrchestratorAgent(BaseAgent):
         Das LLM erhält weiterhin den vollen Text — nur die Routing-Erkennung nutzt den bereinigten Text."""
         return re.sub(r'^\[(?:Telegram Chat-ID|Teams User|Erkannte Sprache):[^\]]+\]\n?', '', message).strip()
 
+    def _get_module_scores(self, text: str) -> dict[str, int]:
+        """Keyword-Scoring für einen Text. Gibt Module → Score zurück (ohne History-Fallback)."""
+        text_lower = text.lower()
+        text_compact = re.sub(r'[\W_]+', '', text_lower)
+        scores: dict[str, int] = {}
+        for keyword, module_name in self._routing_map.items():
+            kw_lower = keyword.lower()
+            kw_compact = re.sub(r'[\W_]+', '', kw_lower)
+            matches = len(re.findall(r'\b' + re.escape(kw_lower) + r'\b', text_lower))
+            if len(kw_compact) >= 7 and matches == 0 and kw_compact in text_compact:
+                matches = 1
+            weight = 5 if kw_lower in [module_name.lower(), module_name.lower().replace("-", "")] else 1
+            if matches > 0:
+                scores[module_name] = scores.get(module_name, 0) + (matches * weight)
+        return scores
+
+    def _has_multistep_indicators(
+        self,
+        message: str,
+        current_scores: dict[str, int],
+    ) -> bool:
+        """Erkennt explizite sequentielle Multi-Modul-Anfragen.
+
+        Single-Module-Guard: Gibt False zurück wenn weniger als 2 Module mit Score >= 2
+        in der aktuellen Nachricht erkannt wurden. "Logs anzeigen und dann neustart"
+        (1 Modul) bleibt Tier 2.
+        """
+        # Mindestens 2 Module mit ausreichendem Score in aktueller Nachricht
+        qualified = [mod for mod, score in current_scores.items() if score >= 2]
+        if len(qualified) < 2:
+            return False
+        msg_lower = message.lower()
+        return any(p.search(msg_lower) for p in _MULTISTEP_PATTERNS)
+
     def _detect_module_fast(
         self,
         message: str,
         chat_history: list[dict] | None = None,
-    ) -> str | None:
-        """
-        Keyword-Fast-Path: gibt Modulname zurück wenn GENAU EIN Modul eindeutig matched.
-        Kein LLM-Call. Bei 0 oder 2+ Treffern: None → Orchestrator-ReAct-Loop entscheidet.
+    ) -> tuple[str | None, bool]:
+        """Keyword-Fast-Path. Gibt (modul, is_compound) zurück.
+
+        - (modul, False): genau ein eindeutiges Modul → Tier 2
+        - (None, True):   mehrere Module → Compound → Tier 4
+        - (None, False):  kein Treffer oder Tier-4-Guard → Tier 1
         """
         # Core-Overrides: explizite Core-Feature-Anfragen nicht an Module delegieren
         core_patterns = [
@@ -341,41 +410,71 @@ class OrchestratorAgent(BaseAgent):
         for pattern in core_patterns:
             if re.search(pattern, msg_lower):
                 logger.info("Core-Override erkannt ('%s'), überspringe Modul-Routing.", pattern)
-                return None
+                return None, False
 
-        def get_scores(text: str) -> dict[str, int]:
-            text_lower = text.lower()
-            text_compact = re.sub(r'[\W_]+', '', text_lower)
-            scores: dict[str, int] = {}
-            for keyword, module_name in self._routing_map.items():
-                kw_lower = keyword.lower()
-                kw_compact = re.sub(r'[\W_]+', '', kw_lower)
-                matches = len(re.findall(r'\b' + re.escape(kw_lower) + r'\b', text_lower))
-                if len(kw_compact) >= 7 and matches == 0 and kw_compact in text_compact:
-                    matches = 1
-                weight = 5 if kw_lower in [module_name.lower(), module_name.lower().replace("-", "")] else 1
-                if matches > 0:
-                    scores[module_name] = scores.get(module_name, 0) + (matches * weight)
-            return scores
+        # Scoring der aktuellen Nachricht
+        current_scores = self._get_module_scores(message)
 
-        module_scores = get_scores(message)
-
-        # History-Fallback: bei 0 Treffern in aktueller Nachricht die letzten 3 History-Nachrichten prüfen
-        if not module_scores and chat_history:
+        # History-Fallback NUR für Single-Module-Detection (nie für Compound)
+        from_history = False
+        if not current_scores and chat_history:
             history_text = " ".join([m.get("content", "") for m in chat_history[-3:]])
-            module_scores = get_scores(history_text)
+            history_scores = self._get_module_scores(history_text)
+            if len(history_scores) == 1:
+                best = next(iter(history_scores))
+                logger.info("History-Fast-Path: '%s…' → '%s'", message[:60], best)
+                return best, False
+            elif history_scores:
+                # Mehrere Treffer aus History → ReAct entscheiden lassen (nie Compound)
+                sorted_h = sorted(history_scores.items(), key=lambda x: x[1], reverse=True)
+                logger.info("History-Ambiguität %s → ReAct-Loop", sorted_h)
+                return None, False
+            return None, False
 
-        if len(module_scores) == 1:
-            best = next(iter(module_scores))
-            logger.info("Keyword-Fast-Path: '%s…' → '%s' (Score: %d)", message[:60], best, module_scores[best])
-            return best
-
-        if module_scores:
-            sorted_scores = sorted(module_scores.items(), key=lambda x: x[1], reverse=True)
-            logger.info("Keyword-Ambiguität %s → ReAct-Loop entscheidet für: '%s…'", sorted_scores, message[:60])
-        else:
+        if not current_scores:
             logger.info("Kein Keyword-Treffer → ReAct-Loop entscheidet für: '%s…'", message[:60])
-        return None
+            return None, False
+
+        if len(current_scores) == 1:
+            best = next(iter(current_scores))
+            logger.info("Keyword-Fast-Path: '%s…' → '%s' (Score: %d)", message[:60], best, current_scores[best])
+            return best, False
+
+        # Mehrere Module — Utility-Module filtern: nur wenn explizit erwähnt
+        filtered: dict[str, int] = {}
+        for mod, score in current_scores.items():
+            if mod in _UTILITY_MODULES:
+                if (
+                    mod in msg_lower
+                    or mod.replace("_", " ") in msg_lower
+                    or mod.replace("_", "") in msg_lower
+                ):
+                    filtered[mod] = score
+            else:
+                filtered[mod] = score
+
+        if len(filtered) <= 1:
+            if filtered:
+                best = next(iter(filtered))
+                return best, False
+            # Alle Matches waren nicht-explizite Utility-Module → ReAct
+            return None, False
+
+        # Compound-Schwellen: beide Top-Module müssen ≥ 3 Score und ausbalanciert sein
+        sorted_f = sorted(filtered.items(), key=lambda x: x[1], reverse=True)
+        top_score = sorted_f[0][1]
+        second_score = sorted_f[1][1]
+
+        if top_score >= 3 and second_score >= 3 and second_score >= (0.4 * top_score):
+            logger.info("Compound erkannt %s → Tier 4", sorted_f[:3])
+            return None, True
+
+        # Scores zu niedrig oder unausgewogen → stärkstes Modul gewinnt
+        logger.info(
+            "Schwache Ambiguität %s → Tier 2 mit stärkstem Modul '%s'",
+            sorted_f[:3], sorted_f[0][0],
+        )
+        return sorted_f[0][0], False
 
     def _classify_tier(
         self,
@@ -384,10 +483,11 @@ class OrchestratorAgent(BaseAgent):
         cfg: RoutingConfig | None = None,
     ) -> tuple[int, str | None]:
         """
-        2-Tier-Routing:
+        3-Tier-Routing (Reihenfolge: 4 → 2 → 1):
+        - Tier 4: Compound (mehrere Module mit hohem Score) ODER explizite sequentielle
+                  Multi-Modul-Anfrage (_has_multistep_indicators) → Pipeline-Planner.
         - Tier 2: Keyword-Fast-Path → genau ein Modul eindeutig erkannt → direkt delegieren.
-        - Tier 1: Alles andere → Orchestrator-ReAct-Loop: LLM entscheidet selbst via
-          call_module_agent, run_pipeline, create_custom_agent oder direkte Antwort.
+        - Tier 1: Alles andere → Orchestrator-ReAct-Loop: LLM entscheidet selbst.
 
         Returns:
             (tier, target_module_or_None)
@@ -396,13 +496,143 @@ class OrchestratorAgent(BaseAgent):
             cfg = RoutingConfig()
 
         routing_message = self._strip_bot_context(message)
+        target_module, is_compound = self._detect_module_fast(routing_message, chat_history)
 
-        if cfg.tier2_enabled:
-            target_module = self._detect_module_fast(routing_message, chat_history)
-            if target_module:
-                return 2, target_module
+        # ── Tier 4: Multi-Modul-Pipeline ─────────────────────────────────────
+        if cfg.tier4_enabled:
+            if is_compound:
+                return 4, None
+            # Multistep-Check nur bei keinem eindeutigen Single-Match
+            if target_module is None:
+                current_scores = self._get_module_scores(routing_message)
+                if self._has_multistep_indicators(routing_message, current_scores):
+                    return 4, None
 
+        # ── Tier 2: Keyword-Fast-Path ─────────────────────────────────────────
+        if cfg.tier2_enabled and target_module:
+            return 2, target_module
+
+        # ── Tier 1: Orchestrator-ReAct-Loop ──────────────────────────────────
         return 1, None
+
+    async def _plan_and_execute_pipeline(
+        self,
+        message: str,
+        chat_history: list[dict] | None,
+        session_id: str,
+        confirmed: bool,
+    ) -> tuple[str, bool]:
+        """Tier-4-Pipeline: LLM-Planner → Validierung → run_pipeline-Ausführung.
+
+        Erstellt einen strukturierten Ausführungsplan (max 4 Schritte), validiert jeden
+        Schritt gegen die Registry, filtert halluzinierte Utility-Module heraus und führt
+        den Plan via run_pipeline aus.
+
+        Fallback: Tier 1 (ReAct-Loop) bei Timeout, Parse-Fehler oder leerem Validierungsresultat.
+        """
+        from core.llm_factory import get_llm
+
+        await status_bus.emit(session_id, _t(
+            "Plane mehrstufige Aufgabe…", "Planning multi-step task…",
+        ))
+
+        modules = self.registry.list_modules()
+        valid_module_names: set[str] = {m.name for m in modules}
+        msg_lower = message.lower()
+
+        # Utility-Module nur wenn explizit im Text erwähnt
+        utility_explicitly_mentioned: set[str] = set()
+        for mod in _UTILITY_MODULES:
+            if (
+                mod in msg_lower
+                or mod.replace("_", " ") in msg_lower
+                or mod.replace("_", "") in msg_lower
+            ):
+                utility_explicitly_mentioned.add(mod)
+
+        # Module-Beschreibungen dynamisch aus Registry (keine hardcodierten Namen)
+        module_lines = [f'- "{m.name}": {m.description}' for m in modules]
+        module_descriptions = "\n".join(module_lines)
+
+        planner_prompt = (
+            f"Du bist ein Aufgaben-Planer. Erstelle einen Ausführungsplan.\n\n"
+            f"ANFRAGE: {message}\n\n"
+            f"VERFÜGBARE MODULE:\n{module_descriptions}\n\n"
+            f"REGELN:\n"
+            f"1. Maximal 4 Schritte\n"
+            f"2. Nur Module nutzen die der User EXPLIZIT benötigt oder die als "
+            f"Datenzulieferer für den nächsten Schritt zwingend nötig sind\n"
+            f"3. Utility-Module (web_search, image_gen, telegram, email, teams) "
+            f"NUR wenn der User sie explizit erwähnt\n"
+            f"4. Jeder task-String muss die vollständige Aufgabe für das Modul enthalten\n"
+            f"5. NUR das JSON-Array zurückgeben — kein erklärender Text\n\n"
+            f'AUSGABE: [{{"module": "<name>", "task": "<vollständige aufgabe>"}}, ...]'
+        )
+
+        try:
+            llm = get_llm()
+            response = await asyncio.wait_for(
+                llm.ainvoke([HumanMessage(content=planner_prompt)]),
+                timeout=_LLM_ROUTING_TIMEOUT,
+            )
+            raw = response.content if hasattr(response, "content") else str(response)
+            # Thinking-Blöcke entfernen
+            raw = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL).strip()
+            # Erstes JSON-Array extrahieren
+            json_match = re.search(r'\[[\s\S]*?\]', raw)
+            if not json_match:
+                raise ValueError("Kein JSON-Array im Planner-Output gefunden")
+            steps: list[dict] = _json.loads(json_match.group(0))
+        except Exception as exc:
+            logger.warning(
+                "Tier-4-Planner fehlgeschlagen (%s) → Fallback Tier 1", exc,
+            )
+            await status_bus.emit(session_id, _t(
+                "Pipeline-Planung fehlgeschlagen, direkte Verarbeitung…",
+                "Pipeline planning failed, direct processing…",
+            ))
+            return await self.invoke(
+                message=message, chat_history=chat_history,
+                session_id=session_id, confirmed=confirmed,
+            )
+
+        # ── Validierung ────────────────────────────────────────────────────
+        valid_steps: list[dict] = []
+        for step in steps:
+            mod = step.get("module", "").strip()
+            task = step.get("task", "").strip()
+            if not mod or not task:
+                continue
+            if mod not in valid_module_names:
+                logger.warning("Tier-4: Modul '%s' nicht in Registry → verworfen", mod)
+                continue
+            if mod in _UTILITY_MODULES and mod not in utility_explicitly_mentioned:
+                logger.warning(
+                    "Tier-4: Utility-Modul '%s' nicht explizit erwähnt → verworfen", mod,
+                )
+                continue
+            valid_steps.append({"module": mod, "task": task})
+            if len(valid_steps) >= 4:
+                break
+
+        if not valid_steps:
+            logger.warning("Tier-4: Keine validen Schritte nach Validierung → Fallback Tier 1")
+            return await self.invoke(
+                message=message, chat_history=chat_history,
+                session_id=session_id, confirmed=confirmed,
+            )
+
+        logger.info(
+            "Tier-4-Pipeline: %d Schritte: %s",
+            len(valid_steps), [s["module"] for s in valid_steps],
+        )
+        await status_bus.emit(session_id, _t(
+            f"Führe {len(valid_steps)}-Schritt-Pipeline aus…",
+            f"Executing {len(valid_steps)}-step pipeline…",
+        ))
+
+        result = await run_pipeline.ainvoke({"steps": valid_steps})
+        return str(result), False
 
     async def resume_tool_execution(self, session_id: str) -> tuple[str, bool]:
         """
@@ -462,7 +692,9 @@ class OrchestratorAgent(BaseAgent):
         force_module: str | None = None,
     ) -> tuple[str, str | None, bool]:
         """
-        2-Tier-Routing:
+        3-Tier-Routing (Reihenfolge: 4 → 2 → 1):
+        - Tier 4: Compound-Erkennung oder explizit sequentielle Multi-Modul-Anfrage
+                  → LLM-Planner → validierter JSON-Plan → run_pipeline.
         - Tier 2: Keyword-Fast-Path → genau ein Modul eindeutig erkannt → direkt delegieren.
         - Tier 1: Orchestrator-ReAct-Loop → LLM entscheidet: call_module_agent,
           run_pipeline, create_custom_agent, generate_image oder direkte Antwort.
@@ -518,6 +750,16 @@ class OrchestratorAgent(BaseAgent):
         self._last_tier_used = tier
         self._update_session_stats(session_id, tier, target_module)
         logger.info("Routing-Tier %d gewählt für: %s…", tier, message[:80])
+
+        # ── Tier 4: Multi-Modul-Pipeline-Planner ─────────────────────────
+        if tier == 4:
+            response, did_compact = await self._plan_and_execute_pipeline(
+                message=message,
+                chat_history=chat_history,
+                session_id=session_id,
+                confirmed=confirmed,
+            )
+            return response, None, did_compact
 
         # ── Tier 2: Keyword-Fast-Path direkt zum Modul-Agent ─────────────
         if tier == 2 and target_module:

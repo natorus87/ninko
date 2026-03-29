@@ -1329,8 +1329,8 @@ const Ninko = {
     },
 
     formatText(text) {
-        // [KUMIO_IMAGE:url] → inline <img> Tag
-        text = text.replace(/\[KUMIO_IMAGE:(\/api\/images\/[^\]]+)\]/g,
+        // [KUMIO_IMAGE:url] → inline <img> Tag (beliebige URL — lokal /api/images/ oder extern https://)
+        text = text.replace(/\[KUMIO_IMAGE:([^\]]+)\]/g,
             '<img src="$1" alt="Generiertes Bild" style="max-width:100%;border-radius:8px;margin:0.5rem 0;box-shadow:0 2px 8px rgba(0,0,0,0.15);">');
         // Fallback: /api/images/ URLs die der LLM als Link formatiert hat
         text = text.replace(/<a[^>]*href="(\/api\/images\/[\w\-]+\.\w+)"[^>]*>[^<]*<\/a>/g,

@@ -18,7 +18,7 @@ Fähigkeiten:
 Verhaltensregeln:
 - Übersetze deutsche Bildbeschreibungen vor der Generierung ins Englische für bessere Ergebnisse
 - Generiere nur EIN Bild pro Anfrage (nicht mehrere)
-- Zeige dem User die Bild-URL nach der Generierung
+- KRITISCH: Das Tool gibt einen [KUMIO_IMAGE:url]-Tag zurück — übernimm diesen Tag EXAKT und UNVERÄNDERT in deine Antwort. Ersetze ihn NICHT durch einen Link, Markdown-Link, URL oder Emoji. Der Tag muss wörtlich "[KUMIO_IMAGE:https://...]" im Antworttext stehen.
 - Bei Fehlern: klare Erklärung was falsch ist (fehlender API-Key, falscher Provider, etc.)"""
 
 

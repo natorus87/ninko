@@ -734,21 +734,25 @@ async def configure_routing(
     preset: str = "",
     tier1_enabled: bool | None = None,
     tier2_enabled: bool | None = None,
+    tier4_enabled: bool | None = None,
 ) -> str:
     """Passt das Routing-Verhalten des Orchestrators für die aktuelle Session an.
 
     Die Änderung gilt NUR für diese Session — nach Session-Ende zurück zu Defaults.
 
-    Zwei Routing-Tiers:
-    - Tier 2 (Keyword-Fast-Path): Genau ein Modul eindeutig per Keyword erkannt → direkt delegieren.
-    - Tier 1 (ReAct-Loop): Alles andere → LLM entscheidet selbst via call_module_agent / run_pipeline.
+    Drei Routing-Tiers:
+    - Tier 4 (Pipeline-Planner): Compound oder explizit sequentielle Multi-Modul-Anfragen
+      → LLM-Planner erstellt JSON-Plan → run_pipeline führt ihn aus.
+    - Tier 2 (Keyword-Fast-Path): Genau ein Modul eindeutig per Keyword → direkt delegieren.
+    - Tier 1 (ReAct-Loop): Alles andere → LLM entscheidet via call_module_agent / run_pipeline.
 
     Nutze dieses Tool wenn:
     - Routing zurückgesetzt werden soll → preset='default'
+    - Pipeline-Planner deaktivieren (schnellere Antworten) → tier4_enabled=False
     - Keyword-Fast-Path deaktivieren (alles durch ReAct-Loop) → tier2_enabled=False
-    - ReAct-Loop für nicht-gematchte Anfragen deaktivieren → tier1_enabled=False
+    - ReAct-Loop deaktivieren → tier1_enabled=False
 
-    Preset-Kurzformen: 'default' (reset), 'fast', 'module-only'
+    Preset-Kurzformen: 'default' (reset), 'fast' (kein Tier 4), 'module-only'
     """
     from agents.orchestrator import (
         get_orchestrator, RoutingConfig, ROUTING_PRESETS,
@@ -775,7 +779,13 @@ async def configure_routing(
             )
         current = RoutingConfig.from_dict({**RoutingConfig().to_dict(), **ROUTING_PRESETS[preset]})
 
-    updates = {k: v for k, v in {"tier1_enabled": tier1_enabled, "tier2_enabled": tier2_enabled}.items() if v is not None}
+    updates = {
+        k: v for k, v in {
+            "tier1_enabled": tier1_enabled,
+            "tier2_enabled": tier2_enabled,
+            "tier4_enabled": tier4_enabled,
+        }.items() if v is not None
+    }
     if updates:
         current = RoutingConfig.from_dict({**current.to_dict(), **updates})
 
@@ -784,8 +794,9 @@ async def configure_routing(
     cfg_dict = current.to_dict()
     lines = [
         f"  Preset: {cfg_dict['preset']}",
-        f"  Tier 1 (ReAct-Loop): {'✓' if cfg_dict['tier1_enabled'] else '✗'}",
+        f"  Tier 4 (Pipeline-Planner): {'✓' if cfg_dict['tier4_enabled'] else '✗'}",
         f"  Tier 2 (Keyword-Fast-Path): {'✓' if cfg_dict['tier2_enabled'] else '✗'}",
+        f"  Tier 1 (ReAct-Loop): {'✓' if cfg_dict['tier1_enabled'] else '✗'}",
     ]
     return _t(
         "Routing-Konfiguration aktualisiert:\n" + "\n".join(lines),
@@ -812,9 +823,8 @@ async def get_routing_info() -> str:
     return (
         f"Routing-Konfiguration (Quelle: {source}):\n"
         f"  Preset: {cfg.preset}\n"
-        f"  Tier 1 (direkt): {'✓' if cfg.tier1_enabled else '✗'} | max {cfg.simple_query_max_chars} Zeichen\n"
-        f"  Tier 2 (Modul): {'✓' if cfg.tier2_enabled else '✗'} | LLM-Fallback: {'✓' if cfg.llm_routing_enabled else '✗'} ({cfg.llm_routing_timeout}s timeout)\n"
-        f"  Tier 3 (dynamisch): {'✓' if cfg.tier3_enabled else '✗'}\n"
-        f"  Tier 4 (Pipeline): {'✓' if cfg.tier4_enabled else '✗'} | Mehrstufige Erkennung: {'✓' if cfg.multistep_detection_enabled else '✗'}\n"
+        f"  Tier 4 (Pipeline-Planner): {'✓' if cfg.tier4_enabled else '✗'}\n"
+        f"  Tier 2 (Keyword-Fast-Path): {'✓' if cfg.tier2_enabled else '✗'}\n"
+        f"  Tier 1 (ReAct-Loop): {'✓' if cfg.tier1_enabled else '✗'}\n"
         f"  Zuletzt genutztes Tier: {last_tier}"
     )
