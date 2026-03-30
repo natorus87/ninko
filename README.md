@@ -11,7 +11,7 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.6.1-blue.svg" alt="Version"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.7.2-blue.svg" alt="Version"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-beta-orange.svg" alt="Status"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.12-blue.svg" alt="Python"></a>
   <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.115-green.svg" alt="FastAPI"></a>
@@ -36,7 +36,7 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 - **Skills system** – Reusable procedural knowledge as SKILL.md files
 - **TTS/STT** – Piper (local) + Whisper for voice input and output
 - **Telegram bot** – Full remote access via messenger including voice messages
-- **SafeGuard** – Profile-based safety system: classify user messages and tool calls, require confirmation for destructive/state-changing actions, detect prompt injection. Configurable via built-in or custom profiles (strict / moderate / user_only / llm_only / disabled) — assignable globally, per-chat, or per-agent
+- **SafeGuard** – Profile-based safety layer that intercepts dangerous actions before they execute — configurable per-chat, per-agent, or globally
 - **Multilingual** – 10 languages, automatically selected based on the user's language
 - **Plugin system** – ZIP-installable modules without restart
 
@@ -143,6 +143,50 @@ On first start, configure your LLM backend under **Settings → LLM Provider** (
 ### Core principle
 
 The core code contains **no module names**. Every module registers itself at startup via its `module_manifest`. Adding a new module only requires creating a new folder under `backend/modules/` — nothing else changes.
+
+---
+
+## SafeGuard
+
+Ninko can execute destructive infrastructure operations — delete VMs, drop firewall rules, restart services. **SafeGuard** is a built-in safety layer that sits in front of every user message and (optionally) every tool call. It classifies the intent, blocks anything dangerous, and asks for explicit confirmation before proceeding.
+
+### Profiles
+
+Instead of a simple on/off toggle, SafeGuard uses **profiles** that give you fine-grained control over what gets checked and what requires confirmation:
+
+| Profile | Checks messages | Checks tool calls | Injection detection | Behavior on LLM error |
+|---|:---:|:---:|:---:|---|
+| `strict` | ✓ | ✓ | ✓ | Block (fail-safe) |
+| `moderate` *(default)* | ✓ | ✓ | — | Block (fail-safe) |
+| `user_only` | ✓ | — | — | Block (fail-safe) |
+| `llm_only` | — | ✓ | — | Block (fail-safe) |
+| `disabled` | — | — | — | Allow (fail-open) |
+
+You can also create **custom profiles** — choose exactly which action categories require confirmation (`DESTRUCTIVE`, `STATE_CHANGING`, `PROMPT_INJECTION`) and whether to use fail-open mode.
+
+### Classification
+
+Every message passes through a three-stage pipeline:
+
+1. **Fast keyword prefilter** — multilingual keyword lists catch common safe/dangerous/injection patterns instantly, with no LLM call
+2. **LLM classifier** — for anything ambiguous, a lightweight LLM call (max 150 tokens, 8s timeout) classifies the intent
+3. **Profile filter** — only categories listed in `confirm_categories` actually block execution; everything else passes through silently
+
+Detected categories: `SAFE` · `STATE_CHANGING` · `DESTRUCTIVE` · `PROMPT_INJECTION` · `UNKNOWN`
+
+### Assignment
+
+Profiles can be scoped at three levels, highest priority first:
+
+- **Per-chat** — shield button in the chat toolbar opens a profile picker; the selection lasts for the session (24h TTL)
+- **Per-agent** — each agent has a profile dropdown in the Agent editor (Settings → Agents)
+- **Global** — set the default for everything in Settings → SafeGuard
+
+### Confirmation flow
+
+When SafeGuard blocks a request, the frontend shows a confirmation dialog with the detected category and the model's rationale. The user can approve or cancel. For **prompt injection** attempts, a dedicated warning banner is shown instead.
+
+Telegram and Teams bots use a pending-message flow: Ninko stores the message for 5 minutes and re-executes it when the user replies with a confirmation word (`yes`, `ja`, `confirm`, `ok`, …).
 
 ---
 
@@ -322,7 +366,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 - **Local AI**: All LLM calls stay within your network (Ollama/LM Studio). No data is sent to external services unless an OpenAI-compatible external provider is explicitly configured.
 - **Secrets**: Encrypted via HashiCorp Vault or local SQLite fallback. Never stored in plaintext on the filesystem.
-- **SafeGuard middleware**: Profile-based safety system. Built-in profiles: `strict`, `moderate`, `user_only`, `llm_only`, `disabled`. Custom profiles configurable via Settings → SafeGuard. Profiles can be assigned globally, per-chat session (TTL 24h), or per-agent. Detects destructive, state-changing, and prompt-injection attempts. LLM error behavior configurable via `fail_open` flag per profile.
+- **SafeGuard middleware**: Profile-based safety layer — classifies every message and (optionally) every tool call before execution. See the [SafeGuard section](#safeguard) above for details.
 - **Destructive actions**: `PROXMOX_CONFIRM_DESTRUCTIVE=true` (default) — the agent asks for confirmation before executing.
 - **Internal network only**: Ninko is not designed for public exposure. Place Traefik/Nginx with TLS and optional auth middleware in front.
 - **Do not commit `.env`**: The file is included in `.gitignore`. Template: `.env.example`.
