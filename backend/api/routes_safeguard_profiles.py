@@ -32,6 +32,8 @@ class ProfileCreateRequest(BaseModel):
     confirm_categories:      list[str]   = ["DESTRUCTIVE", "STATE_CHANGING"]
     detect_prompt_injection: bool        = False
     fail_open:               bool        = False
+    auto_mode:               bool        = False
+    auto_mode_policy:        str         = ""
 
     @field_validator("id")
     @classmethod
@@ -57,6 +59,8 @@ class ProfileUpdateRequest(BaseModel):
     confirm_categories:      list[str] | None = None
     detect_prompt_injection: bool | None = None
     fail_open:               bool | None = None
+    auto_mode:               bool | None = None
+    auto_mode_policy:        str | None  = None
 
     @field_validator("confirm_categories")
     @classmethod
@@ -119,6 +123,8 @@ async def create_profile(body: ProfileCreateRequest, request: Request) -> dict:
         confirm_categories      = body.confirm_categories,
         detect_prompt_injection = body.detect_prompt_injection,
         fail_open               = body.fail_open,
+        auto_mode               = body.auto_mode,
+        auto_mode_policy        = body.auto_mode_policy,
     )
     await profile_store.save_profile(profile)
     return profile.to_dict()
@@ -167,6 +173,10 @@ async def update_profile(
         profile.detect_prompt_injection = body.detect_prompt_injection
     if body.fail_open is not None:
         profile.fail_open = body.fail_open
+    if body.auto_mode is not None:
+        profile.auto_mode = body.auto_mode
+    if body.auto_mode_policy is not None:
+        profile.auto_mode_policy = body.auto_mode_policy
 
     await profile_store.save_profile(profile)
     return profile.to_dict()

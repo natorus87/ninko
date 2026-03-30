@@ -253,5 +253,12 @@
   "safeguard.deleteConfirmTitle": "Delete Profile",
   "safeguard.deleteConfirmMsg": "Really delete profile '{id}'?",
   "safeguard.errorMissingFields": "Name and ID are required.",
-  "safeguard.errorSave": "Error saving profile."
+  "safeguard.errorSave": "Error saving profile.",
+  "safeguard.autoMode": "Auto-Mode",
+  "safeguard.autoModeDesc": "A second LLM call decides autonomously — no user confirmation dialog.",
+  "safeguard.autoModePolicy": "Policy (optional)",
+  "safeguard.autoModePolicyPlaceholder": "e.g. Allow only actions in the dev namespace. Never delete production resources.",
+  "safeguard.autoDenied": "SafeGuard Auto-Mode: Action Denied",
+  "safeguard.autoAllowed": "Auto-Mode: Allowed",
+  "safeguard.scopeAuto": "Auto-Mode"
 }

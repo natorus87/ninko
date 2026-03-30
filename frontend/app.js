@@ -742,6 +742,11 @@ const Ninko = {
                     this._showSafeguardConfirmPrompt(data.safeguard);
                 }
 
+                // Auto-mode: show inline badge when autonomously allowed
+                if (data.safeguard?.auto_decided && data.safeguard?.auto_decision === 'allow') {
+                    this.addChatMeta(`⚡ ${t('safeguard.autoAllowed')}`);
+                }
+
                 if (data.compacted) {
                     this.addCompactionNotice();
                 }
@@ -1171,10 +1176,17 @@ const Ninko = {
     },
 
     _sgScopeBadge(p) {
+        if (p.auto_mode) return '⚡';
         if (!p.check_user_messages && !p.check_tool_calls) return '⊘';
         if (p.check_user_messages && p.check_tool_calls) return '●●';
         if (p.check_user_messages) return '👤';
         return '🤖';
+    },
+
+    _sgToggleAutoPolicy() {
+        const on = document.getElementById('sg-editor-auto-mode')?.checked;
+        const row = document.getElementById('sg-editor-policy-row');
+        if (row) row.style.display = on ? 'flex' : 'none';
     },
 
     async _selectSafeguardProfile(profileId) {
@@ -1289,15 +1301,17 @@ const Ninko = {
         const badges = document.getElementById('sg-profile-badges');
         if (!profile || !box || !badges) return;
         box.style.display = 'block';
-        const scopeLabel = profile.check_user_messages && profile.check_tool_calls ? t('safeguard.scopeBoth')
+        const scopeLabel = profile.auto_mode ? t('safeguard.scopeAuto')
+            : profile.check_user_messages && profile.check_tool_calls ? t('safeguard.scopeBoth')
             : profile.check_user_messages ? t('safeguard.scopeUser')
             : profile.check_tool_calls ? t('safeguard.scopeLLM')
             : t('safeguard.scopeNone');
         badges.innerHTML = `
-            <span class="sg-detail-badge">${scopeLabel}</span>
+            <span class="sg-detail-badge${profile.auto_mode ? ' sg-cat-auto' : ''}">${scopeLabel}</span>
             ${profile.confirm_categories.map(c => `<span class="sg-cat-badge sg-cat-${c.toLowerCase().replace('_','-')}">${c}</span>`).join('')}
             ${profile.detect_prompt_injection ? `<span class="sg-detail-badge sg-injection-badge">${t('safeguard.injectionDetect')}</span>` : ''}
             ${profile.fail_open ? `<span class="sg-detail-badge sg-failopen-badge">${t('safeguard.failOpen')}</span>` : ''}
+            ${profile.auto_mode ? `<span class="sg-cat-badge sg-cat-auto">⚡ ${t('safeguard.autoMode')}</span>` : ''}
         `;
     },
 
@@ -1343,6 +1357,7 @@ const Ninko = {
         ).join('');
         const scopeIco = this._sgScopeBadge(p);
         const injIco = p.detect_prompt_injection ? ' 🔍' : '';
+        const autoIco = p.auto_mode ? ` <span class="sg-cat-badge sg-cat-auto" title="${t('safeguard.autoModeDesc')}">⚡ ${t('safeguard.autoMode')}</span>` : '';
         return `<div class="sg-profile-card">
             <div class="sg-profile-card-header">
                 <span class="sg-profile-card-name">${p.name}</span>
@@ -1354,7 +1369,7 @@ const Ninko = {
                     </div>` : ''}
             </div>
             <div class="sg-profile-card-meta">
-                <span class="sg-detail-badge">${scopeIco}</span>${cats}${injIco}
+                <span class="sg-detail-badge">${scopeIco}</span>${cats}${injIco}${autoIco}
             </div>
         </div>`;
     },
@@ -1378,6 +1393,8 @@ const Ninko = {
             document.getElementById('sg-editor-cat-injection').checked = p.confirm_categories.includes('PROMPT_INJECTION');
             document.getElementById('sg-editor-injection').checked = p.detect_prompt_injection;
             document.getElementById('sg-editor-fail-open').checked = p.fail_open;
+            document.getElementById('sg-editor-auto-mode').checked = !!p.auto_mode;
+            document.getElementById('sg-editor-auto-policy').value = p.auto_mode_policy || '';
             if (title) title.textContent = t('safeguard.editProfile');
         } else {
             document.getElementById('sg-editor-id').value = '';
@@ -1390,8 +1407,11 @@ const Ninko = {
             document.getElementById('sg-editor-cat-injection').checked = false;
             document.getElementById('sg-editor-injection').checked = false;
             document.getElementById('sg-editor-fail-open').checked = false;
+            document.getElementById('sg-editor-auto-mode').checked = false;
+            document.getElementById('sg-editor-auto-policy').value = '';
             if (title) title.textContent = t('safeguard.addProfile');
         }
+        this._sgToggleAutoPolicy();
         document.getElementById('sg-editor-status').textContent = '';
         editor.style.display = 'block';
         editor.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -1421,6 +1441,8 @@ const Ninko = {
             confirm_categories: cats,
             detect_prompt_injection: document.getElementById('sg-editor-injection').checked,
             fail_open: document.getElementById('sg-editor-fail-open').checked,
+            auto_mode: document.getElementById('sg-editor-auto-mode').checked,
+            auto_mode_policy: document.getElementById('sg-editor-auto-policy').value.trim(),
         };
         try {
             let res;

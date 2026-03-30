@@ -1188,6 +1188,15 @@
                                     <label class="form-label" data-i18n="safeguard.failOpen">Fail-Open (bei LLM-Fehler erlauben)</label>
                                     <label class="toggle-switch"><input type="checkbox" id="sg-editor-fail-open"><span class="toggle-slider"></span></label>
                                 </div>
+                                <div class="form-row">
+                                    <label class="form-label" data-i18n="safeguard.autoMode">Auto-Mode</label>
+                                    <label class="toggle-switch"><input type="checkbox" id="sg-editor-auto-mode" onchange="Ninko._sgToggleAutoPolicy()"><span class="toggle-slider"></span></label>
+                                </div>
+                                <div id="sg-editor-policy-row" class="form-col" style="display:none;">
+                                    <label class="form-label" data-i18n="safeguard.autoModePolicy">Policy (optional)</label>
+                                    <textarea id="sg-editor-auto-policy" class="form-input" rows="3" style="resize:vertical;" data-i18n-placeholder="safeguard.autoModePolicyPlaceholder"></textarea>
+                                    <p class="form-hint" style="margin-top:.3rem;color:var(--text-muted);font-size:.8rem;" data-i18n="safeguard.autoModeDesc"></p>
+                                </div>
                                 <div class="form-actions">
                                     <span id="sg-editor-status" class="save-status"></span>
                                     <button class="btn btn-outline btn-sm" onclick="Ninko.closeSafeguardProfileEditor()">Abbrechen</button>

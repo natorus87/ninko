@@ -214,6 +214,13 @@
   "safeguard.deleteConfirmMsg": "Profil '{id}' wirklich löschen?",
   "safeguard.errorMissingFields": "Name und ID sind Pflichtfelder.",
   "safeguard.errorSave": "Fehler beim Speichern.",
+  "safeguard.autoMode": "Auto-Mode",
+  "safeguard.autoModeDesc": "Ein zweiter LLM-Call entscheidet autonom — kein Bestätigungs-Dialog.",
+  "safeguard.autoModePolicy": "Policy (optional)",
+  "safeguard.autoModePolicyPlaceholder": "z.B. Nur Aktionen im dev-Namespace erlauben. Produktions-Ressourcen nie löschen.",
+  "safeguard.autoDenied": "SafeGuard Auto-Mode: Aktion abgelehnt",
+  "safeguard.autoAllowed": "Auto-Mode: Erlaubt",
+  "safeguard.scopeAuto": "Auto-Mode",
   "agent": {
     "safeguardLabel": "SafeGuard-Profil"
   },

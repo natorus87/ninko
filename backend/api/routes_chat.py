@@ -137,6 +137,24 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
                 safeguard=sg_result.to_dict(),
                 timestamp=datetime.now(timezone.utc),
             )
+        # Auto-mode: autonomous denial (no user dialog)
+        if sg_result.auto_decided and sg_result.auto_decision == "deny":
+            await status_bus.done(body.session_id)
+            return ChatResponse(
+                response=_t(
+                    f"🛡️ **SafeGuard Auto-Mode: Aktion abgelehnt**\n\n"
+                    f"**Kategorie:** {sg_result.category.value}\n"
+                    f"**Begründung:** {sg_result.rationale}",
+                    f"🛡️ **SafeGuard Auto-Mode: Action Denied**\n\n"
+                    f"**Category:** {sg_result.category.value}\n"
+                    f"**Reason:** {sg_result.rationale}",
+                ),
+                module_used=None,
+                session_id=body.session_id,
+                confirmation_required=False,
+                safeguard=sg_result.to_dict(),
+                timestamp=datetime.now(timezone.utc),
+            )
 
     # Chat-History laden
     history = await redis.get_chat_history(body.session_id)
