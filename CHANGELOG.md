@@ -7,6 +7,47 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.7.2] – 2026-03-29
+
+### Added
+
+- **SafeGuard Profile System** — replaces the binary on/off toggle with a full profile-based configuration engine:
+  - **5 built-in profiles**: `strict` (user + LLM + injection detection), `moderate` (default, user + LLM), `user_only` (user messages only), `llm_only` (tool calls only), `disabled` (no checks)
+  - **`SafeguardProfile` dataclass** — configurable fields: `check_user_messages`, `check_tool_calls`, `confirm_categories`, `detect_prompt_injection`, `fail_open`
+  - **`SafeguardProfileStore`** (`backend/core/safeguard_profiles.py`) — Redis-backed CRUD for custom profiles; built-ins seeded on every startup (idempotent); legacy `"true"`/`"false"` values in `ninko:settings:safeguard` auto-migrated to `"moderate"`/`"disabled"` on first boot
+  - **Profile resolution priority** (first match wins): per-chat session (TTL 24h) → per-agent override → global profile → fallback `moderate`
+  - **`ActionCategory.PROMPT_INJECTION`** — new category that detects attempts to override system prompts or jailbreak the LLM. Detected by a fast keyword prefilter (`_INJECTION_PATTERNS`) and optionally by the LLM classifier when `detect_prompt_injection=True` on the active profile
+  - **`fail_open` mode** — when `True`, requests pass through if the LLM classifier is unreachable; when `False` (default), the fail-safe blocks as before
+  - **New REST API** under `/api/safeguard/`:
+    - `GET/POST /api/safeguard/active` — read/set global active profile
+    - `GET/POST/DELETE /api/safeguard/chats/{session_id}/profile` — per-chat profile override (24h TTL)
+    - `GET/POST/DELETE /api/safeguard/agents/{agent_id}/profile` — per-agent profile override
+    - `GET/POST/PUT/DELETE /api/safeguard/profiles[/{id}]` — full CRUD for custom profiles (builtin profiles protected)
+  - **Settings → SafeGuard tab** — new panel in the settings sidebar with: global profile selector with detail badges, custom profile list (create/edit/delete), built-in profile reference
+  - **Chat toolbar profile picker** — shield button now opens a popover with all profiles; clicking a profile sets it as the active global profile for the session
+  - **Agent editor profile select** — replaced the safeguard toggle checkbox with a `<select>` dropdown; "Use global profile" resets to global, any other selection sets a per-agent override via `DELETE/POST /api/safeguard/agents/{id}/profile`
+  - **`confirm_categories` filter** — the profile's `confirm_categories` list now controls which `ActionCategory` values require confirmation. Example: `["DESTRUCTIVE"]` lets `STATE_CHANGING` actions through without a prompt
+  - **`SafeguardResult.profile_id`** field — the resolved profile ID is included in every result and propagated to the frontend via `to_dict()`
+
+### Changed
+
+- `SafeguardMiddleware.__init__()` — added `profile_store: SafeguardProfileStore | None` parameter; `enabled` bool kept for backward compatibility (maps to `moderate`/`disabled` profile)
+- `SafeguardMiddleware.check()` — now accepts `session_id` optional parameter for per-chat profile resolution; `check_tool_call()` accepts both `agent_id` and `session_id`
+- `SafeguardMiddleware.enable()` / `disable()` — now switch the active profile to `moderate` / `disabled` instead of flipping a boolean
+- `routes_chat.py` — passes `session_id=body.session_id` to `safeguard.check()`
+- `base_agent.py` `_sg_loop` — passes `agent_id=self.name, session_id=session_id` to `check_tool_call()`
+- `agent_config_store.py` — added `get_profile()`, `set_profile()`, `clear_profile()` convenience methods alongside existing `get_safeguard()`/`set_safeguard()`
+- `routes_safeguard.py` — existing toggle endpoints are now thin wrappers that set profile to `moderate`/`disabled`; `GET /api/safeguard/status` now also returns `profile_id`
+- `safeguard.py` `_parse()` — enforces `violation=1` for `PROMPT_INJECTION` category (same as `DESTRUCTIVE` and `STATE_CHANGING`)
+- Frontend `style.css` — added `.sg-prompt-injection` / `.sg-prompt_injection` badge style (purple), `.sg-cat-badge` system for category pills, safeguard picker popover styles, profile card styles, `.btn-xs` / `.btn-danger` utilities
+- `i18n/*.json` (de + en) — 30+ new `safeguard.*` keys for profile names, scope labels, editor fields, confirmation messages
+
+### Fixed
+
+- Safeguard injection pre-filter: `sg-state_changing` CSS class now also covered by `sg-state-changing` alias to match the new kebab-case convention used in the dynamic badge renderer
+
+---
+
 ## [0.7.0] – 2026-03-29
 
 ### Added

@@ -36,7 +36,7 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 - **Skills system** – Reusable procedural knowledge as SKILL.md files
 - **TTS/STT** – Piper (local) + Whisper for voice input and output
 - **Telegram bot** – Full remote access via messenger including voice messages
-- **Safeguard** – LLM-based classifier that intercepts destructive or state-changing actions and prompts for confirmation before execution
+- **SafeGuard** – Profile-based safety system: classify user messages and tool calls, require confirmation for destructive/state-changing actions, detect prompt injection. Configurable via built-in or custom profiles (strict / moderate / user_only / llm_only / disabled) — assignable globally, per-chat, or per-agent
 - **Multilingual** – 10 languages, automatically selected based on the user's language
 - **Plugin system** – ZIP-installable modules without restart
 
@@ -322,7 +322,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 - **Local AI**: All LLM calls stay within your network (Ollama/LM Studio). No data is sent to external services unless an OpenAI-compatible external provider is explicitly configured.
 - **Secrets**: Encrypted via HashiCorp Vault or local SQLite fallback. Never stored in plaintext on the filesystem.
-- **Safeguard middleware**: LLM-based classifier that runs before every user message. Flags destructive or state-changing requests and requires explicit confirmation. Per-agent toggle available in the agent editor. Can be globally disabled via `POST /api/safeguard/disable` if the LLM is unavailable.
+- **SafeGuard middleware**: Profile-based safety system. Built-in profiles: `strict`, `moderate`, `user_only`, `llm_only`, `disabled`. Custom profiles configurable via Settings → SafeGuard. Profiles can be assigned globally, per-chat session (TTL 24h), or per-agent. Detects destructive, state-changing, and prompt-injection attempts. LLM error behavior configurable via `fail_open` flag per profile.
 - **Destructive actions**: `PROXMOX_CONFIRM_DESTRUCTIVE=true` (default) — the agent asks for confirmation before executing.
 - **Internal network only**: Ninko is not designed for public exposure. Place Traefik/Nginx with TLS and optional auth middleware in front.
 - **Do not commit `.env`**: The file is included in `.gitignore`. Template: `.env.example`.

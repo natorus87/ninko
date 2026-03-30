@@ -115,7 +115,7 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
     # ── Safeguard-Check (vor dem 4-tier Routing) ──────────────────────────────
     safeguard = getattr(request.app.state, "safeguard", None)
     if safeguard and not body.confirmed:
-        sg_result = await safeguard.check(body.message)
+        sg_result = await safeguard.check(body.message, session_id=body.session_id)
         if sg_result.requires_confirmation:
             await status_bus.done(body.session_id)
             return ChatResponse(

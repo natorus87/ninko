@@ -203,65 +203,90 @@ Procedural know-how files (SKILL.md) are auto-injected when they match the messa
 
 ---
 
-## 4. Safeguard Middleware
+## 4. SafeGuard Middleware
 
-Safeguard runs **before** the orchestrator on every user message. It classifies requests and requires explicit confirmation for anything destructive or state-changing.
+SafeGuard runs **before** the orchestrator on every user message (and optionally on every tool call). Since v0.7.2 it is fully profile-based — a `SafeguardProfile` controls exactly what is checked, what requires confirmation, and how LLM errors are handled.
+
+### Built-in Profiles
+
+| Profile ID | Checks user messages | Checks tool calls | Injection detection | fail_open |
+|---|---|---|---|---|
+| `strict` | ✓ | ✓ | ✓ | No |
+| `moderate` *(default)* | ✓ | ✓ | No | No |
+| `user_only` | ✓ | No | No | No |
+| `llm_only` | No | ✓ | No | No |
+| `disabled` | No | No | No | Yes |
+
+Custom profiles can be created in **Settings → SafeGuard**.
 
 ### Categories
 
-| Category | Meaning | Requires confirmation |
-|---|---|---|
-| `SAFE` | Read-only (status, list, show, logs) | No |
-| `STATE_CHANGING` | Creates or modifies something (create pod, update DNS) | Yes |
-| `DESTRUCTIVE` | Irreversible (delete, rm -rf, DROP TABLE) | Yes |
-| `UNKNOWN` | Parse error or LLM failure | Yes (fail-safe) |
+| Category | Meaning |
+|---|---|
+| `SAFE` | Read-only (status, list, show, logs) |
+| `STATE_CHANGING` | Creates or modifies something (create pod, update DNS) |
+| `DESTRUCTIVE` | Irreversible (delete, rm -rf, DROP TABLE) |
+| `PROMPT_INJECTION` | Instruction-hijacking attempt detected |
+| `UNKNOWN` | Parse error or LLM failure |
+
+The `confirm_categories` list in each profile controls which categories actually require user confirmation. An empty list means "classify but never block".
 
 ### Three-Stage Evaluation
 
-**Stage 1 — Disabled check**
-If safeguard is globally disabled (`POST /api/safeguard/disable`) or disabled for this specific agent, the request passes immediately. No LLM call.
+**Stage 1 — Profile check**
+`resolve_profile(agent_id, session_id)` determines the active profile. Resolution order: per-chat session (Redis, TTL 24h) → per-agent (`AgentConfigStore`) → global active profile → `moderate`. If the resolved profile has `check_user_messages=False`, the message passes immediately without any LLM call.
 
 **Stage 2 — Keyword pre-filter** (messages ≤ 200 characters)
 A fast in-process check against curated keyword lists in all 10 supported languages:
 - Safe patterns: `show`, `list`, `get`, `logs`, `status`, `what`, `explain`, `wie`, `pokaż`, `显示`, `表示`, …
 - Destructive terms: `delete`, `rm -`, `drop`, `lösche`, `supprim`, `elimin`, `削除`, …
 - State-changing terms: `create`, `deploy`, `scale`, `erstell`, `crée`, `crea`, `作成`, …
+- Injection patterns: `ignore previous instructions`, `you are now`, `forget your rules`, `system prompt override`, …
 
-Priority: safe → destructive → state-changing. First match wins. No LLM call needed.
+Priority: safe → destructive → state-changing → injection. First match wins. No LLM call needed.
 
-> **Note:** `"del"` is intentionally absent from destructive keywords. In Spanish, Italian, and French it is a common preposition ("del pod" = "of the pod"). The LLM classifier handles the rare `del` command case.
+> **Note:** `"del"` is intentionally absent from destructive keywords — it is a common preposition in Spanish, Italian, and French.
 
 **Stage 3 — LLM classifier** (if no pre-filter match)
-An LLM call with `max_tokens=150` and an 8-second timeout classifies the request. The response is parsed robustly: `<think>` blocks are stripped first, markdown fences removed, and the first `{…}` JSON object is extracted if the model wraps it in prose.
+An LLM call with `max_tokens=150` and an 8-second timeout classifies the request. The response is parsed robustly: `<think>` blocks are stripped first, markdown fences removed, and the first `{…}` JSON object is extracted. Profiles with `detect_prompt_injection=True` receive an extended system prompt that instructs the LLM to also detect instruction-hijacking patterns.
 
 ### Confirmation Flow
 
 **Dashboard (REST API):**
-When safeguard blocks a request, the frontend receives `confirmation_required: true` and displays a confirmation dialog. The user's next click sends `confirmed: true` in the request body, which bypasses safeguard for that specific request.
+When safeguard blocks a request, the frontend receives `confirmation_required: true` and displays a confirmation dialog with the detected category and rationale. For `PROMPT_INJECTION`, a dedicated warning banner is shown. The user's next click sends `confirmed: true` in the request body, which bypasses safeguard for that specific request.
 
 **Telegram / Teams (bot channels):**
 Bots cannot add a `confirmed: true` field to a follow-up message. Ninko stores the pending message in Redis with a 300-second TTL (`ninko:safeguard_pending:{session_id}`). If the user replies with a confirmation word (`yes`, `ja`, `confirm`, `ok`, `si`, `oui`, …) within 5 minutes, the original message is re-executed. Any other message starts a fresh normal flow.
 
-### Per-Agent Toggle
+### fail_open Mode
 
-Each agent can override the global safeguard setting:
-- Enable: `POST /api/safeguard/agents/{agent_id}/enable`
-- Disable: `POST /api/safeguard/agents/{agent_id}/disable`
-- Status: `GET /api/safeguard/agents/{agent_id}`
+When `fail_open: true` in a profile, any LLM error (timeout, parse failure) causes the request to be **allowed** instead of blocked. This prevents Ninko from becoming unusable when the LLM is unavailable. The `disabled` profile always has `fail_open: true`.
 
-This is also configurable via the Agent editor in the dashboard (Safeguard toggle in the General section).
+### Profile Assignment
 
-**Priority:** per-agent setting > global toggle.
+Profiles can be assigned at three levels (highest priority first):
 
-### Global Toggle
+| Level | API | Storage |
+|---|---|---|
+| Per-chat session | `POST /api/safeguard/chats/{session_id}/profile` | Redis TTL 24h |
+| Per-agent | `POST /api/safeguard/agents/{agent_id}/profile` | `ninko:agent_configs` hash |
+| Global | `POST /api/safeguard/active` | `ninko:settings:safeguard` |
 
 ```
-POST /api/safeguard/enable     # Enable globally
-POST /api/safeguard/disable    # Disable globally (stored in Redis, survives restart)
-GET  /api/safeguard/status     # Current state
+GET  /api/safeguard/active               # Current global profile
+POST /api/safeguard/active               # Set global profile {"profile_id": "strict"}
+GET  /api/safeguard/profiles             # List all profiles (built-in + custom)
+POST /api/safeguard/profiles             # Create custom profile
+PUT  /api/safeguard/profiles/{id}        # Update custom profile
+DELETE /api/safeguard/profiles/{id}      # Delete custom profile (built-ins protected)
+GET  /api/safeguard/status               # Legacy: enabled/disabled state + active profile_id
+POST /api/safeguard/enable               # Legacy: set global to "moderate"
+POST /api/safeguard/disable              # Legacy: set global to "disabled"
 ```
 
-> **Warning:** If the LLM backend is unavailable, the LLM classifier cannot run and safeguard defaults to `requires_confirmation: true` for every message. This makes Ninko unusable. Workaround: call `POST /api/safeguard/disable` until the LLM is back.
+The agent editor in the dashboard shows a profile dropdown (Settings → Agents → General → SafeGuard Profile). The chat toolbar shows a profile picker popover (shield button) for per-chat overrides.
+
+> **Warning:** If the LLM backend is unavailable and the active profile has `fail_open: false`, safeguard defaults to `requires_confirmation: true` for every message. Workaround: switch to a profile with `fail_open: true`, or set the global profile to `disabled` via `POST /api/safeguard/active` with `{"profile_id": "disabled"}`.
 
 ---
 
@@ -852,9 +877,9 @@ All LLM calls stay within your network when using Ollama or LM Studio. No data i
 
 All module credentials (API keys, passwords, tokens) are stored encrypted via HashiCorp Vault or an SQLite fallback. They are never stored in plaintext on disk or returned in API responses (secret fields always appear empty in the UI).
 
-### Safeguard
+### SafeGuard
 
-Every user-initiated message is classified before execution. State-changing and destructive operations require explicit confirmation. See Section 4 for full details.
+Every user-initiated message is classified before execution using the active SafeGuard profile. State-changing, destructive, and prompt-injection attempts require explicit confirmation. Profiles control scope (user messages / tool calls / both), categories requiring confirmation, injection detection, and fail_open behavior. See Section 4 for full details.
 
 ### Destructive Action Confirmation (Proxmox)
 
@@ -1021,11 +1046,12 @@ If your module has secret connection fields (ending in `_KEY`, `_PASSWORD`, `_TO
 3. SoulManager.load_from_redis()        — merge dynamic souls from Redis
 4. ModuleRegistry.auto_generate_module_souls() — create souls for modules that don't have one
 5. SkillsManager.load()  — load from backend/skills/ + /app/data/skills/
-6. SafeguardMiddleware.init() — restore global toggle from Redis
-7. DynamicAgentPool.load_from_redis()   — instantiate custom agents from Redis
-8. OrchestratorAgent()   — initialize with module registry
-9. SchedulerAgent.start_loop()          — background cron loop
-10. MonitorAgent.start_loop()           — background health check loop
+6. SafeguardProfileStore.seed_builtins() + migrate_legacy() — seed built-in profiles, migrate old toggle value
+7. SafeguardMiddleware.init() — restore active profile ID from Redis, attach profile_store
+8. DynamicAgentPool.load_from_redis()   — instantiate custom agents from Redis
+9. OrchestratorAgent()   — initialize with module registry
+10. SchedulerAgent.start_loop()          — background cron loop
+11. MonitorAgent.start_loop()           — background health check loop
 ```
 
 ### Persistence Reference
@@ -1034,13 +1060,15 @@ If your module has secret connection fields (ending in `_KEY`, `_PASSWORD`, `_TO
 |---|---|---|---|
 | LLM provider settings | Redis `ninko:settings:llm_providers` | Persistent | Startup |
 | Embedding model | Redis `ninko:settings:embed_model` | Persistent | Startup |
-| Global safeguard toggle | Redis `ninko:settings:safeguard` | Persistent | Startup |
+| Active safeguard profile ID | Redis `ninko:settings:safeguard` | Persistent | Startup |
+| SafeGuard profiles | Redis `ninko:safeguard:profiles` (hash) | Persistent | Startup |
+| Per-chat safeguard profile | Redis `ninko:safeguard:profile:chat:{id}` | 24h TTL | Per request |
 | Module settings | Redis `ninko:settings:modules` | Persistent | On demand |
 | Module connections | Redis `ninko:connections:{module_id}` | Persistent | ConnectionManager |
 | Connection secrets | Vault / SQLite (`ninko:secrets`) | Persistent | Per request |
 | Dynamic agents | Redis `ninko:agents` | Persistent | load_from_redis() |
 | Agent souls | Redis `ninko:souls` | Persistent | load_from_redis() |
-| Per-agent safeguard | Redis `ninko:agent_configs` (hash) | Persistent | Per request |
+| Per-agent safeguard profile | Redis `ninko:agent_configs` (hash, `safeguard_profile` field) | Persistent | Per request |
 | Semantic memory | ChromaDB collection `ninko_memory` | Persistent (PVC) | Auto-connect |
 | Chat history | Redis `ninko:history:{session_id}` | 7-day TTL | Per session |
 | Workflows | Redis `ninko:workflows` | Persistent | load() |

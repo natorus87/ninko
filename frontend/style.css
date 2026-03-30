@@ -1447,14 +1447,227 @@ body.light-mode .chat-input {
     color: #e74c3c;
 }
 
-.sg-state_changing {
+.sg-state_changing, .sg-state-changing {
     background: rgba(230, 126, 34, 0.18);
     color: #e67e22;
+}
+
+.sg-prompt_injection, .sg-prompt-injection {
+    background: rgba(142, 68, 173, 0.18);
+    color: #8e44ad;
 }
 
 .sg-unknown {
     background: rgba(149, 165, 166, 0.18);
     color: var(--text-secondary);
+}
+
+/* SafeGuard Rationale in confirmation prompt */
+.sg-rationale {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin: 0.25rem 0 0.5rem;
+}
+.sg-injection-warning {
+    font-size: 0.82rem;
+    color: #8e44ad;
+    font-weight: 500;
+    margin: 0.25rem 0 0.25rem;
+}
+
+/* ─── SafeGuard Profile Picker (chat toolbar) ─────────────────────────────── */
+
+.safeguard-picker {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 0;
+    min-width: 220px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+    z-index: 200;
+    overflow: hidden;
+}
+
+.sg-picker-header {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    padding: 8px 12px 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.sg-picker-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 8px 12px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    font-family: inherit;
+    text-align: left;
+    transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast), opacity var(--transition-fast);
+}
+
+.sg-picker-item:hover {
+    background: var(--bg-hover);
+}
+
+.sg-picker-item.active {
+    background: rgba(var(--accent-blue-rgb, 59, 130, 246), 0.12);
+    color: var(--accent-blue);
+    font-weight: 600;
+}
+
+.sg-picker-name { flex: 1; }
+
+.sg-picker-scope {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-left: 8px;
+}
+
+.sg-picker-footer {
+    border-top: 1px solid var(--border-color);
+    padding: 6px 8px;
+}
+
+.sg-picker-settings {
+    width: 100%;
+    padding: 5px 8px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.78rem;
+    color: var(--accent-blue);
+    font-family: inherit;
+    text-align: left;
+    border-radius: 6px;
+    transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast), opacity var(--transition-fast);
+}
+
+.sg-picker-settings:hover {
+    background: var(--bg-hover);
+}
+
+/* ─── SafeGuard Settings Panel ───────────────────────────────────────────── */
+
+.sg-profile-details {
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+}
+
+.sg-profile-badge-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+}
+
+.sg-detail-badge {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.sg-injection-badge {
+    background: rgba(142, 68, 173, 0.15);
+    color: #8e44ad;
+}
+
+.sg-failopen-badge {
+    background: rgba(230, 126, 34, 0.15);
+    color: #e67e22;
+}
+
+/* Category badges (reused in picker and settings) */
+.sg-cat-badge {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 4px;
+    letter-spacing: 0.03em;
+}
+
+.sg-cat-destructive {
+    background: rgba(231, 76, 60, 0.15);
+    color: #e74c3c;
+}
+
+.sg-cat-state-changing {
+    background: rgba(230, 126, 34, 0.15);
+    color: #e67e22;
+}
+
+.sg-cat-injection, .sg-cat-prompt-injection {
+    background: rgba(142, 68, 173, 0.15);
+    color: #8e44ad;
+}
+
+/* Profile cards in settings */
+.sg-profile-card {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    background: var(--bg-secondary);
+}
+
+.sg-profile-card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.4rem;
+}
+
+.sg-profile-card-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.sg-profile-card-id {
+    font-size: 0.78rem;
+    font-family: monospace;
+}
+
+.sg-profile-card-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 0.4rem;
+}
+
+.sg-profile-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    align-items: center;
+}
+
+.btn-xs {
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    border-radius: 4px;
+}
+
+.btn-danger {
+    background: rgba(231, 76, 60, 0.1);
+    border-color: rgba(231, 76, 60, 0.4);
+    color: #e74c3c;
+}
+.btn-danger:hover {
+    background: rgba(231, 76, 60, 0.2);
 }
 
 .safeguard-confirm-actions {

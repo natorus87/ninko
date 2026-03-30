@@ -37,6 +37,7 @@ from api.routes_tts import router as tts_router
 from api.routes_image_gen import router as image_gen_router
 from api.routes_skills import router as skills_router
 from api.routes_safeguard import router as safeguard_router
+from api.routes_safeguard_profiles import router as safeguard_profiles_router
 
 # Logging konfigurieren
 settings = get_settings()
@@ -172,28 +173,35 @@ async def lifespan(app: FastAPI):
     # ── Safeguard-Middleware ───────────────────────────
     try:
         from core.safeguard import SafeguardMiddleware
+        from core.safeguard_profiles import SafeguardProfileStore
         from core.agent_config_store import AgentConfigStore
         from core.llm_factory import get_safeguard_openai_client
-        from core.redis_client import get_redis as _get_redis_sg
 
         _sg_client, _sg_model = get_safeguard_openai_client()
-        _sg_enabled = True  # Standard: aktiviert
-        # Gespeicherten globalen Toggle aus Redis laden
-        _sg_raw = await _get_redis_sg().connection.get("ninko:settings:safeguard")
-        if _sg_raw is not None:
-            _sg_enabled = (_sg_raw if isinstance(_sg_raw, str) else _sg_raw.decode()) == "true"
+
+        # Profile-Store initialisieren und Built-ins seeden
+        _sg_profile_store = SafeguardProfileStore()
+        await _sg_profile_store.seed_builtins()
+
+        # Aktive Profil-ID laden (mit Legacy-Migration "true"/"false" → "moderate"/"disabled")
+        _sg_profile_id = await _sg_profile_store.migrate_legacy()
 
         safeguard = SafeguardMiddleware(
             client=_sg_client,
             model=_sg_model,
             timeout=8.0,
-            enabled=_sg_enabled,
+            enabled=(_sg_profile_id != "disabled"),
             agent_store=AgentConfigStore(),
+            profile_store=_sg_profile_store,
         )
+        safeguard._active_profile_id = _sg_profile_id
         app.state.safeguard = safeguard
         from agents.base_agent import set_global_safeguard
         set_global_safeguard(safeguard)
-        logger.info("Safeguard-Middleware initialisiert (Modell: %s, aktiviert: %s).", _sg_model, _sg_enabled)
+        logger.info(
+            "Safeguard-Middleware initialisiert (Modell: %s, Profil: %s).",
+            _sg_model, _sg_profile_id,
+        )
     except Exception as _sg_exc:
         logger.warning("Safeguard-Middleware konnte nicht initialisiert werden: %s", _sg_exc)
         app.state.safeguard = None
@@ -329,6 +337,7 @@ app.include_router(tts_router)
 app.include_router(image_gen_router)
 app.include_router(skills_router)
 app.include_router(safeguard_router)
+app.include_router(safeguard_profiles_router)
 
 # ── Health Endpoint ──────────────────────────────────
 # NOTE: Must be registered BEFORE the catch-all static mount

@@ -1093,55 +1093,141 @@ const Ninko = {
         } catch { /* TTS bleibt deaktiviert */ }
     },
 
-    // ─── Safeguard Toggle ───────────────────────────────────────────────────
+    // ─── SafeGuard (Profile-System) ─────────────────────────────────────────
+
+    // _safeguardProfiles: alle Profile (built-in + custom)
+    // _safeguardActiveId: aktuell globales Profil
+    // _safeguardPickerOpen: Popover-Status
 
     async initSafeguard() {
         try {
-            const res = await fetch('/api/safeguard/status');
-            if (res.ok) {
-                const data = await res.json();
+            const [statusRes, profilesRes] = await Promise.all([
+                fetch('/api/safeguard/status'),
+                fetch('/api/safeguard/profiles'),
+            ]);
+            if (statusRes.ok) {
+                const data = await statusRes.json();
                 this._safeguardEnabled = !!data.enabled;
-                this._updateSafeguardBtn();
+                this._safeguardActiveId = data.profile_id || 'moderate';
             }
+            if (profilesRes.ok) {
+                this._safeguardProfiles = await profilesRes.json();
+            }
+            this._updateSafeguardBtn();
         } catch { /* Safeguard-Status nicht abfragbar — Default: on */ }
     },
 
-    async toggleSafeguard() {
-        const newState = !this._safeguardEnabled;
-        const endpoint = newState ? '/api/safeguard/enable' : '/api/safeguard/disable';
+    // Öffnet/schließt den Profil-Picker im Chat-Toolbar
+    toggleSafeguardPicker(event) {
+        event.stopPropagation();
+        const picker = document.getElementById('safeguard-picker');
+        if (!picker) return;
+        if (this._safeguardPickerOpen) {
+            this._closeSafeguardPicker();
+            return;
+        }
+        this._renderSafeguardPicker(picker);
+        picker.style.display = 'block';
+        this._safeguardPickerOpen = true;
+        // Außerhalb klicken → schließen
+        setTimeout(() => {
+            document.addEventListener('click', this._onPickerOutsideClick, { once: true });
+        }, 0);
+    },
+
+    _onPickerOutsideClick(e) {
+        const picker = document.getElementById('safeguard-picker');
+        if (picker && !picker.contains(e.target)) {
+            Ninko._closeSafeguardPicker();
+        }
+    },
+
+    _closeSafeguardPicker() {
+        const picker = document.getElementById('safeguard-picker');
+        if (picker) picker.style.display = 'none';
+        this._safeguardPickerOpen = false;
+    },
+
+    _renderSafeguardPicker(picker) {
+        const profiles = this._safeguardProfiles || [];
+        const activeId = this._safeguardActiveId || 'moderate';
+        const items = profiles.map(p => {
+            const isActive = p.id === activeId;
+            const scopeBadge = this._sgScopeBadge(p);
+            return `<button class="sg-picker-item${isActive ? ' active' : ''}"
+                onclick="Ninko._selectSafeguardProfile('${p.id}')">
+                <span class="sg-picker-name">${p.name}</span>
+                <span class="sg-picker-scope">${scopeBadge}</span>
+            </button>`;
+        }).join('');
+        picker.innerHTML = `
+            <div class="sg-picker-header">${t('safeguard.pickProfile')}</div>
+            ${items}
+            <div class="sg-picker-footer">
+                <button class="sg-picker-settings" onclick="Ninko._closeSafeguardPicker();Ninko.switchTab('settings');Ninko.switchSettingsTab('safeguard');">
+                    ${t('safeguard.manageProfiles')}
+                </button>
+            </div>`;
+    },
+
+    _sgScopeBadge(p) {
+        if (!p.check_user_messages && !p.check_tool_calls) return '⊘';
+        if (p.check_user_messages && p.check_tool_calls) return '●●';
+        if (p.check_user_messages) return '👤';
+        return '🤖';
+    },
+
+    async _selectSafeguardProfile(profileId) {
+        this._closeSafeguardPicker();
         try {
-            const res = await fetch(endpoint, { method: 'POST' });
+            const res = await fetch('/api/safeguard/active', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ profile_id: profileId }),
+            });
             if (res.ok) {
-                this._safeguardEnabled = newState;
+                this._safeguardActiveId = profileId;
+                const profile = (this._safeguardProfiles || []).find(p => p.id === profileId);
+                this._safeguardEnabled = profile ? (profile.check_user_messages || profile.check_tool_calls) : true;
                 this._updateSafeguardBtn();
             }
-        } catch { /* Zustandsänderung fehlgeschlagen */ }
+        } catch { /* Profilwechsel fehlgeschlagen */ }
+    },
+
+    // Backward-compat: einfacher Toggle (Moderate ↔ Disabled)
+    async toggleSafeguard() {
+        const targetId = this._safeguardEnabled ? 'disabled' : 'moderate';
+        await this._selectSafeguardProfile(targetId);
     },
 
     _updateSafeguardBtn() {
         const btn = document.getElementById('btn-safeguard');
         if (!btn) return;
+        const profile = (this._safeguardProfiles || []).find(p => p.id === this._safeguardActiveId);
+        const name = profile ? profile.name : (this._safeguardEnabled ? 'Moderate' : 'Disabled');
         if (this._safeguardEnabled) {
             btn.classList.add('safeguard-on');
             btn.classList.remove('safeguard-off');
-            btn.title = t('safeguard.btnTitleOn');
         } else {
             btn.classList.remove('safeguard-on');
             btn.classList.add('safeguard-off');
-            btn.title = t('safeguard.btnTitleOff');
         }
+        btn.title = `SafeGuard: ${name}`;
     },
 
     _showSafeguardConfirmPrompt(sg) {
         document.getElementById('safeguard-confirm-prompt')?.remove();
         const container = document.getElementById('chat-messages');
-        const catClass = `sg-${(sg.category || 'unknown').toLowerCase()}`;
+        const catClass = `sg-${(sg.category || 'unknown').toLowerCase().replace('_', '-')}`;
+        const isInjection = sg.category === 'PROMPT_INJECTION';
         const div = document.createElement('div');
         div.className = 'safeguard-confirm-prompt';
         div.id = 'safeguard-confirm-prompt';
         div.innerHTML = `
             <div class="safeguard-confirm-content">
                 <span class="safeguard-confirm-category ${catClass}">${sg.category}</span>
+                ${isInjection ? `<p class="sg-injection-warning">${t('safeguard.injectionWarning')}</p>` : ''}
+                <p class="sg-rationale">${sg.rationale || ''}</p>
                 <div class="safeguard-confirm-actions">
                     <button class="btn-confirm-action btn-confirm-run" onclick="Ninko.confirmSafeguardAction()">${t('safeguard.confirmRun')}</button>
                     <button class="btn-confirm-action btn-confirm-cancel" onclick="Ninko.cancelSafeguardAction()">${t('safeguard.confirmCancel')}</button>
@@ -1166,6 +1252,231 @@ const Ninko = {
     cancelSafeguardAction() {
         this._safeguardPendingMessage = null;
         document.getElementById('safeguard-confirm-prompt')?.remove();
+    },
+
+    // ─── SafeGuard Settings Panel ───────────────────────────────────────────
+
+    async renderSafeguardSettingsPanel() {
+        try {
+            const [profilesRes, activeRes] = await Promise.all([
+                fetch('/api/safeguard/profiles'),
+                fetch('/api/safeguard/active'),
+            ]);
+            if (!profilesRes.ok || !activeRes.ok) return;
+            this._safeguardProfiles = await profilesRes.json();
+            const activeData = await activeRes.json();
+            this._safeguardActiveId = activeData.profile_id;
+            this._safeguardEnabled = this._safeguardActiveId !== 'disabled';
+            this._updateSafeguardBtn();
+        } catch { return; }
+
+        this._renderSgGlobalSelect();
+        this._renderSgProfileLists();
+    },
+
+    _renderSgGlobalSelect() {
+        const sel = document.getElementById('sg-global-profile');
+        if (!sel) return;
+        sel.innerHTML = (this._safeguardProfiles || []).map(p =>
+            `<option value="${p.id}" ${p.id === this._safeguardActiveId ? 'selected' : ''}>${p.name}</option>`
+        ).join('');
+        this._updateSgProfileDetails(this._safeguardActiveId);
+    },
+
+    _updateSgProfileDetails(profileId) {
+        const profile = (this._safeguardProfiles || []).find(p => p.id === profileId);
+        const box = document.getElementById('sg-profile-details');
+        const badges = document.getElementById('sg-profile-badges');
+        if (!profile || !box || !badges) return;
+        box.style.display = 'block';
+        const scopeLabel = profile.check_user_messages && profile.check_tool_calls ? t('safeguard.scopeBoth')
+            : profile.check_user_messages ? t('safeguard.scopeUser')
+            : profile.check_tool_calls ? t('safeguard.scopeLLM')
+            : t('safeguard.scopeNone');
+        badges.innerHTML = `
+            <span class="sg-detail-badge">${scopeLabel}</span>
+            ${profile.confirm_categories.map(c => `<span class="sg-cat-badge sg-cat-${c.toLowerCase().replace('_','-')}">${c}</span>`).join('')}
+            ${profile.detect_prompt_injection ? `<span class="sg-detail-badge sg-injection-badge">${t('safeguard.injectionDetect')}</span>` : ''}
+            ${profile.fail_open ? `<span class="sg-detail-badge sg-failopen-badge">${t('safeguard.failOpen')}</span>` : ''}
+        `;
+    },
+
+    async setSafeguardGlobalProfile(profileId) {
+        try {
+            const res = await fetch('/api/safeguard/active', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ profile_id: profileId }),
+            });
+            if (res.ok) {
+                this._safeguardActiveId = profileId;
+                this._safeguardEnabled = profileId !== 'disabled';
+                this._updateSafeguardBtn();
+                this._updateSgProfileDetails(profileId);
+            }
+        } catch { /* Setzen fehlgeschlagen */ }
+    },
+
+    _renderSgProfileLists() {
+        const profiles = this._safeguardProfiles || [];
+        const custom = profiles.filter(p => !p.builtin);
+        const builtin = profiles.filter(p => p.builtin);
+
+        const customList = document.getElementById('sg-custom-profiles-list');
+        if (customList) {
+            if (custom.length === 0) {
+                customList.innerHTML = `<p class="text-muted" style="font-size:0.85rem;" data-i18n="safeguard.noCustomProfiles">${t('safeguard.noCustomProfiles')}</p>`;
+            } else {
+                customList.innerHTML = custom.map(p => this._renderSgProfileCard(p, false)).join('');
+            }
+        }
+
+        const builtinList = document.getElementById('sg-builtin-profiles-list');
+        if (builtinList) {
+            builtinList.innerHTML = builtin.map(p => this._renderSgProfileCard(p, true)).join('');
+        }
+    },
+
+    _renderSgProfileCard(p, readonly) {
+        const cats = p.confirm_categories.map(c =>
+            `<span class="sg-cat-badge sg-cat-${c.toLowerCase().replace('_','-')}">${c}</span>`
+        ).join('');
+        const scopeIco = this._sgScopeBadge(p);
+        const injIco = p.detect_prompt_injection ? ' 🔍' : '';
+        return `<div class="sg-profile-card">
+            <div class="sg-profile-card-header">
+                <span class="sg-profile-card-name">${p.name}</span>
+                <span class="sg-profile-card-id text-muted">${p.id}</span>
+                ${!readonly ? `
+                    <div class="sg-profile-card-actions">
+                        <button class="btn btn-xs btn-outline" onclick="Ninko.openSafeguardProfileEditor('${p.id}')">${t('safeguard.edit')}</button>
+                        <button class="btn btn-xs btn-danger" onclick="Ninko.deleteSafeguardProfile('${p.id}')">${t('safeguard.delete')}</button>
+                    </div>` : ''}
+            </div>
+            <div class="sg-profile-card-meta">
+                <span class="sg-detail-badge">${scopeIco}</span>${cats}${injIco}
+            </div>
+        </div>`;
+    },
+
+    openSafeguardProfileEditor(profileId) {
+        const editor = document.getElementById('sg-profile-editor');
+        if (!editor) return;
+        const title = document.getElementById('sg-editor-title');
+        editor._editingId = profileId || null;
+
+        if (profileId) {
+            const p = (this._safeguardProfiles || []).find(x => x.id === profileId);
+            if (!p) return;
+            document.getElementById('sg-editor-id').value = p.id;
+            document.getElementById('sg-editor-id').disabled = true; // ID nicht änderbar
+            document.getElementById('sg-editor-name').value = p.name;
+            document.getElementById('sg-editor-check-user').checked = p.check_user_messages;
+            document.getElementById('sg-editor-check-tools').checked = p.check_tool_calls;
+            document.getElementById('sg-editor-cat-destructive').checked = p.confirm_categories.includes('DESTRUCTIVE');
+            document.getElementById('sg-editor-cat-state').checked = p.confirm_categories.includes('STATE_CHANGING');
+            document.getElementById('sg-editor-cat-injection').checked = p.confirm_categories.includes('PROMPT_INJECTION');
+            document.getElementById('sg-editor-injection').checked = p.detect_prompt_injection;
+            document.getElementById('sg-editor-fail-open').checked = p.fail_open;
+            if (title) title.textContent = t('safeguard.editProfile');
+        } else {
+            document.getElementById('sg-editor-id').value = '';
+            document.getElementById('sg-editor-id').disabled = false;
+            document.getElementById('sg-editor-name').value = '';
+            document.getElementById('sg-editor-check-user').checked = true;
+            document.getElementById('sg-editor-check-tools').checked = true;
+            document.getElementById('sg-editor-cat-destructive').checked = true;
+            document.getElementById('sg-editor-cat-state').checked = true;
+            document.getElementById('sg-editor-cat-injection').checked = false;
+            document.getElementById('sg-editor-injection').checked = false;
+            document.getElementById('sg-editor-fail-open').checked = false;
+            if (title) title.textContent = t('safeguard.addProfile');
+        }
+        document.getElementById('sg-editor-status').textContent = '';
+        editor.style.display = 'block';
+        editor.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    },
+
+    closeSafeguardProfileEditor() {
+        const editor = document.getElementById('sg-profile-editor');
+        if (editor) editor.style.display = 'none';
+    },
+
+    async saveSafeguardProfile() {
+        const editor = document.getElementById('sg-profile-editor');
+        const status = document.getElementById('sg-editor-status');
+        const editingId = editor?._editingId;
+        const id = document.getElementById('sg-editor-id').value.trim();
+        const name = document.getElementById('sg-editor-name').value.trim();
+        if (!name || (!editingId && !id)) {
+            if (status) { status.textContent = t('safeguard.errorMissingFields'); status.style.color = 'var(--error-color)'; }
+            return;
+        }
+        const cats = ['DESTRUCTIVE', 'STATE_CHANGING', 'PROMPT_INJECTION']
+            .filter(c => document.getElementById(`sg-editor-cat-${c === 'DESTRUCTIVE' ? 'destructive' : c === 'STATE_CHANGING' ? 'state' : 'injection'}`).checked);
+        const body = {
+            name,
+            check_user_messages: document.getElementById('sg-editor-check-user').checked,
+            check_tool_calls: document.getElementById('sg-editor-check-tools').checked,
+            confirm_categories: cats,
+            detect_prompt_injection: document.getElementById('sg-editor-injection').checked,
+            fail_open: document.getElementById('sg-editor-fail-open').checked,
+        };
+        try {
+            let res;
+            if (editingId) {
+                res = await fetch(`/api/safeguard/profiles/${editingId}`, {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+                });
+            } else {
+                res = await fetch('/api/safeguard/profiles', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, ...body }),
+                });
+            }
+            if (res.ok) {
+                this.closeSafeguardProfileEditor();
+                await this.renderSafeguardSettingsPanel();
+            } else {
+                const err = await res.json().catch(() => ({}));
+                if (status) { status.textContent = err.detail || t('safeguard.errorSave'); status.style.color = 'var(--error-color)'; }
+            }
+        } catch {
+            if (status) { status.textContent = t('safeguard.errorSave'); status.style.color = 'var(--error-color)'; }
+        }
+    },
+
+    async deleteSafeguardProfile(profileId) {
+        const ok = await this.showConfirmDialog(
+            t('safeguard.deleteConfirmTitle'),
+            t('safeguard.deleteConfirmMsg').replace('{id}', profileId),
+        );
+        if (!ok) return;
+        try {
+            const res = await fetch(`/api/safeguard/profiles/${profileId}`, { method: 'DELETE' });
+            if (res.ok || res.status === 204) {
+                await this.renderSafeguardSettingsPanel();
+            }
+        } catch { /* Löschen fehlgeschlagen */ }
+    },
+
+    // Füllt den Profile-Select im Agent-Editor
+    async _populateAgentSafeguardSelect(agentId) {
+        const sel = document.getElementById('agent-safeguard-profile');
+        if (!sel) return;
+        const profiles = this._safeguardProfiles || [];
+        // Option "globales Profil" bleibt als erster Eintrag
+        const opts = profiles.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+        sel.innerHTML = `<option value="">${t('safeguard.useGlobal')}</option>${opts}`;
+        if (agentId) {
+            try {
+                const res = await fetch(`/api/safeguard/agents/${agentId}/profile`);
+                if (res.ok) {
+                    const data = await res.json();
+                    sel.value = data.source === 'agent' ? data.profile_id : '';
+                }
+            } catch { /* Fallback auf globales Profil */ }
+        }
     },
 
     async speakMessage(msgId) {
@@ -1446,6 +1757,7 @@ const Ninko = {
         if (tabId === 'language') this.renderLanguageTab();
         if (tabId === 'tts') { this.loadSttSettings(); this.loadTtsSettings(); this.loadTtsVoices(); }
         if (tabId === 'imagegen') this.loadImageGenProvider();
+        if (tabId === 'safeguard') this.renderSafeguardSettingsPanel();
         if (tabId === 'logs') this.startLogPolling();
     },
 
@@ -3492,17 +3804,8 @@ const Ninko = {
                     const cb = document.getElementById(`agent-mod-${name}`);
                     if (cb) cb.checked = true;
                 });
-                // Load per-agent safeguard state
-                try {
-                    const sgRes = await fetch(`/api/safeguard/agents/${agentId}`);
-                    if (sgRes.ok) {
-                        const sgData = await sgRes.json();
-                        const sgCb = document.getElementById('agent-safeguard');
-                        if (sgCb) {
-                            sgCb.checked = sgData.safeguard_enabled !== false;
-                        }
-                    }
-                } catch { }
+                // Load per-agent safeguard profile
+                await this._populateAgentSafeguardSelect(agentId);
             } catch { }
         } else {
             document.getElementById('agent-editor-title').textContent = 'Neuer Agent';
@@ -3510,8 +3813,7 @@ const Ninko = {
             document.getElementById('agent-desc').value = '';
             document.getElementById('agent-system-prompt').value = '';
             document.getElementById('agent-enabled').checked = true;
-            const sgCb = document.getElementById('agent-safeguard');
-            if (sgCb) sgCb.checked = true;
+            await this._populateAgentSafeguardSelect(null);
         }
         this._renderAgentSteps();
         await this._populateAgentSkills();
@@ -3656,9 +3958,20 @@ const Ninko = {
                 const savedId = saved.id || this._agentEditId;
                 // Persist per-agent safeguard setting
                 if (savedId) {
-                    const sgEnabled = document.getElementById('agent-safeguard')?.checked !== false;
-                    const sgEndpoint = sgEnabled ? 'enable' : 'disable';
-                    try { await fetch(`/api/safeguard/agents/${savedId}/${sgEndpoint}`, { method: 'POST' }); } catch { }
+                    const sgProfileSel = document.getElementById('agent-safeguard-profile');
+                    const sgProfileId = sgProfileSel ? sgProfileSel.value : '';
+                    try {
+                        if (sgProfileId) {
+                            await fetch(`/api/safeguard/agents/${savedId}/profile`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ profile_id: sgProfileId }),
+                            });
+                        } else {
+                            // "" → globales Profil verwenden → per-Agent-Override entfernen
+                            await fetch(`/api/safeguard/agents/${savedId}/profile`, { method: 'DELETE' });
+                        }
+                    } catch { }
                 }
                 showNotification(`Agent "${name}" gespeichert`, 'success');
                 this.closeAgentEditor();

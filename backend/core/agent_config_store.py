@@ -62,3 +62,29 @@ class AgentConfigStore:
             "[AgentConfigStore] Agent '%s' safeguard_enabled=%s gespeichert.",
             agent_id, enabled,
         )
+
+    # ── Safeguard-Profil (pro Agent) ──────────────────────────────────────────
+
+    async def get_profile(self, agent_id: str) -> str | None:
+        """
+        None   → kein gespeichertes Profil, globales Profil gilt
+        str    → Profil-ID für diesen Agent (überschreibt globales Profil)
+        """
+        config = await self.get_config(agent_id)
+        return config.get("safeguard_profile", None)
+
+    async def set_profile(self, agent_id: str, profile_id: str) -> None:
+        await self.set_config(agent_id, "safeguard_profile", profile_id)
+        logger.info(
+            "[AgentConfigStore] Agent '%s' safeguard_profile='%s' gespeichert.",
+            agent_id, profile_id,
+        )
+
+    async def clear_profile(self, agent_id: str) -> None:
+        """Entfernt die per-Agent Profil-Überschreibung (Fallback auf globales Profil)."""
+        from core.redis_client import get_redis
+        config = await self.get_config(agent_id)
+        config.pop("safeguard_profile", None)
+        redis = get_redis()
+        await redis.connection.hset(REDIS_KEY, agent_id, __import__("json").dumps(config))
+        logger.info("[AgentConfigStore] Agent '%s' safeguard_profile zurückgesetzt.", agent_id)

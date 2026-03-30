@@ -456,6 +456,7 @@ class BaseAgent:
             run_config["callbacks"] = [_StatusEmitter(session_id)]
         try:
             # Safeguard-Pfad: interrupt_before=["tools"] + MemorySaver wenn aktiv
+            # .enabled wird durch das aktive Profil gesteuert (disabled-Profil → False)
             use_safeguard = (
                 _global_safeguard is not None
                 and _global_safeguard.enabled
@@ -627,7 +628,11 @@ class BaseAgent:
             for tool_call in last_ai.tool_calls:
                 tool_name = tool_call["name"]
                 tool_args = tool_call.get("args", {})
-                sg_result = await _global_safeguard.check_tool_call(tool_name, tool_args)
+                sg_result = await _global_safeguard.check_tool_call(
+                    tool_name, tool_args,
+                    agent_id=self.name,
+                    session_id=session_id,
+                )
                 if sg_result.requires_confirmation:
                     dangerous_call = (tool_name, tool_args, sg_result)
                     break  # Ersten gefährlichen Call als Confirmation-Request nehmen
