@@ -289,6 +289,17 @@ const Ninko = {
         }
     },
 
+    _customAgentsCache: [],
+
+    async _refreshCustomAgentsCache() {
+        try {
+            const res = await fetch('/api/agents/');
+            if (!res.ok) return;
+            const data = await res.json();
+            this._customAgentsCache = (data.agents || []).filter(a => a.enabled);
+        } catch { /* ignorieren */ }
+    },
+
     _buildModulePicker() {
         const dropdown = document.getElementById('module-picker-dropdown');
         if (!dropdown) return;
@@ -307,6 +318,16 @@ const Ninko = {
                 </button>`;
             }),
         ];
+        // Custom Agents Sektion
+        if (this._customAgentsCache.length) {
+            items.push('<div class="module-picker-divider"></div>');
+            items.push('<div style="padding:0.25rem 0.75rem;font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;">Meine Agenten</div>');
+            this._customAgentsCache.forEach(a => {
+                items.push(`<button class="module-picker-item${this._forcedModule === a.id ? ' selected' : ''}" onclick="Ninko.setForcedModule('${this._escapeHtml(a.id)}', '${this._escapeHtml(a.name)}')">
+                    🤖 ${this._escapeHtml(a.name)}
+                </button>`);
+            });
+        }
         dropdown.innerHTML = items.join('');
     },
 
@@ -333,7 +354,7 @@ const Ninko = {
         }
     },
 
-    setForcedModule(name) {
+    setForcedModule(name, customLabel) {
         this._forcedModule = name;
         const btn = document.getElementById('module-picker-btn');
         const label = document.getElementById('module-picker-label');
@@ -342,7 +363,8 @@ const Ninko = {
             btn.classList.remove('active');
         } else {
             const mod = this.modules.find(m => m.name === name);
-            label.textContent = mod ? (mod.display_name || name) : name;
+            // Modul-Agent → display_name; Custom Agent → customLabel übergeben
+            label.textContent = mod ? (mod.display_name || name) : (customLabel || name);
             btn.classList.add('active');
         }
         this._buildModulePicker();
@@ -3526,15 +3548,27 @@ const Ninko = {
             if (!res.ok) throw new Error(res.statusText);
             const data = await res.json();
             const agents = data.agents || [];
+
+            // Cache für Module-Picker aktualisieren
+            this._customAgentsCache = agents.filter(a => a.enabled);
+            this._buildModulePicker();
+
             if (!agents.length) {
-                container.innerHTML = '<p class="empty-state">Noch keine Agenten konfiguriert.<br><span style="font-size:0.85rem;opacity:0.7">Klicke auf „➕ Neuen Agenten erstellen", um loszulegen.</span></p>';
+                container.innerHTML = `<p class="empty-state">Noch keine Agenten konfiguriert.<br>
+                    <span style="font-size:0.85rem;opacity:0.7">Klicke auf „⚡ Vorlagen" für einen schnellen Einstieg oder „+ Neuer Agent" für einen leeren Editor.</span></p>`;
                 return;
             }
-            container.innerHTML = agents.map(a => `
+            container.innerHTML = agents.map(a => {
+                const isDynamic = !!a.dynamic;
+                const typeBadge = isDynamic
+                    ? `<span class="agent-type-badge agent-type-dynamic" title="Via KI erstellt">✨ KI</span>`
+                    : `<span class="agent-type-badge agent-type-manual" title="Manuell erstellt">Manuell</span>`;
+                return `
                 <div class="agent-card ${a.enabled ? '' : 'agent-card-disabled'}" data-agent-id="${this._escapeHtml(a.id)}">
                     <div class="agent-card-header">
-                        <div>
+                        <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;">
                             <span class="agent-card-name">${this._escapeHtml(a.name)}</span>
+                            ${typeBadge}
                             <span class="agent-card-badge ${a.enabled ? 'badge-active' : 'badge-inactive'}">${a.enabled ? 'Aktiv' : 'Inaktiv'}</span>
                         </div>
                         <div class="agent-card-actions">
@@ -3550,8 +3584,8 @@ const Ninko = {
                         <span>${this._ic.steps} ${(a.steps || []).length} Schritte</span>
                         ${a.updated_at ? `<span title="Zuletzt geändert">${this._ic.clock} ${new Date(a.updated_at).toLocaleDateString('de')}</span>` : ''}
                     </div>
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
             // Event-Delegation – sicher bei beliebigen Agent-Namen
             container.querySelectorAll('.agent-card').forEach(card => {
                 const id = card.dataset.agentId;
@@ -3566,22 +3600,159 @@ const Ninko = {
     },
 
     // ═══════════════════════════════════════════════════════
+    //  AGENT BUILDER: TEMPLATES
+    // ═══════════════════════════════════════════════════════
+
+    _allPanels() {
+        return ['agenten-overview', 'agenten-templates', 'agenten-skills', 'agenten-skill-editor', 'agenten-editor'];
+    },
+
+    _showOnlyPanel(panelId) {
+        this._allPanels().forEach(id => {
+            document.getElementById(id)?.classList.toggle('hidden', id !== panelId);
+        });
+    },
+
+    async openTemplatesPanel() {
+        this._showOnlyPanel('agenten-templates');
+        await this.loadTemplates();
+    },
+
+    closeTemplatesPanel() {
+        this._showOnlyPanel('agenten-overview');
+        this.loadAgents();
+    },
+
+    async loadTemplates() {
+        const container = document.getElementById('templates-grid');
+        if (!container) return;
+        container.innerHTML = '<p class="empty-state">Lade Vorlagen…</p>';
+        try {
+            const res = await fetch('/api/agents/templates');
+            if (!res.ok) throw new Error(res.statusText);
+            const data = await res.json();
+            const templates = data.templates || [];
+            if (!templates.length) {
+                container.innerHTML = '<p class="empty-state">Keine Vorlagen verfügbar.</p>';
+                return;
+            }
+            container.innerHTML = templates.map(tpl => `
+                <div class="template-card" data-tpl-id="${this._escapeHtml(tpl.id)}" tabindex="0" role="button" aria-label="Vorlage ${this._escapeHtml(tpl.label || tpl.name)} verwenden">
+                    <div class="template-card-header">
+                        <span class="template-card-icon">${tpl.icon || '🤖'}</span>
+                        <span class="template-card-name">${this._escapeHtml(tpl.label || tpl.name)}</span>
+                    </div>
+                    <p class="template-card-desc">${this._escapeHtml(tpl.description || '')}</p>
+                    <div class="template-card-tags">
+                        ${(tpl.tags || []).slice(0, 4).map(tag => `<span class="template-tag">${this._escapeHtml(tag)}</span>`).join('')}
+                    </div>
+                </div>
+            `).join('');
+            container.querySelectorAll('.template-card').forEach(card => {
+                const tplId = card.dataset.tplId;
+                const tpl = templates.find(t => t.id === tplId);
+                const activate = () => { if (tpl) this.useTemplate(tpl); };
+                card.addEventListener('click', activate);
+                card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } });
+            });
+        } catch (e) {
+            container.innerHTML = '<p class="empty-state">Fehler beim Laden der Vorlagen.</p>';
+        }
+    },
+
+    useTemplate(tpl) {
+        // Editor öffnen und Vorlage einfüllen
+        this._showOnlyPanel('agenten-editor');
+        this._agentEditId = null;
+        this._agentSteps = [];
+        document.getElementById('agent-editor-title').textContent = 'Neuer Agent';
+        document.getElementById('agent-name').value = tpl.label || tpl.name || '';
+        document.getElementById('agent-desc').value = tpl.description || '';
+        document.getElementById('agent-system-prompt').value = tpl.system_prompt || '';
+        document.getElementById('agent-enabled').checked = true;
+        document.getElementById('agent-usecase').value = '';
+        this._renderAgentSteps();
+        this._populateAgentSafeguardSelect(null);
+        // Module vorauswählen die im Template empfohlen sind
+        this._populateModulesAndPreselect(tpl.suggested_modules || []);
+        this._populateAgentSkills();
+    },
+
+    async _populateModulesAndPreselect(suggestedModules) {
+        const container = document.getElementById('agent-modules-list');
+        if (!container) return;
+        try {
+            const res = await fetch('/api/modules/');
+            if (!res.ok) return;
+            const modules = await res.json();
+            const enabled = modules.filter(m => m.enabled);
+            if (!enabled.length) { container.innerHTML = '<p class="text-muted">Keine aktiven Module.</p>'; return; }
+            container.innerHTML = enabled.map(m => {
+                const checked = suggestedModules.includes(m.name) ? 'checked' : '';
+                return `<label class="module-checkbox-item"><input type="checkbox" id="agent-mod-${this._escapeHtml(m.name)}" value="${this._escapeHtml(m.name)}" ${checked}><span>${this._escapeHtml(m.display_name || m.name)}</span></label>`;
+            }).join('');
+        } catch { container.innerHTML = '<p class="text-muted">Fehler beim Laden.</p>'; }
+    },
+
+    // ═══════════════════════════════════════════════════════
+    //  AGENT BUILDER: KI-GENERIERUNG
+    // ═══════════════════════════════════════════════════════
+
+    async generateAgentWithAI() {
+        const usecase = document.getElementById('agent-usecase')?.value?.trim();
+        if (!usecase) {
+            showNotification('Bitte zuerst einen Use-Case beschreiben.', 'warning');
+            return;
+        }
+        const btn = document.getElementById('agent-generate-btn');
+        if (btn) { btn.disabled = true; btn.textContent = '✨ Generiere…'; }
+        try {
+            // Ausgewählte Module übergeben
+            const checkedModules = Array.from(
+                document.querySelectorAll('#agent-modules-list input[type="checkbox"]:checked')
+            ).map(el => el.value);
+
+            const res = await fetch('/api/agents/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ use_case: usecase, allowed_modules: checkedModules }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.detail || res.statusText);
+            }
+            const spec = await res.json();
+            if (spec.name) document.getElementById('agent-name').value = spec.name;
+            if (spec.description) document.getElementById('agent-desc').value = spec.description;
+            if (spec.system_prompt) document.getElementById('agent-system-prompt').value = spec.system_prompt;
+            // Empfohlene Module vorauswählen
+            if (spec.suggested_modules?.length) {
+                document.querySelectorAll('#agent-modules-list input[type="checkbox"]').forEach(cb => {
+                    cb.checked = spec.suggested_modules.includes(cb.value);
+                });
+            }
+            showNotification('Agent-Spezifikation erfolgreich generiert ✨', 'success');
+        } catch (e) {
+            showNotification(`Generierung fehlgeschlagen: ${e.message}`, 'error');
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = '✨ Generieren'; }
+        }
+    },
+
+    // ═══════════════════════════════════════════════════════
     //  SKILLS
     // ═══════════════════════════════════════════════════════
 
     _agentEditorContext: null,   // Agenten-Name beim Öffnen des Skill-Editors aus Agent heraus
 
     async openSkillsPanel() {
-        document.getElementById('agenten-overview').classList.add('hidden');
-        document.getElementById('agenten-editor').classList.add('hidden');
-        document.getElementById('agenten-skill-editor').classList.add('hidden');
-        document.getElementById('agenten-skills').classList.remove('hidden');
+        this._showOnlyPanel('agenten-skills');
         await this.loadSkillsList();
     },
 
     closeSkillsPanel() {
-        document.getElementById('agenten-skills').classList.add('hidden');
-        document.getElementById('agenten-overview').classList.remove('hidden');
+        this._showOnlyPanel('agenten-overview');
+        this.loadAgents();
     },
 
     async loadSkillsList() {
@@ -3629,21 +3800,14 @@ const Ninko = {
     openSkillEditorFromAgent() {
         const agentName = document.getElementById('agent-name')?.value?.trim() || '';
         this._agentEditorContext = agentName;
-        // Skills-Panel öffnen ohne Overview zu zeigen
-        document.getElementById('agenten-overview').classList.add('hidden');
-        document.getElementById('agenten-editor').classList.add('hidden');
-        document.getElementById('agenten-skills').classList.add('hidden');
-        document.getElementById('agenten-skill-editor').classList.remove('hidden');
+        this._showOnlyPanel('agenten-skill-editor');
         this._clearSkillEditor();
         if (agentName) document.getElementById('skill-modules').value = agentName;
         this._updateSkillFrontmatterPreview();
     },
 
     async _showSkillEditorPanel(name) {
-        document.getElementById('agenten-overview').classList.add('hidden');
-        document.getElementById('agenten-skills').classList.add('hidden');
-        document.getElementById('agenten-editor').classList.add('hidden');
-        document.getElementById('agenten-skill-editor').classList.remove('hidden');
+        this._showOnlyPanel('agenten-skill-editor');
 
         if (name) {
             document.getElementById('skill-editor-title').textContent = 'Skill bearbeiten';
@@ -3692,14 +3856,12 @@ const Ninko = {
     },
 
     closeSkillEditor() {
-        document.getElementById('agenten-skill-editor').classList.add('hidden');
         if (this._agentEditorContext !== null) {
-            // Zurück zum Agent-Editor
-            document.getElementById('agenten-editor').classList.remove('hidden');
+            this._showOnlyPanel('agenten-editor');
             this._populateAgentSkills();
             this._agentEditorContext = null;
         } else {
-            document.getElementById('agenten-skills').classList.remove('hidden');
+            this._showOnlyPanel('agenten-skills');
             this.loadSkillsList();
         }
     },
@@ -3790,8 +3952,7 @@ const Ninko = {
 
     async openSkillEditorFromAgentWithName(skillName) {
         this._agentEditorContext = document.getElementById('agent-name')?.value?.trim() || '';
-        document.getElementById('agenten-editor').classList.add('hidden');
-        document.getElementById('agenten-skill-editor').classList.remove('hidden');
+        this._showOnlyPanel('agenten-skill-editor');
         await this._showSkillEditorPanel(skillName);
     },
 
@@ -3802,8 +3963,8 @@ const Ninko = {
     async openAgentEditor(agentId) {
         this._agentEditId = agentId;
         this._agentSteps = [];
-        document.getElementById('agenten-overview').classList.add('hidden');
-        document.getElementById('agenten-editor').classList.remove('hidden');
+        document.getElementById('agent-usecase').value = '';
+        this._showOnlyPanel('agenten-editor');
 
         // Load LLM providers for dropdown
         await this._populateLlmDropdown('agent-llm');
@@ -3842,8 +4003,7 @@ const Ninko = {
     },
 
     closeAgentEditor() {
-        document.getElementById('agenten-overview').classList.remove('hidden');
-        document.getElementById('agenten-editor').classList.add('hidden');
+        this._showOnlyPanel('agenten-overview');
         this.loadAgents();
     },
 

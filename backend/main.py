@@ -347,6 +347,6 @@ async def health():
     return {
         "status": "ok",
         "service": "ninko",
-        "version": "0.5.12",
+        "version": "0.8.0",
     }
 

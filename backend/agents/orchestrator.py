@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 from langchain_core.messages import HumanMessage
 
 from agents.base_agent import BaseAgent, _t
-from agents.core_tools import execute_cli_command, create_custom_agent, install_skill, create_linear_workflow, execute_workflow, remember_fact, recall_memory, forget_fact, confirm_forget, call_module_agent, run_pipeline, configure_routing, get_routing_info
+from agents.core_tools import execute_cli_command, create_custom_agent, update_custom_agent, install_skill, create_linear_workflow, execute_workflow, remember_fact, recall_memory, forget_fact, confirm_forget, call_module_agent, run_pipeline, configure_routing, get_routing_info
 from modules.image_gen.tools import generate_image
 from core import status_bus
 
@@ -140,7 +140,10 @@ ENTSCHEIDUNGS-LOGIK:
 2. Erfordert die Anfrage mehrere Module nacheinander?
    → `run_pipeline([{"module":"...", "task":"..."}])` — Ergebnisse werden automatisch weitergegeben.
 3. Braucht der User ein spezialisiertes KI-Profil das kein Modul abdeckt?
-   → `create_custom_agent` aufrufen.
+   → `create_custom_agent` aufrufen. WICHTIG: Vor dem Erstellen Use-Case klären (Zweck, Module,
+     Output, Kritikalität). System-Prompt strukturiert aufbauen: ## Aufgaben / ## Arbeitsweise /
+     ## Kritische Aktionen / ## Eskalation. Destruktive Aktionen immer gatten.
+   → Mit `update_custom_agent` einen bestehenden Agenten verbessern wenn der User das möchte.
 4. Braucht der User einen Workflow?
    → `create_linear_workflow` SOFORT aufrufen — NIEMALS nur erklären wie es geht.
 5. Kann ich es direkt aus meinem Wissen beantworten?
@@ -174,7 +177,7 @@ class OrchestratorAgent(BaseAgent):
         super().__init__(
             name="orchestrator",
             system_prompt=SYSTEM_PROMPT,
-            tools=[execute_cli_command, create_custom_agent, install_skill, create_linear_workflow, execute_workflow, remember_fact, recall_memory, forget_fact, confirm_forget, call_module_agent, run_pipeline, generate_image, configure_routing, get_routing_info],
+            tools=[execute_cli_command, create_custom_agent, update_custom_agent, install_skill, create_linear_workflow, execute_workflow, remember_fact, recall_memory, forget_fact, confirm_forget, call_module_agent, run_pipeline, generate_image, configure_routing, get_routing_info],
         )
         self.registry = registry
         self._routing_map: dict[str, str] = {}
@@ -712,6 +715,35 @@ class OrchestratorAgent(BaseAgent):
         # ── Direktes Modul-Routing (force_module) ────────────────────────────
         if force_module:
             agent = self.registry.get_agent(force_module)
+            # Fallback: Custom Agent aus DynamicAgentPool (agent_id übergeben)
+            if agent is None:
+                try:
+                    from core.agent_pool import get_agent_pool
+                    pool = get_agent_pool()
+                    pool_agent, pool_name = pool.get_agent_by_id(force_module)
+                    if pool_agent is not None:
+                        await status_bus.emit(session_id, _t(f"Rufe Agent '{pool_name}' direkt auf…", f"Calling agent '{pool_name}' directly…"))
+                        logger.info("Direktes Routing an Custom-Agent '%s' (id=%s): %s…", pool_name, force_module, message[:80])
+                        try:
+                            response, did_compact = await pool_agent.invoke(
+                                message=message,
+                                chat_history=chat_history,
+                                session_id=session_id,
+                                confirmed=confirmed,
+                            )
+                            return response, force_module, did_compact
+                        except Exception as exc:
+                            logger.error("Direktes Routing Custom-Agent '%s' Fehler: %s", force_module, exc, exc_info=True)
+                            return (
+                                _t(
+                                    f"Fehler: Agent '{pool_name}' hat einen Fehler gemeldet: {exc}.",
+                                    f"Error: Agent '{pool_name}' reported an error: {exc}.",
+                                ),
+                                force_module,
+                                False,
+                            )
+                except Exception:
+                    pass
             if agent is None:
                 return (
                     _t(

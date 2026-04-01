@@ -756,7 +756,7 @@ _TOOL_READONLY: frozenset[str] = frozenset({
     # Memory / knowledge operations
     "recall_memory", "remember_fact", "forget_fact", "confirm_forget",
     # Orchestration / meta
-    "create_custom_agent", "install_skill",
+    "create_custom_agent", "update_custom_agent", "install_skill",
     "create_linear_workflow", "execute_workflow", "run_pipeline",
     "generate_image", "get_routing_info",
     # Search

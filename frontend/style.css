@@ -3427,6 +3427,96 @@ a:hover {
     border-top: 1px solid var(--border-color);
 }
 
+/* Agent Builder: Type-Badge */
+.agent-type-badge {
+    display: inline-block;
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 0.1rem 0.45rem;
+    border-radius: 10px;
+    letter-spacing: 0.02em;
+    margin-left: 0.4rem;
+    vertical-align: middle;
+}
+.agent-type-dynamic {
+    background: rgba(var(--accent-blue-rgb, 59, 130, 246), 0.15);
+    color: var(--accent-blue, #3b82f6);
+    border: 1px solid rgba(var(--accent-blue-rgb, 59, 130, 246), 0.3);
+}
+.agent-type-manual {
+    background: rgba(var(--primary-color-rgb, 99, 102, 241), 0.12);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+}
+
+/* Agent Builder: KI-Assistent Section */
+.agent-builder-ai-section {
+    background: linear-gradient(135deg, rgba(var(--primary-color-rgb, 99, 102, 241), 0.06), rgba(var(--accent-blue-rgb, 59, 130, 246), 0.04));
+    border: 1px solid rgba(var(--primary-color-rgb, 99, 102, 241), 0.2);
+    border-radius: 8px;
+}
+.agent-builder-ai-section h4 {
+    color: var(--primary-color);
+}
+
+/* Agent Builder: Template Cards */
+.template-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1.1rem;
+    cursor: pointer;
+    transition: border-color, box-shadow, transform;
+    transition-duration: 0.18s;
+    transition-timing-function: ease;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.template-card:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 2px 14px rgba(var(--primary-color-rgb, 99, 102, 241), 0.18);
+    transform: translateY(-1px);
+}
+.template-card:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
+}
+.template-card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+.template-card-icon {
+    font-size: 1.5rem;
+    line-height: 1;
+    flex-shrink: 0;
+}
+.template-card-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+.template-card-desc {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin: 0;
+    line-height: 1.5;
+}
+.template-card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-top: 0.25rem;
+}
+.template-tag {
+    font-size: 0.7rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 10px;
+    background: var(--bg-body);
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+}
+
 .editor-grid {
     display: grid;
     grid-template-columns: 1fr 320px;

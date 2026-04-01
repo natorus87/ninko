@@ -152,9 +152,25 @@ async def execute_cli_command(command: str) -> str:
 @tool
 async def create_custom_agent(name: str, system_prompt: str, description: str = "") -> str:
     """
-    Erstellt einen neuen benutzerspezifischen Agenten in Ninko.
-    Dies ist nützlich, um spezialisierte KI-Personas für bestimmte Aufgaben dauerhaft anzulegen.
-    Der Agent wird sofort im Agenten-Pool registriert und ist für zukünftige Aufgaben wiederverwendbar.
+    Erstellt einen neuen spezialisierten Agenten im Ninko Agent-Pool.
+
+    Wann verwenden:
+    - Der User braucht ein wiederverwendbares KI-Profil für eine spezifische Domäne
+    - Kein vorhandenes Modul deckt die Aufgabe ab
+    - Eine Persona mit spezifischem Fachwissen/Verhalten gewünscht
+
+    Qualitäts-Anforderungen für system_prompt:
+    - Klar beschriebene Aufgaben (bullet points)
+    - Arbeitsweise und Verhalten definiert
+    - Eskalationsregel enthalten ("→ an Ninko zurückgeben")
+    - Destruktive Aktionen gegattet ("immer bestätigen lassen")
+    - Module die genutzt werden via call_module_agent erwähnt
+    - Scope explizit begrenzt (was der Agent NICHT macht)
+
+    name: Kurzer, funktionsbeschreibender Name (max 5 Wörter, z.B. "K8s-Log-Analyst")
+    system_prompt: Vollständiger Deutsch-Prompt nach obigem Schema
+    description: Ein klarer Satz was dieser Agent konkret macht
+
     Gibt die ID des neu erstellten Agenten zurück.
     """
     from core.agent_pool import get_agent_pool
@@ -166,6 +182,43 @@ async def create_custom_agent(name: str, system_prompt: str, description: str = 
     return _t(
         f"Agent '{name}' (ID: {agent_id}) wurde erfolgreich erstellt und ist sofort im Agenten-Pool verfügbar.",
         f"Agent '{name}' (ID: {agent_id}) was successfully created and is immediately available in the agent pool.",
+    )
+
+
+@tool
+async def update_custom_agent(agent_id: str, system_prompt: str = "", description: str = "") -> str:
+    """
+    Aktualisiert einen bestehenden Custom-Agenten im Agenten-Pool.
+
+    Wann verwenden:
+    - Agent soll verbessert oder erweitert werden
+    - System-Prompt muss korrigiert/optimiert werden
+    - Beschreibung soll präzisiert werden
+
+    agent_id: Die ID des zu aktualisierenden Agenten (aus der Agenten-Liste)
+    system_prompt: Neuer System-Prompt (leer = unverändert)
+    description: Neue Beschreibung (leer = unverändert)
+
+    Gibt Erfolgs- oder Fehlermeldung zurück.
+    """
+    from core.agent_pool import get_agent_pool
+
+    pool = get_agent_pool()
+    updated = await pool.update_agent(
+        agent_id,
+        system_prompt=system_prompt or None,
+        description=description or None,
+    )
+
+    if updated:
+        logger.info("Custom Agent via Tool aktualisiert: %s", agent_id)
+        return _t(
+            f"Agent (ID: {agent_id}) wurde erfolgreich aktualisiert.",
+            f"Agent (ID: {agent_id}) was successfully updated.",
+        )
+    return _t(
+        f"Fehler: Agent mit ID '{agent_id}' nicht gefunden.",
+        f"Error: Agent with ID '{agent_id}' not found.",
     )
 
 

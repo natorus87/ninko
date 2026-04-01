@@ -384,14 +384,27 @@
             <div id="tab-agents" class="tab-panel">
                 <div class="module-dashboard" id="agenten-overview">
                     <div class="page-header">
-                        <h2>Agenten</h2>
+                        <h2>Agent Builder</h2>
                         <div style="display:flex;gap:0.5rem;">
                             <button class="btn btn-outline" onclick="Ninko.openSkillsPanel()">Skills</button>
+                            <button class="btn btn-outline" onclick="Ninko.openTemplatesPanel()">⚡ Vorlagen</button>
                             <button class="btn btn-primary" onclick="Ninko.openAgentEditor(null)">+ Neuer Agent</button>
                         </div>
                     </div>
                     <div id="agents-list" class="agents-grid">
                         <p class="empty-state">Lade Agenten…</p>
+                    </div>
+                </div>
+
+                <!-- Template Gallery Panel -->
+                <div id="agenten-templates" class="module-dashboard hidden">
+                    <div class="page-header">
+                        <h2>⚡ Agent-Vorlagen</h2>
+                        <button class="btn btn-outline" onclick="Ninko.closeTemplatesPanel()">← Zurück</button>
+                    </div>
+                    <p class="text-muted" style="margin-bottom:1.25rem;font-size:0.88rem;">Wähle eine Vorlage als Ausgangspunkt – du kannst alles anpassen.</p>
+                    <div id="templates-grid" class="agents-grid">
+                        <p class="empty-state">Lade Vorlagen…</p>
                     </div>
                 </div>
                 <!-- Skills Panel -->
@@ -465,12 +478,25 @@
                     <div class="page-header">
                         <h2 id="agent-editor-title">Neuer Agent</h2>
                         <div style="display:flex;gap:0.5rem;">
+                            <button class="btn btn-outline" onclick="Ninko.openTemplatesPanel()">⚡ Vorlage</button>
                             <button class="btn btn-outline" onclick="Ninko.closeAgentEditor()">Abbrechen</button>
                             <button class="btn btn-primary" onclick="Ninko.saveAgent()">Speichern</button>
                         </div>
                     </div>
                     <div class="editor-grid">
                         <div class="editor-main">
+                            <!-- KI-Assistent -->
+                            <div class="setting-group agent-builder-ai-section">
+                                <h4>✨ KI-Assistent</h4>
+                                <p class="setting-desc">Beschreibe deinen Use-Case – Ninko generiert Name, System-Prompt und Beschreibung automatisch.</p>
+                                <div class="form-row">
+                                    <textarea id="agent-usecase" class="form-input form-textarea" rows="3"
+                                        placeholder="z.B. Ein Agent der täglich die Kubernetes-Pod-Logs analysiert, CrashLoops erkennt und eine Telegram-Benachrichtigung sendet"></textarea>
+                                </div>
+                                <div style="display:flex;justify-content:flex-end;margin-top:0.5rem;">
+                                    <button class="btn btn-outline" id="agent-generate-btn" onclick="Ninko.generateAgentWithAI()">✨ Generieren</button>
+                                </div>
+                            </div>
                             <div class="setting-group">
                                 <h4>Allgemein</h4>
                                 <div class="form-row">

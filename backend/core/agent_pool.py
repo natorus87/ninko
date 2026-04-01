@@ -232,6 +232,72 @@ class DynamicAgentPool:
         """Gibt einen Live-Agenten anhand seiner ID zurück."""
         return self._live_agents.get(agent_id)
 
+    # ──────────────────────────────────────────────────────────────────────
+    # Update
+    # ──────────────────────────────────────────────────────────────────────
+
+    async def update_agent(
+        self,
+        agent_id: str,
+        *,
+        name: str | None = None,
+        system_prompt: str | None = None,
+        description: str | None = None,
+    ) -> bool:
+        """
+        Aktualisiert einen bestehenden Agenten in Redis und im Live-Pool.
+        Gibt True zurück wenn der Agent gefunden und aktualisiert wurde.
+        """
+        from core.redis_client import get_redis
+        from datetime import datetime, timezone
+
+        async with self._register_lock:
+            redis = get_redis()
+            raw = await redis.connection.get(REDIS_KEY)
+            agents = json.loads(raw) if raw else []
+
+            idx = next((i for i, a in enumerate(agents) if a["id"] == agent_id), None)
+            if idx is None:
+                return False
+
+            if name is not None:
+                agents[idx]["name"] = name
+            if system_prompt is not None:
+                agents[idx]["system_prompt"] = system_prompt
+            if description is not None:
+                agents[idx]["description"] = description
+            agents[idx]["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+            await redis.connection.set(REDIS_KEY, json.dumps(agents))
+
+            # Live-Instanz neu erstellen damit der neue Prompt sofort wirkt
+            self._meta[agent_id] = agents[idx]
+            if agent_id in self._live_agents:
+                self._instantiate(agents[idx])
+
+        # Soul MD neu generieren wenn name oder description geändert wurde
+        if name is not None or description is not None:
+            try:
+                from core.soul_manager import get_soul_manager
+                sm = get_soul_manager()
+                meta = self._meta[agent_id]
+                caps = _extract_capabilities(meta.get("system_prompt", ""))
+                soul_md = sm.generate_soul(
+                    name=meta["name"],
+                    purpose=meta.get("description") or f"Spezialisierter Agent für: {meta['name']}",
+                    capabilities=caps or None,
+                )
+                await sm.save_soul(meta["name"], soul_md)
+            except Exception as exc:
+                logger.warning("Soul-Update für Agent '%s' fehlgeschlagen: %s", agent_id, exc)
+
+        logger.info("DynamicAgentPool: Agent '%s' aktualisiert.", agent_id)
+        return True
+
+    def list_agents(self) -> list[dict]:
+        """Gibt alle Agent-Metadaten als Liste zurück."""
+        return list(self._meta.values())
+
 
 # ── Hilfsfunktion ────────────────────────────────────────────────────────
 

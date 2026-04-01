@@ -11,12 +11,18 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from core.redis_client import get_redis
 from schemas.agents import AgentDefinition, AgentCreate, AgentListResponse
 
 logger = logging.getLogger("ninko.api.agents")
 router = APIRouter(prefix="/api/agents", tags=["Agents"])
+
+
+class AgentGenerateRequest(BaseModel):
+    use_case: str
+    allowed_modules: list[str] = []
 
 REDIS_KEY = "ninko:agents"
 
@@ -124,6 +130,96 @@ async def delete_agent(agent_id: str) -> dict:
 
     logger.info("Agent gelöscht: %s", agent_id)
     return {"id": agent_id, "deleted": True}
+
+
+@router.get("/templates")
+async def get_agent_templates() -> dict:
+    """Built-in Agent-Vorlagen für den Agent Builder zurückgeben."""
+    from core.agent_templates import AGENT_TEMPLATES
+    return {"templates": AGENT_TEMPLATES}
+
+
+@router.post("/generate")
+async def generate_agent_spec(body: AgentGenerateRequest) -> dict:
+    """
+    Generiert eine Agent-Spezifikation (Name, System-Prompt, Beschreibung) aus einem Use-Case.
+    Ruft das aktive LLM auf um einen hochwertigen, strukturierten System-Prompt zu erstellen.
+    """
+    use_case = body.use_case.strip()
+    if not use_case:
+        raise HTTPException(status_code=422, detail="use_case darf nicht leer sein")
+
+    try:
+        from core.llm_factory import get_llm_client
+        from core.module_registry import get_registry
+        from langchain_core.messages import HumanMessage
+
+        # Verfügbare Module für Kontext
+        try:
+            registry = get_registry()
+            all_modules = [
+                f"{m.name} ({m.description[:60]})"
+                for m in registry.list_manifests()
+                if m.enabled_by_default
+            ]
+            module_context = ", ".join(all_modules[:12]) if all_modules else "kubernetes, linux_server, docker, pihole, homeassistant"
+        except Exception:
+            module_context = "kubernetes, linux_server, docker, pihole, homeassistant, opnsense, glpi, telegram"
+
+        allowed_hint = ""
+        if body.allowed_modules:
+            allowed_hint = f"\nBevorzugte Module: {', '.join(body.allowed_modules)}"
+
+        prompt = f"""Du bist ein Agent-Builder-Experte für das Ninko IT-Operations-System.
+
+Erstelle für den folgenden Use-Case eine vollständige, hochwertige Agent-Spezifikation.
+
+USE-CASE: {use_case}{allowed_hint}
+
+VERFÜGBARE MODULE: {module_context}
+
+ANFORDERUNGEN AN DEN SYSTEM-PROMPT:
+- Klar strukturiert mit ## Aufgaben, ## Arbeitsweise, ## Kritische Aktionen, ## Eskalation
+- Spezifische, handlungsorientierte Bullet-Points
+- Destruktive Aktionen explizit gegattet ("immer bestätigen lassen")
+- Eskalationsregel: "Aufgabe außerhalb Scope → an Ninko zurückgeben"
+- Module via call_module_agent("<modul>", "...") erwähnen wenn relevant
+- Kompakt: 200–400 Zeichen
+
+Antworte AUSSCHLIESSLICH mit einem JSON-Objekt ohne Markdown-Umrahmung:
+{{
+  "name": "Kurzer funktionsbeschreibender Name (max 4 Wörter)",
+  "description": "Ein präziser Satz was der Agent konkret macht",
+  "system_prompt": "Vollständiger System-Prompt auf Deutsch",
+  "suggested_modules": ["modul1", "modul2"]
+}}"""
+
+        llm = get_llm_client(max_tokens=600)
+        response = await llm.ainvoke([HumanMessage(content=prompt)])
+        raw = response.content if hasattr(response, "content") else str(response)
+
+        # <think>-Blöcke entfernen (Thinking-Modelle)
+        import re
+        raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
+
+        # Erstes JSON-Objekt extrahieren
+        m = re.search(r"\{.*\}", raw, re.DOTALL)
+        if not m:
+            raise ValueError("Kein JSON in LLM-Antwort gefunden")
+
+        import json
+        spec = json.loads(m.group())
+
+        return {
+            "name": spec.get("name", ""),
+            "description": spec.get("description", ""),
+            "system_prompt": spec.get("system_prompt", ""),
+            "suggested_modules": spec.get("suggested_modules", []),
+        }
+
+    except Exception as exc:
+        logger.warning("Agent-Generierung fehlgeschlagen: %s", exc)
+        raise HTTPException(status_code=500, detail=f"Generierung fehlgeschlagen: {exc}")
 
 
 @router.post("/{agent_id}/duplicate", status_code=201)

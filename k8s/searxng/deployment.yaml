@@ -24,7 +24,7 @@ spec:
             - name: searxng-settings
               mountPath: /etc/searxng/settings.yml
               subPath: settings.yml
-              readOnly: true
+              readOnly: false
           resources:
             requests:
               memory: "128Mi"

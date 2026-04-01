@@ -7,6 +7,41 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.8.0] – 2026-04-01
+
+### Added
+
+- **Agent Builder** — complete overhaul of the dynamic agent creation system:
+  - **`backend/skills/agent-builder/SKILL.md`** — Ninko now has built-in expertise for building high-quality agents. The skill auto-triggers when agent creation is requested and guides Ninko through a 5-question interview (purpose, trigger, modules, output, criticality), provides system-prompt quality standards, 6 category patterns (IT-Ops, Monitoring, Security, Helpdesk, CI/CD, Home Automation), tool-selection logic, anti-patterns table, and a pre-creation quality checklist.
+  - **`backend/core/agent_templates.py`** — 6 built-in agent templates: `it_ops` (IT-Operations Agent), `k8s_specialist` (Kubernetes Specialist), `security_scanner` (Security Scanner), `monitor_reporter` (Monitoring & Reporting), `helpdesk` (Helpdesk Assistant), `home_automation` (Smart Home Agent). Each template includes icon, category, description, tags, suggested modules, and a production-ready system prompt.
+  - **`GET /api/agents/templates`** — returns the full template catalog for the frontend gallery.
+  - **`POST /api/agents/generate`** — LLM-powered agent spec generation: takes a free-text `use_case` description, queries the active LLM, and returns a structured `{name, description, system_prompt, suggested_modules}` JSON. Used by the frontend "✨ Generieren" button.
+  - **`update_custom_agent` tool** — new LangChain tool in `core_tools.py` that allows Ninko to update existing dynamic agents (system_prompt, description) without deleting and recreating them. Registered in `_TOOL_READONLY` so SafeGuard does not block it.
+  - **`DynamicAgentPool.update_agent()`** — new async method in `agent_pool.py` for in-place agent updates: patches Redis, re-instantiates the live agent, and regenerates the Soul MD when name/description change.
+  - **`DynamicAgentPool.list_agents()`** — convenience method returning all agent metadata as a list.
+  - **Custom Agent routing via `force_module`** — `orchestrator.route()` now falls back to `DynamicAgentPool.get_agent_by_id()` when `force_module` does not match any registered module. Enables direct routing to custom agents from the chat toolbar.
+  - **Improved `create_custom_agent` docstring** — the tool's docstring now includes explicit quality requirements that the orchestrator LLM reads during reasoning, ensuring every generated system prompt contains Aufgaben / Arbeitsweise / Kritische Aktionen / Eskalation sections.
+  - **`update_custom_agent` in Orchestrator `SYSTEM_PROMPT`** — the orchestrator now knows it can improve existing agents without recreating them.
+
+- **Frontend Agent Builder UI** (complete redesign of the Agents tab):
+  - **Tab header renamed** to "Agent Builder" with new "⚡ Vorlagen" button alongside the existing "+ Neuer Agent" button.
+  - **Template Gallery panel** (`agenten-templates`) — card grid showing all 6 built-in templates with icon, label, description, and tag chips. Clicking a template opens the editor pre-filled with name, description, system prompt, and pre-checked suggested modules. Keyboard accessible (Enter/Space).
+  - **KI-Assistent section** in the agent editor — a highlighted textarea at the top of the editor form where the user can describe a use case in plain language. The "✨ Generieren" button calls `/api/agents/generate` and auto-fills name, description, system prompt, and module checkboxes. The section has a distinct gradient background to visually separate it from the manual fields.
+  - **"⚡ Vorlage" button** in the editor header — quickly jumps to the template gallery without leaving the editor context.
+  - **Agent type badges** in the agent list — `✨ KI` (blue, for `dynamic: true` agents) and `Manuell` (grey) badges next to each agent name.
+  - **Improved empty state** — shows instructions for both the template gallery and the manual editor.
+  - **`_showOnlyPanel(panelId)`** — new centralized helper that replaces all scattered `classList.add/remove('hidden')` calls across `openSkillsPanel`, `closeSkillsPanel`, `openAgentEditor`, `closeAgentEditor`, `openSkillEditorFromAgent`, `_showSkillEditorPanel`, `closeSkillEditor`. All panel transitions now go through a single function.
+  - **`_customAgentsCache`** — updated on every `loadAgents()` call; feeds the module picker with custom agents.
+  - **Module picker shows custom agents** — under a "Meine Agenten" section separator, all enabled custom agents appear in the chat toolbar dropdown with a 🤖 prefix. Selecting one sets `force_module = agent_id`, which the backend now resolves via `DynamicAgentPool`.
+
+### Changed
+
+- `orchestrator.py` SYSTEM_PROMPT — added Agent Builder guidance: clarifies when to use `create_custom_agent` vs `update_custom_agent`, requires structured system prompts with four sections.
+- `safeguard.py` `_TOOL_READONLY` — added `update_custom_agent` so SafeGuard does not block agent update operations.
+- `style.css` — new CSS classes: `.agent-type-badge`, `.agent-type-dynamic`, `.agent-type-manual`, `.agent-builder-ai-section`, `.template-card`, `.template-card-header`, `.template-card-icon`, `.template-card-name`, `.template-card-desc`, `.template-card-tags`, `.template-tag`. All transitions enumerate only paint-safe properties (no `transition: all`). Touch targets for template cards meet the 44px guideline via padding.
+
+---
+
 ## [0.7.2] – 2026-03-29
 
 ### Added
