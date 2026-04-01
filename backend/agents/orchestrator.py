@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 from langchain_core.messages import HumanMessage
 
 from agents.base_agent import BaseAgent, _t
-from agents.core_tools import execute_cli_command, create_custom_agent, update_custom_agent, install_skill, create_linear_workflow, execute_workflow, remember_fact, recall_memory, forget_fact, confirm_forget, call_module_agent, run_pipeline, configure_routing, get_routing_info
+from agents.core_tools import execute_cli_command, create_custom_agent, update_custom_agent, install_skill, create_dag_workflow, create_linear_workflow, execute_workflow, remember_fact, recall_memory, forget_fact, confirm_forget, call_module_agent, run_pipeline, configure_routing, get_routing_info
 from modules.image_gen.tools import generate_image
 from core import status_bus
 
@@ -145,7 +145,8 @@ ENTSCHEIDUNGS-LOGIK:
      ## Kritische Aktionen / ## Eskalation. Destruktive Aktionen immer gatten.
    → Mit `update_custom_agent` einen bestehenden Agenten verbessern wenn der User das möchte.
 4. Braucht der User einen Workflow?
-   → `create_linear_workflow` SOFORT aufrufen — NIEMALS nur erklären wie es geht.
+   → Einfache lineare Abfolge: `create_linear_workflow` SOFORT aufrufen.
+   → Conditions, Loops oder Branching: `create_dag_workflow` aufrufen — NIEMALS nur erklären wie es geht.
 5. Kann ich es direkt aus meinem Wissen beantworten?
    → Direkte Antwort ohne Tools.
 
@@ -177,7 +178,7 @@ class OrchestratorAgent(BaseAgent):
         super().__init__(
             name="orchestrator",
             system_prompt=SYSTEM_PROMPT,
-            tools=[execute_cli_command, create_custom_agent, update_custom_agent, install_skill, create_linear_workflow, execute_workflow, remember_fact, recall_memory, forget_fact, confirm_forget, call_module_agent, run_pipeline, generate_image, configure_routing, get_routing_info],
+            tools=[execute_cli_command, create_custom_agent, update_custom_agent, install_skill, create_dag_workflow, create_linear_workflow, execute_workflow, remember_fact, recall_memory, forget_fact, confirm_forget, call_module_agent, run_pipeline, generate_image, configure_routing, get_routing_info],
         )
         self.registry = registry
         self._routing_map: dict[str, str] = {}

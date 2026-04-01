@@ -21,6 +21,23 @@ REDIS_KEY_RUNS_PREFIX = "ninko:workflow:runs:"
 REDIS_KEY_RUN_INDEX = "ninko:workflow:run_index"
 
 
+def _compare(a, op: str, b) -> bool:
+    """Numerischer/String-Vergleich für Condition-Expressions."""
+    if op == "==":
+        return a == b
+    if op in ("!=", "!=="):
+        return a != b
+    if op == ">":
+        return a > b
+    if op == "<":
+        return a < b
+    if op == ">=":
+        return a >= b
+    if op == "<=":
+        return a <= b
+    return False
+
+
 class WorkflowEngine:
     """Asynchrone Workflow-Ausführungsmaschine."""
 
@@ -173,24 +190,116 @@ class WorkflowEngine:
         elif node_type == "condition":
             expr = config.get("expression", "")
             previous = variables.get("previous_output", "")
-            # Einfache Auswertung: output.contains("x")
-            match = re.match(r"output\.contains\(['\"](.+?)['\"]\)", expr)
-            if match:
-                result = match.group(1).lower() in previous.lower()
-            else:
-                # Fallback: immer true
-                result = True
+            result = self._evaluate_condition(expr, previous, variables)
             label = config.get("true_label", "true") if result else config.get("false_label", "false")
             return f"Bedingung: {result}", label
 
         elif node_type == "loop":
-            # Vereinfacht: direkt weiter
+            mode = config.get("mode", "foreach")
             var_name = config.get("variable", "items")
-            items = variables.get(var_name, [])
-            return f"Loop über {len(items) if isinstance(items, list) else '?'} Elemente", None
+            prompt_template = config.get("prompt", "Verarbeite: {loop_item}")
+            max_iter = min(int(config.get("max_iterations", 10) or 10), 50)
+            condition = config.get("condition", "")
+
+            # Items aus Variable laden
+            raw = variables.get(var_name, "[]")
+            if isinstance(raw, list):
+                items = raw
+            else:
+                try:
+                    items = json.loads(str(raw))
+                    if not isinstance(items, list):
+                        items = [str(items)]
+                except Exception:
+                    items = [i.strip() for i in str(raw).split(",") if i.strip()]
+
+            iter_results: list[str] = []
+
+            if mode == "foreach":
+                for i, item in enumerate(items[:max_iter]):
+                    variables["loop_item"] = str(item)
+                    variables["loop_index"] = str(i)
+                    prompt = self._interpolate(prompt_template, variables)
+                    if self.orchestrator:
+                        resp, _, _ = await self.orchestrator.route(message=prompt, chat_history=[])
+                        iter_results.append(f"[{i}] {resp}")
+                        variables["previous_output"] = resp
+                    else:
+                        iter_results.append(f"[{i}] {item}")
+
+            elif mode == "while":
+                for i in range(max_iter):
+                    variables["loop_index"] = str(i)
+                    # Abbruch wenn Bedingung nicht mehr erfüllt
+                    if condition and not self._evaluate_condition(condition, variables.get("previous_output", ""), variables):
+                        break
+                    prompt = self._interpolate(prompt_template, variables)
+                    if self.orchestrator:
+                        resp, _, _ = await self.orchestrator.route(message=prompt, chat_history=[])
+                        iter_results.append(f"[{i}] {resp}")
+                        variables["previous_output"] = resp
+                    else:
+                        break
+
+            variables["loop_results"] = "\n".join(iter_results)
+            return f"Loop: {len(iter_results)} Iterationen abgeschlossen", None
 
         else:
             return f"Unbekannter Node-Typ: {node_type}", None
+
+    def _evaluate_condition(self, expr: str, previous: str, variables: dict) -> bool:
+        """Wertet eine Condition-Expression aus. Gibt True/False zurück."""
+        expr = expr.strip()
+
+        # output.contains("x")
+        m = re.match(r"output\.contains\(['\"](.+?)['\"]\)", expr)
+        if m:
+            return m.group(1).lower() in previous.lower()
+
+        # output.startswith("x")
+        m = re.match(r"output\.startswith\(['\"](.+?)['\"]\)", expr)
+        if m:
+            return previous.lower().startswith(m.group(1).lower())
+
+        # output.endswith("x")
+        m = re.match(r"output\.endswith\(['\"](.+?)['\"]\)", expr)
+        if m:
+            return previous.lower().endswith(m.group(1).lower())
+
+        # output.matches("regex")
+        m = re.match(r"output\.matches\(['\"](.+?)['\"]\)", expr)
+        if m:
+            try:
+                return bool(re.search(m.group(1), previous))
+            except re.error:
+                return False
+
+        # len(output) > N  /  len(output) < N  /  len(output) == N
+        m = re.match(r"len\(output\)\s*([><=!]+)\s*(\d+)", expr)
+        if m:
+            op, val = m.group(1), int(m.group(2))
+            ln = len(previous)
+            return _compare(ln, op, val)
+
+        # variable.NAME == "value"  /  !=  /  > N  /  < N
+        m = re.match(r"variable\.(\w+)\s*([><=!]+)\s*['\"]?([^'\"]+?)['\"]?$", expr)
+        if m:
+            var_val = variables.get(m.group(1), "")
+            op = m.group(2)
+            rhs = m.group(3)
+            # Numerischer Vergleich wenn möglich
+            try:
+                return _compare(float(var_val), op, float(rhs))
+            except ValueError:
+                if op == "==":
+                    return str(var_val) == rhs
+                if op in ("!=", "!=="):
+                    return str(var_val) != rhs
+                return False
+
+        # Fallback: true
+        logger.debug("Unbekannte Condition-Expression '%s' → fallback true", expr)
+        return True
 
     def _interpolate(self, template: str, variables: dict) -> str:
         """Ersetzt {variable_name} Platzhalter."""

@@ -223,6 +223,120 @@ async def update_custom_agent(agent_id: str, system_prompt: str = "", descriptio
 
 
 @tool
+async def create_dag_workflow(name: str, description: str, nodes: list[dict], edges: list[dict]) -> str:
+    """
+    Erstellt einen Workflow mit beliebiger DAG-Struktur — inkl. Conditions, Loops und Branching.
+    Nutze dieses Tool wenn der Workflow mehr als lineare Schritte benötigt (Bedingungen, Schleifen, Fehler-Handler).
+    Für einfache lineare Workflows nutze create_linear_workflow.
+
+    nodes: Liste von Node-Dicts mit:
+      - id: eindeutige Kurzkennung (z.B. "start", "check", "cond1")
+      - type: "trigger" | "agent" | "condition" | "loop" | "variable" | "end"
+      - label: Anzeigename
+      - config: typ-spezifische Konfiguration:
+          trigger: {"mode": "manual"|"cron", "cron": "0 8 * * *"}
+          agent:   {"agent_id": "orchestrator", "prompt": "Aufgabe mit {previous_output}"}
+          condition: {"expression": "output.contains(\\"error\\")", "true_label": "true", "false_label": "false"}
+          loop:    {"mode": "foreach", "variable": "items", "prompt": "Verarbeite: {loop_item}", "max_iterations": "10"}
+          variable: {"name": "myVar", "value": "wert"}
+          end:     {"status": "succeeded"|"failed"}
+
+    edges: Liste von Edge-Dicts mit:
+      - source_id: ID des Quell-Nodes
+      - target_id: ID des Ziel-Nodes
+      - label: leer ("") oder Condition-Branch-Label ("true"/"false")
+
+    Vollständiges Beispiel — K8s Health Check mit Alert bei Fehler:
+      nodes=[
+        {"id": "start", "type": "trigger", "label": "Start", "config": {"mode": "manual"}},
+        {"id": "check", "type": "agent",     "label": "Pods prüfen", "config": {"agent_id": "orchestrator", "prompt": "Prüfe alle Pods auf Fehler"}},
+        {"id": "cond",  "type": "condition", "label": "Fehler?",    "config": {"expression": "output.contains(\\"error\\")", "true_label": "true", "false_label": "false"}},
+        {"id": "alert", "type": "agent",     "label": "Alert",      "config": {"agent_id": "orchestrator", "prompt": "Sende Telegram-Alert: {previous_output}"}},
+        {"id": "ok",    "type": "end",       "label": "OK",         "config": {"status": "succeeded"}},
+        {"id": "done",  "type": "end",       "label": "Fertig",     "config": {"status": "succeeded"}}
+      ],
+      edges=[
+        {"source_id": "start", "target_id": "check",  "label": ""},
+        {"source_id": "check",  "target_id": "cond",   "label": ""},
+        {"source_id": "cond",   "target_id": "alert",  "label": "true"},
+        {"source_id": "cond",   "target_id": "ok",     "label": "false"},
+        {"source_id": "alert",  "target_id": "done",   "label": ""}
+      ]
+    """
+    import json
+    import uuid
+    from datetime import datetime, timezone
+    from core.redis_client import get_redis
+
+    if not nodes:
+        return _t("Fehler: Keine Nodes angegeben.", "Error: No nodes provided.")
+
+    # UUIDs vergeben und Positionen auto-berechnen (einfaches Layer-Layout)
+    id_map: dict[str, str] = {}
+    for n in nodes:
+        short_id = str(n.get("id", "")).strip()
+        if not short_id:
+            short_id = str(uuid.uuid4())[:8]
+        full_id = str(uuid.uuid4())[:8]
+        id_map[short_id] = full_id
+
+    # Nodes mit neuen IDs und Positionen aufbauen
+    x_base, y_base, y_step = 120, 100, 160
+    built_nodes = []
+    for i, n in enumerate(nodes):
+        short_id = str(n.get("id", "")).strip()
+        full_id = id_map.get(short_id, str(uuid.uuid4())[:8])
+        built_nodes.append({
+            "id": full_id,
+            "type": n.get("type", "agent"),
+            "label": n.get("label", n.get("type", "Node")),
+            "config": n.get("config", {}),
+            "position": {"x": x_base, "y": y_base + i * y_step},
+        })
+
+    # Edges mit gemappten IDs aufbauen
+    built_edges = []
+    for e in edges:
+        src = id_map.get(str(e.get("source_id", "")), "")
+        tgt = id_map.get(str(e.get("target_id", "")), "")
+        if src and tgt:
+            built_edges.append({
+                "id": str(uuid.uuid4())[:8],
+                "source_id": src,
+                "target_id": tgt,
+                "label": e.get("label", ""),
+            })
+
+    redis = get_redis()
+    raw = await redis.connection.get("ninko:workflows")
+    workflows = json.loads(raw) if raw else []
+
+    wf_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+
+    new_wf = {
+        "id": wf_id,
+        "name": name,
+        "description": description,
+        "nodes": built_nodes,
+        "edges": built_edges,
+        "variables": [],
+        "enabled": True,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    workflows.append(new_wf)
+    await redis.connection.set("ninko:workflows", json.dumps(workflows))
+    logger.info("DAG-Workflow via Tool erstellt: %s (%s, %d nodes, %d edges)", name, wf_id, len(built_nodes), len(built_edges))
+
+    return _t(
+        f"Workflow '{name}' (ID: {wf_id}) mit {len(built_nodes)} Nodes und {len(built_edges)} Edges wurde erfolgreich erstellt.",
+        f"Workflow '{name}' (ID: {wf_id}) with {len(built_nodes)} nodes and {len(built_edges)} edges was successfully created.",
+    )
+
+
+@tool
 async def create_linear_workflow(name: str, description: str, steps: list[str]) -> str:
     """
     Erstellt einen neuen, automatisierten Workflow im System.

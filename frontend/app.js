@@ -4296,7 +4296,7 @@ const Ninko = {
             trigger: { label: 'Trigger', config: { mode: 'manual' } },
             agent: { label: 'Agent', config: { agent_id: '', prompt: '' } },
             condition: { label: 'Bedingung', config: { expression: 'output.contains("error")', true_label: 'true', false_label: 'false' } },
-            loop: { label: 'Loop', config: { mode: 'foreach', variable: 'items' } },
+            loop: { label: 'Loop', config: { mode: 'foreach', variable: 'items', prompt: 'Verarbeite: {loop_item}', max_iterations: '10' } },
             variable: { label: 'Variable', config: { name: 'myVar', value: '' } },
             end: { label: 'Ende', config: { status: 'succeeded' } },
         };
@@ -4558,6 +4558,18 @@ const Ninko = {
                         <option value="succeeded" ${v === 'succeeded' ? 'selected' : ''}>Erfolgreich</option>
                         <option value="failed" ${v === 'failed' ? 'selected' : ''}>Fehlgeschlagen</option>
                     </select>
+                </div>`;
+            } else if (k === 'mode' && node.type === 'loop') {
+                html += `<div class="form-row"><label class="form-label">Modus</label>
+                    <select class="form-select" onchange="Ninko._wfUpdateNodeConfig('${nodeId}', 'mode', this.value)">
+                        <option value="foreach" ${v === 'foreach' ? 'selected' : ''}>Foreach (Liste)</option>
+                        <option value="while" ${v === 'while' ? 'selected' : ''}>While (Bedingung)</option>
+                    </select>
+                </div>`;
+            } else if (k === 'prompt' && (node.type === 'loop' || node.type === 'agent')) {
+                html += `<div class="form-row"><label class="form-label">Prompt</label>
+                    <textarea class="form-input" rows="3" style="resize:vertical"
+                        onchange="Ninko._wfUpdateNodeConfig('${nodeId}', 'prompt', this.value)">${this._escapeHtml(String(v ?? ''))}</textarea>
                 </div>`;
             } else {
                 html += `<div class="form-row"><label class="form-label">${this._escapeHtml(k)}</label>
