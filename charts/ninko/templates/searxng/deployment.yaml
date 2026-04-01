@@ -19,6 +19,7 @@ spec:
         {{- include "ninko.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: searxng
     spec:
+      enableServiceLinks: false
       containers:
         - name: searxng
           image: "{{ .Values.searxng.image.repository }}:{{ .Values.searxng.image.tag }}"
