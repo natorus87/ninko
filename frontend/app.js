@@ -771,6 +771,18 @@ const Ninko = {
 
                 if (data.compacted) {
                     this.addCompactionNotice();
+                    // Context-Ring kurz aufblitzen lassen (zeigt Reset an)
+                    const ctxEl = document.getElementById('ctx-indicator');
+                    if (ctxEl) {
+                        ctxEl.classList.remove('ctx-flash');
+                        void ctxEl.offsetWidth; // reflow für CSS-Animation-Neustart
+                        ctxEl.classList.add('ctx-flash');
+                        setTimeout(() => ctxEl.classList.remove('ctx-flash'), 1000);
+                    }
+                }
+
+                if (data.context_budget) {
+                    this._updateCtxIndicator(data.context_budget);
                 }
 
                 if (data.module_used) {
@@ -1613,6 +1625,40 @@ const Ninko = {
         const input = document.getElementById('chat-input');
         if (input) input.value = userText;
         await this.sendMessage();
+    },
+
+    _updateCtxIndicator(budget) {
+        const el  = document.getElementById('ctx-indicator');
+        const arc = document.getElementById('ctx-arc');
+        const pct = document.getElementById('ctx-pct');
+        if (!el || !arc || !pct || !budget) return;
+
+        const { used_tokens, threshold_tokens, max_tokens } = budget;
+        const limit    = threshold_tokens || max_tokens || 1;
+        const fillPct  = Math.min(100, (used_tokens / limit) * 100);
+
+        // SVG arc: r=7.5 → circumference ≈ 47.12
+        const circ = 47.12;
+        arc.setAttribute('stroke-dashoffset', (circ * (1 - fillPct / 100)).toFixed(2));
+
+        // Farbe: grün → gelb → orange → rot
+        let color;
+        if      (fillPct < 40) color = '#27ae60';
+        else if (fillPct < 65) color = '#f0b429';
+        else if (fillPct < 85) color = '#e67e22';
+        else                   color = '#e74c3c';
+        arc.style.stroke = color;
+        pct.style.color  = color;
+
+        // Label
+        pct.textContent = budget.should_reset ? '!' : Math.round(fillPct) + '%';
+
+        // Tooltip
+        const fmt = n => n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
+        const remaining = Math.max(0, limit - used_tokens);
+        el.title = `Kontext: ${fmt(used_tokens)} / ${fmt(limit)} Tokens\nKomprimierung in ~${fmt(remaining)} Tokens`;
+
+        el.classList.add('visible');
     },
 
     addCompactionNotice() {

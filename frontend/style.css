@@ -1340,7 +1340,7 @@ body.light-mode .chat-bubble tbody tr:nth-child(even) td {
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     color: var(--text-primary);
-    padding: 0.875rem 6.5rem 0.875rem 3rem;
+    padding: 0.875rem 6.5rem 0.875rem 6rem;
     border-radius: 16px;
     font-size: 0.95rem;
     font-family: inherit;
@@ -1411,6 +1411,55 @@ body.light-mode .chat-input {
 .btn-safeguard.safeguard-off:hover {
     opacity: 0.9;
     color: var(--text-secondary);
+}
+
+/* ── Context Window Ring Indicator ── */
+.ctx-indicator {
+    position: absolute;
+    left: calc(0.75rem + 9px + 44px);
+    bottom: calc(1.25rem + 9px);
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--transition-fast);
+    z-index: 1;
+}
+
+.ctx-indicator.visible {
+    opacity: 1;
+    pointer-events: auto;
+    cursor: default;
+}
+
+.ctx-track {
+    stroke: var(--border-color);
+}
+
+.ctx-arc {
+    stroke: #27ae60;
+    transition: stroke-dashoffset 0.7s ease, stroke 0.7s ease;
+}
+
+.ctx-pct {
+    font-size: 0.65rem;
+    font-weight: 600;
+    line-height: 1;
+    color: #27ae60;
+    transition: color 0.7s ease;
+    min-width: 2.5ch;
+    user-select: none;
+}
+
+@keyframes ctxCompactFlash {
+    0%, 100% { opacity: 1; }
+    30%       { opacity: 0.2; }
+    60%       { opacity: 0.9; }
+}
+
+.ctx-indicator.ctx-flash .ctx-arc {
+    animation: ctxCompactFlash 0.9s ease-in-out;
 }
 
 /* ── Safeguard Confirmation Prompt ── */
@@ -4894,6 +4943,17 @@ a:hover {
     /* Mic-Pulse stoppen */
     .btn-mic-inline.recording {
         animation: none !important;
+    }
+
+    /* Context-Ring Flash deaktivieren */
+    .ctx-indicator.ctx-flash .ctx-arc {
+        animation: none !important;
+    }
+
+    /* Context-Ring Übergänge deaktivieren */
+    .ctx-arc,
+    .ctx-pct {
+        transition: none !important;
     }
 
     /* Intro-Opacity-Transition: sofort einblenden */
