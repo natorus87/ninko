@@ -7,6 +7,22 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.9.1] – 2026-04-02
+
+### Fixed
+
+- **Safeguard SSL bypass** — `get_safeguard_openai_client()` in `llm_factory.py` created an `AsyncOpenAI` client without a custom httpx instance, so the safeguard classifier always used Python's default SSL verification — ignoring the provider's `verify_ssl` setting. On every chat message, the safeguard would fail with `CERTIFICATE_VERIFY_FAILED` when the LLM backend has a self-signed certificate. Fixed by passing `http_client=httpx.AsyncClient(verify=settings.LLM_VERIFY_SSL)` to the `AsyncOpenAI` constructor.
+
+- **Provider test URL corruption (`rstrip` bug)** — `base_url.rstrip("/v1")` stripped individual characters (`/`, `v`, `1`) instead of the substring `/v1`. This corrupted port numbers ending in `1` (e.g. `:8001` → `:800`). Replaced with an explicit `endswith("/v1")` check + slice, correctly normalizing the base URL before appending `/v1/models`.
+
+- **`AttributeError: cache_clear` on provider save with `verify_ssl=False`** — `_apply_default_provider()` called `.cache_clear()` on `get_settings`, which uses a plain module-level singleton, not `@lru_cache`. Caused a 500 error whenever a provider with `verify_ssl=False` was saved or set as default. Removed the invalid call; `core.config._settings = None` in `_reconfigure_llm()` is the correct invalidation pattern.
+
+### Changed
+
+- Provider connection test (`POST /api/settings/llm/providers/{id}/test`) now logs `verify_ssl_raw` and `verify_ssl_bool` at `INFO` level for easier SSL diagnosis.
+
+---
+
 ## [0.9.0] – 2026-04-02
 
 ### Added

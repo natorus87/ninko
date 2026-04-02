@@ -470,17 +470,24 @@ async def test_llm_provider(provider_id: str) -> dict:
     backend = provider.get("backend", "ollama")
     api_key = provider.get("api_key", "")
 
-    # Test-URL bestimmen
+    # Test-URL bestimmen (korrekte Substring-Entfernung, nicht char-based rstrip)
+    base_url_clean = base_url.rstrip("/")
+    if base_url_clean.endswith("/v1"):
+        base_url_clean = base_url_clean[:-3]
     if backend == "ollama":
-        test_url = base_url.rstrip("/") + "/api/tags"
+        test_url = base_url_clean + "/api/tags"
     else:
-        test_url = base_url.rstrip("/").rstrip("/v1") + "/v1/models"
+        test_url = base_url_clean + "/v1/models"
 
     headers = {}
     if backend == "openai_compatible" and api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
     verify_ssl = bool(provider.get("verify_ssl", True))
+    logger.debug(
+        "Provider-Test: id=%s backend=%s url=%s verify_ssl_raw=%r verify_ssl_bool=%r",
+        provider_id, backend, test_url, provider.get("verify_ssl"), verify_ssl,
+    )
     status = "unreachable"
     error = None
     try:

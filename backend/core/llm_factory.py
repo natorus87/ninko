@@ -411,5 +411,7 @@ def get_safeguard_openai_client():
         api_key = "lm-studio"
         model = settings.LMSTUDIO_MODEL
 
-    client = AsyncOpenAI(base_url=base_url, api_key=api_key)
+    verify_ssl = settings.LLM_VERIFY_SSL
+    http_client = httpx.AsyncClient(verify=verify_ssl)
+    client = AsyncOpenAI(base_url=base_url, api_key=api_key, http_client=http_client)
     return client, model
