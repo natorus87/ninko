@@ -58,6 +58,7 @@ class CoreSettings(BaseSettings):
     # ── General ────────────────────────────────────────
     LOG_LEVEL: str = "INFO"
     LANGUAGE: str = "de"
+    TIMEZONE: str = "Europe/Berlin"
 
     # ── Monitoring ─────────────────────────────────────
     MONITOR_INTERVAL_SECONDS: int = 300

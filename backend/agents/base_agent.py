@@ -383,6 +383,33 @@ class BaseAgent:
         except Exception:
             pass  # Fallback: keine Sprachanweisung
 
+        # Aktuelles Datum + Uhrzeit injizieren (Timezone aus Config)
+        try:
+            from datetime import datetime
+            import zoneinfo
+            from core.config import get_settings as _gs2
+            tz_name = _gs2().TIMEZONE
+            tz = zoneinfo.ZoneInfo(tz_name)
+            now = datetime.now(tz)
+            weekdays_de = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
+            weekdays_en = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+            lang = _gs().LANGUAGE if "lang" in dir() else "de"
+            if lang == "de":
+                dt_str = (
+                    f"Aktuelles Datum: {weekdays_de[now.weekday()]}, "
+                    f"{now.day:02d}.{now.month:02d}.{now.year} | "
+                    f"Uhrzeit: {now.strftime('%H:%M')} ({tz_name})"
+                )
+            else:
+                dt_str = (
+                    f"Current date: {weekdays_en[now.weekday()]}, "
+                    f"{now.strftime('%B %d, %Y')} | "
+                    f"Time: {now.strftime('%H:%M')} ({tz_name})"
+                )
+            final_system_prompt += f"\n\n{dt_str}"
+        except Exception as exc:
+            logger.debug("Datetime-Injection fehlgeschlagen (ignoriert): %s", exc)
+
         # Komprimierungs-Zusammenfassungen aus der History einsammeln (role="system")
         # und in den System-Prompt integrieren (nicht als separate SystemMessage —
         # Thinking-Modelle wie Qwen3.5 akzeptieren nur EINEN System-Block am Anfang)
