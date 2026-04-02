@@ -7,6 +7,55 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.9.0] – 2026-04-02
+
+### Added
+
+- **Workflow Builder** — Ninko now has expert knowledge to build perfect workflows:
+  - **`backend/skills/workflow-builder/SKILL.md`** — Auto-injected skill that gives Ninko a comprehensive 10-step guide for building workflows. Covers all node types, condition syntax, variable interpolation, prompt design, error handling, tool selection, and anti-patterns. Triggers on any workflow-related request (Workflow erstellen, Automatisierung, Workflow mit Bedingung, Workflow mit Loop, etc.).
+  - **`create_dag_workflow` tool** (`backend/agents/core_tools.py`) — New LangChain tool that lets Ninko build arbitrary DAG workflows with branches, conditions, and loops via chat. Accepts `name`, `description`, `nodes` (with short user-friendly IDs), and `edges`. Auto-calculates Y positions, maps short IDs to UUIDs, saves to Redis, and returns a confirmation with node/edge counts. Registered in `_TOOL_READONLY` in `safeguard.py`.
+  - **Orchestrator SYSTEM_PROMPT update** — now explicitly routes to `create_dag_workflow` for complex workflows (conditions/loops/branching) and to `create_linear_workflow` for simple linear flows.
+
+- **Loop-Node fully implemented** (`backend/core/workflow_engine.py`):
+  - **`foreach` mode** — iterates over a list variable, executes a prompt template per item with `{loop_item}` and `{loop_index}` substitution, collects results in `{loop_results}`. Supports lists, JSON strings, and comma-separated values.
+  - **`while` mode** — repeats until a condition expression evaluates to `False`, with configurable `max_iterations` (capped at 50).
+
+- **Extended Condition expressions** (`backend/core/workflow_engine.py`):
+  - New `_evaluate_condition()` method with 9 supported expression types: `output.contains("x")`, `output.startswith("x")`, `output.endswith("x")`, `output.matches("regex")`, `variable.NAME == "value"`, `variable.NAME != "value"`, `variable.NAME > N`, `variable.NAME < N`, `len(output) > N`.
+
+- **Frontend Loop Inspector** (`frontend/app.js`):
+  - Loop nodes now show a `mode` dropdown (foreach / while) and a `prompt` textarea in the Workflow Inspector panel instead of a plain text input.
+
+- **Context Window Ring Indicator** (`frontend/`) — live context usage visualization in the chat input bar:
+  - SVG donut-ring next to the SafeGuard shield, fills from 0% to 100% as conversation history grows toward the compaction threshold.
+  - Color-coded: green (0–40%) → yellow (40–65%) → orange (65–85%) → red (85–100%).
+  - Percentage label next to the ring (same color); shows `!` when compaction will fire on the next message.
+  - Hover tooltip: `Kontext: X / Y Tokens · Komprimierung in ~Z Tokens`.
+  - Brief flash animation when a compaction event occurs.
+  - Initializes at page load by calling `GET /api/settings/llm/context-window` — ring appears immediately, not only after the first message.
+
+- **Manual Context-Window override per LLM Provider**:
+  - New `context_window` field (integer, `0 = auto`) in the LLM provider form (Settings → LLM).
+  - When set to a value > 0, the `llm_factory` cache is populated directly without an API call to `/v1/models` — solves incorrect values from providers that omit `context_length` in their model metadata (e.g. LM Studio with certain models).
+  - New `GET /api/settings/llm/context-window` endpoint returns the effective value (manual override > cached API value > fallback 32768) with a `source` field (`"manual"` or `"api"`).
+  - Schema fields `context_window: int = 0` added to `LLMProvider` and `LLMProviderCreate` in `backend/schemas/settings.py`.
+  - Provider card in the UI shows the configured context window size (e.g. `32k ctx`) next to the model name.
+  - `invalidate_context_window_cache(override: int = 0)` — extended signature; passing `override > 0` writes the value directly into the cache.
+  - i18n keys `settings.providerContextWindow`, `settings.providerContextWindowPlaceholder`, `settings.providerContextWindowHint` added for all 10 supported languages (DE, EN, FR, ES, IT, NL, PT, PL, JA, ZH).
+
+### Fixed
+
+- **SearXNG pod crash** — `enableServiceLinks: false` added to the SearXNG deployment spec in all three manifest locations (`k8s/searxng/deployment.yaml`, `k8s-conbro/searxng/deployment.yaml`, `charts/ninko/templates/searxng/deployment.yaml`). Prevents Kubernetes from injecting hundreds of `SERVICE_*` env vars that caused "arg list too long" pod crashes.
+- **`k8s-conbro/searxng/deployment.yaml` namespace** — corrected `namespace: ninko` → `namespace: kumio` (cluster still uses `kumio` namespace pending migration).
+- **Context Window Ring alignment** — SafeGuard icon and context-ring indicator are now wrapped in a shared `.chat-bottom-left` flex-container, ensuring both elements sit on exactly the same baseline regardless of margin/padding offsets.
+
+### Changed
+
+- `frontend/style.css` — new `.chat-bottom-left` wrapper replaces individual `position: absolute` on `.btn-safeguard` and `.ctx-indicator`. Textarea `padding-left` adjusted to `7rem` to accommodate both icons without text overlap.
+- `backend/core/workflow_engine.py` — loop handler replaced (was a non-functional stub); condition evaluation replaced inline string match with the new 9-pattern `_evaluate_condition()` + `_compare()` helper.
+
+---
+
 ## [0.8.0] – 2026-04-01
 
 ### Added
