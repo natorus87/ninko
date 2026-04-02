@@ -352,12 +352,10 @@ def _apply_default_provider(providers: list[dict]) -> None:
     )
     _reconfigure_llm(settings)
 
-    # SSL-Verify-Flag in Config übernehmen (wird von llm_factory beim nächsten get_llm() gelesen)
+    # SSL-Verify-Flag in Env schreiben (wird von llm_factory beim nächsten get_llm() gelesen)
     verify_ssl = bool(default.get("verify_ssl", True))
     import os
     os.environ["LLM_VERIFY_SSL"] = "true" if verify_ssl else "false"
-    from core.config import get_settings as _cfg
-    _cfg.cache_clear()  # pydantic-settings Cache invalidieren
 
     # Context-Window Override: wenn manuell gesetzt, direkt in Cache schreiben
     ctx_override = int(default.get("context_window") or 0)
