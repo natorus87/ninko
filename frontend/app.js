@@ -166,6 +166,7 @@ const Ninko = {
         this.initSidebarTransitions();
         this._checkTtsAvailable();
         this.initSafeguard();
+        this._initCtxIndicator();
         document.documentElement.classList.remove('light-mode-pre');
         document.body.style.opacity = '1';
     },
@@ -1625,6 +1626,28 @@ const Ninko = {
         const input = document.getElementById('chat-input');
         if (input) input.value = userText;
         await this.sendMessage();
+    },
+
+    async _initCtxIndicator() {
+        // Context-Window des aktiven Providers laden und in den Ring schreiben
+        // (noch ohne used_tokens — zeigt nur dass der Ring sichtbar ist)
+        try {
+            const res = await fetch('/api/settings/llm/context-window');
+            if (!res.ok) return;
+            const data = await res.json();
+            const win = data.context_window || 0;
+            if (win > 0) {
+                // Virtuelles leeres Budget aufbauen: 0 Tokens genutzt, Threshold = 25% des Fensters
+                const threshold = Math.floor(win * 0.25);
+                this._updateCtxIndicator({
+                    used_tokens: 0,
+                    threshold_tokens: threshold,
+                    max_tokens: threshold,
+                    usage_percent: 0,
+                    should_reset: false,
+                });
+            }
+        } catch { /* kein Fehler anzeigen — optionale Initialisierung */ }
     },
 
     _updateCtxIndicator(budget) {
@@ -5152,7 +5175,7 @@ const Ninko = {
                         </div>
                     </div>
                     <div class="provider-meta">
-                        <span>${this._escapeHtml({ollama:'Ollama',lmstudio:'LM Studio',openai_compatible:'OpenAI'}[p.backend] || p.backend || '')}</span> · <span>${this._escapeHtml(p.base_url || '')}</span> · <span>${this._escapeHtml(p.model || '')}</span>
+                        <span>${this._escapeHtml({ollama:'Ollama',lmstudio:'LM Studio',openai_compatible:'OpenAI'}[p.backend] || p.backend || '')}</span> · <span>${this._escapeHtml(p.base_url || '')}</span> · <span>${this._escapeHtml(p.model || '')}</span>${p.context_window > 0 ? ` · <span>${(p.context_window >= 1000 ? (p.context_window/1000).toFixed(0)+'k' : p.context_window)} ctx</span>` : ''}
                     </div>
                     ${!p.is_default ? `<button class="btn btn-sm btn-outline" style="margin-top:0.5rem;" onclick="Ninko.setDefaultProvider('${p.id}')">Als Standard setzen</button>` : ''}
                 </div>
@@ -5169,6 +5192,7 @@ const Ninko = {
         document.getElementById('provider-url').value = '';
         document.getElementById('provider-model').value = '';
         document.getElementById('provider-api-key').value = '';
+        document.getElementById('provider-context-window').value = 0;
         document.getElementById('provider-is-default').checked = false;
 
         if (providerId) {
@@ -5181,6 +5205,7 @@ const Ninko = {
                     document.getElementById('provider-backend').value = p.backend;
                     document.getElementById('provider-url').value = p.base_url;
                     document.getElementById('provider-model').value = p.model;
+                    document.getElementById('provider-context-window').value = p.context_window || 0;
                     document.getElementById('provider-is-default').checked = p.is_default;
                 }
             } catch { }
@@ -5203,6 +5228,7 @@ const Ninko = {
             model: document.getElementById('provider-model').value,
             api_key: document.getElementById('provider-api-key').value,
             is_default: document.getElementById('provider-is-default').checked,
+            context_window: parseInt(document.getElementById('provider-context-window').value || '0', 10),
         };
         const id = document.getElementById('provider-edit-id').value;
         try {

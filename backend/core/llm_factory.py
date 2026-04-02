@@ -248,10 +248,13 @@ async def get_model_context_window() -> int:
     return _cached_context_window
 
 
-def invalidate_context_window_cache() -> None:
-    """Cache leeren und Generation erhöhen — z.B. nach Provider-/Modell-Wechsel via UI."""
+def invalidate_context_window_cache(override: int = 0) -> None:
+    """Cache leeren und Generation erhöhen — z.B. nach Provider-/Modell-Wechsel via UI.
+
+    override: wenn > 0, wird dieser Wert direkt als Context-Window gesetzt (kein API-Aufruf).
+    """
     global _cached_context_window, _llm_generation
-    _cached_context_window = None
+    _cached_context_window = override if override > 0 else None
     _llm_generation += 1
 
 

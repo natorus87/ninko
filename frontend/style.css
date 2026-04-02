@@ -1340,7 +1340,7 @@ body.light-mode .chat-bubble tbody tr:nth-child(even) td {
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     color: var(--text-primary);
-    padding: 0.875rem 6.5rem 0.875rem 6rem;
+    padding: 0.875rem 6.5rem 0.875rem 7rem;
     border-radius: 16px;
     font-size: 0.95rem;
     font-family: inherit;
@@ -1370,11 +1370,19 @@ body.light-mode .chat-input {
     color: var(--text-muted);
 }
 
-/* ── Safeguard Toggle (bottom-left inside textarea) ── */
-.btn-safeguard {
+/* ── Gemeinsamer Wrapper: Safeguard + Context-Ring ── */
+.chat-bottom-left {
     position: absolute;
-    left: calc(0.75rem + 9px);
-    bottom: calc(1.25rem + 9px);
+    left: calc(0.75rem + 3px);
+    bottom: calc(1.25rem + 3px);
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    z-index: 1;
+}
+
+/* ── Safeguard Toggle ── */
+.btn-safeguard {
     background: none;
     border: none;
     color: var(--text-muted);
@@ -1388,7 +1396,6 @@ body.light-mode .chat-input {
     justify-content: center;
     transition: color var(--transition-fast), transform var(--transition-fast);
     flex-shrink: 0;
-    z-index: 1;
 }
 
 .btn-safeguard:hover {
@@ -1415,16 +1422,13 @@ body.light-mode .chat-input {
 
 /* ── Context Window Ring Indicator ── */
 .ctx-indicator {
-    position: absolute;
-    left: calc(0.75rem + 9px + 44px);
-    bottom: calc(1.25rem + 9px);
     display: flex;
     align-items: center;
     gap: 3px;
     opacity: 0;
     pointer-events: none;
     transition: opacity var(--transition-fast);
-    z-index: 1;
+    margin-left: 6px;
 }
 
 .ctx-indicator.visible {

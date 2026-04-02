@@ -351,10 +351,21 @@ def _apply_default_provider(providers: list[dict]) -> None:
         api_key=default.get("api_key", ""),
     )
     _reconfigure_llm(settings)
-    logger.info(
-        "LLM-Factory auf Standard-Provider umgestellt: %s (%s, %s)",
-        default.get("name"), settings.backend, settings.model,
-    )
+
+    # Context-Window Override: wenn manuell gesetzt, direkt in Cache schreiben
+    ctx_override = int(default.get("context_window") or 0)
+    if ctx_override > 0:
+        from core.llm_factory import invalidate_context_window_cache
+        invalidate_context_window_cache(override=ctx_override)
+        logger.info(
+            "LLM-Factory auf Standard-Provider umgestellt: %s (%s, %s) — Context-Window Override: %d",
+            default.get("name"), settings.backend, settings.model, ctx_override,
+        )
+    else:
+        logger.info(
+            "LLM-Factory auf Standard-Provider umgestellt: %s (%s, %s)",
+            default.get("name"), settings.backend, settings.model,
+        )
 
 
 @router.get("/llm/providers")
@@ -481,6 +492,28 @@ async def test_llm_provider(provider_id: str) -> dict:
         await _save_providers(redis, providers)
 
     return {"id": provider_id, "status": status, "error": error}
+
+
+@router.get("/llm/context-window")
+async def get_context_window() -> dict:
+    """Aktuelles Context-Window des geladenen Modells zurückgeben.
+
+    Gibt zuerst einen manuell konfigurierten Override zurück (aus dem aktiven Provider),
+    andernfalls den gecachten Wert aus der API-Abfrage (oder den Fallback 32768).
+    """
+    from core.llm_factory import get_model_context_window, _cached_context_window, _DEFAULT_CONTEXT_WINDOW
+    redis = get_redis()
+    providers = await _load_providers(redis)
+    default = next((p for p in providers if p.get("is_default")), providers[0] if providers else None)
+    override = int((default or {}).get("context_window") or 0)
+    if override > 0:
+        return {"context_window": override, "source": "manual"}
+    cached = _cached_context_window
+    if cached:
+        return {"context_window": cached, "source": "api"}
+    # Noch nicht gecacht → jetzt abfragen
+    window = await get_model_context_window()
+    return {"context_window": window, "source": "api"}
 
 
 @router.put("/llm/default")

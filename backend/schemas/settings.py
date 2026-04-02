@@ -37,6 +37,8 @@ class LLMProvider(BaseModel):
     is_default: bool = False
     status: Literal["unknown", "connected", "unreachable"] = "unknown"
     created_at: Optional[str] = None
+    # Manuelles Context-Window Override (0 = auto-detect)
+    context_window: int = 0
 
 
 class LLMProviderCreate(BaseModel):
@@ -47,6 +49,8 @@ class LLMProviderCreate(BaseModel):
     model: str = "llama3.2:3b"
     api_key: str = ""
     is_default: bool = False
+    # Manuelles Context-Window Override (0 = auto-detect via /v1/models)
+    context_window: int = 0
 
 
 # ── Module Settings ──────────────────────────────────
