@@ -987,6 +987,14 @@ const Ninko = {
         // Switch back to centered state
         this._setChatState('centered');
 
+        // Context-Window Ring zurücksetzen
+        const arc = document.getElementById('ctx-arc');
+        const pct = document.getElementById('ctx-pct');
+        const ctxEl = document.getElementById('ctx-indicator');
+        if (arc) { arc.setAttribute('stroke-dashoffset', '47.12'); arc.style.stroke = '#27ae60'; }
+        if (pct) { pct.textContent = '—'; pct.style.color = '#27ae60'; }
+        if (ctxEl) { ctxEl.classList.remove('visible', 'ctx-flash'); ctxEl.title = ''; }
+
         // New session
         this.sessionId = this.generateUUID();
         sessionStorage.setItem('ninko_session', this.sessionId);

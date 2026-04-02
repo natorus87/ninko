@@ -1325,32 +1325,65 @@ body.light-mode .chat-bubble tbody tr:nth-child(even) td {
 }
 
 .chat-input-wrapper {
-    position: relative;
     display: flex;
-    align-items: flex-end;
-    padding: 0.75rem 0.75rem 1.25rem;
+    flex-direction: column;
     max-width: 760px;
     width: 100%;
     margin: 0 auto;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.chat-input-wrapper:focus-within {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(92, 158, 235, 0.12);
+}
+
+/* Zeile 1: Textarea */
+.chat-input-top {
+    padding: 0.75rem 0.875rem 0.25rem;
 }
 
 .chat-input {
-    flex: 1;
+    width: 100%;
     resize: none;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
+    background: transparent;
+    border: none;
     color: var(--text-primary);
-    padding: 0.875rem 6.5rem 0.875rem 7rem;
-    border-radius: 16px;
+    padding: 0;
     font-size: 0.95rem;
     font-family: inherit;
     line-height: 1.5;
-    min-height: 54px;
-    max-height: 300px;
+    min-height: 44px;
+    max-height: 200px;
     overflow-y: auto;
     scrollbar-width: none;
     outline: none;
-    transition: color var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast), opacity var(--transition-fast);
+    transition: color var(--transition-fast);
+}
+
+/* Zeile 2: Toolbar */
+.chat-input-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.25rem 0.5rem 0.5rem;
+    gap: 0.5rem;
+}
+
+.chat-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.chat-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-left: auto;
 }
 
 .chat-input::-webkit-scrollbar {
@@ -1362,23 +1395,12 @@ body.light-mode .chat-bubble tbody tr:nth-child(even) td {
     box-shadow: 0 0 0 3px rgba(92, 158, 235, 0.12);
 }
 
-body.light-mode .chat-input {
+body.light-mode .chat-input-wrapper {
     background: #FFFFFF;
 }
 
 .chat-input::placeholder {
     color: var(--text-muted);
-}
-
-/* ── Gemeinsamer Wrapper: Safeguard + Context-Ring ── */
-.chat-bottom-left {
-    position: absolute;
-    left: calc(0.75rem + 3px);
-    bottom: calc(1.25rem + 3px);
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    z-index: 1;
 }
 
 /* ── Safeguard Toggle ── */
@@ -1387,15 +1409,14 @@ body.light-mode .chat-input {
     border: none;
     color: var(--text-muted);
     cursor: pointer;
-    /* Touch target: min 44px effective area */
-    padding: 10px;
-    margin: -6px;
+    padding: 6px;
     border-radius: 6px;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: color var(--transition-fast), transform var(--transition-fast);
     flex-shrink: 0;
+    /* Touch target via ::before */
 }
 
 .btn-safeguard:hover {
@@ -1428,7 +1449,6 @@ body.light-mode .chat-input {
     opacity: 0;
     pointer-events: none;
     transition: opacity var(--transition-fast);
-    margin-left: 6px;
 }
 
 .ctx-indicator.visible {
@@ -1763,15 +1783,7 @@ body.light-mode .chat-input {
     color: var(--text-primary);
 }
 
-/* ── Inline action buttons (inside textarea) ── */
-.chat-input-actions {
-    position: absolute;
-    right: calc(0.75rem + 8px);
-    bottom: calc(1.25rem + 9px);
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-}
+/* .chat-input-actions entfernt — Buttons jetzt in .chat-toolbar-right */
 
 .btn-mic-inline {
     background: none;
@@ -3104,8 +3116,12 @@ body.light-mode .btn-primary:hover {
         padding: 1rem;
     }
 
-    .chat-input-wrapper {
-        padding: 0.75rem 1rem;
+    .chat-input-top {
+        padding: 0.625rem 0.75rem 0.2rem;
+    }
+
+    .chat-input-toolbar {
+        padding: 0.2rem 0.375rem 0.375rem;
     }
 
     .module-tab-content {
