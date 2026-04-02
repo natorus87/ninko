@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 class LlmSettings(BaseModel):
     """LLM/AI Provider Konfiguration (Legacy Single-Provider)."""
-    backend: Literal["ollama", "lmstudio", "openai_compatible"] = "ollama"
+    backend: Literal["ollama", "lmstudio", "openai_compatible", "litellm"] = "ollama"
     base_url: str = "http://ollama:11434"
     model: str = "llama3.2:3b"
     api_key: str = ""
@@ -30,7 +30,7 @@ class LLMProvider(BaseModel):
     """Ein konfigurierbarer LLM-Provider."""
     id: str = ""
     name: str
-    backend: Literal["ollama", "lmstudio", "openai_compatible"] = "ollama"
+    backend: Literal["ollama", "lmstudio", "openai_compatible", "litellm"] = "ollama"
     base_url: str = "http://ollama:11434"
     model: str = "llama3.2:3b"
     api_key: str = ""
@@ -46,7 +46,7 @@ class LLMProvider(BaseModel):
 class LLMProviderCreate(BaseModel):
     """Payload zum Erstellen/Ändern eines Providers."""
     name: str = Field(..., min_length=1, max_length=128)
-    backend: Literal["ollama", "lmstudio", "openai_compatible"] = "ollama"
+    backend: Literal["ollama", "lmstudio", "openai_compatible", "litellm"] = "ollama"
     base_url: str = "http://ollama:11434"
     model: str = "llama3.2:3b"
     api_key: str = ""

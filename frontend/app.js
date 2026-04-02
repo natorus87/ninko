@@ -5183,7 +5183,7 @@ const Ninko = {
                         </div>
                     </div>
                     <div class="provider-meta">
-                        <span>${this._escapeHtml({ollama:'Ollama',lmstudio:'LM Studio',openai_compatible:'OpenAI'}[p.backend] || p.backend || '')}</span> · <span>${this._escapeHtml(p.base_url || '')}</span> · <span>${this._escapeHtml(p.model || '')}</span>${p.context_window > 0 ? ` · <span>${(p.context_window >= 1000 ? (p.context_window/1000).toFixed(0)+'k' : p.context_window)} ctx</span>` : ''}${p.verify_ssl === false ? ' · <span style="color:var(--warning-color,#f0b429)" title="SSL-Verifizierung deaktiviert">⚠ SSL off</span>' : ''}
+                        <span>${this._escapeHtml({ollama:'Ollama',lmstudio:'LM Studio',openai_compatible:'OpenAI',litellm:'LiteLLM'}[p.backend] || p.backend || '')}</span> · <span>${this._escapeHtml(p.base_url || '')}</span> · <span>${this._escapeHtml(p.model || '')}</span>${p.context_window > 0 ? ` · <span>${(p.context_window >= 1000 ? (p.context_window/1000).toFixed(0)+'k' : p.context_window)} ctx</span>` : ''}${p.verify_ssl === false ? ' · <span style="color:var(--warning-color,#f0b429)" title="SSL-Verifizierung deaktiviert">⚠ SSL off</span>' : ''}
                     </div>
                     ${!p.is_default ? `<button class="btn btn-sm btn-outline" style="margin-top:0.5rem;" onclick="Ninko.setDefaultProvider('${p.id}')">Als Standard setzen</button>` : ''}
                 </div>
@@ -5284,7 +5284,7 @@ const Ninko = {
     toggleProviderApiKey() {
         const backend = document.getElementById('provider-backend').value;
         const row = document.getElementById('provider-api-key-row');
-        if (row) row.style.display = backend === 'openai_compatible' ? '' : 'none';
+        if (row) row.style.display = (backend === 'openai_compatible' || backend === 'litellm') ? '' : 'none';
     },
 
     async loadEmbedModel() {

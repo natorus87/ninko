@@ -20,7 +20,7 @@ class CoreSettings(BaseSettings):
     )
 
     # ── LLM Backend ────────────────────────────────────
-    LLM_BACKEND: Literal["ollama", "lmstudio", "openai_compatible"] = "lmstudio"
+    LLM_BACKEND: Literal["ollama", "lmstudio", "openai_compatible", "litellm"] = "lmstudio"
     # LM Studio / OpenAI-kompatibler Provider (Standard)
     LMSTUDIO_BASE_URL: str = "http://192.168.1.100:1234/v1"
     LMSTUDIO_MODEL: str = "local-model"
@@ -31,6 +31,10 @@ class CoreSettings(BaseSettings):
     OPENAI_BASE_URL: str = "https://openrouter.ai/api/v1"
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "anthropic/claude-sonnet-4"
+    # LiteLLM Proxy (self-hosted, requires API key)
+    LITELLM_BASE_URL: str = "http://litellm:4000/v1"
+    LITELLM_MODEL: str = "gpt-4"
+    LITELLM_API_KEY: str = ""
     # Globales Embedding-Modell (einheitlich für ChromaDB)
     EMBED_MODEL: str = "nomic-ai/nomic-embed-text-v1.5-GGUF"
 

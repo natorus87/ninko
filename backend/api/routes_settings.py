@@ -57,6 +57,9 @@ async def get_llm_settings() -> LlmSettingsResponse:
     elif cfg.LLM_BACKEND == "openai_compatible":
         base_url = cfg.OPENAI_BASE_URL
         model = cfg.OPENAI_MODEL
+    elif cfg.LLM_BACKEND == "litellm":
+        base_url = cfg.LITELLM_BASE_URL
+        model = cfg.LITELLM_MODEL
     else:
         base_url = cfg.LMSTUDIO_BASE_URL
         model = cfg.LMSTUDIO_MODEL
@@ -125,6 +128,11 @@ def _reconfigure_llm(settings: LlmSettings) -> None:
         os.environ["OPENAI_MODEL"] = settings.model
         if settings.api_key:
             os.environ["OPENAI_API_KEY"] = settings.api_key
+    elif settings.backend == "litellm":
+        os.environ["LITELLM_BASE_URL"] = settings.base_url
+        os.environ["LITELLM_MODEL"] = settings.model
+        if settings.api_key:
+            os.environ["LITELLM_API_KEY"] = settings.api_key
     else:
         os.environ["LMSTUDIO_BASE_URL"] = settings.base_url
         os.environ["LMSTUDIO_MODEL"] = settings.model
@@ -480,7 +488,7 @@ async def test_llm_provider(provider_id: str) -> dict:
         test_url = base_url_clean + "/v1/models"
 
     headers = {}
-    if backend == "openai_compatible" and api_key:
+    if backend in ("openai_compatible", "litellm") and api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
     verify_ssl = bool(provider.get("verify_ssl", True))

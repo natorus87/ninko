@@ -7,6 +7,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.9.2] – 2026-04-02
+
+### Added
+
+- **LiteLLM Proxy backend** — new `litellm` backend type for self-hosted [LiteLLM](https://github.com/BerriAI/litellm) proxy instances:
+  - Unlike `lmstudio` (no-key local), LiteLLM always requires an API key — even if it is just a placeholder like `sk-1234`.
+  - Uses `_NormalizingChatOpenAI` (standard OpenAI tool handling, no LM Studio Jinja workarounds needed).
+  - Config keys: `LITELLM_BASE_URL` (default `http://litellm:4000/v1`), `LITELLM_MODEL`, `LITELLM_API_KEY`.
+  - Provider form in Settings → LLM shows the API key field when `litellm` backend is selected (same as `openai_compatible`).
+  - Provider connection test sends `Authorization: Bearer <key>` header for `litellm` (same as `openai_compatible`).
+  - `get_safeguard_openai_client()` and `get_model_context_window()` both handle the `litellm` backend case.
+  - Provider card in the UI displays `LiteLLM` as the backend label.
+
+---
+
 ## [0.9.1] – 2026-04-02
 
 ### Fixed
