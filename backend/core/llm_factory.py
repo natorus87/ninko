@@ -221,7 +221,8 @@ async def get_model_context_window() -> int:
         if settings.LLM_BACKEND == "openai_compatible" and settings.OPENAI_API_KEY:
             headers["Authorization"] = f"Bearer {settings.OPENAI_API_KEY}"
 
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        verify_ssl = get_settings().LLM_VERIFY_SSL
+        async with httpx.AsyncClient(timeout=5.0, verify=verify_ssl) as client:
             resp = await client.get(f"{base_url}/models", headers=headers)
             resp.raise_for_status()
             data = resp.json()
@@ -295,33 +296,41 @@ def get_llm() -> BaseChatModel:
         # OpenAI-kompatibel mit API-Key (OpenRouter, Groq, Together, etc.)
         base_url = _get_lmstudio_base_url(settings.OPENAI_BASE_URL)
         api_key = settings.OPENAI_API_KEY or "sk-placeholder"
+        verify_ssl = settings.LLM_VERIFY_SSL
         logger.info(
-            "LLM-Backend: OpenAI-kompatibel – URL=%s, Modell=%s",
-            base_url,
-            settings.OPENAI_MODEL,
+            "LLM-Backend: OpenAI-kompatibel – URL=%s, Modell=%s, verify_ssl=%s",
+            base_url, settings.OPENAI_MODEL, verify_ssl,
         )
+        http_client = httpx.Client(verify=verify_ssl)
+        http_async_client = httpx.AsyncClient(verify=verify_ssl)
         return _NormalizingChatOpenAI(
             base_url=base_url,
             api_key=api_key,
             model=settings.OPENAI_MODEL,
             temperature=settings.LLM_TEMPERATURE,
             max_tokens=settings.MAX_OUTPUT_TOKENS,
+            http_client=http_client,
+            http_async_client=http_async_client,
         )
 
     else:
         # Standard: LM Studio / OpenAI-kompatibler Endpoint (lokal, kein API-Key)
         base_url = _get_lmstudio_base_url(settings.LMSTUDIO_BASE_URL)
+        verify_ssl = settings.LLM_VERIFY_SSL
         logger.info(
-            "LLM-Backend: LM Studio – URL=%s, Modell=%s",
-            base_url,
-            settings.LMSTUDIO_MODEL,
+            "LLM-Backend: LM Studio – URL=%s, Modell=%s, verify_ssl=%s",
+            base_url, settings.LMSTUDIO_MODEL, verify_ssl,
         )
+        http_client = httpx.Client(verify=verify_ssl)
+        http_async_client = httpx.AsyncClient(verify=verify_ssl)
         return _LMStudioChatOpenAI(
             base_url=base_url,
             api_key="lm-studio",
             model=settings.LMSTUDIO_MODEL,
             temperature=settings.LLM_TEMPERATURE,
             max_tokens=settings.MAX_OUTPUT_TOKENS,
+            http_client=http_client,
+            http_async_client=http_async_client,
         )
 
 

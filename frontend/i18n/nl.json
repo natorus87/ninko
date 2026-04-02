@@ -134,6 +134,8 @@
   "settings.providerContextWindow": "Contextvenster (tokens)",
   "settings.providerContextWindowPlaceholder": "0 = automatisch",
   "settings.providerContextWindowHint": "0 = automatisch detecteren via API (aanbevolen). Alleen handmatig instellen als automatische detectie onjuiste waarden geeft.",
+  "settings.providerVerifySsl": "SSL-certificaat verifiëren",
+  "settings.providerVerifySslHint": "Uitschakelen voor zelfondertekende certificaten (bijv. lokale servers zonder openbaar certificaat)",
   "settings.embedModel": "Embeddingmodel",
   "settings.setDefault": "Als standaardprovider instellen",
   "settings.cancel": "Annuleren",

@@ -5183,7 +5183,7 @@ const Ninko = {
                         </div>
                     </div>
                     <div class="provider-meta">
-                        <span>${this._escapeHtml({ollama:'Ollama',lmstudio:'LM Studio',openai_compatible:'OpenAI'}[p.backend] || p.backend || '')}</span> · <span>${this._escapeHtml(p.base_url || '')}</span> · <span>${this._escapeHtml(p.model || '')}</span>${p.context_window > 0 ? ` · <span>${(p.context_window >= 1000 ? (p.context_window/1000).toFixed(0)+'k' : p.context_window)} ctx</span>` : ''}
+                        <span>${this._escapeHtml({ollama:'Ollama',lmstudio:'LM Studio',openai_compatible:'OpenAI'}[p.backend] || p.backend || '')}</span> · <span>${this._escapeHtml(p.base_url || '')}</span> · <span>${this._escapeHtml(p.model || '')}</span>${p.context_window > 0 ? ` · <span>${(p.context_window >= 1000 ? (p.context_window/1000).toFixed(0)+'k' : p.context_window)} ctx</span>` : ''}${p.verify_ssl === false ? ' · <span style="color:var(--warning-color,#f0b429)" title="SSL-Verifizierung deaktiviert">⚠ SSL off</span>' : ''}
                     </div>
                     ${!p.is_default ? `<button class="btn btn-sm btn-outline" style="margin-top:0.5rem;" onclick="Ninko.setDefaultProvider('${p.id}')">Als Standard setzen</button>` : ''}
                 </div>
@@ -5201,6 +5201,7 @@ const Ninko = {
         document.getElementById('provider-model').value = '';
         document.getElementById('provider-api-key').value = '';
         document.getElementById('provider-context-window').value = 0;
+        document.getElementById('provider-verify-ssl').checked = true;
         document.getElementById('provider-is-default').checked = false;
 
         if (providerId) {
@@ -5214,6 +5215,7 @@ const Ninko = {
                     document.getElementById('provider-url').value = p.base_url;
                     document.getElementById('provider-model').value = p.model;
                     document.getElementById('provider-context-window').value = p.context_window || 0;
+                    document.getElementById('provider-verify-ssl').checked = p.verify_ssl !== false;
                     document.getElementById('provider-is-default').checked = p.is_default;
                 }
             } catch { }
@@ -5237,6 +5239,7 @@ const Ninko = {
             api_key: document.getElementById('provider-api-key').value,
             is_default: document.getElementById('provider-is-default').checked,
             context_window: parseInt(document.getElementById('provider-context-window').value || '0', 10),
+            verify_ssl: document.getElementById('provider-verify-ssl').checked,
         };
         const id = document.getElementById('provider-edit-id').value;
         try {

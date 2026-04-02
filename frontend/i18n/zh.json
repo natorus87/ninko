@@ -134,6 +134,8 @@
   "settings.providerContextWindow": "上下文窗口（令牌）",
   "settings.providerContextWindowPlaceholder": "0 = 自动",
   "settings.providerContextWindowHint": "0 = 通过API自动检测（推荐）。仅在自动检测返回错误值时手动设置。",
+  "settings.providerVerifySsl": "验证SSL证书",
+  "settings.providerVerifySslHint": "对于自签名证书请禁用（例如没有公共证书的本地服务器）",
   "settings.embedModel": "嵌入模型",
   "settings.setDefault": "设为默认提供商",
   "settings.cancel": "取消",

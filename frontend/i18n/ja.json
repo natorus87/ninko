@@ -134,6 +134,8 @@
   "settings.providerContextWindow": "コンテキストウィンドウ（トークン）",
   "settings.providerContextWindowPlaceholder": "0 = 自動",
   "settings.providerContextWindowHint": "0 = API経由で自動検出（推奨）。自動検出が誤った値を返す場合のみ手動で設定してください。",
+  "settings.providerVerifySsl": "SSL証明書を検証する",
+  "settings.providerVerifySslHint": "自己署名証明書の場合は無効にしてください（例：公開証明書のないローカルサーバー）",
   "settings.embedModel": "埋め込みモデル",
   "settings.setDefault": "デフォルトプロバイダーとして設定",
   "settings.cancel": "キャンセル",

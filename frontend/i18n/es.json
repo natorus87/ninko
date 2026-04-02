@@ -134,6 +134,8 @@
   "settings.providerContextWindow": "Ventana de contexto (tokens)",
   "settings.providerContextWindowPlaceholder": "0 = automático",
   "settings.providerContextWindowHint": "0 = detección automática vía API (recomendado). Establecer manualmente solo si la detección automática devuelve valores incorrectos.",
+  "settings.providerVerifySsl": "Verificar certificado SSL",
+  "settings.providerVerifySslHint": "Desactivar para certificados autofirmados (p.ej. servidores locales sin certificado público)",
   "settings.embedModel": "Modelo de embedding",
   "settings.setDefault": "Establecer como proveedor predeterminado",
   "settings.cancel": "Cancelar",

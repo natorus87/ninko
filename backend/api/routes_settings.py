@@ -352,6 +352,13 @@ def _apply_default_provider(providers: list[dict]) -> None:
     )
     _reconfigure_llm(settings)
 
+    # SSL-Verify-Flag in Config übernehmen (wird von llm_factory beim nächsten get_llm() gelesen)
+    verify_ssl = bool(default.get("verify_ssl", True))
+    import os
+    os.environ["LLM_VERIFY_SSL"] = "true" if verify_ssl else "false"
+    from core.config import get_settings as _cfg
+    _cfg.cache_clear()  # pydantic-settings Cache invalidieren
+
     # Context-Window Override: wenn manuell gesetzt, direkt in Cache schreiben
     ctx_override = int(default.get("context_window") or 0)
     if ctx_override > 0:
@@ -475,10 +482,11 @@ async def test_llm_provider(provider_id: str) -> dict:
     if backend == "openai_compatible" and api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
+    verify_ssl = bool(provider.get("verify_ssl", True))
     status = "unreachable"
     error = None
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with httpx.AsyncClient(timeout=5.0, verify=verify_ssl) as client:
             resp = await client.get(test_url, headers=headers)
             if resp.status_code < 500:
                 status = "connected"

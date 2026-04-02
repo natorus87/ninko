@@ -142,6 +142,8 @@
   "settings.providerContextWindow": "Context-Window (Tokens)",
   "settings.providerContextWindowPlaceholder": "0 = automatisch",
   "settings.providerContextWindowHint": "0 = automatisch via API erkennen (empfohlen). Nur setzen wenn die Auto-Erkennung falsche Werte liefert.",
+  "settings.providerVerifySsl": "SSL-Zertifikat verifizieren",
+  "settings.providerVerifySslHint": "Deaktivieren bei selbstsignierten Zertifikaten (z.B. lokale Server ohne öffentliches Zertifikat)",
   "settings.embedModel": "Embedding-Modell",
   "settings.setDefault": "Als Standard-Provider setzen",
   "settings.cancel": "Abbrechen",

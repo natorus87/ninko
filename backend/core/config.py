@@ -59,6 +59,7 @@ class CoreSettings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     LANGUAGE: str = "de"
     TIMEZONE: str = "Europe/Berlin"
+    LLM_VERIFY_SSL: bool = True  # False = self-signed Zertifikate erlauben
 
     # ── Monitoring ─────────────────────────────────────
     MONITOR_INTERVAL_SECONDS: int = 300

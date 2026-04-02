@@ -39,6 +39,8 @@ class LLMProvider(BaseModel):
     created_at: Optional[str] = None
     # Manuelles Context-Window Override (0 = auto-detect)
     context_window: int = 0
+    # SSL-Zertifikat-Verifizierung (False = self-signed Certs erlauben)
+    verify_ssl: bool = True
 
 
 class LLMProviderCreate(BaseModel):
@@ -51,6 +53,8 @@ class LLMProviderCreate(BaseModel):
     is_default: bool = False
     # Manuelles Context-Window Override (0 = auto-detect via /v1/models)
     context_window: int = 0
+    # SSL-Zertifikat-Verifizierung (False = self-signed Certs erlauben)
+    verify_ssl: bool = True
 
 
 # ── Module Settings ──────────────────────────────────
