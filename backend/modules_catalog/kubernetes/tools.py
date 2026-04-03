@@ -1,6 +1,6 @@
 """
-Kubernetes Modul – LangGraph @tool-Funktionen.
-Vollständige Implementierung mit kubernetes Python-Client.
+Kubernetes module — LangGraph @tool functions.
+Full implementation using the kubernetes Python client.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ logger = logging.getLogger("ninko.modules.kubernetes.tools")
 async def _get_k8s_client(
     connection_id: str = "",
 ) -> tuple[client.CoreV1Api, client.AppsV1Api, client.NetworkingV1Api]:
-    """Initialisiert den Kubernetes-Client via ConnectionManager."""
+    """Initialize the Kubernetes client via ConnectionManager."""
     from core.connections import ConnectionManager
     from core.vault import get_vault
     import base64
@@ -30,7 +30,7 @@ async def _get_k8s_client(
     if connection_id:
         conn = await ConnectionManager.get_connection("kubernetes", connection_id)
         if not conn:
-            raise ValueError(f"Kubernetes Verbindung mit ID '{connection_id}' nicht gefunden.")
+            raise ValueError(f"Kubernetes connection with ID '{connection_id}' not found.")
     else:
         conn = await ConnectionManager.get_default_connection("kubernetes")
         # Fallback to local
@@ -55,11 +55,11 @@ async def _get_k8s_client(
         if conn.environment == "local":
             config.load_kube_config()
             return client.CoreV1Api(), client.AppsV1Api(), client.NetworkingV1Api()
-        raise ValueError(f"Keine Kubeconfig in Vault für '{conn.name}' hinterlegt.")
+        raise ValueError(f"No kubeconfig in Vault for '{conn.name}' configured.")
 
     kubeconfig_b64 = await vault.get_secret(kubeconfig_key)
     if not kubeconfig_b64:
-        raise ValueError(f"Kubeconfig für '{conn.name}' nicht im Vault gefunden.")
+        raise ValueError(f"Kubeconfig for '{conn.name}' not found in Vault.")
 
     kubeconfig_bytes = base64.b64decode(kubeconfig_b64)
     kubeconfig_str = kubeconfig_bytes.decode("utf-8")
@@ -69,8 +69,8 @@ async def _get_k8s_client(
         config_dict = yaml.safe_load(kubeconfig_str)
         config.load_kube_config_from_dict(config_dict)
     except Exception as e:
-        logger.error(f"Fehler beim Parsen der Kubeconfig: {e}")
-        raise ValueError(f"Ungültige Kubeconfig für Verbindung '{conn.name}'. Bitte überprüfe die Datei.")
+        logger.error(f"Failed to parse kubeconfig: {e}")
+        raise ValueError(f"Invalid kubeconfig for connection '{conn.name}'. Please check the file.")
 
     return client.CoreV1Api(), client.AppsV1Api(), client.NetworkingV1Api()
 
@@ -83,9 +83,9 @@ async def _get_dynamic_client(connection_id: str = "") -> dynamic.DynamicClient:
 
 
 def _pod_age(creation_timestamp) -> str:
-    """Berechnet das Alter eines Pods als lesbaren String."""
+    """Calculate the age of a pod as a readable string."""
     if not creation_timestamp:
-        return "unbekannt"
+        return "unknown"
     now = datetime.now(timezone.utc)
     delta = now - creation_timestamp.replace(tzinfo=timezone.utc) if creation_timestamp.tzinfo is None else now - creation_timestamp
     days = delta.days
@@ -100,7 +100,7 @@ def _pod_age(creation_timestamp) -> str:
 
 @tool
 async def get_cluster_status(connection_id: str = "") -> dict:
-    """Gibt den Gesamtstatus des Kubernetes-Clusters zurück: Nodes, Pods, Deployments."""
+    """Returns the overall status of the Kubernetes cluster: nodes, pods, deployments."""
     v1, apps_v1, _ = await _get_k8s_client(connection_id)
 
     nodes = v1.list_node()
@@ -130,7 +130,7 @@ async def get_cluster_status(connection_id: str = "") -> dict:
 
 @tool
 async def list_namespaces(connection_id: str = "") -> list[dict]:
-    """Listet alle Kubernetes-Namespaces auf."""
+    """Lists all Kubernetes namespaces."""
     v1, _, _ = await _get_k8s_client(connection_id)
     ns_list = v1.list_namespace()
 
@@ -146,7 +146,7 @@ async def list_namespaces(connection_id: str = "") -> list[dict]:
 
 @tool
 async def get_all_pods(namespace: str = "default", connection_id: str = "") -> list[dict]:
-    """Listet alle Pods in einem Namespace auf."""
+    """Lists all pods in a namespace."""
     v1, _, _ = await _get_k8s_client(connection_id)
     pods = v1.list_namespaced_pod(namespace=namespace)
 
@@ -173,7 +173,7 @@ async def get_all_pods(namespace: str = "default", connection_id: str = "") -> l
 
 @tool
 async def get_failing_pods(namespace: str = "", connection_id: str = "") -> list[dict]:
-    """Findet alle fehlerhaften Pods (CrashLoop, ImagePull, OOMKilled, etc.)."""
+    """Finds all failing pods (CrashLoop, ImagePull, OOMKilled, etc.)."""
     v1, _, _ = await _get_k8s_client(connection_id)
 
     if namespace:
@@ -198,7 +198,7 @@ async def get_failing_pods(namespace: str = "", connection_id: str = "") -> list
                 if reason in ("OOMKilled", "Error"):
                     issues.append(f"{cs.name}: {reason}")
             if cs.restart_count > 5:
-                issues.append(f"{cs.name}: {cs.restart_count} Neustarts")
+                issues.append(f"{cs.name}: {cs.restart_count} restarts")
 
         if issues:
             containers = p.status.container_statuses or []
@@ -218,7 +218,7 @@ async def get_failing_pods(namespace: str = "", connection_id: str = "") -> list
 
 @tool
 async def restart_pod(namespace: str, pod_name: str, connection_id: str = "") -> dict:
-    """Startet einen einzelnen Pod neu (löscht ihn – Controller erstellt neuen)."""
+    """Restarts a single pod (deletes it — controller creates a new one)."""
     v1, _, _ = await _get_k8s_client(connection_id)
 
     try:
@@ -228,7 +228,7 @@ async def restart_pod(namespace: str, pod_name: str, connection_id: str = "") ->
             "target": pod_name,
             "namespace": namespace,
             "status": "success",
-            "detail": f"Pod '{pod_name}' im Namespace '{namespace}' wird neu gestartet.",
+            "detail": f"Pod '{pod_name}' in namespace '{namespace}' is being restarted.",
         }
     except client.ApiException as e:
         return {
@@ -242,7 +242,7 @@ async def restart_pod(namespace: str, pod_name: str, connection_id: str = "") ->
 
 @tool
 async def get_pod_logs(namespace: str, pod_name: str, lines: int = 100, connection_id: str = "") -> dict:
-    """Gibt die letzten Logzeilen eines Pods zurück."""
+    """Returns the last log lines of a pod."""
     v1, _, _ = await _get_k8s_client(connection_id)
 
     try:
@@ -267,7 +267,7 @@ async def get_pod_logs(namespace: str, pod_name: str, lines: int = 100, connecti
 
 @tool
 async def scale_deployment(namespace: str, name: str, replicas: int, connection_id: str = "") -> dict:
-    """Skaliert ein Deployment auf die angegebene Anzahl Replicas."""
+    """Scales a deployment to the specified number of replicas."""
     _, apps_v1, _ = await _get_k8s_client(connection_id)
 
     try:
@@ -280,7 +280,7 @@ async def scale_deployment(namespace: str, name: str, replicas: int, connection_
             "target": name,
             "namespace": namespace,
             "status": "success",
-            "detail": f"Deployment '{name}' auf {replicas} Replicas skaliert.",
+            "detail": f"Deployment '{name}' scaled to {replicas} replicas.",
         }
     except client.ApiException as e:
         return {
@@ -294,11 +294,11 @@ async def scale_deployment(namespace: str, name: str, replicas: int, connection_
 
 @tool
 async def rollout_restart(namespace: str, deployment_name: str, connection_id: str = "") -> dict:
-    """Führt einen Rollout-Restart eines Deployments durch."""
+    """Performs a rollout restart of a deployment."""
     _, apps_v1, _ = await _get_k8s_client(connection_id)
 
     try:
-        # Rollout Restart = Annotation aktualisieren
+        # Rollout Restart = update annotation
         now = datetime.now(timezone.utc).isoformat()
         body = {
             "spec": {
@@ -319,7 +319,7 @@ async def rollout_restart(namespace: str, deployment_name: str, connection_id: s
             "target": deployment_name,
             "namespace": namespace,
             "status": "success",
-            "detail": f"Rollout-Restart für '{deployment_name}' initiiert.",
+            "detail": f"Rollout restart for '{deployment_name}' initiated.",
         }
     except client.ApiException as e:
         return {
@@ -333,7 +333,7 @@ async def rollout_restart(namespace: str, deployment_name: str, connection_id: s
 
 @tool
 async def get_deployment_status(namespace: str, name: str, connection_id: str = "") -> dict:
-    """Gibt den detaillierten Status eines Deployments zurück."""
+    """Returns the detailed status of a deployment."""
     _, apps_v1, _ = await _get_k8s_client(connection_id)
 
     try:
@@ -355,7 +355,7 @@ async def get_deployment_status(namespace: str, name: str, connection_id: str = 
 
 @tool
 async def get_recent_events(namespace: str = "default", last_minutes: int = 30, connection_id: str = "") -> list[dict]:
-    """Gibt die letzten Kubernetes-Events eines Namespaces zurück."""
+    """Returns the recent Kubernetes events of a namespace."""
     v1, _, _ = await _get_k8s_client(connection_id)
 
     events = v1.list_namespaced_event(namespace=namespace)
@@ -379,7 +379,7 @@ async def get_recent_events(namespace: str = "default", last_minutes: int = 30, 
 
 @tool
 async def list_services(namespace: str = "default", connection_id: str = "") -> list[dict]:
-    """Listet alle Services in einem Namespace auf."""
+    """Lists all services in a namespace."""
     v1, _, _ = await _get_k8s_client(connection_id)
 
     services = v1.list_namespaced_service(namespace=namespace)
@@ -400,7 +400,7 @@ async def list_services(namespace: str = "default", connection_id: str = "") -> 
 
 @tool
 async def list_ingresses(namespace: str = "default", connection_id: str = "") -> list[dict]:
-    """Listet alle Ingresses in einem Namespace auf."""
+    """Lists all ingresses in a namespace."""
     _, _, net_v1 = await _get_k8s_client(connection_id)
 
     ingresses = net_v1.list_namespaced_ingress(namespace=namespace)
@@ -419,7 +419,7 @@ async def list_ingresses(namespace: str = "default", connection_id: str = "") ->
 
 @tool
 async def list_pvcs(namespace: str = "default", connection_id: str = "") -> list[dict]:
-    """Listet alle PersistentVolumeClaims in einem Namespace auf."""
+    """Lists all PersistentVolumeClaims in a namespace."""
     v1, _, _ = await _get_k8s_client(connection_id)
 
     pvcs = v1.list_namespaced_persistent_volume_claim(namespace=namespace)

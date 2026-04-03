@@ -1,6 +1,6 @@
 """
-WordPress Modul – LangGraph @tool-Funktionen.
-WordPress-Verwaltung über die WP REST API v2 mit Application Passwords.
+WordPress Module — LangGraph @tool functions.
+WordPress management via WP REST API v2 with Application Passwords.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from typing import Any
 import httpx
 from langchain_core.tools import tool
 
+from agents.base_agent import _t
 from core.connections import ConnectionManager
 from core.vault import get_vault
 
@@ -21,13 +22,18 @@ logger = logging.getLogger("ninko.modules.wordpress.tools")
 
 async def _get_wp_client(connection_id: str = "") -> dict:
     """
-    Erstellt WordPress API-Config aus dem ConnectionManager.
-    WP REST API v2 nutzt HTTP Basic Auth mit Application Passwords.
+    Build WordPress API config from ConnectionManager.
+    WP REST API v2 uses HTTP Basic Auth with Application Passwords.
     """
     if connection_id:
         conn = await ConnectionManager.get_connection("wordpress", connection_id)
         if not conn:
-            raise ValueError(f"WordPress-Verbindung mit ID '{connection_id}' nicht gefunden.")
+            raise ValueError(
+                _t(
+                    de=f"WordPress-Verbindung mit ID '{connection_id}' nicht gefunden.",
+                    en=f"WordPress connection with ID '{connection_id}' not found.",
+                )
+            )
     else:
         conn = await ConnectionManager.get_default_connection("wordpress")
 
@@ -48,15 +54,32 @@ async def _get_wp_client(connection_id: str = "") -> dict:
 
     if not site_url:
         raise ValueError(
-            "Keine WordPress-Verbindung konfiguriert. "
-            "Bitte im Dashboard unter Einstellungen → Modul → Zahnrad eine Verbindung anlegen "
-            "(URL, Benutzername, Application Password)."
+            _t(
+                de=(
+                    "Keine WordPress-Verbindung konfiguriert. "
+                    "Bitte im Dashboard unter Einstellungen → Modul → Zahnrad eine Verbindung anlegen "
+                    "(URL, Benutzername, Application Password)."
+                ),
+                en=(
+                    "No WordPress connection configured. "
+                    "Please create a connection in the dashboard under Settings → Module → Gear icon "
+                    "(URL, username, Application Password)."
+                ),
+            )
         )
 
     if not username or not app_password:
         raise ValueError(
-            "WordPress-Benutzername oder Application Password fehlen. "
-            "Ein Application Password erstellst du in WP unter Benutzer → Profil → Application Passwords."
+            _t(
+                de=(
+                    "WordPress-Benutzername oder Application Password fehlen. "
+                    "Ein Application Password erstellst du in WP unter Benutzer → Profil → Application Passwords."
+                ),
+                en=(
+                    "WordPress username or Application Password missing. "
+                    "Create an Application Password in WP under Users → Profile → Application Passwords."
+                ),
+            )
         )
 
     # Basic Auth Header
@@ -66,7 +89,7 @@ async def _get_wp_client(connection_id: str = "") -> dict:
         "Content-Type": "application/json",
     }
 
-    # SSL-Verifikation (Standard: True, für selbst-signierte Zertifikate auf "false" setzen)
+    # SSL verification (default: True, set to "false" for self-signed certificates)
     verify_ssl = True
     if conn:
         verify_ssl = str(conn.config.get("verify_ssl", "true")).lower() == "true"
@@ -87,7 +110,7 @@ async def _wp_api(
     json_body: dict | None = None,
     params: dict | None = None,
 ) -> Any:
-    """Führt einen WP REST API-Aufruf durch."""
+    """Execute a WP REST API call."""
     client_cfg = await _get_wp_client(connection_id)
     url = f"{client_cfg['api_base']}{path}"
     headers = client_cfg["headers"]
@@ -115,7 +138,7 @@ async def _wp_api(
 
 
 async def _wp_api_root(connection_id: str = "") -> dict:
-    """Holt die API-Root-Infos (ohne /wp/v2 Pfad)."""
+    """Fetch API root info (without /wp/v2 path)."""
     client_cfg = await _get_wp_client(connection_id)
     url = f"{client_cfg['base_url']}/wp-json/"
     verify = client_cfg["verify_ssl"]
@@ -127,7 +150,7 @@ async def _wp_api_root(connection_id: str = "") -> dict:
 
 
 def _truncate(text: str, max_lines: int = 50, max_chars: int = 4000) -> str:
-    """Kürzt lange Ausgaben."""
+    """Truncate long outputs."""
     lines = text.split("\n")
     if len(lines) > max_lines:
         text = "\n".join(lines[:max_lines]) + f"\n[…{len(lines) - max_lines} Zeilen]"
@@ -143,8 +166,8 @@ def _truncate(text: str, max_lines: int = 50, max_chars: int = 4000) -> str:
 @tool
 async def get_site_info(connection_id: str = "") -> dict:
     """
-    Gibt grundlegende Informationen über die WordPress-Instanz zurück:
-    Name, Beschreibung, URL, WP-Version, Sprache.
+    Return basic information about the WordPress instance:
+    name, description, URL, WP version, language.
     """
     try:
         data = await _wp_api_root(connection_id)
@@ -165,13 +188,13 @@ async def get_site_info(connection_id: str = "") -> dict:
 @tool
 async def get_updates_info(connection_id: str = "") -> dict:
     """
-    Prüft auf verfügbare Updates (WordPress Core, Plugins, Themes).
-    Benötigt Admin-Rechte.
+    Check for available updates (WordPress core, plugins, themes).
+    Requires admin privileges.
     """
     try:
         settings = await _wp_api("GET", "/settings", connection_id)
-        # WP REST API Settings enthält keine Update-Infos direkt.
-        # Wir prüfen die Plugin-Liste auf verfügbare Updates.
+        # WP REST API Settings does not include update info directly.
+        # We check the plugin list for available updates.
         plugins = await _wp_api("GET", "/plugins", connection_id, params={"per_page": 100})
         plugins_with_updates = [
             {"name": p.get("name", ""), "slug": p.get("plugin", ""), "version": p.get("version", "")}
@@ -193,7 +216,7 @@ async def get_updates_info(connection_id: str = "") -> dict:
 @tool
 async def list_plugins(status: str = "all", connection_id: str = "") -> list[dict]:
     """
-    Listet alle installierten Plugins auf.
+    List all installed plugins.
     status: 'all', 'active', 'inactive'
     """
     try:
@@ -221,12 +244,12 @@ async def list_plugins(status: str = "all", connection_id: str = "") -> list[dic
 @tool
 async def search_plugins(query: str, connection_id: str = "") -> list[dict]:
     """
-    Durchsucht das WordPress.org Plugin-Verzeichnis nach neuen Plugins.
-    Gibt Suchergebnisse mit Name, Slug, Bewertung und Downloads zurück.
+    Search the WordPress.org plugin directory for new plugins.
+    Returns results with name, slug, rating, and download count.
     """
     try:
         client_cfg = await _get_wp_client(connection_id)
-        # WordPress.org Plugin API (extern, nicht WP REST API)
+        # WordPress.org Plugin API (external, not WP REST API)
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(
                 "https://api.wordpress.org/plugins/info/1.2/",
@@ -263,8 +286,8 @@ async def search_plugins(query: str, connection_id: str = "") -> list[dict]:
 @tool
 async def install_plugin(slug: str, connection_id: str = "") -> dict:
     """
-    Installiert ein Plugin aus dem WordPress.org Verzeichnis anhand des Slugs.
-    Beispiel: slug='akismet' oder slug='yoast-seo'
+    Install a plugin from the WordPress.org directory by slug.
+    Example: slug='akismet' or slug='yoast-seo'
     """
     try:
         result = await _wp_api("POST", "/plugins", connection_id, json_body={"slug": slug})
@@ -272,7 +295,10 @@ async def install_plugin(slug: str, connection_id: str = "") -> dict:
             "slug": result.get("plugin", slug),
             "name": result.get("name", ""),
             "status": result.get("status", ""),
-            "detail": f"Plugin '{result.get('name', slug)}' erfolgreich installiert.",
+            "detail": _t(
+                de=f"Plugin '{result.get('name', slug)}' erfolgreich installiert.",
+                en=f"Plugin '{result.get('name', slug)}' installed successfully.",
+            ),
         }
     except Exception as e:
         return {"slug": slug, "error": str(e)}
@@ -281,8 +307,8 @@ async def install_plugin(slug: str, connection_id: str = "") -> dict:
 @tool
 async def activate_plugin(plugin_slug: str, connection_id: str = "") -> dict:
     """
-    Aktiviert ein installiertes Plugin.
-    plugin_slug Format: 'akismet/akismet' (ordner/datei ohne .php)
+    Activate an installed plugin.
+    plugin_slug format: 'akismet/akismet' (folder/file without .php)
     """
     try:
         result = await _wp_api("POST", f"/plugins/{plugin_slug}", connection_id, json_body={"status": "active"})
@@ -290,7 +316,10 @@ async def activate_plugin(plugin_slug: str, connection_id: str = "") -> dict:
             "slug": result.get("plugin", plugin_slug),
             "name": result.get("name", ""),
             "status": result.get("status", ""),
-            "detail": f"Plugin '{result.get('name', plugin_slug)}' aktiviert.",
+            "detail": _t(
+                de=f"Plugin '{result.get('name', plugin_slug)}' aktiviert.",
+                en=f"Plugin '{result.get('name', plugin_slug)}' activated.",
+            ),
         }
     except Exception as e:
         return {"slug": plugin_slug, "error": str(e)}
@@ -299,8 +328,8 @@ async def activate_plugin(plugin_slug: str, connection_id: str = "") -> dict:
 @tool
 async def deactivate_plugin(plugin_slug: str, connection_id: str = "") -> dict:
     """
-    Deaktiviert ein aktives Plugin.
-    plugin_slug Format: 'akismet/akismet'
+    Deactivate an active plugin.
+    plugin_slug format: 'akismet/akismet'
     """
     try:
         result = await _wp_api("POST", f"/plugins/{plugin_slug}", connection_id, json_body={"status": "inactive"})
@@ -308,7 +337,10 @@ async def deactivate_plugin(plugin_slug: str, connection_id: str = "") -> dict:
             "slug": result.get("plugin", plugin_slug),
             "name": result.get("name", ""),
             "status": result.get("status", ""),
-            "detail": f"Plugin '{result.get('name', plugin_slug)}' deaktiviert.",
+            "detail": _t(
+                de=f"Plugin '{result.get('name', plugin_slug)}' deaktiviert.",
+                en=f"Plugin '{result.get('name', plugin_slug)}' deactivated.",
+            ),
         }
     except Exception as e:
         return {"slug": plugin_slug, "error": str(e)}
@@ -317,8 +349,8 @@ async def deactivate_plugin(plugin_slug: str, connection_id: str = "") -> dict:
 @tool
 async def update_plugin(plugin_slug: str, connection_id: str = "") -> dict:
     """
-    Aktualisiert ein Plugin auf die neueste Version.
-    plugin_slug Format: 'akismet/akismet'
+    Update a plugin to the latest version.
+    plugin_slug format: 'akismet/akismet'
     """
     try:
         result = await _wp_api("PUT", f"/plugins/{plugin_slug}", connection_id, json_body={"update": True})
@@ -326,7 +358,10 @@ async def update_plugin(plugin_slug: str, connection_id: str = "") -> dict:
             "slug": result.get("plugin", plugin_slug),
             "name": result.get("name", ""),
             "version": result.get("version", ""),
-            "detail": f"Plugin '{result.get('name', plugin_slug)}' aktualisiert.",
+            "detail": _t(
+                de=f"Plugin '{result.get('name', plugin_slug)}' aktualisiert.",
+                en=f"Plugin '{result.get('name', plugin_slug)}' updated.",
+            ),
         }
     except Exception as e:
         return {"slug": plugin_slug, "error": str(e)}
@@ -335,31 +370,34 @@ async def update_plugin(plugin_slug: str, connection_id: str = "") -> dict:
 @tool
 async def delete_plugin(plugin_slug: str, connection_id: str = "") -> dict:
     """
-    Löscht ein deaktiviertes Plugin.
-    plugin_slug Format: 'akismet/akismet'
-    DESTRUKTIV – erfordert Bestätigung. Plugin muss vorher deaktiviert sein.
+    Delete a deactivated plugin.
+    plugin_slug format: 'akismet/akismet'
+    DESTRUCTIVE — requires confirmation. Plugin must be deactivated first.
     """
     try:
         result = await _wp_api("DELETE", f"/plugins/{plugin_slug}", connection_id)
         return {
             "slug": plugin_slug,
             "status": "deleted",
-            "detail": f"Plugin '{plugin_slug}' wurde gelöscht.",
+            "detail": _t(
+                de=f"Plugin '{plugin_slug}' wurde gelöscht.",
+                en=f"Plugin '{plugin_slug}' has been deleted.",
+            ),
         }
     except Exception as e:
         return {"slug": plugin_slug, "error": str(e)}
 
 
 # ═══════════════════════════════════════════════════════
-# Seiten-Management Tools
+# Page Management Tools
 # ═══════════════════════════════════════════════════════
 
 @tool
 async def list_pages(status: str = "publish", per_page: int = 20, search: str = "", connection_id: str = "") -> list[dict]:
     """
-    Listet WordPress-Seiten auf.
+    List WordPress pages.
     status: 'publish', 'draft', 'pending', 'trash', 'any'
-    search: Suchbegriff für Titel/Inhalt
+    search: search term for title/content
     """
     try:
         params: dict[str, Any] = {"per_page": per_page, "orderby": "modified", "order": "desc"}
@@ -390,8 +428,8 @@ async def list_pages(status: str = "publish", per_page: int = 20, search: str = 
 @tool
 async def get_page(page_id: int, connection_id: str = "") -> dict:
     """
-    Gibt eine einzelne Seite mit vollständigem Inhalt zurück.
-    page_id: Die WordPress-Seiten-ID.
+    Return a single page with full content.
+    page_id: The WordPress page ID.
     """
     try:
         p = await _wp_api("GET", f"/pages/{page_id}", connection_id)
@@ -417,12 +455,12 @@ async def get_page(page_id: int, connection_id: str = "") -> dict:
 @tool
 async def create_page(title: str, content: str, status: str = "draft", slug: str = "", parent: int = 0, connection_id: str = "") -> dict:
     """
-    Erstellt eine neue WordPress-Seite.
-    title: Seitentitel
-    content: Seiteninhalt (HTML erlaubt)
+    Create a new WordPress page.
+    title: page title
+    content: page content (HTML allowed)
     status: 'draft', 'publish', 'pending', 'private'
-    slug: URL-Slug (optional, wird automatisch generiert)
-    parent: Parent-Seite ID (0 = Hauptseite)
+    slug: URL slug (optional, auto-generated if empty)
+    parent: parent page ID (0 = top-level page)
     """
     try:
         body: dict[str, Any] = {
@@ -442,7 +480,10 @@ async def create_page(title: str, content: str, status: str = "draft", slug: str
             "slug": result.get("slug", ""),
             "status": result.get("status", ""),
             "link": result.get("link", ""),
-            "detail": f"Seite '{result.get('title', {}).get('rendered', '')}' erstellt (ID: {result['id']}).",
+            "detail": _t(
+                de=f"Seite '{result.get('title', {}).get('rendered', '')}' erstellt (ID: {result['id']}).",
+                en=f"Page '{result.get('title', {}).get('rendered', '')}' created (ID: {result['id']}).",
+            ),
         }
     except Exception as e:
         return {"error": str(e)}
@@ -451,13 +492,13 @@ async def create_page(title: str, content: str, status: str = "draft", slug: str
 @tool
 async def update_page(page_id: int, title: str = "", content: str = "", status: str = "", slug: str = "", connection_id: str = "") -> dict:
     """
-    Aktualisiert eine bestehende WordPress-Seite.
-    Nur angegebene Felder werden geändert.
-    page_id: Seiten-ID
-    title: Neuer Titel (optional)
-    content: Neuer Inhalt (optional)
-    status: Neue Status (optional): 'draft', 'publish', 'pending', 'trash'
-    slug: Neuer Slug (optional)
+    Update an existing WordPress page.
+    Only specified fields are changed.
+    page_id: page ID
+    title: new title (optional)
+    content: new content (optional)
+    status: new status (optional): 'draft', 'publish', 'pending', 'trash'
+    slug: new slug (optional)
     """
     try:
         body: dict[str, Any] = {}
@@ -471,7 +512,7 @@ async def update_page(page_id: int, title: str = "", content: str = "", status: 
             body["slug"] = slug
 
         if not body:
-            return {"error": "Keine Änderungen angegeben."}
+            return {"error": _t(de="Keine Änderungen angegeben.", en="No changes specified.")}
 
         result = await _wp_api("PUT", f"/pages/{page_id}", connection_id, json_body=body)
         return {
@@ -480,7 +521,10 @@ async def update_page(page_id: int, title: str = "", content: str = "", status: 
             "slug": result.get("slug", ""),
             "status": result.get("status", ""),
             "modified": result.get("modified", ""),
-            "detail": f"Seite ID {page_id} aktualisiert.",
+            "detail": _t(
+                de=f"Seite ID {page_id} aktualisiert.",
+                en=f"Page ID {page_id} updated.",
+            ),
         }
     except Exception as e:
         return {"page_id": page_id, "error": str(e)}
@@ -489,9 +533,9 @@ async def update_page(page_id: int, title: str = "", content: str = "", status: 
 @tool
 async def delete_page(page_id: int, force: bool = False, connection_id: str = "") -> dict:
     """
-    Löscht eine WordPress-Seite.
-    force=false verschiebt in den Papierkorb, force=true endgültig löschen.
-    DESTRUKTIV bei force=true – erfordert Bestätigung.
+    Delete a WordPress page.
+    force=false moves to trash, force=true permanently deletes.
+    DESTRUCTIVE when force=true — requires confirmation.
     """
     try:
         params = {"force": 1} if force else {}
@@ -499,22 +543,25 @@ async def delete_page(page_id: int, force: bool = False, connection_id: str = ""
         return {
             "page_id": page_id,
             "status": "deleted" if force else "trashed",
-            "detail": f"Seite ID {page_id} {'endgültig gelöscht' if force else 'in den Papierkorb verschoben'}.",
+            "detail": _t(
+                de=f"Seite ID {page_id} {'endgültig gelöscht' if force else 'in den Papierkorb verschoben'}.",
+                en=f"Page ID {page_id} {'permanently deleted' if force else 'moved to trash'}.",
+            ),
         }
     except Exception as e:
         return {"page_id": page_id, "error": str(e)}
 
 
 # ═══════════════════════════════════════════════════════
-# Beiträge (Posts) Management Tools
+# Posts Management Tools
 # ═══════════════════════════════════════════════════════
 
 @tool
 async def list_posts(status: str = "publish", per_page: int = 20, search: str = "", connection_id: str = "") -> list[dict]:
     """
-    Listet WordPress-Beiträge auf.
+    List WordPress posts.
     status: 'publish', 'draft', 'pending', 'trash', 'any'
-    search: Suchbegriff
+    search: search term
     """
     try:
         params: dict[str, Any] = {"per_page": per_page, "orderby": "modified", "order": "desc"}
@@ -546,7 +593,7 @@ async def list_posts(status: str = "publish", per_page: int = 20, search: str = 
 @tool
 async def get_post(post_id: int, connection_id: str = "") -> dict:
     """
-    Gibt einen einzelnen Beitrag mit vollständigem Inhalt zurück.
+    Return a single post with full content.
     """
     try:
         p = await _wp_api("GET", f"/posts/{post_id}", connection_id)
@@ -571,13 +618,13 @@ async def get_post(post_id: int, connection_id: str = "") -> dict:
 @tool
 async def create_post(title: str, content: str, status: str = "draft", slug: str = "", categories: str = "", tags: str = "", connection_id: str = "") -> dict:
     """
-    Erstellt einen neuen WordPress-Beitrag.
-    title: Titel
-    content: Inhalt (HTML erlaubt)
+    Create a new WordPress post.
+    title: title
+    content: content (HTML allowed)
     status: 'draft', 'publish', 'pending', 'private'
-    slug: URL-Slug (optional)
-    categories: Kategorie-IDs kommagetrennt (z.B. '1,3,5')
-    tags: Tag-IDs kommagetrennt (z.B. '2,4')
+    slug: URL slug (optional)
+    categories: comma-separated category IDs (e.g. '1,3,5')
+    tags: comma-separated tag IDs (e.g. '2,4')
     """
     try:
         body: dict[str, Any] = {
@@ -599,7 +646,10 @@ async def create_post(title: str, content: str, status: str = "draft", slug: str
             "slug": result.get("slug", ""),
             "status": result.get("status", ""),
             "link": result.get("link", ""),
-            "detail": f"Beitrag '{result.get('title', {}).get('rendered', '')}' erstellt (ID: {result['id']}).",
+            "detail": _t(
+                de=f"Beitrag '{result.get('title', {}).get('rendered', '')}' erstellt (ID: {result['id']}).",
+                en=f"Post '{result.get('title', {}).get('rendered', '')}' created (ID: {result['id']}).",
+            ),
         }
     except Exception as e:
         return {"error": str(e)}
@@ -608,8 +658,8 @@ async def create_post(title: str, content: str, status: str = "draft", slug: str
 @tool
 async def update_post(post_id: int, title: str = "", content: str = "", status: str = "", slug: str = "", connection_id: str = "") -> dict:
     """
-    Aktualisiert einen bestehenden WordPress-Beitrag.
-    Nur angegebene Felder werden geändert.
+    Update an existing WordPress post.
+    Only specified fields are changed.
     """
     try:
         body: dict[str, Any] = {}
@@ -623,7 +673,7 @@ async def update_post(post_id: int, title: str = "", content: str = "", status: 
             body["slug"] = slug
 
         if not body:
-            return {"error": "Keine Änderungen angegeben."}
+            return {"error": _t(de="Keine Änderungen angegeben.", en="No changes specified.")}
 
         result = await _wp_api("PUT", f"/posts/{post_id}", connection_id, json_body=body)
         return {
@@ -631,7 +681,10 @@ async def update_post(post_id: int, title: str = "", content: str = "", status: 
             "title": result.get("title", {}).get("rendered", ""),
             "status": result.get("status", ""),
             "modified": result.get("modified", ""),
-            "detail": f"Beitrag ID {post_id} aktualisiert.",
+            "detail": _t(
+                de=f"Beitrag ID {post_id} aktualisiert.",
+                en=f"Post ID {post_id} updated.",
+            ),
         }
     except Exception as e:
         return {"post_id": post_id, "error": str(e)}
@@ -640,8 +693,8 @@ async def update_post(post_id: int, title: str = "", content: str = "", status: 
 @tool
 async def delete_post(post_id: int, force: bool = False, connection_id: str = "") -> dict:
     """
-    Löscht einen WordPress-Beitrag.
-    force=false → Papierkorb, force=true → endgültig.
+    Delete a WordPress post.
+    force=false → trash, force=true → permanent delete.
     """
     try:
         params = {"force": 1} if force else {}
@@ -649,19 +702,22 @@ async def delete_post(post_id: int, force: bool = False, connection_id: str = ""
         return {
             "post_id": post_id,
             "status": "deleted" if force else "trashed",
-            "detail": f"Beitrag ID {post_id} {'endgültig gelöscht' if force else 'in den Papierkorb verschoben'}.",
+            "detail": _t(
+                de=f"Beitrag ID {post_id} {'endgültig gelöscht' if force else 'in den Papierkorb verschoben'}.",
+                en=f"Post ID {post_id} {'permanently deleted' if force else 'moved to trash'}.",
+            ),
         }
     except Exception as e:
         return {"post_id": post_id, "error": str(e)}
 
 
 # ═══════════════════════════════════════════════════════
-# Kategorien & Tags
+# Categories & Tags
 # ═══════════════════════════════════════════════════════
 
 @tool
 async def list_categories(connection_id: str = "") -> list[dict]:
-    """Listet alle Beitrags-Kategorien auf."""
+    """List all post categories."""
     try:
         cats = await _wp_api("GET", "/categories", connection_id, params={"per_page": 100})
         return [
@@ -674,7 +730,7 @@ async def list_categories(connection_id: str = "") -> list[dict]:
 
 @tool
 async def create_category(name: str, slug: str = "", parent: int = 0, connection_id: str = "") -> dict:
-    """Erstellt eine neue Kategorie."""
+    """Create a new category."""
     try:
         body: dict[str, Any] = {"name": name}
         if slug:
@@ -686,7 +742,10 @@ async def create_category(name: str, slug: str = "", parent: int = 0, connection
             "id": result["id"],
             "name": result.get("name", ""),
             "slug": result.get("slug", ""),
-            "detail": f"Kategorie '{result.get('name', '')}' erstellt (ID: {result['id']}).",
+            "detail": _t(
+                de=f"Kategorie '{result.get('name', '')}' erstellt (ID: {result['id']}).",
+                en=f"Category '{result.get('name', '')}' created (ID: {result['id']}).",
+            ),
         }
     except Exception as e:
         return {"error": str(e)}
@@ -694,7 +753,7 @@ async def create_category(name: str, slug: str = "", parent: int = 0, connection
 
 @tool
 async def list_tags(connection_id: str = "") -> list[dict]:
-    """Listet alle Tags auf."""
+    """List all tags."""
     try:
         tags = await _wp_api("GET", "/tags", connection_id, params={"per_page": 100})
         return [
@@ -707,7 +766,7 @@ async def list_tags(connection_id: str = "") -> list[dict]:
 
 @tool
 async def create_tag(name: str, slug: str = "", connection_id: str = "") -> dict:
-    """Erstellt einen neuen Tag."""
+    """Create a new tag."""
     try:
         body: dict[str, Any] = {"name": name}
         if slug:
@@ -716,19 +775,22 @@ async def create_tag(name: str, slug: str = "", connection_id: str = "") -> dict
         return {
             "id": result["id"],
             "name": result.get("name", ""),
-            "detail": f"Tag '{result.get('name', '')}' erstellt (ID: {result['id']}).",
+            "detail": _t(
+                de=f"Tag '{result.get('name', '')}' erstellt (ID: {result['id']}).",
+                en=f"Tag '{result.get('name', '')}' created (ID: {result['id']}).",
+            ),
         }
     except Exception as e:
         return {"error": str(e)}
 
 
 # ═══════════════════════════════════════════════════════
-# Benutzer-Management
+# User Management
 # ═══════════════════════════════════════════════════════
 
 @tool
 async def list_users(per_page: int = 20, connection_id: str = "") -> list[dict]:
-    """Listet WordPress-Benutzer auf."""
+    """List WordPress users."""
     try:
         users = await _wp_api("GET", "/users", connection_id, params={"per_page": per_page})
         return [
@@ -749,8 +811,8 @@ async def list_users(per_page: int = 20, connection_id: str = "") -> list[dict]:
 @tool
 async def get_current_user(connection_id: str = "") -> dict:
     """
-    Gibt Informationen über den aktuell authentifizierten Benutzer zurück.
-    Nützlich um die Berechtigungen zu prüfen.
+    Return information about the currently authenticated user.
+    Useful for checking permissions.
     """
     try:
         client_cfg = await _get_wp_client(connection_id)
@@ -774,14 +836,14 @@ async def get_current_user(connection_id: str = "") -> dict:
 
 
 # ═══════════════════════════════════════════════════════
-# Einstellungen
+# Settings
 # ═══════════════════════════════════════════════════════
 
 @tool
 async def get_site_settings(connection_id: str = "") -> dict:
     """
-    Gibt die WordPress-Einstellungen zurück (Titel, Untertitel, Sprache, Zeitzone, etc.).
-    Benötigt Admin-Rechte.
+    Return WordPress settings (title, subtitle, language, timezone, etc.).
+    Requires admin privileges.
     """
     try:
         settings = await _wp_api("GET", "/settings", connection_id)
@@ -806,11 +868,11 @@ async def get_site_settings(connection_id: str = "") -> dict:
 @tool
 async def update_site_settings(title: str = "", description: str = "", posts_per_page: int = 0, connection_id: str = "") -> dict:
     """
-    Aktualisiert WordPress-Einstellungen.
-    Nur angegebene Felder werden geändert.
-    title: Neuer Seitentitel
-    description: Neuer Untertitel
-    posts_per_page: Beiträge pro Seite
+    Update WordPress settings.
+    Only specified fields are changed.
+    title: new site title
+    description: new subtitle
+    posts_per_page: posts per page
     """
     try:
         body: dict[str, Any] = {}
@@ -822,13 +884,16 @@ async def update_site_settings(title: str = "", description: str = "", posts_per
             body["posts_per_page"] = posts_per_page
 
         if not body:
-            return {"error": "Keine Änderungen angegeben."}
+            return {"error": _t(de="Keine Änderungen angegeben.", en="No changes specified.")}
 
         result = await _wp_api("PUT", "/settings", connection_id, json_body=body)
         return {
             "title": result.get("title", ""),
             "description": result.get("description", ""),
-            "detail": "Einstellungen aktualisiert.",
+            "detail": _t(
+                de="Einstellungen aktualisiert.",
+                en="Settings updated.",
+            ),
         }
     except Exception as e:
         return {"error": str(e)}
@@ -841,8 +906,8 @@ async def update_site_settings(title: str = "", description: str = "", posts_per
 @tool
 async def list_media(per_page: int = 20, media_type: str = "", connection_id: str = "") -> list[dict]:
     """
-    Listet hochgeladene Medien auf.
-    media_type: 'image', 'video', 'audio', 'document' oder leer für alle.
+    List uploaded media files.
+    media_type: 'image', 'video', 'audio', 'document' or empty for all.
     """
     try:
         params: dict[str, Any] = {"per_page": per_page, "orderby": "date", "order": "desc"}

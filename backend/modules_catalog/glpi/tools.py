@@ -1,6 +1,6 @@
 """
-GLPI Modul – LangGraph @tool-Funktionen.
-Vollständige Implementierung mit GLPI REST API (httpx async).
+GLPI module — LangGraph @tool functions.
+Full implementation with GLPI REST API (httpx async).
 """
 
 from __future__ import annotations
@@ -16,15 +16,15 @@ from core.vault import get_vault
 
 logger = logging.getLogger("ninko.modules.glpi.tools")
 
-STATUS_MAP = {1: "Neu", 2: "In Bearbeitung", 3: "Geplant", 4: "Wartend", 5: "Gelöst", 6: "Geschlossen"}
-PRIORITY_MAP = {1: "Sehr niedrig", 2: "Niedrig", 3: "Mittel", 4: "Hoch", 5: "Sehr hoch", 6: "Kritisch"}
+STATUS_MAP = {1: "New", 2: "In progress", 3: "Planned", 4: "Pending", 5: "Solved", 6: "Closed"}
+PRIORITY_MAP = {1: "Very low", 2: "Low", 3: "Medium", 4: "High", 5: "Very high", 6: "Critical"}
 
 
 @asynccontextmanager
 async def glpi_session(connection_id: str = ""):
     """
-    Context Manager für GLPI API Sessions.
-    Erstellt eine Session und beendet sie nach Gebrauch.
+    Context manager for GLPI API sessions.
+    Creates a session and terminates it after use.
     """
     from core.connections import ConnectionManager
     from core.vault import get_vault
@@ -32,11 +32,11 @@ async def glpi_session(connection_id: str = ""):
     if connection_id:
         conn = await ConnectionManager.get_connection("glpi", connection_id)
         if not conn:
-            raise ValueError(f"GLPI Verbindung mit ID '{connection_id}' nicht gefunden.")
+            raise ValueError(f"GLPI connection with ID '{connection_id}' not found.")
     else:
         conn = await ConnectionManager.get_default_connection("glpi")
         if not conn:
-            raise ValueError("Keine Standard-GLPI-Verbindung konfiguriert.")
+            raise ValueError("No default GLPI connection configured.")
 
     vault = get_vault()
     base_url = conn.config.get("base_url", "").rstrip("/")
@@ -49,10 +49,10 @@ async def glpi_session(connection_id: str = ""):
         user_token = await vault.get_secret(conn.vault_keys["user_token"]) or ""
 
     if not base_url or not app_token or not user_token:
-        raise ValueError("GLPI nicht konfiguriert: BASE_URL, APP_TOKEN, USER_TOKEN erforderlich")
+        raise ValueError("GLPI not configured: BASE_URL, APP_TOKEN, USER_TOKEN required")
 
     async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
-        # Session initialisieren
+        # Initialize session
         resp = await client.get(
             f"{base_url}/apirest.php/initSession",
             headers={
@@ -72,7 +72,7 @@ async def glpi_session(connection_id: str = ""):
         try:
             yield client, base_url, headers
         finally:
-            # Session beenden
+            # Kill session
             try:
                 await client.get(
                     f"{base_url}/apirest.php/killSession",
@@ -92,7 +92,7 @@ async def create_ticket(
     assigned_group_id: int = 0,
     connection_id: str = "",
 ) -> dict:
-    """Erstellt ein neues GLPI-Ticket. ticket_type: 1=Incident, 2=Request. priority: 1-6."""
+    """Creates a new GLPI ticket. ticket_type: 1=Incident, 2=Request. priority: 1-6."""
     async with glpi_session(connection_id) as (client, base_url, headers):
         payload = {
             "input": {
@@ -119,7 +119,7 @@ async def create_ticket(
 
         ticket_id = data.get("id", 0)
 
-        # Gruppe zuweisen falls angegeben
+        # Assign group if specified
         if group_id and ticket_id:
             try:
                 await client.post(
@@ -128,7 +128,7 @@ async def create_ticket(
                     headers=headers,
                 )
             except Exception as e:
-                logger.warning("Gruppe konnte nicht zugewiesen werden: %s", e)
+                logger.warning("Could not assign group: %s", e)
 
         return {
             "action": "create_ticket",
@@ -136,13 +136,13 @@ async def create_ticket(
             "title": title,
             "priority": PRIORITY_MAP.get(priority, str(priority)),
             "status": "success",
-            "detail": f"Ticket #{ticket_id} erstellt: {title}",
+            "detail": f"Ticket #{ticket_id} created: {title}",
         }
 
 
 @tool
 async def get_ticket(ticket_id: int, connection_id: str = "") -> dict:
-    """Gibt die Details eines GLPI-Tickets zurück."""
+    """Returns the details of a GLPI ticket."""
     async with glpi_session(connection_id) as (client, base_url, headers):
         resp = await client.get(
             f"{base_url}/apirest.php/Ticket/{ticket_id}",
@@ -156,9 +156,9 @@ async def get_ticket(ticket_id: int, connection_id: str = "") -> dict:
             "title": t.get("name", ""),
             "content": t.get("content", ""),
             "status": t.get("status", 0),
-            "status_name": STATUS_MAP.get(t.get("status", 0), "Unbekannt"),
+            "status_name": STATUS_MAP.get(t.get("status", 0), "Unknown"),
             "priority": t.get("priority", 0),
-            "priority_name": PRIORITY_MAP.get(t.get("priority", 0), "Unbekannt"),
+            "priority_name": PRIORITY_MAP.get(t.get("priority", 0), "Unknown"),
             "type": t.get("type", 0),
             "date_creation": t.get("date_creation", ""),
             "date_mod": t.get("date_mod", ""),
@@ -175,7 +175,7 @@ async def search_tickets(
     limit: int = 10,
     connection_id: str = "",
 ) -> list[dict]:
-    """Sucht GLPI-Tickets nach Status, Priorität oder Suchbegriff."""
+    """Searches GLPI tickets by status, priority, or keyword."""
     async with glpi_session(connection_id) as (client, base_url, headers):
         params: dict = {
             "range": f"0-{limit - 1}",
@@ -183,7 +183,7 @@ async def search_tickets(
             "order": "DESC",
         }
 
-        # Suchkriterien aufbauen
+        # Build search criteria
         criteria_idx = 0
         if status:
             params[f"criteria[{criteria_idx}][field]"] = "12"  # Status
@@ -203,7 +203,7 @@ async def search_tickets(
             params[f"criteria[{criteria_idx}][value]"] = keyword
             criteria_idx += 1
 
-        # Forced Display Felder
+        # Forced display fields
         for i, field in enumerate([1, 2, 3, 12, 15, 19]):
             params[f"forcedisplay[{i}]"] = str(field)
 
@@ -239,7 +239,7 @@ async def update_ticket(
     priority: int = 0,
     connection_id: str = "",
 ) -> dict:
-    """Aktualisiert ein GLPI-Ticket (Status, Lösung, Priorität)."""
+    """Updates a GLPI ticket (status, solution, priority)."""
     async with glpi_session(connection_id) as (client, base_url, headers):
         update: dict = {}
         if status:
@@ -263,22 +263,22 @@ async def update_ticket(
             "ticket_id": ticket_id,
             "updates": update,
             "status": "success",
-            "detail": f"Ticket #{ticket_id} aktualisiert.",
+            "detail": f"Ticket #{ticket_id} updated.",
         }
 
 
 @tool
 async def close_ticket(ticket_id: int, solution: str, connection_id: str = "") -> dict:
-    """Schließt ein GLPI-Ticket mit einer Lösung."""
+    """Closes a GLPI ticket with a solution."""
     async with glpi_session(connection_id) as (client, base_url, headers):
-        # Lösung hinzufügen
+        # Add solution
         await client.post(
             f"{base_url}/apirest.php/Ticket/{ticket_id}/ITILSolution",
             json={"input": {"content": solution, "itemtype": "Ticket", "items_id": ticket_id}},
             headers=headers,
         )
 
-        # Status auf Gelöst setzen
+        # Set status to solved
         await client.put(
             f"{base_url}/apirest.php/Ticket/{ticket_id}",
             json={"input": {"status": 5}},
@@ -289,13 +289,13 @@ async def close_ticket(ticket_id: int, solution: str, connection_id: str = "") -
             "action": "close_ticket",
             "ticket_id": ticket_id,
             "status": "success",
-            "detail": f"Ticket #{ticket_id} geschlossen mit Lösung.",
+            "detail": f"Ticket #{ticket_id} closed with solution.",
         }
 
 
 @tool
 async def add_followup(ticket_id: int, content: str, is_private: bool = False, connection_id: str = "") -> dict:
-    """Fügt ein Follow-up (Notiz) zu einem GLPI-Ticket hinzu."""
+    """Adds a follow-up (note) to a GLPI ticket."""
     async with glpi_session(connection_id) as (client, base_url, headers):
         resp = await client.post(
             f"{base_url}/apirest.php/Ticket/{ticket_id}/ITILFollowup",
@@ -315,13 +315,13 @@ async def add_followup(ticket_id: int, content: str, is_private: bool = False, c
             "action": "add_followup",
             "ticket_id": ticket_id,
             "status": "success",
-            "detail": f"Follow-up zu Ticket #{ticket_id} hinzugefügt.",
+            "detail": f"Follow-up added to ticket #{ticket_id}.",
         }
 
 
 @tool
 async def add_solution(ticket_id: int, solution_content: str, connection_id: str = "") -> dict:
-    """Fügt eine Lösung zu einem GLPI-Ticket hinzu."""
+    """Adds a solution to a GLPI ticket."""
     async with glpi_session(connection_id) as (client, base_url, headers):
         resp = await client.post(
             f"{base_url}/apirest.php/Ticket/{ticket_id}/ITILSolution",
@@ -340,13 +340,13 @@ async def add_solution(ticket_id: int, solution_content: str, connection_id: str
             "action": "add_solution",
             "ticket_id": ticket_id,
             "status": "success",
-            "detail": f"Lösung zu Ticket #{ticket_id} hinzugefügt.",
+            "detail": f"Solution added to ticket #{ticket_id}.",
         }
 
 
 @tool
 async def search_users(keyword: str, connection_id: str = "") -> list[dict]:
-    """Sucht GLPI-Benutzer nach Name."""
+    """Searches GLPI users by name."""
     async with glpi_session(connection_id) as (client, base_url, headers):
         resp = await client.get(
             f"{base_url}/apirest.php/search/User",
@@ -376,7 +376,7 @@ async def search_users(keyword: str, connection_id: str = "") -> list[dict]:
 
 @tool
 async def list_groups(connection_id: str = "") -> list[dict]:
-    """Listet alle GLPI-Gruppen auf."""
+    """Lists all GLPI groups."""
     async with glpi_session(connection_id) as (client, base_url, headers):
         resp = await client.get(
             f"{base_url}/apirest.php/Group",
@@ -395,7 +395,7 @@ async def list_groups(connection_id: str = "") -> list[dict]:
 
 @tool
 async def list_categories(connection_id: str = "") -> list[dict]:
-    """Listet alle GLPI-Ticket-Kategorien auf."""
+    """Lists all GLPI ticket categories."""
     async with glpi_session(connection_id) as (client, base_url, headers):
         resp = await client.get(
             f"{base_url}/apirest.php/ITILCategory",
@@ -418,7 +418,7 @@ async def list_categories(connection_id: str = "") -> list[dict]:
 
 @tool
 async def get_ticket_stats(connection_id: str = "") -> dict:
-    """Gibt Ticket-Statistiken zurück (Anzahl pro Status)."""
+    """Returns ticket statistics (count per status)."""
     stats = {"total": 0, "new": 0, "processing": 0, "pending": 0, "solved": 0, "closed": 0}
 
     status_fields = {

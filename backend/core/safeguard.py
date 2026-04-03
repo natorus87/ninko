@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import re
 import logging
+import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING
@@ -39,7 +40,7 @@ logger = logging.getLogger("ninko.core.safeguard")
 # ─── Compiled regex constants ─────────────────────────────────────────────────
 
 # Strips <think>...</think> blocks emitted by reasoning models (Qwen3.5, DeepSeek-R1)
-_RE_THINK    = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+_RE_THINK = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
 # Strips markdown code fences the model may wrap around JSON
 _RE_MD_FENCE = re.compile(r"```(?:json)?\s*|\s*```")
 # Extracts the first {...} block when JSON is embedded in prose
@@ -189,12 +190,13 @@ _AUTO_DECISION_POLICY_SECTION = "## POLICY\n\n{policy}\n"
 
 # ─── Category and result types ────────────────────────────────────────────────
 
+
 class ActionCategory(str, Enum):
-    SAFE             = "SAFE"
-    DESTRUCTIVE      = "DESTRUCTIVE"
-    STATE_CHANGING   = "STATE_CHANGING"
-    PROMPT_INJECTION = "PROMPT_INJECTION"   # User tries to override system instructions
-    UNKNOWN          = "UNKNOWN"            # Only on parse/classifier failure
+    SAFE = "SAFE"
+    DESTRUCTIVE = "DESTRUCTIVE"
+    STATE_CHANGING = "STATE_CHANGING"
+    PROMPT_INJECTION = "PROMPT_INJECTION"  # User tries to override system instructions
+    UNKNOWN = "UNKNOWN"  # Only on parse/classifier failure
 
 
 @dataclass
@@ -202,10 +204,10 @@ class SafeguardResult:
     requires_confirmation: bool
     category: ActionCategory
     rationale: str
-    raw_response: str  = ""
-    profile_id: str    = ""
-    auto_decided: bool = False   # True when auto-mode LLM made the decision
-    auto_decision: str = ""      # "allow" or "deny" (only set when auto_decided=True)
+    raw_response: str = ""
+    profile_id: str = ""
+    auto_decided: bool = False  # True when auto-mode LLM made the decision
+    auto_decision: str = ""  # "allow" or "deny" (only set when auto_decided=True)
 
     def to_dict(self) -> dict:
         d = {
@@ -221,6 +223,7 @@ class SafeguardResult:
 
 
 # ─── Safeguard Profile ────────────────────────────────────────────────────────
+
 
 @dataclass
 class SafeguardProfile:
@@ -241,44 +244,49 @@ class SafeguardProfile:
     fail_open — when True, allow requests if the LLM classifier is unreachable;
       when False (default), block as fail-safe.
     """
-    id:                      str
-    name:                    str
-    builtin:                 bool       = True
-    check_user_messages:     bool       = True
-    check_tool_calls:        bool       = True
-    confirm_categories:      list       = field(default_factory=lambda: ["DESTRUCTIVE", "STATE_CHANGING"])
-    detect_prompt_injection: bool       = False
-    fail_open:               bool       = False
-    auto_mode:               bool       = False
-    auto_mode_policy:        str        = ""
+
+    id: str
+    name: str
+    builtin: bool = True
+    check_user_messages: bool = True
+    check_tool_calls: bool = True
+    confirm_categories: list = field(
+        default_factory=lambda: ["DESTRUCTIVE", "STATE_CHANGING"]
+    )
+    detect_prompt_injection: bool = False
+    fail_open: bool = False
+    auto_mode: bool = False
+    auto_mode_policy: str = ""
 
     def to_dict(self) -> dict:
         return {
-            "id":                      self.id,
-            "name":                    self.name,
-            "builtin":                 self.builtin,
-            "check_user_messages":     self.check_user_messages,
-            "check_tool_calls":        self.check_tool_calls,
-            "confirm_categories":      self.confirm_categories,
+            "id": self.id,
+            "name": self.name,
+            "builtin": self.builtin,
+            "check_user_messages": self.check_user_messages,
+            "check_tool_calls": self.check_tool_calls,
+            "confirm_categories": self.confirm_categories,
             "detect_prompt_injection": self.detect_prompt_injection,
-            "fail_open":               self.fail_open,
-            "auto_mode":               self.auto_mode,
-            "auto_mode_policy":        self.auto_mode_policy,
+            "fail_open": self.fail_open,
+            "auto_mode": self.auto_mode,
+            "auto_mode_policy": self.auto_mode_policy,
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> "SafeguardProfile":
         return cls(
-            id                      = str(data.get("id", "")),
-            name                    = str(data.get("name", "")),
-            builtin                 = bool(data.get("builtin", False)),
-            check_user_messages     = bool(data.get("check_user_messages", True)),
-            check_tool_calls        = bool(data.get("check_tool_calls", True)),
-            confirm_categories      = list(data.get("confirm_categories", ["DESTRUCTIVE", "STATE_CHANGING"])),
-            detect_prompt_injection = bool(data.get("detect_prompt_injection", False)),
-            fail_open               = bool(data.get("fail_open", False)),
-            auto_mode               = bool(data.get("auto_mode", False)),
-            auto_mode_policy        = str(data.get("auto_mode_policy", "")),
+            id=str(data.get("id", "")),
+            name=str(data.get("name", "")),
+            builtin=bool(data.get("builtin", False)),
+            check_user_messages=bool(data.get("check_user_messages", True)),
+            check_tool_calls=bool(data.get("check_tool_calls", True)),
+            confirm_categories=list(
+                data.get("confirm_categories", ["DESTRUCTIVE", "STATE_CHANGING"])
+            ),
+            detect_prompt_injection=bool(data.get("detect_prompt_injection", False)),
+            fail_open=bool(data.get("fail_open", False)),
+            auto_mode=bool(data.get("auto_mode", False)),
+            auto_mode_policy=str(data.get("auto_mode_policy", "")),
         )
 
 
@@ -286,40 +294,66 @@ class SafeguardProfile:
 
 _BUILTIN_PROFILES: dict[str, SafeguardProfile] = {
     "strict": SafeguardProfile(
-        id="strict", name="Strict", builtin=True,
-        check_user_messages=True, check_tool_calls=True,
+        id="strict",
+        name="Strict",
+        builtin=True,
+        check_user_messages=True,
+        check_tool_calls=True,
         confirm_categories=["DESTRUCTIVE", "STATE_CHANGING", "PROMPT_INJECTION"],
-        detect_prompt_injection=True, fail_open=False,
+        detect_prompt_injection=True,
+        fail_open=False,
     ),
     "moderate": SafeguardProfile(
-        id="moderate", name="Moderate", builtin=True,
-        check_user_messages=True, check_tool_calls=True,
+        id="moderate",
+        name="Moderate",
+        builtin=True,
+        check_user_messages=True,
+        check_tool_calls=True,
         confirm_categories=["DESTRUCTIVE", "STATE_CHANGING"],
-        detect_prompt_injection=False, fail_open=False,
+        detect_prompt_injection=False,
+        fail_open=False,
     ),
     "user_only": SafeguardProfile(
-        id="user_only", name="User Only", builtin=True,
-        check_user_messages=True, check_tool_calls=False,
+        id="user_only",
+        name="User Only",
+        builtin=True,
+        check_user_messages=True,
+        check_tool_calls=False,
         confirm_categories=["DESTRUCTIVE", "STATE_CHANGING"],
-        detect_prompt_injection=False, fail_open=False,
+        detect_prompt_injection=False,
+        fail_open=False,
     ),
     "llm_only": SafeguardProfile(
-        id="llm_only", name="LLM Only", builtin=True,
-        check_user_messages=False, check_tool_calls=True,
+        id="llm_only",
+        name="LLM Only",
+        builtin=True,
+        check_user_messages=False,
+        check_tool_calls=True,
         confirm_categories=["DESTRUCTIVE", "STATE_CHANGING"],
-        detect_prompt_injection=False, fail_open=False,
+        detect_prompt_injection=False,
+        fail_open=False,
     ),
     "disabled": SafeguardProfile(
-        id="disabled", name="Disabled", builtin=True,
-        check_user_messages=False, check_tool_calls=False,
-        confirm_categories=[], detect_prompt_injection=False, fail_open=True,
+        id="disabled",
+        name="Disabled",
+        builtin=True,
+        check_user_messages=False,
+        check_tool_calls=False,
+        confirm_categories=[],
+        detect_prompt_injection=False,
+        fail_open=True,
     ),
     "auto": SafeguardProfile(
-        id="auto", name="Auto-Mode", builtin=True,
-        check_user_messages=True, check_tool_calls=True,
+        id="auto",
+        name="Auto-Mode",
+        builtin=True,
+        check_user_messages=True,
+        check_tool_calls=True,
         confirm_categories=["DESTRUCTIVE", "STATE_CHANGING", "PROMPT_INJECTION"],
-        detect_prompt_injection=False, fail_open=True,
-        auto_mode=True, auto_mode_policy="",
+        detect_prompt_injection=False,
+        fail_open=True,
+        auto_mode=True,
+        auto_mode_policy="",
     ),
 }
 
@@ -333,305 +367,308 @@ _BUILTIN_PROFILES: dict[str, SafeguardProfile] = {
 
 _DESTRUCTIVE_TERMS: tuple[tuple[str, bool], ...] = (
     # ── German (DE) ──────────────────────────────────────────────────────────
-    ("lösch",          False),  # lösche/löschen/löscht/löschst
-    ("entfern",        False),  # entferne/entfernen/entfernt
-    ("vernicht",       False),  # vernichte/vernichten
-    ("bereinig",       False),  # bereinige/bereinigen
-    ("tilg",           False),  # tilge/tilgen
-    ("leere ",         True),   # leere den Cache — not "Leere" as noun
+    ("lösch", False),  # lösche/löschen/löscht/löschst
+    ("entfern", False),  # entferne/entfernen/entfernt
+    ("vernicht", False),  # vernichte/vernichten
+    ("bereinig", False),  # bereinige/bereinigen
+    ("tilg", False),  # tilge/tilgen
+    ("leere ", True),  # leere den Cache — not "Leere" as noun
     # ── English (EN) ─────────────────────────────────────────────────────────
-    ("delete",         False),
-    ("remove",         False),
-    ("destroy",        False),
-    ("wipe",           False),
-    ("purge",          False),
-    ("truncate",       False),
-    ("shred",          False),
-    ("erase",          False),
-    ("nuke",           False),
-    ("terminate",      False),
+    ("delete", False),
+    ("remove", False),
+    ("destroy", False),
+    ("wipe", False),
+    ("purge", False),
+    ("truncate", False),
+    ("shred", False),
+    ("erase", False),
+    ("nuke", False),
+    ("terminate", False),
     # ── French (FR) ──────────────────────────────────────────────────────────
-    ("supprim",        False),  # supprime/supprimer/supprimez/suppriment
-    ("efface",         False),  # efface/effacer/effacez
-    ("enlève",         False),  # enlève/enlever
-    ("enlever",        False),
-    ("détru",          False),  # détruis/détruit/détruire
-    ("effac",          False),  # effacer stem
-    ("vider",          False),  # vider (empty/clear)
-    ("vide ",          True),   # vide le cache — not "évident"
+    ("supprim", False),  # supprime/supprimer/supprimez/suppriment
+    ("efface", False),  # efface/effacer/effacez
+    ("enlève", False),  # enlève/enlever
+    ("enlever", False),
+    ("détru", False),  # détruis/détruit/détruire
+    ("effac", False),  # effacer stem
+    ("vider", False),  # vider (empty/clear)
+    ("vide ", True),  # vide le cache — not "évident"
     # ── Spanish (ES) ─────────────────────────────────────────────────────────
-    ("elimin",         False),  # elimina/eliminar/elimine/eliminad
-    ("borrar",         False),  # borrar
-    ("borra ",         True),   # borra el pod — not "aborra"
-    ("destruy",        False),  # destruye/destruyendo/destruir
-    ("destruir",       False),
-    ("suprimir",       False),
-    ("vaciar",         False),  # vaciar (empty)
-    ("vacía ",         True),   # vacía el disco
+    ("elimin", False),  # elimina/eliminar/elimine/eliminad
+    ("borrar", False),  # borrar
+    ("borra ", True),  # borra el pod — not "aborra"
+    ("destruy", False),  # destruye/destruyendo/destruir
+    ("destruir", False),
+    ("suprimir", False),
+    ("vaciar", False),  # vaciar (empty)
+    ("vacía ", True),  # vacía el disco
     # ── Italian (IT) ─────────────────────────────────────────────────────────
-    ("cancell",        False),  # cancella/cancellare/cancellato
-    ("rimuovi",        False),
-    ("rimuover",       False),
-    ("svuota",         False),  # svuota/svuotare
-    ("distrug",        False),  # distruggi/distruggere
+    ("cancell", False),  # cancella/cancellare/cancellato
+    ("rimuovi", False),
+    ("rimuover", False),
+    ("svuota", False),  # svuota/svuotare
+    ("distrug", False),  # distruggi/distruggere
     # ── Portuguese (PT) ──────────────────────────────────────────────────────
-    ("apagar",         False),  # apagar
-    ("apaga ",         True),   # apaga o pod
-    ("destrói",        False),
-    ("destruir",       False),
-    ("limpar",         False),
-    ("limpa ",         True),   # limpa o cache
+    ("apagar", False),  # apagar
+    ("apaga ", True),  # apaga o pod
+    ("destrói", False),
+    ("destruir", False),
+    ("limpar", False),
+    ("limpa ", True),  # limpa o cache
     # ── Dutch (NL) ───────────────────────────────────────────────────────────
-    ("verwijder",      False),  # verwijder/verwijderen/verwijderd
-    ("verniet",        False),  # vernietig/vernietigen
-    ("wissen",         False),  # wissen (erase)
-    ("wis ",           True),   # wis de data — not "wist"
-    ("leegmak",        False),  # leegmaken
+    ("verwijder", False),  # verwijder/verwijderen/verwijderd
+    ("verniet", False),  # vernietig/vernietigen
+    ("wissen", False),  # wissen (erase)
+    ("wis ", True),  # wis de data — not "wist"
+    ("leegmak", False),  # leegmaken
     # ── Polish (PL) ──────────────────────────────────────────────────────────
-    ("usuń",           False),  # usuń (delete, imperative)
-    ("skasuj",         False),  # skasuj (delete/wipe)
-    ("zniszcz",        False),  # zniszcz (destroy)
-    ("wyczyść",        False),  # wyczyść (clear/wipe)
-    ("usuwa",          False),  # usuwa (deletes)
+    ("usuń", False),  # usuń (delete, imperative)
+    ("skasuj", False),  # skasuj (delete/wipe)
+    ("zniszcz", False),  # zniszcz (destroy)
+    ("wyczyść", False),  # wyczyść (clear/wipe)
+    ("usuwa", False),  # usuwa (deletes)
     # ── Chinese (ZH) ─────────────────────────────────────────────────────────
-    ("删除",            False),  # shānchú — delete
-    ("清除",            False),  # qīngchú — clear/purge
-    ("移除",            False),  # yíchú — remove
-    ("销毁",            False),  # xiāohuǐ — destroy
-    ("格式化",           False),  # géshìhuà — format
-    ("清空",            False),  # qīngkōng — empty/wipe
+    ("删除", False),  # shānchú — delete
+    ("清除", False),  # qīngchú — clear/purge
+    ("移除", False),  # yíchú — remove
+    ("销毁", False),  # xiāohuǐ — destroy
+    ("格式化", False),  # géshìhuà — format
+    ("清空", False),  # qīngkōng — empty/wipe
     # ── Japanese (JA) ────────────────────────────────────────────────────────
-    ("削除",            False),  # sakujo — delete
-    ("消去",            False),  # shōkyo — erase
-    ("消して",           False),  # keshite — delete (te-form)
-    ("削除して",         False),  # sakujo shite — please delete
+    ("削除", False),  # sakujo — delete
+    ("消去", False),  # shōkyo — erase
+    ("消して", False),  # keshite — delete (te-form)
+    ("削除して", False),  # sakujo shite — please delete
     # ── CLI / SQL / IaC patterns ──────────────────────────────────────────────
-    ("rm -",           False),  # rm -rf / rm -r
-    ("drop ",          True),   # DROP TABLE — not "dropdown"
+    ("rm -", False),  # rm -rf / rm -r
+    ("drop ", True),  # DROP TABLE — not "dropdown"
     # "del" intentionally omitted: common article in ES/IT/FR ("del pod" = "of the pod")
-    ("kill ",          True),   # kill pod — not "skill"
+    ("kill ", True),  # kill pod — not "skill"
     ("kubectl delete", False),
-    ("pvremove",       False),
-    ("wipefs",         False),
-    ("mkfs",           False),
-    ("format ",        True),   # format disk — not "format string"
+    ("pvremove", False),
+    ("wipefs", False),
+    ("mkfs", False),
+    ("format ", True),  # format disk — not "format string"
     ("terraform destroy", False),
 )
 
 _STATE_TERMS: tuple[tuple[str, bool], ...] = (
     # ── German (DE) — create ─────────────────────────────────────────────────
-    ("erstell",        False),  # erstelle/erstellen/erstellt
-    ("anlegen",        False),
-    ("lege an",        False),
-    ("deploye",        False),
-    ("installier",     False),
-    ("starte ",        True),   # starte den Pod — not "Neustart"
-    ("hochfahren",     False),
-    ("fahre hoch",     False),
+    ("erstell", False),  # erstelle/erstellen/erstellt
+    ("anlegen", False),
+    ("lege an", False),
+    ("deploye", False),
+    ("installier", False),
+    ("starte ", True),  # starte den Pod — not "Neustart"
+    ("hochfahren", False),
+    ("fahre hoch", False),
     # German — modify
-    ("ändere",         False),
-    ("ändert",         False),
-    ("ändern",         False),
-    ("aktualisier",    False),
-    ("skalier",        False),
-    ("konfiguriere",   False),
-    ("konfigurieren",  False),
-    ("bearbeite",      False),
-    ("migriere",       False),
-    ("neustart",       False),
-    ("neustarten",     False),
-    ("zurücksetzen",   False),
-    ("deaktiviere",    False),
-    ("aktiviere",      False),
-    ("rotiere",        False),  # rotiere das Zertifikat
-    ("widerrufe",      False),  # widerrufe den Token
+    ("ändere", False),
+    ("ändert", False),
+    ("ändern", False),
+    ("aktualisier", False),
+    ("skalier", False),
+    ("konfiguriere", False),
+    ("konfigurieren", False),
+    ("bearbeite", False),
+    ("migriere", False),
+    ("neustart", False),
+    ("neustarten", False),
+    ("zurücksetzen", False),
+    ("deaktiviere", False),
+    ("aktiviere", False),
+    ("rotiere", False),  # rotiere das Zertifikat
+    ("widerrufe", False),  # widerrufe den Token
+    ("schalte", False),  # schalte das Licht ein/aus
+    ("schalten", False),  # Licht anschalten
+    ("umschalten", False),  # umschalten (toggle)
     # ── English (EN) — create / deploy ───────────────────────────────────────
-    ("create",         False),
-    ("deploy",         False),
-    ("install",        False),
-    ("launch",         False),
-    ("provision",      False),
-    ("enable",         False),
-    ("disable",        False),
+    ("create", False),
+    ("deploy", False),
+    ("install", False),
+    ("launch", False),
+    ("provision", False),
+    ("enable", False),
+    ("disable", False),
     # English — modify
-    ("update",         False),
-    ("upgrade",        False),
-    ("patch",          False),
-    ("modify",         False),
-    ("configure",      False),
-    ("reconfigure",    False),
-    ("overwrite",      False),
-    ("migrate",        False),
-    ("scale",          False),
-    ("resize",         False),
-    ("rotate",         False),
-    ("revoke",         False),
-    ("apply",          False),
-    ("edit",           False),
-    ("restart",        False),
-    ("reboot",         False),
-    ("reset",          False),
-    ("add ",           True),
-    ("set ",           True),
+    ("update", False),
+    ("upgrade", False),
+    ("patch", False),
+    ("modify", False),
+    ("configure", False),
+    ("reconfigure", False),
+    ("overwrite", False),
+    ("migrate", False),
+    ("scale", False),
+    ("resize", False),
+    ("rotate", False),
+    ("revoke", False),
+    ("apply", False),
+    ("edit", False),
+    ("restart", False),
+    ("reboot", False),
+    ("reset", False),
+    ("add ", True),
+    ("set ", True),
     # ── French (FR) — create ─────────────────────────────────────────────────
-    ("créer",          False),  # créer
-    ("crée ",          True),   # crée un pod — not "recréer"
-    ("déploi",         False),  # déploie/déployer/déployez
-    ("lancer",         False),
-    ("lance ",         True),   # lance l'app
-    ("activer",        False),
-    ("active ",        True),   # active le module
-    ("désactiver",     False),
-    ("désactive",      False),
+    ("créer", False),  # créer
+    ("crée ", True),  # crée un pod — not "recréer"
+    ("déploi", False),  # déploie/déployer/déployez
+    ("lancer", False),
+    ("lance ", True),  # lance l'app
+    ("activer", False),
+    ("active ", True),  # active le module
+    ("désactiver", False),
+    ("désactive", False),
     # French — modify
-    ("modifier",       False),
-    ("modifie",        False),
-    ("configurer",     False),
-    ("configure",      False),
-    ("mettre à jour",  False),  # mets à jour / mettre à jour
-    ("mets à jour",    False),
-    ("mise à jour",    False),
-    ("redémarr",       False),  # redémarre/redémarrer
-    ("redémarrage",    False),
-    ("migrer",         False),
+    ("modifier", False),
+    ("modifie", False),
+    ("configurer", False),
+    ("configure", False),
+    ("mettre à jour", False),  # mets à jour / mettre à jour
+    ("mets à jour", False),
+    ("mise à jour", False),
+    ("redémarr", False),  # redémarre/redémarrer
+    ("redémarrage", False),
+    ("migrer", False),
     # ── Spanish (ES) — create ────────────────────────────────────────────────
-    ("crear",          False),
-    ("crea ",          True),   # crea un pod — not "recrear"
-    ("desplegar",      False),
-    ("despleg",        False),  # despliega/desplegar
-    ("lanzar",         False),
-    ("lanza ",         True),
-    ("activar",        False),
-    ("activa ",        True),
-    ("desactivar",     False),
-    ("desactiva",      False),
+    ("crear", False),
+    ("crea ", True),  # crea un pod — not "recrear"
+    ("desplegar", False),
+    ("despleg", False),  # despliega/desplegar
+    ("lanzar", False),
+    ("lanza ", True),
+    ("activar", False),
+    ("activa ", True),
+    ("desactivar", False),
+    ("desactiva", False),
     # Spanish — modify
-    ("actualizar",     False),
-    ("actualiz",       False),
-    ("configurar",     False),
-    ("modificar",      False),
-    ("modific",        False),
-    ("reiniciar",      False),
-    ("reinici",        False),
-    ("escalar",        False),
-    ("aplicar",        False),
-    ("migrar",         False),
+    ("actualizar", False),
+    ("actualiz", False),
+    ("configurar", False),
+    ("modificar", False),
+    ("modific", False),
+    ("reiniciar", False),
+    ("reinici", False),
+    ("escalar", False),
+    ("aplicar", False),
+    ("migrar", False),
     # ── Italian (IT) — create ────────────────────────────────────────────────
-    ("creare",         False),
-    ("crea ",          True),   # crea un pod
-    ("distribuire",    False),
-    ("avviare",        False),
-    ("avvia ",         True),
-    ("attivare",       False),
-    ("attiva ",        True),
-    ("disattivare",    False),
-    ("disattiva",      False),
+    ("creare", False),
+    ("crea ", True),  # crea un pod
+    ("distribuire", False),
+    ("avviare", False),
+    ("avvia ", True),
+    ("attivare", False),
+    ("attiva ", True),
+    ("disattivare", False),
+    ("disattiva", False),
     # Italian — modify
-    ("aggiornare",     False),
-    ("aggior",         False),  # aggiorna/aggiornare
-    ("configurare",    False),
-    ("modificare",     False),
-    ("modifica ",      True),
-    ("riavviare",      False),
-    ("riavvia",        False),
-    ("migrare",        False),
+    ("aggiornare", False),
+    ("aggior", False),  # aggiorna/aggiornare
+    ("configurare", False),
+    ("modificare", False),
+    ("modifica ", True),
+    ("riavviare", False),
+    ("riavvia", False),
+    ("migrare", False),
     # ── Portuguese (PT) — create ─────────────────────────────────────────────
-    ("criar",          False),
-    ("cria ",          True),   # cria um pod
-    ("implantar",      False),
-    ("implementar",    False),
-    ("lançar",         False),
-    ("lança ",         True),
-    ("ativar",         False),
-    ("ativa ",         True),
-    ("desativar",      False),
-    ("desativa",       False),
+    ("criar", False),
+    ("cria ", True),  # cria um pod
+    ("implantar", False),
+    ("implementar", False),
+    ("lançar", False),
+    ("lança ", True),
+    ("ativar", False),
+    ("ativa ", True),
+    ("desativar", False),
+    ("desativa", False),
     # Portuguese — modify
-    ("atualizar",      False),
-    ("atualiz",        False),
-    ("configurar",     False),
-    ("modificar",      False),
-    ("reiniciar",      False),
-    ("migrar",         False),
+    ("atualizar", False),
+    ("atualiz", False),
+    ("configurar", False),
+    ("modificar", False),
+    ("reiniciar", False),
+    ("migrar", False),
     # ── Dutch (NL) — create ──────────────────────────────────────────────────
-    ("aanmaken",       False),
-    ("maak aan",       False),
-    ("maak ",          True),   # maak een pod aan — "maak aan" may be non-contiguous
-    ("implementeren",  False),
-    ("implementeer",   False),
-    ("installeren",    False),
-    ("installeer",     False),
-    ("activeren",      False),
-    ("activeer",       False),
-    ("deactiveren",    False),
-    ("deactiveer",     False),
+    ("aanmaken", False),
+    ("maak aan", False),
+    ("maak ", True),  # maak een pod aan — "maak aan" may be non-contiguous
+    ("implementeren", False),
+    ("implementeer", False),
+    ("installeren", False),
+    ("installeer", False),
+    ("activeren", False),
+    ("activeer", False),
+    ("deactiveren", False),
+    ("deactiveer", False),
     # Dutch — modify
-    ("bijwerken",      False),
-    ("configureren",   False),
-    ("configureer",    False),
-    ("wijzigen",       False),
-    ("wijzig ",        True),
-    ("herstarten",     False),
-    ("herstart",       False),
-    ("migreren",       False),
+    ("bijwerken", False),
+    ("configureren", False),
+    ("configureer", False),
+    ("wijzigen", False),
+    ("wijzig ", True),
+    ("herstarten", False),
+    ("herstart", False),
+    ("migreren", False),
     # ── Polish (PL) — create ─────────────────────────────────────────────────
-    ("utwórz",         False),  # create
-    ("wdróż",          False),  # deploy
-    ("zainstaluj",     False),  # install
-    ("uruchom",        False),  # start/run
-    ("włącz",          False),  # enable
-    ("wyłącz",         False),  # disable
+    ("utwórz", False),  # create
+    ("wdróż", False),  # deploy
+    ("zainstaluj", False),  # install
+    ("uruchom", False),  # start/run
+    ("włącz", False),  # enable
+    ("wyłącz", False),  # disable
     # Polish — modify
-    ("zaktualizuj",    False),
-    ("skonfiguruj",    False),
-    ("zmodyfiku",      False),
-    ("zrestartuj",     False),
-    ("zmigruj",        False),
+    ("zaktualizuj", False),
+    ("skonfiguruj", False),
+    ("zmodyfiku", False),
+    ("zrestartuj", False),
+    ("zmigruj", False),
     # ── Chinese (ZH) — create ────────────────────────────────────────────────
-    ("创建",             False),  # chuàngjiàn — create
-    ("部署",             False),  # bùshǔ — deploy
-    ("安装",             False),  # ānzhuāng — install
-    ("启动",             False),  # qǐdòng — start
-    ("启用",             False),  # qǐyòng — enable
-    ("禁用",             False),  # jìnyòng — disable
+    ("创建", False),  # chuàngjiàn — create
+    ("部署", False),  # bùshǔ — deploy
+    ("安装", False),  # ānzhuāng — install
+    ("启动", False),  # qǐdòng — start
+    ("启用", False),  # qǐyòng — enable
+    ("禁用", False),  # jìnyòng — disable
     # Chinese — modify
-    ("更新",             False),  # gēngxīn — update
-    ("配置",             False),  # pèizhì — configure
-    ("修改",             False),  # xiūgǎi — modify
-    ("重启",             False),  # chóngqǐ — restart
-    ("扩展",             False),  # kuòzhǎn — scale out
-    ("缩减",             False),  # suōjiǎn — scale in
-    ("应用",             False),  # yīngyòng — apply
-    ("编辑",             False),  # biānjí — edit
-    ("迁移",             False),  # qiānyí — migrate
+    ("更新", False),  # gēngxīn — update
+    ("配置", False),  # pèizhì — configure
+    ("修改", False),  # xiūgǎi — modify
+    ("重启", False),  # chóngqǐ — restart
+    ("扩展", False),  # kuòzhǎn — scale out
+    ("缩减", False),  # suōjiǎn — scale in
+    ("应用", False),  # yīngyòng — apply
+    ("编辑", False),  # biānjí — edit
+    ("迁移", False),  # qiānyí — migrate
     # ── Japanese (JA) — create ───────────────────────────────────────────────
-    ("作成",             False),  # sakusei — create
-    ("デプロイ",          False),  # depuroi — deploy
-    ("インストール",       False),  # insutōru — install
-    ("起動",             False),  # kidō — start
-    ("有効化",            False),  # yūkōka — enable
-    ("無効化",            False),  # mukōka — disable
+    ("作成", False),  # sakusei — create
+    ("デプロイ", False),  # depuroi — deploy
+    ("インストール", False),  # insutōru — install
+    ("起動", False),  # kidō — start
+    ("有効化", False),  # yūkōka — enable
+    ("無効化", False),  # mukōka — disable
     # Japanese — modify
-    ("更新",             False),  # kōshin — update
-    ("設定",             False),  # settei — configure/set
-    ("変更",             False),  # henkō — change/modify
-    ("再起動",            False),  # saikidō — restart
-    ("スケール",          False),  # sukēru — scale
-    ("適用",             False),  # tekiyō — apply
-    ("移行",             False),  # ikō — migrate
+    ("更新", False),  # kōshin — update
+    ("設定", False),  # settei — configure/set
+    ("変更", False),  # henkō — change/modify
+    ("再起動", False),  # saikidō — restart
+    ("スケール", False),  # sukēru — scale
+    ("適用", False),  # tekiyō — apply
+    ("移行", False),  # ikō — migrate
     # ── CLI / IaC patterns ───────────────────────────────────────────────────
-    ("kubectl apply",  False),
+    ("kubectl apply", False),
     ("kubectl create", False),
-    ("kubectl patch",  False),
-    ("kubectl edit",   False),
-    ("kubectl scale",  False),
-    ("kubectl label",  False),
+    ("kubectl patch", False),
+    ("kubectl edit", False),
+    ("kubectl scale", False),
+    ("kubectl label", False),
     ("kubectl annotate", False),
-    ("kubectl taint",  False),
-    ("helm install",   False),
-    ("helm upgrade",   False),
+    ("kubectl taint", False),
+    ("helm install", False),
+    ("helm upgrade", False),
     ("helm uninstall", False),
-    ("terraform apply",False),
+    ("terraform apply", False),
     ("ansible-playbook", False),
 )
 
@@ -721,28 +758,100 @@ def _check_injection_prefilter(text: str) -> SafeguardResult | None:
 # Checked against start and interior of the lowercased message.
 _SAFE_PATTERNS: tuple[str, ...] = (
     # English
-    "show ", "list", "get ", "describe ", "status",
-    "logs ",                            # trailing space avoids matching "/var/log"
-    "what ", "how ", "which ", "explain", "help", "search", "find ", "check ", "monitor",
+    "show ",
+    "list",
+    "get ",
+    "describe ",
+    "status",
+    "logs ",  # trailing space avoids matching "/var/log"
+    "what ",
+    "how ",
+    "which ",
+    "explain",
+    "help",
+    "search",
+    "find ",
+    "check ",
+    "monitor",
     # German
-    "zeige ", "zeig ", "liste", "was ", "wie ", "welche", "wieviel", "wie viele",
-    "erkläre", "hilfe", "suche", "finde ", "prüfe ",
+    "zeige ",
+    "zeig ",
+    "liste",
+    "was ",
+    "wie ",
+    "welche",
+    "wieviel",
+    "wie viele",
+    "erkläre",
+    "hilfe",
+    "suche",
+    "finde ",
+    "prüfe ",
     # French
-    "montre ", "affiche ", "liste ", "décris ", "statut", "qu'est-ce", "comment ", "vérif",
+    "montre ",
+    "affiche ",
+    "liste ",
+    "décris ",
+    "statut",
+    "qu'est-ce",
+    "comment ",
+    "vérif",
     # Spanish
-    "muestra ", "lista ", "describe ", "estado", "qué es", "cómo ", "verif",
+    "muestra ",
+    "lista ",
+    "describe ",
+    "estado",
+    "qué es",
+    "cómo ",
+    "verif",
     # Italian
-    "mostra ", "elenca ", "descrivi ", "stato", "cos'è", "come ", "controlla ",
+    "mostra ",
+    "elenca ",
+    "descrivi ",
+    "stato",
+    "cos'è",
+    "come ",
+    "controlla ",
     # Portuguese
-    "mostra ", "lista ", "descreve ", "estado", "o que é", "como ", "verifica ",
+    "mostra ",
+    "lista ",
+    "descreve ",
+    "estado",
+    "o que é",
+    "como ",
+    "verifica ",
     # Dutch
-    "toon ", "lijst", "beschrijf ", "status", "wat is", "hoe ", "controleer ",
+    "toon ",
+    "lijst",
+    "beschrijf ",
+    "status",
+    "wat is",
+    "hoe ",
+    "controleer ",
     # Polish
-    "pokaż ", "wylistuj ", "opisz ", "status", "co to", "jak ", "sprawdź ",
+    "pokaż ",
+    "wylistuj ",
+    "opisz ",
+    "status",
+    "co to",
+    "jak ",
+    "sprawdź ",
     # Chinese
-    "显示", "列出", "查看", "状态", "检查", "描述", "获取",
+    "显示",
+    "列出",
+    "查看",
+    "状态",
+    "检查",
+    "描述",
+    "获取",
     # Japanese
-    "表示", "一覧", "確認", "ステータス", "調べ", "教えて", "状態",
+    "表示",
+    "一覧",
+    "確認",
+    "ステータス",
+    "調べ",
+    "教えて",
+    "状態",
 )
 
 
@@ -752,67 +861,158 @@ _SAFE_PATTERNS: tuple[str, ...] = (
 # (memory, agent creation, pipeline coordination). Checking them against the
 # LLM classifier would add latency without security benefit.
 
-_TOOL_READONLY: frozenset[str] = frozenset({
-    # Memory / knowledge operations
-    "recall_memory", "remember_fact", "forget_fact", "confirm_forget",
-    # Orchestration / meta
-    "create_custom_agent", "update_custom_agent", "install_skill",
-    "create_dag_workflow", "create_linear_workflow", "execute_workflow", "run_pipeline",
-    "generate_image", "get_routing_info",
-    # Search
-    "perform_web_search",
-    # Kubernetes read-only
-    "get_cluster_status", "get_all_pods", "get_failing_pods",
-    "list_namespaces", "list_services", "get_recent_events",
-    "get_resource_yaml", "get_pod_logs",
-    "list_ingresses", "list_pvcs", "list_deployments", "get_deployment_status",
-    # Proxmox read-only
-    "get_nodes", "get_node_status", "list_all_vms", "list_vms",
-    "get_vm_status", "get_vm_config", "get_recent_tasks",
-    # PiHole read-only
-    "get_pihole_summary", "get_query_log", "get_top_domains", "get_top_clients",
-    "get_blocklists", "get_pihole_system", "get_custom_dns_records",
-    "get_cname_records", "get_dhcp_leases", "get_system_messages",
-    # FritzBox read-only
-    "get_fritz_system_info", "get_fritz_devices", "get_fritz_wan_status",
-    "get_fritz_bandwidth", "get_fritz_wlan_status", "get_fritz_smarthome_devices",
-    "get_fritz_call_list",
-    # Home Assistant read-only
-    "ha_get_entity_state", "ha_list_entities", "ha_find_device", "ha_get_entity_details",
-    # IONOS DNS read-only
-    "get_ionos_zones", "get_ionos_records",
-    # Email read-only
-    "read_emails",
-    # GLPI read-only
-    "get_ticket", "search_tickets", "search_users", "list_groups",
-    "list_categories", "get_ticket_stats",
-    # WordPress read-only
-    "get_site_info", "get_updates_info", "list_plugins", "search_plugins",
-    "list_posts", "get_post", "list_pages", "get_page",
-    "list_tags", "list_users", "get_current_user", "get_site_settings", "list_media",
-    # Docker read-only
-    "list_containers", "inspect_container", "get_container_logs",
-    "get_container_stats", "list_images", "list_volumes",
-    "get_docker_info", "get_docker_version", "get_docker_disk_usage",
-    # Linux Server read-only
-    "get_system_info", "get_disk_usage", "get_top_processes",
-    "get_journal", "get_logfile", "read_file", "list_directory",
-    "get_network_info", "check_port", "check_last_logins",
-    # OPNsense read-only
-    "get_opnsense_system_status", "get_opnsense_interfaces", "get_opnsense_gateways",
-    "get_opnsense_firewall_rules", "get_opnsense_nat_rules", "get_opnsense_services",
-    "get_opnsense_dhcp_leases", "get_opnsense_logs",
-    # Tasmota read-only
-    "get_tasmota_status", "get_tasmota_power", "get_tasmota_sensors", "get_tasmota_wifi_info",
-    # Qdrant read-only
-    "search_knowledge", "list_knowledge_collections", "get_collection_stats",
-    # Codelab read-only
-    "get_available_languages",
-    # Checkmk read-only
-    "checkmk_get_hosts", "checkmk_get_services", "checkmk_get_host_status",
-    "checkmk_get_service_status", "checkmk_get_alerts", "checkmk_get_host_details",
-    "checkmk_get_service_details", "checkmk_search_hosts", "checkmk_search_services",
-})
+_TOOL_READONLY: frozenset[str] = frozenset(
+    {
+        # Memory / knowledge operations
+        "recall_memory",
+        "remember_fact",
+        "forget_fact",
+        "confirm_forget",
+        # Orchestration / meta
+        "create_custom_agent",
+        "update_custom_agent",
+        "install_skill",
+        "create_dag_workflow",
+        "create_linear_workflow",
+        "execute_workflow",
+        "run_pipeline",
+        "generate_image",
+        "get_routing_info",
+        # Search
+        "perform_web_search",
+        # Kubernetes read-only
+        "get_cluster_status",
+        "get_all_pods",
+        "get_failing_pods",
+        "list_namespaces",
+        "list_services",
+        "get_recent_events",
+        "get_resource_yaml",
+        "get_pod_logs",
+        "list_ingresses",
+        "list_pvcs",
+        "list_deployments",
+        "get_deployment_status",
+        # Proxmox read-only
+        "get_nodes",
+        "get_node_status",
+        "list_all_vms",
+        "list_vms",
+        "get_vm_status",
+        "get_vm_config",
+        "get_recent_tasks",
+        # PiHole read-only
+        "get_pihole_summary",
+        "get_query_log",
+        "get_top_domains",
+        "get_top_clients",
+        "get_blocklists",
+        "get_pihole_system",
+        "get_custom_dns_records",
+        "get_cname_records",
+        "get_dhcp_leases",
+        "get_system_messages",
+        # FritzBox read-only
+        "get_fritz_system_info",
+        "get_fritz_devices",
+        "get_fritz_wan_status",
+        "get_fritz_bandwidth",
+        "get_fritz_wlan_status",
+        "get_fritz_smarthome_devices",
+        "get_fritz_call_list",
+        # Home Assistant read-only
+        "ha_get_entity_state",
+        "ha_list_entities",
+        "ha_find_device",
+        "ha_get_entity_details",
+        # IONOS DNS read-only
+        "get_ionos_zones",
+        "get_ionos_records",
+        # Email read-only
+        "read_emails",
+        # GLPI read-only
+        "get_ticket",
+        "search_tickets",
+        "search_users",
+        "list_groups",
+        "list_categories",
+        "get_ticket_stats",
+        # WordPress read-only
+        "get_site_info",
+        "get_updates_info",
+        "list_plugins",
+        "search_plugins",
+        "list_posts",
+        "get_post",
+        "list_pages",
+        "get_page",
+        "list_tags",
+        "list_users",
+        "get_current_user",
+        "get_site_settings",
+        "list_media",
+        # Docker read-only
+        "list_containers",
+        "inspect_container",
+        "get_container_logs",
+        "get_container_stats",
+        "list_images",
+        "list_volumes",
+        "get_docker_info",
+        "get_docker_version",
+        "get_docker_disk_usage",
+        # Linux Server read-only
+        "get_system_info",
+        "get_disk_usage",
+        "get_top_processes",
+        "get_journal",
+        "get_logfile",
+        "read_file",
+        "list_directory",
+        "get_network_info",
+        "check_port",
+        "check_last_logins",
+        # OPNsense read-only
+        "get_opnsense_system_status",
+        "get_opnsense_interfaces",
+        "get_opnsense_gateways",
+        "get_opnsense_firewall_rules",
+        "get_opnsense_nat_rules",
+        "get_opnsense_services",
+        "get_opnsense_dhcp_leases",
+        "get_opnsense_logs",
+        # Tasmota read-only
+        "get_tasmota_status",
+        "get_tasmota_power",
+        "get_tasmota_sensors",
+        "get_tasmota_wifi_info",
+        # Qdrant read-only
+        "search_knowledge",
+        "list_knowledge_collections",
+        "get_collection_stats",
+        # Codelab read-only
+        "get_available_languages",
+        # Checkmk read-only
+        "checkmk_get_hosts",
+        "checkmk_get_services",
+        "checkmk_get_host_status",
+        "checkmk_get_service_status",
+        "checkmk_get_alerts",
+        "checkmk_get_host_details",
+        "checkmk_get_service_details",
+        "checkmk_search_hosts",
+        "checkmk_search_services",
+        # Synology read-only
+        "get_synology_system_info",
+        "get_synology_storage",
+        "get_synology_packages",
+        "get_synology_services",
+        "get_synology_tasks",
+        "check_synology_updates",
+        "get_synology_network_info",
+        "get_synology_users",
+    }
+)
 
 
 def _keyword_prefilter(text: str) -> SafeguardResult | None:
@@ -826,7 +1026,7 @@ def _keyword_prefilter(text: str) -> SafeguardResult | None:
       4. No match → None (fall through to LLM classifier)
     """
     lower = text.lower().strip()
-    spaced = f" {lower} "   # wrap for word-boundary substring matching
+    spaced = f" {lower} "  # wrap for word-boundary substring matching
 
     # 1. Clearly read-only — no confirmation needed
     for pat in _SAFE_PATTERNS:
@@ -868,6 +1068,7 @@ def _keyword_prefilter(text: str) -> SafeguardResult | None:
 
 # ─── Safeguard middleware ─────────────────────────────────────────────────────
 
+
 class SafeguardMiddleware:
     """
     Model-agnostic safeguard with profile-based configuration.
@@ -882,9 +1083,20 @@ class SafeguardMiddleware:
       detect_prompt_injection — extend classifier with PROMPT_INJECTION detection
       fail_open               — allow on LLM error (vs fail-safe block)
 
+    Per-agent classifier policy:
+      Each agent can have a custom policy string (stored in AgentConfigStore)
+      that is injected into the LLM classifier system prompt as
+      "AGENT-SPECIFIC SAFETY POLICY". This allows stricter rules for
+      specific agents (e.g. Proxmox agent) without changing the global prompt.
+
     Backward-compat: enable()/disable() map to 'moderate'/'disabled' profiles.
     The .enabled property reflects whether the active profile is not 'disabled'.
     """
+
+    # Redis key for the audit log list
+    AUDIT_LOG_KEY = "ninko:safeguard_audit"
+    # Maximum audit log entries kept in Redis (FIFO cap)
+    MAX_AUDIT_ENTRIES = 5000
 
     def __init__(
         self,
@@ -896,16 +1108,20 @@ class SafeguardMiddleware:
         agent_store: "AgentConfigStore | None" = None,
         profile_store: "SafeguardProfileStore | None" = None,
     ) -> None:
-        self.client           = client
-        self.model            = model
-        self._base_policy     = policy or SAFEGUARD_SYSTEM_PROMPT
-        self.timeout          = timeout
-        self.agent_store      = agent_store
-        self.profile_store    = profile_store
+        self.client = client
+        self.model = model
+        self._base_policy = policy or SAFEGUARD_SYSTEM_PROMPT
+        self.timeout = timeout
+        self.agent_store = agent_store
+        self.profile_store = profile_store
         # Active global profile — backward-compat: enabled=False → "disabled"
         self._active_profile_id: str = "moderate" if enabled else "disabled"
         # .enabled kept for legacy callers (base_agent.py use_safeguard guard)
         self.enabled = enabled
+        # LLM generation counter — detect provider switches
+        from core.llm_factory import get_llm_generation
+
+        self._llm_generation: int = get_llm_generation()
 
     # ── Global toggle (backward-compat wrappers) ──────────────────────────────
 
@@ -914,7 +1130,9 @@ class SafeguardMiddleware:
         if self._active_profile_id == "disabled":
             self._active_profile_id = "moderate"
         self.enabled = True
-        logger.info("[Safeguard] Globally enabled (profile: %s).", self._active_profile_id)
+        logger.info(
+            "[Safeguard] Globally enabled (profile: %s).", self._active_profile_id
+        )
 
     def disable(self) -> None:
         """Switch to 'disabled' profile (backward compat for toggle endpoint)."""
@@ -922,16 +1140,108 @@ class SafeguardMiddleware:
         self.enabled = False
         logger.warning("[Safeguard] Globally DISABLED — autonomous mode active.")
 
+    # ── Audit log ─────────────────────────────────────────────────────────────
+
+    async def _audit_log(
+        self,
+        action: str,
+        category: ActionCategory,
+        text: str,
+        session_id: str | None = None,
+        agent_id: str | None = None,
+        tool_name: str | None = None,
+        outcome: str = "pending",
+        rationale: str = "",
+        profile_id: str = "",
+    ) -> None:
+        """Write a structured audit entry to Redis (FIFO-capped list)."""
+        import time
+        from core.redis_client import get_redis
+
+        entry = {
+            "timestamp": time.time(),
+            "action": action,
+            "category": category.value,
+            "text": text[:500],
+            "session_id": session_id or "",
+            "agent_id": agent_id or "",
+            "tool_name": tool_name or "",
+            "outcome": outcome,
+            "rationale": rationale[:300],
+            "profile_id": profile_id or "",
+        }
+        try:
+            redis = get_redis()
+            pipe = redis.connection.pipeline()
+            pipe.lpush(self.AUDIT_LOG_KEY, json.dumps(entry))
+            pipe.ltrim(self.AUDIT_LOG_KEY, 0, self.MAX_AUDIT_ENTRIES - 1)
+            await pipe.execute()
+        except Exception as exc:
+            logger.warning("[Safeguard/Audit] Failed to write audit entry: %s", exc)
+
+    # ── LLM generation re-init ────────────────────────────────────────────────
+
+    def check_llm_generation(self) -> None:
+        """
+        Re-initialize the safeguard LLM client if the provider changed.
+        Called periodically (e.g. before check()) to stay in sync with
+        the _llm_generation counter in llm_factory.py.
+        """
+        from core.llm_factory import get_llm_generation, get_safeguard_openai_client
+
+        current = get_llm_generation()
+        if current != self._llm_generation:
+            logger.info(
+                "[Safeguard] LLM provider changed (gen %d → %d) — re-initializing client.",
+                self._llm_generation,
+                current,
+            )
+            try:
+                client, model = get_safeguard_openai_client()
+                self.client = client
+                self.model = model
+                self._llm_generation = current
+                logger.info("[Safeguard] Client re-initialized (model: %s).", model)
+            except Exception as exc:
+                logger.error("[Safeguard] Client re-init failed: %s", exc)
+
+    # ── Paused-agent cleanup ──────────────────────────────────────────────────
+
+    async def cleanup_paused_agents(self) -> int:
+        """
+        Remove stale entries from _paused_sg_agents whose Redis pending key
+        has expired. Returns the number of cleaned entries.
+        """
+        from agents.base_agent import _paused_sg_agents
+        from core.redis_client import get_redis
+
+        redis = get_redis()
+        stale_keys = []
+        for session_id in list(_paused_sg_agents.keys()):
+            pending = await redis.connection.exists(
+                f"ninko:safeguard_tool_pending:{session_id}"
+            )
+            if not pending:
+                stale_keys.append(session_id)
+        for sid in stale_keys:
+            _paused_sg_agents.pop(sid, None)
+        if stale_keys:
+            logger.info(
+                "[Safeguard] Cleaned %d stale paused-agent entries.", len(stale_keys)
+            )
+        return len(stale_keys)
+
     # ── Profile management ─────────────────────────────────────────────────────
 
     async def set_active_profile(self, profile_id: str) -> None:
         """Set the global active profile and persist to Redis."""
         from core.redis_client import get_redis
+
         profile = await self._get_profile(profile_id)
         if profile is None:
             raise ValueError(f"Profil '{profile_id}' nicht gefunden.")
         self._active_profile_id = profile_id
-        self.enabled = (profile_id != "disabled")
+        self.enabled = profile_id != "disabled"
         redis = get_redis()
         await redis.connection.set("ninko:settings:safeguard", profile_id)
         logger.info("[Safeguard] Globales Profil gesetzt: '%s'.", profile_id)
@@ -957,11 +1267,14 @@ class SafeguardMiddleware:
         Priority: per-chat > per-agent > global > fallback='moderate'
         """
         from core.redis_client import get_redis
+
         redis = get_redis()
 
         # 1. Per-chat override (TTL 24h, set by UI or API)
         if session_id:
-            raw = await redis.connection.get(f"ninko:safeguard:profile:chat:{session_id}")
+            raw = await redis.connection.get(
+                f"ninko:safeguard:profile:chat:{session_id}"
+            )
             if raw:
                 pid = raw if isinstance(raw, str) else raw.decode()
                 p = await self._get_profile(pid)
@@ -994,7 +1307,9 @@ class SafeguardMiddleware:
     async def disable_for_agent(self, agent_id: str) -> None:
         if self.agent_store:
             await self.agent_store.set_safeguard(agent_id, enabled=False)
-        logger.warning("[Safeguard] DISABLED for agent '%s' — autonomous mode.", agent_id)
+        logger.warning(
+            "[Safeguard] DISABLED for agent '%s' — autonomous mode.", agent_id
+        )
 
     # ── Main entry point: user messages ───────────────────────────────────────
 
@@ -1014,6 +1329,7 @@ class SafeguardMiddleware:
 
         Always returns a SafeguardResult — never raises.
         """
+        self.check_llm_generation()
         profile = await self.resolve_profile(agent_id, session_id)
 
         if not profile.check_user_messages:
@@ -1035,29 +1351,72 @@ class SafeguardMiddleware:
                     rationale=pre.rationale,
                     profile_id=profile.id,
                 )
-                return await self._apply_auto_mode(user_input, result, profile)
+                result = await self._apply_auto_mode(user_input, result, profile)
+                if result.category != ActionCategory.SAFE:
+                    await self._audit_log(
+                        action="user_message",
+                        category=result.category,
+                        text=user_input,
+                        session_id=session_id,
+                        agent_id=agent_id,
+                        outcome="auto_approved"
+                        if result.auto_decided
+                        else (
+                            "confirmed"
+                            if not result.requires_confirmation
+                            else "pending"
+                        ),
+                        rationale=result.rationale,
+                        profile_id=profile.id,
+                    )
+                return result
 
             # Prompt injection prefilter
             if profile.detect_prompt_injection:
                 inj = _check_injection_prefilter(user_input)
                 if inj is not None:
-                    req_conf = ActionCategory.PROMPT_INJECTION.value in profile.confirm_categories
+                    req_conf = (
+                        ActionCategory.PROMPT_INJECTION.value
+                        in profile.confirm_categories
+                    )
                     result = SafeguardResult(
                         requires_confirmation=req_conf,
                         category=ActionCategory.PROMPT_INJECTION,
                         rationale=inj.rationale,
                         profile_id=profile.id,
                     )
-                    return await self._apply_auto_mode(user_input, result, profile)
+                    result = await self._apply_auto_mode(user_input, result, profile)
+                    await self._audit_log(
+                        action="user_message",
+                        category=result.category,
+                        text=user_input,
+                        session_id=session_id,
+                        agent_id=agent_id,
+                        outcome="auto_approved"
+                        if result.auto_decided
+                        else (
+                            "confirmed"
+                            if not result.requires_confirmation
+                            else "pending"
+                        ),
+                        rationale=result.rationale,
+                        profile_id=profile.id,
+                    )
+                    return result
 
         # LLM classifier
-        system_prompt = self._build_policy(profile)
+        # Fetch agent-specific classifier policy (if any)
+        agent_policy = ""
+        if agent_id and self.agent_store:
+            agent_policy = await self.agent_store.get_classifier_policy(agent_id) or ""
+
+        system_prompt = self._build_policy(profile, agent_policy=agent_policy)
         try:
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user",   "content": user_input},
+                    {"role": "user", "content": user_input},
                 ],
                 temperature=0.0,
                 max_tokens=150,
@@ -1073,23 +1432,51 @@ class SafeguardMiddleware:
                 raw_response=parsed.raw_response,
                 profile_id=profile.id,
             )
-            return await self._apply_auto_mode(user_input, result, profile)
+            result = await self._apply_auto_mode(user_input, result, profile)
+            if result.category != ActionCategory.SAFE:
+                await self._audit_log(
+                    action="user_message",
+                    category=result.category,
+                    text=user_input,
+                    session_id=session_id,
+                    agent_id=agent_id,
+                    outcome="auto_approved"
+                    if result.auto_decided
+                    else (
+                        "confirmed" if not result.requires_confirmation else "pending"
+                    ),
+                    rationale=result.rationale,
+                    profile_id=profile.id,
+                )
+            return result
 
         except Exception as exc:
             logger.warning(
                 "[Safeguard] Classifier call failed: %s — fail-%s.",
-                exc, "open" if profile.fail_open else "safe",
+                exc,
+                "open" if profile.fail_open else "safe",
             )
-            return SafeguardResult(
+            result = SafeguardResult(
                 requires_confirmation=not profile.fail_open,
                 category=ActionCategory.UNKNOWN,
                 rationale=(
-                    f"Classifier nicht erreichbar ({type(exc).__name__}) — "
-                    f"{'Ausführung erlaubt (fail-open)' if profile.fail_open else 'Bestätigung erforderlich (fail-safe)'}."
+                    f"Classifier unreachable ({type(exc).__name__}) — "
+                    f"{'execution allowed (fail-open)' if profile.fail_open else 'confirmation required (fail-safe)'}."
                 ),
                 raw_response=str(exc),
                 profile_id=profile.id,
             )
+            await self._audit_log(
+                action="classifier_error",
+                category=ActionCategory.UNKNOWN,
+                text=user_input,
+                session_id=session_id,
+                agent_id=agent_id,
+                outcome="fail_open" if profile.fail_open else "fail_safe",
+                rationale=result.rationale,
+                profile_id=profile.id,
+            )
+            return result
 
     # ── Tool-call classifier ───────────────────────────────────────────────────
 
@@ -1155,7 +1542,9 @@ class SafeguardMiddleware:
         On error: respects profile.fail_open (True = allow, False = deny).
         """
         policy_section = (
-            _AUTO_DECISION_POLICY_SECTION.format(policy=profile.auto_mode_policy.strip())
+            _AUTO_DECISION_POLICY_SECTION.format(
+                policy=profile.auto_mode_policy.strip()
+            )
             if profile.auto_mode_policy.strip()
             else ""
         )
@@ -1182,18 +1571,21 @@ class SafeguardMiddleware:
                 raw = m.group(0) if m else raw
             data = json.loads(raw)
             decision = str(data.get("decision", "deny")).lower().strip()
-            reason   = str(data.get("reason", "No reason provided."))
-            allowed  = decision == "allow"
+            reason = str(data.get("reason", "No reason provided."))
+            allowed = decision == "allow"
             logger.info(
                 "[Safeguard/Auto] %s → %s | %s",
-                category.value, "ALLOW" if allowed else "DENY", reason,
+                category.value,
+                "ALLOW" if allowed else "DENY",
+                reason,
             )
             return allowed, reason
         except Exception as exc:
             fallback_allow = profile.fail_open
             logger.warning(
                 "[Safeguard/Auto] Decision call failed: %s — fail-%s.",
-                exc, "open (allow)" if fallback_allow else "safe (deny)",
+                exc,
+                "open (allow)" if fallback_allow else "safe (deny)",
             )
             reason = (
                 f"Auto-decision LLM unavailable ({type(exc).__name__}) — "
@@ -1228,15 +1620,37 @@ class SafeguardMiddleware:
 
     # ── Policy builder ─────────────────────────────────────────────────────────
 
-    def _build_policy(self, profile: "SafeguardProfile") -> str:
-        """Build the LLM system prompt, optionally with injection detection section."""
-        if not profile.detect_prompt_injection:
-            return self._base_policy
-        marker = "Classify the user input now. Respond ONLY with the JSON object."
-        return self._base_policy.replace(
-            marker,
-            _INJECTION_SYSTEM_PROMPT_SECTION + marker,
-        )
+    _POLICY_MARKER = "Classify the user input now. Respond ONLY with the JSON object."
+
+    def _build_policy(
+        self,
+        profile: "SafeguardProfile",
+        agent_policy: str = "",
+    ) -> str:
+        """
+        Build the LLM system prompt.
+
+        Sections are injected before the final marker in this order:
+          1. Agent-specific classifier policy (if provided)
+          2. Prompt injection detection section (if profile enables it)
+        """
+        policy = self._base_policy
+
+        sections = []
+        if agent_policy.strip():
+            sections.append(
+                f"\n## AGENT-SPECIFIC SAFETY POLICY\n\n{agent_policy.strip()}\n"
+            )
+        if profile.detect_prompt_injection:
+            sections.append(_INJECTION_SYSTEM_PROMPT_SECTION)
+
+        if sections:
+            injection = "\n".join(sections)
+            policy = policy.replace(
+                self._POLICY_MARKER,
+                injection + self._POLICY_MARKER,
+            )
+        return policy
 
     # ── Response parser ────────────────────────────────────────────────────────
 
@@ -1258,10 +1672,10 @@ class SafeguardMiddleware:
             cleaned = m.group(0) if m else cleaned
 
         try:
-            data         = json.loads(cleaned)
-            violation    = int(data.get("violation", 1))
+            data = json.loads(cleaned)
+            violation = int(data.get("violation", 1))
             category_raw = str(data.get("category", "UNKNOWN")).upper()
-            rationale    = str(data.get("rationale", "No rationale provided."))
+            rationale = str(data.get("rationale", "No rationale provided."))
 
             try:
                 category = ActionCategory(category_raw)
@@ -1301,16 +1715,39 @@ class SafeguardMiddleware:
 SAFEGUARD_PENDING_KEY = "ninko:safeguard_pending:{session_id}"
 
 # Words accepted as confirmation in bot channels (single-word or short replies only)
-_CONFIRMATION_WORDS: frozenset[str] = frozenset({
-    # German
-    "ja", "jo", "jep", "jup", "jawohl", "klar", "natürlich",
-    "bestätige", "bestätigen", "bestätigt",
-    "weiter", "ausführen", "durchführen",
-    "ok", "okay",
-    # English
-    "yes", "yep", "yup", "y", "sure", "absolutely",
-    "confirm", "confirmed", "proceed", "continue", "run", "go",
-})
+_CONFIRMATION_WORDS: frozenset[str] = frozenset(
+    {
+        # German
+        "ja",
+        "jo",
+        "jep",
+        "jup",
+        "jawohl",
+        "klar",
+        "natürlich",
+        "bestätige",
+        "bestätigen",
+        "bestätigt",
+        "weiter",
+        "ausführen",
+        "durchführen",
+        "ok",
+        "okay",
+        # English
+        "yes",
+        "yep",
+        "yup",
+        "y",
+        "sure",
+        "absolutely",
+        "confirm",
+        "confirmed",
+        "proceed",
+        "continue",
+        "run",
+        "go",
+    }
+)
 
 
 def is_bot_confirmation(text: str) -> bool:

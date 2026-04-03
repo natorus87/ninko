@@ -1,5 +1,5 @@
 """
-IONOS DNS Modul – Manifest mit Metadaten und Health-Check.
+IONOS DNS Module — Manifest with metadata and health check.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ logger = logging.getLogger("ninko.modules.ionos")
 
 
 async def check_ionos_health() -> dict:
-    """Health-Check für IONOS-Verbindung."""
+    """Health check for IONOS connection."""
     try:
         from .tools import _ionos_request
 
@@ -33,8 +33,8 @@ async def check_ionos_health() -> dict:
 module_manifest = ModuleManifest(
     name="ionos",
     display_name="IONOS DNS",
-    description="IONOS DNS Zonen und Records Management.",
-    version="1.0.0",
+    description="IONOS DNS zones and records management.",
+    version="1.1.0",
     author="Ninko",
     enabled_by_default=True,
     env_prefix="IONOS_",

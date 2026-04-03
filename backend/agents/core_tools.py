@@ -12,6 +12,27 @@ from langchain_core.tools import tool
 # Strong references to background tasks to prevent premature GC
 _background_tasks: set[asyncio.Task] = set()
 
+# Exportliste für externe Importe
+__all__ = [
+    "execute_cli_command",
+    "create_custom_agent",
+    "update_custom_agent",
+    "create_dag_workflow",
+    "create_linear_workflow",
+    "execute_workflow",
+    "call_module_agent",
+    "run_pipeline",
+    "install_skill",
+    "remember_fact",
+    "recall_memory",
+    "forget_fact",
+    "confirm_forget",
+    "speak",
+    "configure_routing",
+    "get_routing_info",
+    "wait",
+]
+
 
 def _t(de: str, en: str) -> str:
     """Gibt DE oder EN zurück abhängig von der LANGUAGE-Einstellung."""
@@ -995,3 +1016,52 @@ async def get_routing_info() -> str:
         f"  Tier 1 (ReAct-Loop): {'✓' if cfg.tier1_enabled else '✗'}\n"
         f"  Zuletzt genutztes Tier: {last_tier}"
     )
+
+
+@tool
+async def wait(seconds: int, reason: str = "") -> str:
+    """
+    Wartet für eine bestimmte Anzahl von Sekunden, bevor mit der nächsten Aktion fortgefahren wird.
+    Nutze dieses Tool, wenn eine Aufgabe etwas Zeit benötigt oder du bewusst eine Pause einlegen möchtest.
+    
+    WICHTIG: Dieses Tool blockiert den aktuellen Agenten-Thread für die angegebene Zeit.
+    Verwende es nur für kurze Wartezeiten (< 30 Sekunden) oder wenn du sicher bist,
+    dass der User auf das Ergebnis wartet.
+    
+    Args:
+        seconds: Anzahl der Sekunden zum Warten (1-60)
+        reason: Optionaler Grund für die Wartezeit (wird im Log protokolliert)
+    
+    Beispiele:
+    - "Warte 5 Sekunden, bis die Datenbank synchronisiert ist"
+    - "Warte 10 Sekunden, bevor du die nächste Abfrage startest"
+    """
+    if seconds < 1 or seconds > 60:
+        return _t(
+            f"Fehler: Ungültige Wartezeit. Erlaubt sind 1-60 Sekunden (angefordert: {seconds}).",
+            f"Error: Invalid wait time. Allowed range is 1-60 seconds (requested: {seconds}).",
+        )
+    
+    if reason:
+        logger.info("Warte %d Sekunden auf Grund: %s", seconds, reason)
+    else:
+        logger.info("Warte %d Sekunden (kein Grund angegeben)", seconds)
+    
+    try:
+        await asyncio.sleep(seconds)
+        return _t(
+            f"⏳ Gewartet für {seconds} Sekunden. Fortsetzung...",
+            f"⏳ Waited for {seconds} seconds. Continuing...",
+        )
+    except asyncio.CancelledError:
+        logger.warning("Warte-Operation wurde abgebrochen")
+        return _t(
+            "⚠️ Warte-Operation wurde abgebrochen.",
+            "⚠️ Wait operation was cancelled.",
+        )
+    except Exception as exc:
+        logger.error("Fehler während der Wartezeit: %s", exc)
+        return _t(
+            f"Fehler während der Wartezeit: {exc}",
+            f"Error during wait: {exc}",
+        )

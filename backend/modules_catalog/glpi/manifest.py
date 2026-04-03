@@ -1,5 +1,5 @@
 """
-GLPI Modul – Manifest mit Metadaten und Health-Check.
+GLPI module — manifest with metadata and health check.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ logger = logging.getLogger("ninko.modules.glpi")
 
 
 async def check_glpi_health() -> dict:
-    """Health-Check für GLPI-API-Verbindung."""
+    """Health check for GLPI API connection."""
     try:
         import httpx
         from core.vault import get_vault
@@ -21,13 +21,13 @@ async def check_glpi_health() -> dict:
         vault = get_vault()
         base_url = os.environ.get("GLPI_BASE_URL", "")
         if not base_url:
-            return {"status": "error", "detail": "GLPI_BASE_URL nicht konfiguriert"}
+            return {"status": "error", "detail": "GLPI_BASE_URL not configured"}
 
         app_token = await vault.get_secret("GLPI_APP_TOKEN")
         user_token = await vault.get_secret("GLPI_USER_TOKEN")
 
         if not app_token or not user_token:
-            return {"status": "error", "detail": "GLPI Tokens nicht im Vault"}
+            return {"status": "error", "detail": "GLPI tokens not in vault"}
 
         async with httpx.AsyncClient(verify=False, timeout=10.0) as client:
             resp = await client.get(
@@ -39,7 +39,7 @@ async def check_glpi_health() -> dict:
             )
             if resp.status_code == 200:
                 session = resp.json().get("session_token", "")
-                # Session sofort beenden
+                # Kill session immediately
                 await client.get(
                     f"{base_url}/apirest.php/killSession",
                     headers={
@@ -47,19 +47,19 @@ async def check_glpi_health() -> dict:
                         "Session-Token": session,
                     },
                 )
-                return {"status": "ok", "detail": "GLPI API erreichbar"}
+                return {"status": "ok", "detail": "GLPI API reachable"}
             else:
                 return {"status": "error", "detail": f"HTTP {resp.status_code}: {resp.text[:100]}"}
 
     except Exception as e:
-        return {"status": "error", "detail": f"GLPI nicht erreichbar: {e}"}
+        return {"status": "error", "detail": f"GLPI unreachable: {e}"}
 
 
 module_manifest = ModuleManifest(
     name="glpi",
     display_name="GLPI Helpdesk",
     description="GLPI Helpdesk Integration – Tickets, Incidents, SLA-Tracking",
-    version="1.0.0",
+    version="1.1.0",
     author="Ninko Team",
     enabled_by_default=True,
     env_prefix="GLPI_",

@@ -37,6 +37,7 @@ def _get_language() -> str:
     """Gibt den konfigurierten Sprach-Code zurück (gecacht, Fallback: 'de')."""
     try:
         from core.config import get_settings
+
         return get_settings().LANGUAGE
     except Exception:
         return "de"
@@ -49,58 +50,79 @@ def _t(de: str, en: str) -> str:
 
 # ── Tool-Name → Status-Label (DE / EN) ──────────────────────────────────────
 _TOOL_LABELS: dict[str, tuple[str, str]] = {
-    "execute_code":             ("Führe Code aus",                "Executing code"),
-    "get_available_languages":  ("Prüfe verfügbare Sprachen",     "Checking available languages"),
-    "get_cluster_status":       ("Lade Cluster-Status",           "Loading cluster status"),
-    "get_all_pods":             ("Lade Pods",                     "Loading pods"),
-    "get_failing_pods":         ("Prüfe fehlerhafte Pods",        "Checking failing pods"),
-    "list_namespaces":          ("Lade Namespaces",               "Loading namespaces"),
-    "list_services":            ("Lade Services",                 "Loading services"),
-    "restart_pod":              ("Starte Pod neu",                "Restarting pod"),
-    "rollout_restart":          ("Führe Rollout-Restart durch",   "Performing rollout restart"),
-    "scale_deployment":         ("Skaliere Deployment",           "Scaling deployment"),
-    "get_recent_events":        ("Lade Cluster-Events",           "Loading cluster events"),
-    "get_pihole_summary":       ("Lade Pi-hole Statistiken",      "Loading Pi-hole statistics"),
-    "get_query_log":            ("Lade DNS-Query-Log",            "Loading DNS query log"),
-    "toggle_blocking":          ("Konfiguriere Blocking",         "Configuring blocking"),
-    "add_domain_to_list":       ("Aktualisiere Domain-Liste",     "Updating domain list"),
-    "remove_domain_from_list":  ("Aktualisiere Domain-Liste",     "Updating domain list"),
-    "update_gravity":           ("Aktualisiere Gravity",          "Updating gravity"),
-    "flush_dns_cache":          ("Leere DNS-Cache",               "Flushing DNS cache"),
-    "perform_web_search":       ("Durchsuche das Web",            "Searching the web"),
-    "web_search":               ("Durchsuche das Web",            "Searching the web"),
-    "execute_cli_command":      ("Führe CLI-Befehl aus",          "Executing CLI command"),
-    "call_module_agent":        ("Rufe Modul-Agent auf",          "Calling module agent"),
-    "run_pipeline":             ("Führe Pipeline aus",            "Running pipeline"),
-    "create_linear_workflow":   ("Erstelle Workflow",             "Creating workflow"),
-    "execute_workflow":         ("Führe Workflow aus",             "Executing workflow"),
-    "remember_fact":            ("Speichere im Gedächtnis",       "Saving to memory"),
-    "recall_memory":            ("Durchsuche Gedächtnis",         "Searching memory"),
-    "forget_fact":              ("Suche zu löschende Fakten",     "Searching facts to forget"),
-    "confirm_forget":           ("Lösche Fakten",                 "Deleting facts"),
-    "create_custom_agent":      ("Erstelle Agenten",              "Creating agent"),
-    "install_skill":            ("Installiere Skill",             "Installing skill"),
-    "get_fritzbox_status":      ("Lade FritzBox-Status",          "Loading FritzBox status"),
-    "get_connected_devices":    ("Lade verbundene Geräte",        "Loading connected devices"),
-    "get_call_list":            ("Lade Anrufliste",               "Loading call list"),
-    "get_ha_entities":          ("Lade Home Assistant Entitäten",  "Loading Home Assistant entities"),
-    "call_ha_service":          ("Steuere Gerät",                 "Controlling device"),
-    "get_dns_zones":            ("Lade DNS-Zonen",                "Loading DNS zones"),
-    "get_zone_records":         ("Lade DNS-Einträge",             "Loading DNS records"),
-    "create_dns_record":        ("Erstelle DNS-Eintrag",          "Creating DNS record"),
-    "send_email":               ("Sende E-Mail",                  "Sending email"),
-    "fetch_emails":             ("Lade E-Mails",                  "Fetching emails"),
-    "send_telegram_message":    ("Sende Telegram-Nachricht",      "Sending Telegram message"),
-    "generate_image":           ("Generiere Bild",                "Generating image"),
-    "checkmk_get_hosts":        ("Lade Hosts",                   "Loading hosts"),
-    "checkmk_get_services":    ("Lade Services",                "Loading services"),
-    "checkmk_get_host_status": ("Prüfe Host-Status",            "Checking host status"),
-    "checkmk_get_service_status": ("Prüfe Service-Status",       "Checking service status"),
-    "checkmk_get_alerts":       ("Lade Alarme",                 "Loading alerts"),
-    "checkmk_get_host_details": ("Lade Host-Details",           "Loading host details"),
-    "checkmk_get_service_details": ("Lade Service-Details",     "Loading service details"),
-    "checkmk_search_hosts":     ("Suche Hosts",                  "Searching hosts"),
-    "checkmk_search_services": ("Suche Services",               "Searching services"),
+    "execute_code": ("Führe Code aus", "Executing code"),
+    "get_available_languages": (
+        "Prüfe verfügbare Sprachen",
+        "Checking available languages",
+    ),
+    "get_cluster_status": ("Lade Cluster-Status", "Loading cluster status"),
+    "get_all_pods": ("Lade Pods", "Loading pods"),
+    "get_failing_pods": ("Prüfe fehlerhafte Pods", "Checking failing pods"),
+    "list_namespaces": ("Lade Namespaces", "Loading namespaces"),
+    "list_services": ("Lade Services", "Loading services"),
+    "restart_pod": ("Starte Pod neu", "Restarting pod"),
+    "rollout_restart": ("Führe Rollout-Restart durch", "Performing rollout restart"),
+    "scale_deployment": ("Skaliere Deployment", "Scaling deployment"),
+    "get_recent_events": ("Lade Cluster-Events", "Loading cluster events"),
+    "get_pihole_summary": ("Lade Pi-hole Statistiken", "Loading Pi-hole statistics"),
+    "get_query_log": ("Lade DNS-Query-Log", "Loading DNS query log"),
+    "toggle_blocking": ("Konfiguriere Blocking", "Configuring blocking"),
+    "add_domain_to_list": ("Aktualisiere Domain-Liste", "Updating domain list"),
+    "remove_domain_from_list": ("Aktualisiere Domain-Liste", "Updating domain list"),
+    "update_gravity": ("Aktualisiere Gravity", "Updating gravity"),
+    "flush_dns_cache": ("Leere DNS-Cache", "Flushing DNS cache"),
+    "perform_web_search": ("Durchsuche das Web", "Searching the web"),
+    "web_search": ("Durchsuche das Web", "Searching the web"),
+    "execute_cli_command": ("Führe CLI-Befehl aus", "Executing CLI command"),
+    "call_module_agent": ("Rufe Modul-Agent auf", "Calling module agent"),
+    "run_pipeline": ("Führe Pipeline aus", "Running pipeline"),
+    "create_linear_workflow": ("Erstelle Workflow", "Creating workflow"),
+    "execute_workflow": ("Führe Workflow aus", "Executing workflow"),
+    "remember_fact": ("Speichere im Gedächtnis", "Saving to memory"),
+    "recall_memory": ("Durchsuche Gedächtnis", "Searching memory"),
+    "forget_fact": ("Suche zu löschende Fakten", "Searching facts to forget"),
+    "confirm_forget": ("Lösche Fakten", "Deleting facts"),
+    "create_custom_agent": ("Erstelle Agenten", "Creating agent"),
+    "install_skill": ("Installiere Skill", "Installing skill"),
+    "get_fritzbox_status": ("Lade FritzBox-Status", "Loading FritzBox status"),
+    "get_connected_devices": ("Lade verbundene Geräte", "Loading connected devices"),
+    "get_call_list": ("Lade Anrufliste", "Loading call list"),
+    "get_ha_entities": (
+        "Lade Home Assistant Entitäten",
+        "Loading Home Assistant entities",
+    ),
+    "call_ha_service": ("Steuere Gerät", "Controlling device"),
+    "get_dns_zones": ("Lade DNS-Zonen", "Loading DNS zones"),
+    "get_zone_records": ("Lade DNS-Einträge", "Loading DNS records"),
+    "create_dns_record": ("Erstelle DNS-Eintrag", "Creating DNS record"),
+    "send_email": ("Sende E-Mail", "Sending email"),
+    "fetch_emails": ("Lade E-Mails", "Fetching emails"),
+    "send_telegram_message": ("Sende Telegram-Nachricht", "Sending Telegram message"),
+    "generate_image": ("Generiere Bild", "Generating image"),
+    "checkmk_get_hosts": ("Lade Hosts", "Loading hosts"),
+    "checkmk_get_services": ("Lade Services", "Loading services"),
+    "checkmk_get_host_status": ("Prüfe Host-Status", "Checking host status"),
+    "checkmk_get_service_status": ("Prüfe Service-Status", "Checking service status"),
+    "checkmk_get_alerts": ("Lade Alarme", "Loading alerts"),
+    "checkmk_get_host_details": ("Lade Host-Details", "Loading host details"),
+    "checkmk_get_service_details": ("Lade Service-Details", "Loading service details"),
+    "checkmk_search_hosts": ("Suche Hosts", "Searching hosts"),
+    "checkmk_search_services": ("Suche Services", "Searching services"),
+    # Synology
+    "get_synology_system_info": ("Lade System-Info", "Loading system info"),
+    "get_synology_storage": ("Lade Storage", "Loading storage"),
+    "get_synology_packages": ("Lade Pakete", "Loading packages"),
+    "get_synology_services": ("Lade Services", "Loading services"),
+    "get_synology_tasks": ("Lade Tasks", "Loading tasks"),
+    "restart_synology_service": ("Starte Service neu", "Restarting service"),
+    "check_synology_updates": ("Prüfe Updates", "Checking updates"),
+    "install_synology_update": ("Installiere Update", "Installing update"),
+    "install_synology_package": ("Installiere Paket", "Installing package"),
+    "uninstall_synology_package": ("Deinstalliere Paket", "Uninstalling package"),
+    "get_synology_network_info": ("Lade Netzwerk-Info", "Loading network info"),
+    "get_synology_users": ("Lade Benutzer", "Loading users"),
+    "shutdown_synologyNAS": ("Fahre NAS herunter", "Shutting down NAS"),
+    "reboot_synologyNAS": ("Boote NAS neu", "Rebooting NAS"),
 }
 
 
@@ -122,6 +144,7 @@ class _StatusEmitter(AsyncCallbackHandler):
     async def on_llm_start(self, serialized: dict, messages: list, **kwargs) -> None:  # type: ignore[override]
         await status_bus.emit(self.session_id, _t("Denke nach…", "Thinking…"))
 
+
 # Ab dieser Tool-Anzahl wird JIT Tool Injection aktiviert
 _JIT_THRESHOLD = 6
 # Max. Tools nach JIT-Filterung (Kontext-Sparsamkeit)
@@ -130,13 +153,21 @@ _JIT_MAX_TOOLS = 8
 # Strong references to background tasks to prevent premature GC
 _background_tasks: set[asyncio.Task] = set()
 
-# Auto-Memorize Cooldown: agent_name → letzter Zeitstempel (monotonic)
-_memorize_cooldowns: dict[str, float] = {}
+# Auto-Memorize Cooldown: (agent_name, session_id) → letzter Zeitstempel (monotonic)
+_memorize_cooldowns: dict[tuple[str, str], float] = {}
 _MEMORIZE_COOLDOWN_SECS = 60.0  # Max 1 Auto-Memorize pro Minute pro Agent
 # Agenten die kein Auto-Memorize brauchen (Background-Loops)
 _MEMORIZE_EXCLUDED_AGENTS = {"monitor", "scheduler"}
 _MEMORIZE_STOP_WORDS = {
-    "NICHTS", "NOTHING", "RIEN", "NADA", "NULLA", "NIETS", "NIC", "何もない", "没有"
+    "NICHTS",
+    "NOTHING",
+    "RIEN",
+    "NADA",
+    "NULLA",
+    "NIETS",
+    "NIC",
+    "何もない",
+    "没有",
 }
 
 # ── Tool-level Safeguard (global, gesetzt von main.py via set_global_safeguard) ──
@@ -146,6 +177,8 @@ _TOOL_SAFEGUARD_SENTINEL = "__TOOL_SAFEGUARD__"
 # Paused safeguard agents: session_id → (sg_agent, thread_config)
 # Hält den unterbrochenen LangGraph-Agenten für den Resume-Aufruf am Leben.
 _paused_sg_agents: dict[str, tuple] = {}
+# Session-spezifische Locks verhindern parallele Safeguard-Runs/Resumes
+_safeguard_session_locks: dict[str, asyncio.Lock] = {}
 
 _global_safeguard: "SafeguardMiddleware | None" = None
 
@@ -155,6 +188,24 @@ def set_global_safeguard(sg: "SafeguardMiddleware") -> None:
     global _global_safeguard
     _global_safeguard = sg
     logger.info("Globale Safeguard-Instanz registriert.")
+
+
+def _get_safeguard_session_lock(session_id: str) -> asyncio.Lock:
+    """Gibt den Lock für eine Session zurück (lazy init)."""
+    if session_id not in _safeguard_session_locks:
+        _safeguard_session_locks[session_id] = asyncio.Lock()
+    return _safeguard_session_locks[session_id]
+
+
+def _get_agent_timeout_seconds() -> int:
+    """Lädt den Agent-Timeout aus der Config mit robustem Fallback."""
+    try:
+        from core.config import get_settings
+
+        timeout = int(get_settings().AGENT_TIMEOUT_SECONDS)
+        return timeout if timeout > 0 else 1800
+    except Exception:
+        return 1800
 
 
 # Sprachanweisungen für Language-Injection am Ende jedes System-Prompts
@@ -272,7 +323,9 @@ class BaseAgent:
         selected = [t for _, t in top[:_JIT_MAX_TOOLS]]
         logger.debug(
             "JIT Tool Injection: Agent '%s' %d → %d Tools.",
-            self.name, len(self.tools), len(selected),
+            self.name,
+            len(self.tools),
+            len(selected),
         )
         return selected
 
@@ -280,9 +333,10 @@ class BaseAgent:
         """Erzeugt dynamischen Kontext (z.B. Connections), der an den System-Prompt gehängt wird."""
         if self.name in ("orchestrator", "monitor", "scheduler"):
             return ""
-            
+
         try:
             from core.connections import ConnectionManager
+
             conns = await ConnectionManager.list_connections(self.name)
             if not conns:
                 return ""
@@ -336,7 +390,9 @@ class BaseAgent:
             self._llm = get_llm()
             self._agent = create_react_agent(model=self._llm, tools=self.tools)
             self._llm_generation = current_gen
-            logger.info("Agent '%s': LLM nach Provider-Wechsel neu initialisiert.", self.name)
+            logger.info(
+                "Agent '%s': LLM nach Provider-Wechsel neu initialisiert.", self.name
+            )
 
         # Context-Window einmalig kalibrieren (gecacht nach erstem Aufruf)
         model_window = await get_model_context_window()
@@ -345,10 +401,13 @@ class BaseAgent:
         # Context-Budget prüfen: Komprimierung oder Trimming
         did_compact = False
         if self._context_mgr.should_reset(history):
-            await status_bus.emit(session_id, _t("Kontext wird komprimiert…", "Compacting context…"))
-            trimmed_history, did_compact = await self._context_mgr.compact_messages_async(
-                history, self._llm
+            await status_bus.emit(
+                session_id, _t("Kontext wird komprimiert…", "Compacting context…")
             )
+            (
+                trimmed_history,
+                did_compact,
+            ) = await self._context_mgr.compact_messages_async(history, self._llm)
         else:
             # Einzelne sehr lange Nachrichten vorher stutzen (opencode Pruning)
             history = self._context_mgr.trim_large_messages(history)
@@ -366,6 +425,7 @@ class BaseAgent:
         # Soul-Injection: Identität an den Anfang des System-Prompts setzen
         try:
             from core.soul_manager import get_soul_manager
+
             soul = get_soul_manager().get_soul(self.name)
             if soul:
                 final_system_prompt = soul + "\n\n---\n\n" + final_system_prompt
@@ -376,6 +436,7 @@ class BaseAgent:
         # Sprachanweisung injizieren
         try:
             from core.config import get_settings as _gs
+
             lang = _gs().LANGUAGE
             lang_instruction = _LANG_INSTRUCTIONS.get(lang)
             if lang_instruction:
@@ -388,11 +449,28 @@ class BaseAgent:
             from datetime import datetime
             import zoneinfo
             from core.config import get_settings as _gs2
+
             tz_name = _gs2().TIMEZONE
             tz = zoneinfo.ZoneInfo(tz_name)
             now = datetime.now(tz)
-            weekdays_de = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
-            weekdays_en = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+            weekdays_de = [
+                "Montag",
+                "Dienstag",
+                "Mittwoch",
+                "Donnerstag",
+                "Freitag",
+                "Samstag",
+                "Sonntag",
+            ]
+            weekdays_en = [
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday",
+                "Saturday",
+                "Sunday",
+            ]
             lang = _gs().LANGUAGE if "lang" in dir() else "de"
             if lang == "de":
                 dt_str = (
@@ -421,23 +499,29 @@ class BaseAgent:
         try:
             memory_hits = await self._memory.search(query=message, top_k=3)
             relevant_hits = [
-                hit for hit in memory_hits
+                hit
+                for hit in memory_hits
                 if hit.get("distance") is None or hit["distance"] < 0.5
             ]
             if relevant_hits:
                 rag_context = "\n\n".join(
                     f"[Memory] {hit['content']}" for hit in relevant_hits
                 )
-                final_system_prompt += "\n\n" + _t(
-                    "Relevanter Kontext aus dem Memory:\n",
-                    "Relevant context from memory:\n",
-                ) + rag_context
+                final_system_prompt += (
+                    "\n\n"
+                    + _t(
+                        "Relevanter Kontext aus dem Memory:\n",
+                        "Relevant context from memory:\n",
+                    )
+                    + rag_context
+                )
         except Exception as exc:
             logger.debug("Memory-Suche fehlgeschlagen: %s", exc)
 
         # Skills-Injection in den System-Prompt integrieren
         try:
             from core.skills_manager import get_skills_manager
+
             sm = get_skills_manager()
             matching_skills = sm.find_matching_skills(message, self.name)
             if matching_skills:
@@ -445,7 +529,9 @@ class BaseAgent:
                 final_system_prompt += f"\n\n{skill_text}"
                 logger.debug(
                     "Agent '%s': %d Skill(s) injiziert: %s",
-                    self.name, len(matching_skills), [s.name for s in matching_skills],
+                    self.name,
+                    len(matching_skills),
+                    [s.name for s in matching_skills],
                 )
         except Exception as exc:
             logger.debug("Skills-Injection fehlgeschlagen (ignoriert): %s", exc)
@@ -477,7 +563,7 @@ class BaseAgent:
             jit_agent = self._agent
 
         # Agent ausführen – kein Schrittzähler (wie Roo Code), stattdessen Timeout
-        AGENT_TIMEOUT = 1800  # 30 Minuten max pro Anfrage
+        AGENT_TIMEOUT = _get_agent_timeout_seconds()
         run_config: dict = {"recursion_limit": 10000}
         if session_id:
             run_config["callbacks"] = [_StatusEmitter(session_id)]
@@ -493,9 +579,19 @@ class BaseAgent:
             )
 
             if use_safeguard:
-                raw_result = await self._run_with_safeguard(
-                    messages, active_tools, run_config, session_id
-                )
+                # Wenn bereits ein pausierter Tool-Call in dieser Session wartet, nicht überschreiben.
+                if session_id in _paused_sg_agents:
+                    return _t(
+                        "Für diese Session gibt es bereits eine ausstehende Tool-Bestätigung. "
+                        "Bestätige zuerst den offenen Schritt (confirmed=true).",
+                        "There is already a pending tool confirmation for this session. "
+                        "Confirm the open step first (confirmed=true).",
+                    ), did_compact
+
+                async with _get_safeguard_session_lock(session_id):
+                    raw_result = await self._run_with_safeguard(
+                        messages, active_tools, run_config, session_id
+                    )
                 # Sentinel-String → Tool-Call braucht Bestätigung
                 if isinstance(raw_result, str):
                     return raw_result, did_compact
@@ -512,8 +608,7 @@ class BaseAgent:
             # Letzte AI-Nachricht extrahieren
             all_messages = result.get("messages", [])
             ai_messages = [
-                m for m in all_messages
-                if isinstance(m, AIMessage) and m.content
+                m for m in all_messages if isinstance(m, AIMessage) and m.content
             ]
 
             if ai_messages:
@@ -530,8 +625,7 @@ class BaseAgent:
                 # Fallback: letztes Tool-Ergebnis verwenden wenn kein AI-Text vorhanden
                 # (passiert wenn LLM nach Tool-Aufruf keinen Text generiert oder nur <think>)
                 tool_messages = [
-                    m for m in all_messages
-                    if isinstance(m, ToolMessage) and m.content
+                    m for m in all_messages if isinstance(m, ToolMessage) and m.content
                 ]
                 if tool_messages:
                     response = _extract_text(tool_messages[-1].content)
@@ -552,13 +646,14 @@ class BaseAgent:
             # Triviale Antworten (< 80 Zeichen) überspringen – kein Mehrwert
             # Background-Agenten (monitor, scheduler) ausschließen + Cooldown pro Agent
             _now = asyncio.get_running_loop().time()
-            _last = _memorize_cooldowns.get(self.name, 0.0)
+            _cooldown_key = (self.name, session_id or "__no_session__")
+            _last = _memorize_cooldowns.get(_cooldown_key, 0.0)
             if (
                 len(response) >= 80
                 and self.name not in _MEMORIZE_EXCLUDED_AGENTS
                 and (_now - _last) >= _MEMORIZE_COOLDOWN_SECS
             ):
-                _memorize_cooldowns[self.name] = _now
+                _memorize_cooldowns[_cooldown_key] = _now
                 _task = asyncio.create_task(self._auto_memorize(message, response))
                 _background_tasks.add(_task)
                 _task.add_done_callback(_background_tasks.discard)
@@ -584,19 +679,26 @@ class BaseAgent:
                     "Please check LM Studio and reload the model.",
                 )
             else:
-                user_msg = _t(
-                    f"Fehler: {exc_str}",
-                    f"Error: {exc_str}",
+                logger.warning(
+                    "Agent '%s' Fehler wird gegenüber User sanitisiert. raw_error=%s",
+                    self.name,
+                    exc_str[:300],
                 )
-            logger.error(
-                "Agent '%s' Fehler: %s", self.name, exc, exc_info=True
-            )
+                user_msg = _t(
+                    "Fehler: Bei der Verarbeitung ist ein interner Fehler aufgetreten. "
+                    "Bitte versuche es erneut oder präzisiere die Anfrage.",
+                    "Error: An internal processing error occurred. "
+                    "Please retry or make the request more specific.",
+                )
+            logger.error("Agent '%s' Fehler: %s", self.name, exc, exc_info=True)
             return user_msg, False
 
     def _extract_result_response(self, result: dict) -> str:
         """Extrahiert den Antwort-Text aus einem LangGraph-Ergebnis-Dict."""
         all_messages = result.get("messages", [])
-        ai_messages = [m for m in all_messages if isinstance(m, AIMessage) and m.content]
+        ai_messages = [
+            m for m in all_messages if isinstance(m, AIMessage) and m.content
+        ]
 
         if ai_messages:
             raw = _extract_text(ai_messages[-1].content)
@@ -604,7 +706,9 @@ class BaseAgent:
             if response:
                 return response
             # Thinking-only: Fallback auf ToolMessages
-        tool_messages = [m for m in all_messages if isinstance(m, ToolMessage) and m.content]
+        tool_messages = [
+            m for m in all_messages if isinstance(m, ToolMessage) and m.content
+        ]
         if tool_messages:
             return _extract_text(tool_messages[-1].content)
         return _t("Keine Antwort generiert.", "No response generated.")
@@ -623,7 +727,7 @@ class BaseAgent:
         LangGraph-Ergebnis-Dict zurück wenn die Ausführung abgeschlossen ist,
         oder einen Sentinel-String wenn ein Tool-Call Bestätigung benötigt.
         """
-        AGENT_TIMEOUT = 1800
+        AGENT_TIMEOUT = _get_agent_timeout_seconds()
 
         while True:
             result = await asyncio.wait_for(
@@ -641,7 +745,8 @@ class BaseAgent:
             # Paused — pending Tool-Calls aus dem State lesen
             all_msgs = state.values.get("messages", [])
             ai_with_tools = [
-                m for m in all_msgs
+                m
+                for m in all_msgs
                 if isinstance(m, AIMessage) and getattr(m, "tool_calls", None)
             ]
             if not ai_with_tools:
@@ -655,8 +760,19 @@ class BaseAgent:
             for tool_call in last_ai.tool_calls:
                 tool_name = tool_call["name"]
                 tool_args = tool_call.get("args", {})
+                if _global_safeguard is None or not _global_safeguard.enabled:
+                    logger.warning(
+                        "[Safeguard] Instanz während Lauf verloren/deaktiviert "
+                        "(Agent: %s, Session: %s) – setze Ausführung ohne erneuten Check fort.",
+                        self.name,
+                        session_id,
+                    )
+                    dangerous_call = None
+                    break
+
                 sg_result = await _global_safeguard.check_tool_call(
-                    tool_name, tool_args,
+                    tool_name,
+                    tool_args,
                     agent_id=self.name,
                     session_id=session_id,
                 )
@@ -673,30 +789,34 @@ class BaseAgent:
             # Pausiert: Zustand im Modul-Dict speichern + in Redis vermerken
             _paused_sg_agents[session_id] = (sg_agent, thread_config)
             from core.redis_client import get_redis
+
             redis = get_redis()
             await redis.connection.setex(
                 f"ninko:safeguard_tool_pending:{session_id}",
                 300,
-                _json.dumps({
-                    "tool_name": tool_name,
-                    "tool_args": tool_args,
-                    "agent": self.name,
-                    "category": sg_result.category.value,
-                    "rationale": sg_result.rationale,
-                }),
+                _json.dumps(
+                    {
+                        "tool_name": tool_name,
+                        "tool_args": tool_args,
+                        "agent": self.name,
+                        "category": sg_result.category.value,
+                        "rationale": sg_result.rationale,
+                    }
+                ),
             )
 
             logger.info(
                 "[Safeguard] Tool-Call '%s' pausiert (Agent: '%s', Session: '%s').",
-                tool_name, self.name, session_id,
+                tool_name,
+                self.name,
+                session_id,
             )
-            return (
-                f"{_TOOL_SAFEGUARD_SENTINEL}"
-                + _json.dumps({
+            return f"{_TOOL_SAFEGUARD_SENTINEL}" + _json.dumps(
+                {
                     "tool_name": tool_name,
                     "category": sg_result.category.value,
                     "rationale": sg_result.rationale,
-                })
+                }
             )
 
     async def _run_with_safeguard(
@@ -720,7 +840,9 @@ class BaseAgent:
             interrupt_before=["tools"],
         )
         thread_config = {**run_config, "configurable": {"thread_id": session_id}}
-        return await self._sg_loop(sg_agent, thread_config, {"messages": messages}, session_id)
+        return await self._sg_loop(
+            sg_agent, thread_config, {"messages": messages}, session_id
+        )
 
     async def resume_safeguard_tool(self, session_id: str) -> tuple[str, bool]:
         """
@@ -737,25 +859,56 @@ class BaseAgent:
                 "Error: No pending tool call for this session.",
             ), False
 
-        sg_agent, thread_config = _paused_sg_agents.pop(session_id)
+        async with _get_safeguard_session_lock(session_id):
+            # Nicht poppen bevor Resume erfolgreich ist — sonst State-Verlust bei Fehlern.
+            paused = _paused_sg_agents.get(session_id)
+            if paused is None:
+                return _t(
+                    "Fehler: Kein ausstehender Tool-Aufruf für diese Session.",
+                    "Error: No pending tool call for this session.",
+                ), False
+            sg_agent, thread_config = paused
+            try:
+                result = await self._sg_loop(sg_agent, thread_config, None, session_id)
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "Agent '%s' Timeout beim Resume (Session: %s).",
+                    self.name,
+                    session_id,
+                )
+                return _t(
+                    "Die Ausführung hat zu lange gedauert und wurde abgebrochen.",
+                    "Execution timed out and was aborted.",
+                ), False
+            except Exception as exc:
+                logger.error(
+                    "Agent '%s' Fehler beim Resume: %s", self.name, exc, exc_info=True
+                )
+                return _t(
+                    "Fehler: Resume fehlgeschlagen. Bitte erneut bestätigen oder Anfrage wiederholen.",
+                    "Error: Resume failed. Please confirm again or retry the request.",
+                ), False
 
-        try:
-            result = await self._sg_loop(sg_agent, thread_config, None, session_id)
-        except asyncio.TimeoutError:
-            logger.warning("Agent '%s' Timeout beim Resume (Session: %s).", self.name, session_id)
-            return _t(
-                "Die Ausführung hat zu lange gedauert und wurde abgebrochen.",
-                "Execution timed out and was aborted.",
-            ), False
-        except Exception as exc:
-            logger.error("Agent '%s' Fehler beim Resume: %s", self.name, exc, exc_info=True)
-            return _t(f"Fehler: {exc}", f"Error: {exc}"), False
+            # Weiterer Sentinel? (nächster gefährlicher Tool-Call)
+            if isinstance(result, str):
+                return result, False
 
-        # Weiterer Sentinel? (nächster gefährlicher Tool-Call)
-        if isinstance(result, str):
-            return result, False
+            # Erfolg: pausierten Zustand + Pending-Key aufräumen
+            _paused_sg_agents.pop(session_id, None)
+            try:
+                from core.redis_client import get_redis
 
-        return self._extract_result_response(result), False
+                redis = get_redis()
+                await redis.connection.delete(
+                    f"ninko:safeguard_tool_pending:{session_id}"
+                )
+            except Exception as exc:
+                logger.debug(
+                    "[Safeguard] Pending-Key Cleanup fehlgeschlagen (Session: %s): %s",
+                    session_id,
+                    exc,
+                )
+            return self._extract_result_response(result), False
 
     async def store_incident(
         self,
@@ -791,13 +944,19 @@ class BaseAgent:
                 f"User: {user_msg}\nAssistant: {ai_response[:800]}",
             )
             result = await self._llm.ainvoke([HumanMessage(content=prompt)])
-            fact = result.content.strip() if hasattr(result, "content") else str(result).strip()
+            fact = (
+                result.content.strip()
+                if hasattr(result, "content")
+                else str(result).strip()
+            )
             if fact and fact.strip("*_ \n").upper() not in _MEMORIZE_STOP_WORDS:
                 await self._memory.store(
                     content=fact,
                     category="agent_memory",
                     metadata={"agent": self.name, "source": "auto"},
                 )
-                logger.debug("Auto-Memory gespeichert für Agent '%s': %s…", self.name, fact[:80])
+                logger.debug(
+                    "Auto-Memory gespeichert für Agent '%s': %s…", self.name, fact[:80]
+                )
         except Exception as exc:
             logger.debug("Auto-Memorize fehlgeschlagen (ignoriert): %s", exc)

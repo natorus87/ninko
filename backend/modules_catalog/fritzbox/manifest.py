@@ -17,7 +17,7 @@ async def check_fritzbox_health(connection_id: str = "") -> dict:
              conn_data = await ConnectionManager.get_default_connection("fritzbox")
         
         if not conn_data:
-             return {"status": "error", "detail": "Keine FritzBox-Verbindung konfiguriert."}
+             return {"status": "error", "detail": "No FritzBox connection configured."}
             
         host = conn_data.config.get("host", conn_data.config.get("FRITZBOX_HOST", "192.168.178.1"))
         user = conn_data.config.get("user", conn_data.config.get("FRITZBOX_USER", ""))
@@ -33,17 +33,17 @@ async def check_fritzbox_health(connection_id: str = "") -> dict:
             return fc.call_action("DeviceInfo1", "GetInfo")
             
         await asyncio.to_thread(_check)
-        return {"status": "ok", "detail": f"Verbunden mit FritzBox {host}"}
+        return {"status": "ok", "detail": f"Connected to FritzBox {host}"}
         
     except Exception as e:
-        logger.error("FritzBox Healthcheck fehlgeschlagen: %s", e)
+        logger.error("FritzBox health check failed: %s", e)
         return {"status": "error", "detail": str(e)}
 
 module_manifest = ModuleManifest(
     name="fritzbox",
     display_name="FritzBox",
     description="Integration und Steuerung von AVM FritzBox Routern via TR-064 und AHA",
-    version="1.0.0",
+    version="1.1.0",
     author="Ninko",
     enabled_by_default=False,
     env_prefix="FRITZBOX_",

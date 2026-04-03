@@ -1,6 +1,6 @@
 """
-IONOS DNS Modul – Tools für den AI-Agenten.
-Nutzt die IONOS Cloud DNS API v1.
+IONOS DNS Module — Tools for the AI Agent.
+Uses the IONOS Cloud DNS API v1.
 """
 
 from __future__ import annotations
@@ -12,13 +12,15 @@ from typing import Optional
 import httpx
 from langchain_core.tools import tool
 
+from agents.base_agent import _t
+
 logger = logging.getLogger("ninko.modules.ionos.tools")
 
 IONOS_DNS_API_BASE = "https://api.hosting.ionos.com/dns/v1"
 
 
 async def _get_ionos_config(connection_id: str = "") -> dict:
-    """IONOS Verbindungsdaten aus ConnectionManager, Vault oder Env-Var laden."""
+    """Load IONOS connection data from ConnectionManager, Vault, or env var."""
     from core.connections import ConnectionManager
     from core.vault import get_vault
 
@@ -26,7 +28,12 @@ async def _get_ionos_config(connection_id: str = "") -> dict:
     if connection_id:
         conn = await ConnectionManager.get_connection("ionos", connection_id)
         if not conn:
-            raise ValueError(f"IONOS Verbindung mit ID '{connection_id}' nicht gefunden.")
+            raise ValueError(
+                _t(
+                    de=f"IONOS Verbindung mit ID '{connection_id}' nicht gefunden.",
+                    en=f"IONOS connection with ID '{connection_id}' not found.",
+                )
+            )
     else:
         conn = await ConnectionManager.get_default_connection("ionos")
 
@@ -35,15 +42,17 @@ async def _get_ionos_config(connection_id: str = "") -> dict:
         api_key = ""
         if "api_key" in conn.vault_keys:
             api_key = await vault.get_secret(conn.vault_keys["api_key"]) or ""
-            api_key = api_key.replace("—", "-").strip()
+            api_key = api_key.replace("\u2014", "-").strip()
         return {"api_key": api_key}
 
-    # Fallback: Env-Var (für k8s / docker-compose Konfiguration ohne UI)
-    api_key = os.getenv("IONOS_API_KEY", "").replace("—", "-").strip()
+    # Fallback: env var (for k8s / docker-compose without UI)
+    api_key = os.getenv("IONOS_API_KEY", "").replace("\u2014", "-").strip()
     if not api_key:
         raise ValueError(
-            "Keine IONOS-Verbindung konfiguriert. "
-            "Bitte eine Verbindung in den Einstellungen anlegen oder IONOS_API_KEY setzen."
+            _t(
+                de="Keine IONOS-Verbindung konfiguriert. Bitte eine Verbindung in den Einstellungen anlegen oder IONOS_API_KEY setzen.",
+                en="No IONOS connection configured. Please create a connection in Settings or set IONOS_API_KEY.",
+            )
         )
     return {"api_key": api_key}
 
@@ -55,26 +64,27 @@ async def _ionos_request(
     params: dict | None = None,
     connection_id: str = "",
 ) -> dict | list | str:
-    """Authentifizierter Request an die IONOS DNS API."""
+    """Authenticated request to the IONOS DNS API."""
     config = await _get_ionos_config(connection_id)
     api_key = config["api_key"]
-    
+
     if not api_key:
         raise ValueError(
-            "IONOS API-Key nicht konfiguriert. "
-            "Bitte IONOS_API_KEY in den Modul-Einstellungen setzen."
+            _t(
+                de="IONOS API-Key nicht konfiguriert. Bitte IONOS_API_KEY in den Modul-Einstellungen setzen.",
+                en="IONOS API key not configured. Please set IONOS_API_KEY in the module settings.",
+            )
         )
 
-    # Clean path
     if path.startswith("/"):
         path = path[1:]
-        
+
     url = f"{IONOS_DNS_API_BASE}/{path}"
     headers = {
         "X-API-Key": api_key,
         "Accept": "application/json"
     }
-    
+
     if body:
         headers["Content-Type"] = "application/json"
 
@@ -83,11 +93,10 @@ async def _ionos_request(
             method, url, headers=headers, json=body, params=params
         )
         resp.raise_for_status()
-        
-        # Responses might be empty for DELETE
+
         if resp.status_code == 204 or not resp.text:
             return ""
-            
+
         return resp.json()
 
 
@@ -96,27 +105,25 @@ async def _ionos_request(
 @tool
 async def get_ionos_zones(connection_id: str = "") -> list[dict]:
     """
-    Ruft alle DNS-Zonen bei IONOS ab.
-    Nützlich, um die zone_id (UUID) für weitere Operationen zu finden.
+    Retrieve all DNS zones from IONOS.
+    Useful for finding the zone_id (UUID) for further operations.
     """
     response = await _ionos_request("GET", "zones", connection_id=connection_id)
     if isinstance(response, list):
         return response
-    
-    # Manchmal verpackt die API die Liste
     return response
 
 
 @tool
 async def get_ionos_records(zone_id: str, connection_id: str = "") -> list[dict]:
     """
-    Ruft alle DNS-Einträge (A, AAAA, CNAME, TXT, etc.) für eine bestimmte DNS-Zone ab.
-    
+    Retrieve all DNS records (A, AAAA, CNAME, TXT, etc.) for a specific DNS zone.
+
     Args:
-        zone_id: Die eindeutige UUID der IONOS DNS Zone (aus get_ionos_zones).
+        zone_id: The unique UUID of the IONOS DNS zone (from get_ionos_zones).
     """
-    # Die IONOS Hosting API gibt Records als Teil von GET /zones/{id} zurück.
-    # Der separate Endpoint /zones/{id}/records ist nicht für alle Keys zugänglich.
+    # The IONOS Hosting API returns records as part of GET /zones/{id}.
+    # The separate /zones/{id}/records endpoint is not accessible for all keys.
     response = await _ionos_request("GET", f"zones/{zone_id}", connection_id=connection_id)
     if isinstance(response, dict):
         return response.get("records", [])
@@ -134,15 +141,15 @@ async def add_ionos_record(
     connection_id: str = ""
 ) -> str:
     """
-    Erstellt einen neuen DNS-Eintrag in einer IONOS Zone.
-    
+    Create a new DNS record in an IONOS zone.
+
     Args:
-        zone_id: Die UUID der Zone.
-        name: Der Hostname (z.B. 'www' oder 'api'). Verwende den vollständigen FQDN, oder einfach '@' falls es APEX ist.
-        record_type: Der Record-Typ (A, AAAA, CNAME, TXT, MX, etc.).
-        content: Das Ziel (IP-Adresse, Domain für CNAME, Text für TXT).
-        ttl: Die Time-To-Live in Sekunden (Standard: 3600).
-        prio: Die Priorität (nur für MX-Einträge relevant).
+        zone_id: The UUID of the zone.
+        name: The hostname (e.g. 'www' or 'api'). Use the full FQDN or '@' for apex.
+        record_type: Record type (A, AAAA, CNAME, TXT, MX, etc.).
+        content: The target (IP address, domain for CNAME, text for TXT).
+        ttl: Time-to-live in seconds (default: 3600).
+        prio: Priority (only relevant for MX records).
     """
     record = {
         "name": name,
@@ -151,13 +158,15 @@ async def add_ionos_record(
         "ttl": ttl
     }
 
-    # Prio nur bei MX hinzufügen
     if record_type.upper() == "MX":
         record["prio"] = prio
 
-    # IONOS API erwartet ein Array von Records
     await _ionos_request("POST", f"zones/{zone_id}/records", body=[record], connection_id=connection_id)
-    return f"DNS-Eintrag ({record_type}) für '{name}' -> '{content}' erfolgreich erstellt."
+    logger.info("Created DNS record (%s) for '%s' -> '%s'", record_type, name, content)
+    return _t(
+        de=f"DNS-Eintrag ({record_type}) für '{name}' -> '{content}' erfolgreich erstellt.",
+        en=f"DNS record ({record_type}) for '{name}' -> '{content}' created successfully.",
+    )
 
 
 @tool
@@ -172,16 +181,16 @@ async def update_ionos_record(
     connection_id: str = ""
 ) -> str:
     """
-    Aktualisiert einen bestehenden IONOS DNS-Eintrag.
-    
+    Update an existing IONOS DNS record.
+
     Args:
-        zone_id: Die UUID der Zone.
-        record_id: Die eindeutige UUID des anzupassenden DNS-Eintrags.
-        name: Der neue (oder alte) Hostname.
-        record_type: Der Record-Typ (A, CNAME, etc.).
-        content: Das neue Ziel.
-        ttl: Die Time-To-Live in Sekunden.
-        prio: Die Priorität (für MX).
+        zone_id: The UUID of the zone.
+        record_id: The unique UUID of the DNS record to update.
+        name: The new (or old) hostname.
+        record_type: Record type (A, CNAME, etc.).
+        content: The new target.
+        ttl: Time-to-live in seconds.
+        prio: Priority (for MX).
     """
     payload = {
         "name": name,
@@ -189,22 +198,30 @@ async def update_ionos_record(
         "content": content,
         "ttl": ttl
     }
-    
+
     if record_type.upper() == "MX":
         payload["prio"] = prio
-        
+
     await _ionos_request("PUT", f"zones/{zone_id}/records/{record_id}", body=payload, connection_id=connection_id)
-    return f"DNS-Eintrag {record_id} aktualisiert: {name} ({record_type}) -> {content}."
+    logger.info("Updated DNS record %s: %s (%s) -> %s", record_id, name, record_type, content)
+    return _t(
+        de=f"DNS-Eintrag {record_id} aktualisiert: {name} ({record_type}) -> {content}.",
+        en=f"DNS record {record_id} updated: {name} ({record_type}) -> {content}.",
+    )
 
 
 @tool
 async def delete_ionos_record(zone_id: str, record_id: str, connection_id: str = "") -> str:
     """
-    Löscht einen DNS-Eintrag bei IONOS endgültig.
-    
+    Delete a DNS record from IONOS permanently.
+
     Args:
-        zone_id: Die UUID der Zone.
-        record_id: Die eindeutige UUID des zu löschenden DNS-Eintrags.
+        zone_id: The UUID of the zone.
+        record_id: The unique UUID of the DNS record to delete.
     """
     await _ionos_request("DELETE", f"zones/{zone_id}/records/{record_id}", connection_id=connection_id)
-    return f"DNS-Eintrag {record_id} aus der Zone {zone_id} erfolgreich gelöscht."
+    logger.info("Deleted DNS record %s from zone %s", record_id, zone_id)
+    return _t(
+        de=f"DNS-Eintrag {record_id} aus der Zone {zone_id} erfolgreich gelöscht.",
+        en=f"DNS record {record_id} deleted from zone {zone_id} successfully.",
+    )

@@ -38,6 +38,7 @@ from api.routes_image_gen import router as image_gen_router
 from api.routes_skills import router as skills_router
 from api.routes_safeguard import router as safeguard_router
 from api.routes_safeguard_profiles import router as safeguard_profiles_router
+from api.routes_safeguard_audit import router as safeguard_audit_router
 
 # Logging konfigurieren
 settings = get_settings()
@@ -227,6 +228,19 @@ async def lifespan(app: FastAPI):
     scheduler_task = asyncio.create_task(scheduler.start_loop())
     app.state.scheduler = scheduler
 
+    # ── Safeguard paused-agent cleanup (Background) ───
+    safeguard = app.state.safeguard
+    if safeguard:
+        async def _sg_cleanup_loop():
+            while True:
+                await asyncio.sleep(60)
+                try:
+                    await safeguard.cleanup_paused_agents()
+                except Exception:
+                    pass
+        sg_cleanup_task = asyncio.create_task(_sg_cleanup_loop())
+        logger.info("Safeguard paused-agent cleanup task started.")
+
     # ── Telegram Polling Bot (optional – catalog module) ──
     telegram_bot = None
     try:
@@ -285,6 +299,8 @@ async def lifespan(app: FastAPI):
     monitor_task.cancel()
     await scheduler.stop()
     scheduler_task.cancel()
+    if safeguard:
+        sg_cleanup_task.cancel()
 
     from core.redis_client import get_redis
     redis = get_redis()
@@ -338,6 +354,7 @@ app.include_router(image_gen_router)
 app.include_router(skills_router)
 app.include_router(safeguard_router)
 app.include_router(safeguard_profiles_router)
+app.include_router(safeguard_audit_router)
 
 # ── Health Endpoint ──────────────────────────────────
 # NOTE: Must be registered BEFORE the catch-all static mount

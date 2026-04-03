@@ -1,5 +1,5 @@
 """
-Qdrant Modul – Manifest mit Metadaten und Health-Check.
+Qdrant Module — Manifest with metadata and health check.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ logger = logging.getLogger("ninko.modules.qdrant")
 
 
 async def check_qdrant_health() -> dict:
-    """Health-Check für Qdrant-Verbindung."""
+    """Health check for Qdrant connection."""
     from core.connections import ConnectionManager
 
     try:
@@ -26,18 +26,18 @@ async def check_qdrant_health() -> dict:
             url = os.getenv("QDRANT_URL", "http://localhost:6333").rstrip("/")
 
         if not url:
-            return {"status": "error", "detail": "Keine Qdrant-URL konfiguriert"}
+            return {"status": "error", "detail": "No Qdrant URL configured"}
 
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get(f"{url}/healthz")
             if response.status_code == 200:
-                return {"status": "ok", "detail": f"Qdrant erreichbar ({url})"}
+                return {"status": "ok", "detail": f"Qdrant reachable ({url})"}
             return {
                 "status": "error",
-                "detail": f"Qdrant antwortet mit HTTP {response.status_code}",
+                "detail": f"Qdrant responded with HTTP {response.status_code}",
             }
     except Exception as e:
-        return {"status": "error", "detail": f"Qdrant nicht erreichbar: {e}"}
+        return {"status": "error", "detail": f"Qdrant not reachable: {e}"}
 
 
 module_manifest = ModuleManifest(
@@ -48,7 +48,7 @@ module_manifest = ModuleManifest(
         "Speichert und durchsucht Fachwissen, IT-Dokumentation und Runbooks "
         "per semantischer Vektorsuche mit Payload-Filterung nach Kategorie und Tags."
     ),
-    version="1.0.0",
+    version="1.1.0",
     author="Ninko Team",
     enabled_by_default=False,
     env_prefix="NINKO_MODULE_QDRANT",

@@ -1,6 +1,4 @@
-"""
-Tasmota Modul – Manifest mit Metadaten und Health-Check.
-"""
+"""Tasmota module — manifest with metadata and health check."""
 
 from __future__ import annotations
 
@@ -13,7 +11,7 @@ logger = logging.getLogger("ninko.modules.tasmota")
 
 
 async def check_tasmota_health(connection_id: str = "") -> dict:
-    """Health-Check für Tasmota-Geräte via HTTP."""
+    """Health check for Tasmota devices via HTTP."""
     from core.connections import ConnectionManager
     import httpx
 
@@ -23,16 +21,16 @@ async def check_tasmota_health(connection_id: str = "") -> dict:
             conn_data = await ConnectionManager.get_default_connection("tasmota")
 
         if not conn_data:
-            return {"status": "error", "detail": "Keine Tasmota-Verbindung konfiguriert."}
+            return {"status": "error", "detail": "No Tasmota connection configured."}
 
         host = conn_data.config.get("host", "")
         if not host:
-            return {"status": "error", "detail": "Keine Host-Adresse konfiguriert."}
+            return {"status": "error", "detail": "No host address configured."}
 
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(f"http://{host}/cm?cmnd=Status")
             if resp.status_code == 200:
-                return {"status": "ok", "detail": f"Tasmota unter {host} erreichbar"}
+                return {"status": "ok", "detail": f"Tasmota at {host} reachable"}
             return {"status": "error", "detail": f"HTTP {resp.status_code}"}
     except Exception as e:
         return {"status": "error", "detail": str(e)}
@@ -42,7 +40,7 @@ module_manifest = ModuleManifest(
     name="tasmota",
     display_name="Tasmota",
     description="Steuerung und Monitoring von Tasmota-Geräten (ESP8266/ESP32) via HTTP REST API.",
-    version="1.0.0",
+    version="1.1.0",
     author="Ninko",
     enabled_by_default=False,
     env_prefix="TASMOTA_",

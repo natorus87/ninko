@@ -2398,6 +2398,12 @@ const Ninko = {
             { key: 'url', label: 'Home Assistant URL', placeholder: 'http://homeassistant.local:8123' },
             { key: 'HOMEASSISTANT_API_TOKEN', label: 'Long-Lived Access Token', placeholder: '••••••', type: 'password', isSecret: true },
         ],
+        synology: [
+            { key: 'url', label: 'DSM URL', placeholder: 'https://192.168.1.100:5001' },
+            { key: 'username', label: 'Benutzername', placeholder: 'admin' },
+            { key: 'SYNOLOGY_PASSWORD', label: 'Passwort', placeholder: '••••••', type: 'password', isSecret: true },
+            { key: 'SYNOLOGY_API_KEY', label: 'API Key (optional)', placeholder: '••••••', type: 'password', isSecret: true },
+        ],
         teams: [
             { key: 'MICROSOFT_APP_ID', label: 'Microsoft App ID', placeholder: 'e.g. 1234abcd-1234-abcd-1234-abcd1234abcd' },
             { key: 'MICROSOFT_APP_PASSWORD', label: 'Microsoft App Password / Client Secret', placeholder: '••••••', type: 'password', isSecret: true },

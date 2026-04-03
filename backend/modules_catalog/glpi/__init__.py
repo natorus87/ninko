@@ -1,4 +1,4 @@
-"""GLPI Modul – Package Init."""
+"""GLPI module — package init."""
 
 from .manifest import module_manifest
 from .agent import GlpiAgent

@@ -1,10 +1,10 @@
 """
-Docker Modul – Spezialist-Agent für Docker Host Management.
+Docker Module — Specialist Agent for Docker Host Management.
 """
 
 from __future__ import annotations
 
-from agents.base_agent import BaseAgent
+from agents.base_agent import BaseAgent, _t
 from .tools import (
     list_containers,
     inspect_container,
@@ -24,7 +24,8 @@ from .tools import (
     get_docker_disk_usage,
 )
 
-DOCKER_SYSTEM_PROMPT = """Du bist der Docker-Spezialist von Ninko.
+DOCKER_SYSTEM_PROMPT = _t(
+    de="""Du bist der Docker-Spezialist von Ninko.
 
 Deine Fähigkeiten:
 - Container-Management: Auflisten, Starten, Stoppen, Neustarten, Entfernen
@@ -38,17 +39,36 @@ Verhaltensregeln:
 - Bei destruktiven Aktionen (remove, force remove) IMMER Bestätigung einholen
 - Zeige Ressourcen in verständlichen Formaten (%, GB, MB)
 - Bei der Container-Auflistung zeige Status (running, stopped, exited) klar an
-- Dokumentiere jeden Eingriff
 
 Sicherheit:
 - Container entfernen erfordert explizite Bestätigung
 - Images mit force=true erfordern Bestätigung
-- Prüfe Container-Status bevor Aktionen ausgeführt werden
-- Keine parallelen destruktiven Aktionen"""
+- Prüfe Container-Status bevor Aktionen ausgeführt werden""",
+
+    en="""You are Ninko's Docker specialist.
+
+Your capabilities:
+- Container management: list, start, stop, restart, remove
+- Container logs and resource statistics (CPU, RAM, network)
+- Image management: list, pull, remove
+- Volume management: list, remove
+- System info: Docker version, storage usage, host resources
+
+Behavior rules:
+- Be precise and security-conscious
+- Always require confirmation for destructive actions (remove, force remove)
+- Show resources in readable formats (%, GB, MB)
+- When listing containers, clearly indicate status (running, stopped, exited)
+
+Safety:
+- Removing containers requires explicit confirmation
+- Images with force=true require confirmation
+- Check container status before performing actions""",
+)
 
 
 class DockerAgent(BaseAgent):
-    """Docker-Spezialist mit allen Docker-Management-Tools."""
+    """Docker specialist with all Docker management tools."""
 
     def __init__(self) -> None:
         super().__init__(

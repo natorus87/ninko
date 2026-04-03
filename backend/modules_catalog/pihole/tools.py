@@ -1,7 +1,4 @@
-"""
-Pi-hole Modul – Tools für den AI-Agenten.
-Nutzt die Pi-hole v6 REST API mit Session-basierter Authentifizierung.
-"""
+"""Pi-hole module — tools for the AI agent. Uses Pi-hole v6 REST API with session-based auth."""
 
 from __future__ import annotations
 
@@ -11,16 +8,17 @@ from typing import Optional
 
 import httpx
 from langchain_core.tools import tool
+from agents.base_agent import _t
 
 logger = logging.getLogger("ninko.modules.pihole.tools")
 
 # ── Session Cache ──────────────────────────────────
 _session_cache: dict[str, dict] = {}  # url -> {"sid": str, "expires": float}
-SESSION_TTL = 300  # 5 Minuten
+SESSION_TTL = 300  # 5 minutes
 
 
 async def _get_pihole_config(connection_id: str = "") -> dict:
-    """Pi-hole Verbindungsdaten aus ConnectionManager, Env oder Vault laden."""
+    """Load Pi-hole connection data from ConnectionManager, env, or Vault."""
     from core.connections import ConnectionManager
     from core.vault import get_vault
     import os
@@ -30,7 +28,7 @@ async def _get_pihole_config(connection_id: str = "") -> dict:
     if connection_id:
         conn = await ConnectionManager.get_default_connection("pihole") if connection_id == "default" else await ConnectionManager.get_connection("pihole", connection_id)
         if not conn:
-            raise ValueError(f"Pi-hole Verbindung mit ID '{connection_id}' nicht gefunden.")
+            raise ValueError(f"Pi-hole connection with ID '{connection_id}' not found.")
             
         url = conn.config.get("url", "").rstrip("/")
         password = ""
@@ -39,7 +37,7 @@ async def _get_pihole_config(connection_id: str = "") -> dict:
             
         return {"url": url, "password": password}
 
-    # Versuch über ConnectionManager ohne ID (Default)
+    # Try via ConnectionManager without ID (default)
     conn = await ConnectionManager.get_default_connection("pihole")
     if conn and conn.config.get("url"):
         url = conn.config.get("url", "").rstrip("/")
@@ -48,10 +46,10 @@ async def _get_pihole_config(connection_id: str = "") -> dict:
             password = await vault.get_secret(conn.vault_keys["password"]) or ""
         return {"url": url, "password": password}
 
-    # FALLBACK: Legacy Env Vars (aus routes_settings)
+    # FALLBACK: legacy env vars (from routes_settings)
     fallback_url = os.environ.get("PIHOLE_URL", "").rstrip("/")
     
-    # Wenn nicht in Env Vars, dann versuche es direkt aus den Legacy Settings im Redis zu laden
+    # If not in env vars, try loading directly from legacy settings in Redis
     if not fallback_url:
         try:
             from core.redis_client import get_redis
@@ -69,14 +67,17 @@ async def _get_pihole_config(connection_id: str = "") -> dict:
         fallback_password = await vault.get_secret("PIHOLE_PASSWORD") or os.environ.get("PIHOLE_PASSWORD", "")
         return {"url": fallback_url, "password": fallback_password}
 
-    raise ValueError("Keine Standard-Pi-hole-Verbindung konfiguriert (Verbitte den Nutzer im Dashboard unter 'Einstellungen -> Verbindungen' eine Pi-hole Verbindung anzulegen).")
+    raise ValueError(_t(
+        "Keine Standard-Pi-hole-Verbindung konfiguriert (Verbitte den Nutzer im Dashboard unter 'Einstellungen -> Verbindungen' eine Pi-hole Verbindung anzulegen).",
+        "No default Pi-hole connection configured (ask the user to create a Pi-hole connection in the dashboard under 'Settings -> Connections').",
+    ))
 
 
 async def _authenticate(base_url: str, password: str) -> str:
     """
-    Pi-hole v6 Session-Auth: POST /api/auth → sid.
-    Cached den Token für SESSION_TTL Sekunden.
-    Behandelt 429 (api_seats_exceeded) durch Session-Cleanup.
+    Pi-hole v6 session auth: POST /api/auth → sid.
+    Caches the token for SESSION_TTL seconds.
+    Handles 429 (api_seats_exceeded) via session cleanup.
     """
     import asyncio
 
@@ -96,11 +97,11 @@ async def _authenticate(base_url: str, password: str) -> str:
                 body = resp.json() if resp.text else {}
                 hint = body.get("error", {}).get("key", "")
                 logger.warning(
-                    "Pi-hole Auth 429: %s (Versuch %d/3)",
+                    "Pi-hole auth 429: %s (attempt %d/3)",
                     hint, attempt + 1,
                 )
 
-                # api_seats_exceeded → alte Session löschen und nochmal
+                # api_seats_exceeded → delete old session and retry
                 if hint == "api_seats_exceeded" and cached:
                     try:
                         await client.delete(
@@ -116,23 +117,32 @@ async def _authenticate(base_url: str, password: str) -> str:
                 continue
 
             if resp.status_code == 401:
-                raise ValueError("Pi-hole Auth fehlgeschlagen: falsches Passwort")
+                raise ValueError(_t(
+                    "Pi-hole Auth fehlgeschlagen: falsches Passwort",
+                    "Pi-hole auth failed: wrong password",
+                ))
 
             resp.raise_for_status()
             data = resp.json()
 
             sid = data.get("session", {}).get("sid", "")
             if not sid:
-                raise ValueError("Pi-hole Auth fehlgeschlagen: kein SID erhalten")
+                raise ValueError(_t(
+                    "Pi-hole Auth fehlgeschlagen: kein SID erhalten",
+                    "Pi-hole auth failed: no SID received",
+                ))
 
             _session_cache[cache_key] = {
                 "sid": sid,
                 "expires": time.time() + SESSION_TTL,
             }
-            logger.info("Pi-hole Session erstellt für %s", base_url)
+            logger.info("Pi-hole session created for %s", base_url)
             return sid
 
-    raise ValueError("Pi-hole Auth fehlgeschlagen: zu viele Versuche (429)")
+    raise ValueError(_t(
+        "Pi-hole Auth fehlgeschlagen: zu viele Versuche (429)",
+        "Pi-hole auth failed: too many attempts (429)",
+    ))
 
 
 async def _pihole_request(
@@ -143,15 +153,15 @@ async def _pihole_request(
     connection_id: str = "",
 ) -> dict:
     """
-    Authentifizierter Request an die Pi-hole API.
-    Wiederholt Auth bei 401.
+    Authenticated request to the Pi-hole API.
+    Re-authenticates on 401.
     """
     config = await _get_pihole_config(connection_id)
     if not config["url"]:
-        raise ValueError(
-            "Pi-hole nicht konfiguriert. "
-            "Bitte URL und Passwort in den Modul-Einstellungen setzen."
-        )
+        raise ValueError(_t(
+            "Pi-hole nicht konfiguriert. Bitte URL und Passwort in den Modul-Einstellungen setzen.",
+            "Pi-hole not configured. Please set URL and password in the module settings.",
+        ))
 
     base_url = config["url"]
     sid = await _authenticate(base_url, config["password"])
@@ -164,7 +174,7 @@ async def _pihole_request(
             method, url, headers=headers, json=body, params=params
         )
 
-        # Token abgelaufen → re-auth
+        # Token expired → re-auth
         if resp.status_code == 401:
             _session_cache.pop(base_url, None)
             sid = await _authenticate(base_url, config["password"])
@@ -185,8 +195,7 @@ async def _pihole_request(
 @tool
 async def get_pihole_summary(connection_id: str = "") -> dict:
     """
-    Pi-hole Zusammenfassung: Blockierte Queries, Prozent blockiert,
-    Gesamtanfragen, Status (aktiv/deaktiviert), Clients.
+    Pi-hole summary: blocked queries, percent blocked, total queries, status (enabled/disabled), clients.
     """
     data = await _pihole_request("GET", "/stats/summary", connection_id=connection_id)
 
@@ -210,11 +219,11 @@ async def get_pihole_summary(connection_id: str = "") -> dict:
 @tool
 async def get_query_log(count: int = 100, connection_id: str = "") -> list[dict]:
     """
-    Letzte DNS-Anfragen aus dem Pi-hole Query-Log.
-    Zeigt Domain, Client, Status (blockiert/erlaubt/cached) und Anfragetyp.
+    Recent DNS queries from the Pi-hole query log.
+    Shows domain, client, status (blocked/allowed/cached) and query type.
 
     Args:
-        count: Anzahl der Einträge (Standard: 100, Max: 500)
+        count: Number of entries (default: 100, max: 500)
     """
     count = min(count, 500)
     data = await _pihole_request("GET", "/queries", params={"length": count}, connection_id=connection_id)
@@ -237,10 +246,10 @@ async def get_query_log(count: int = 100, connection_id: str = "") -> list[dict]
 @tool
 async def get_top_domains(count: int = 10, connection_id: str = "") -> dict:
     """
-    Top erlaubte und blockierte Domains.
+    Top permitted and blocked domains.
 
     Args:
-        count: Anzahl pro Kategorie (Standard: 10)
+        count: Number per category (default: 10)
     """
     data = await _pihole_request("GET", "/stats/top_domains", params={"count": count}, connection_id=connection_id)
 
@@ -263,10 +272,10 @@ async def get_top_domains(count: int = 10, connection_id: str = "") -> dict:
 @tool
 async def get_top_clients(count: int = 10, connection_id: str = "") -> dict:
     """
-    Die aktivsten DNS-Clients (nach Anzahl Anfragen).
+    Most active DNS clients (by query count).
 
     Args:
-        count: Anzahl (Standard: 10)
+        count: Number of clients (default: 10)
     """
     data = await _pihole_request("GET", "/stats/top_clients", params={"count": count}, connection_id=connection_id)
 
@@ -281,12 +290,12 @@ async def get_top_clients(count: int = 10, connection_id: str = "") -> dict:
 @tool
 async def toggle_blocking(enable: bool = True, duration: int = 0, connection_id: str = "") -> str:
     """
-    DNS-Blocking aktivieren oder deaktivieren.
-    Bei Deaktivierung kann eine Dauer in Sekunden angegeben werden (0 = dauerhaft).
+    Enable or disable DNS blocking.
+    When disabling, a duration in seconds can be specified (0 = permanent).
 
     Args:
-        enable: True = Blocking aktivieren, False = deaktivieren
-        duration: Dauer der Deaktivierung in Sekunden (0 = dauerhaft, nur bei enable=False)
+        enable: True = enable blocking, False = disable
+        duration: Duration of disable in seconds (0 = permanent, only when enable=False)
     """
     body = {"blocking": enable}
     if not enable and duration > 0:
@@ -295,17 +304,17 @@ async def toggle_blocking(enable: bool = True, duration: int = 0, connection_id:
     await _pihole_request("POST", "/dns/blocking", body=body, connection_id=connection_id)
 
     if enable:
-        return "DNS-Blocking aktiviert."
+        return _t("DNS-Blocking aktiviert.", "DNS blocking enabled.")
     elif duration > 0:
-        return f"DNS-Blocking für {duration} Sekunden deaktiviert."
+        return _t(f"DNS-Blocking für {duration} Sekunden deaktiviert.", f"DNS blocking disabled for {duration} seconds.")
     else:
-        return "DNS-Blocking dauerhaft deaktiviert."
+        return _t("DNS-Blocking dauerhaft deaktiviert.", "DNS blocking permanently disabled.")
 
 
 @tool
 async def get_blocklists(connection_id: str = "") -> list[dict]:
     """
-    Alle konfigurierten Blocklisten (Adlists) mit Status und Domainanzahl.
+    All configured blocklists (adlists) with status and domain count.
     """
     data = await _pihole_request("GET", "/lists", connection_id=connection_id)
 
@@ -330,28 +339,28 @@ async def add_domain_to_list(
     connection_id: str = "",
 ) -> str:
     """
-    Domain zur Whitelist oder Blacklist hinzufügen.
+    Add a domain to the whitelist or blacklist.
 
     Args:
-        domain: Domain-Name (z.B. 'example.com')
-        list_type: 'allow' (Whitelist) oder 'deny' (Blacklist)
-        kind: 'exact' oder 'regex'
-        comment: Optionaler Kommentar
+        domain: Domain name (e.g. 'example.com')
+        list_type: 'allow' (whitelist) or 'deny' (blacklist)
+        kind: 'exact' or 'regex'
+        comment: Optional comment
     """
     if list_type not in ("allow", "deny"):
-        return "Fehler: list_type muss 'allow' oder 'deny' sein."
+        return _t("Fehler: list_type muss 'allow' oder 'deny' sein.", "Error: list_type must be 'allow' or 'deny'.")
     if kind not in ("exact", "regex"):
-        return "Fehler: kind muss 'exact' oder 'regex' sein."
+        return _t("Fehler: kind muss 'exact' oder 'regex' sein.", "Error: kind must be 'exact' or 'regex'.")
 
     body = {
         "domain": domain,
-        "comment": comment or f"Hinzugefügt via Ninko",
+        "comment": comment or f"Added via Ninko",
     }
 
     await _pihole_request("POST", f"/domains/{list_type}/{kind}", body=body, connection_id=connection_id)
 
     label = "Whitelist" if list_type == "allow" else "Blacklist"
-    return f"Domain '{domain}' zur {label} ({kind}) hinzugefügt."
+    return _t(f"Domain '{domain}' zur {label} ({kind}) hinzugefügt.", f"Domain '{domain}' added to {label} ({kind}).")
 
 
 @tool
@@ -362,32 +371,32 @@ async def remove_domain_from_list(
     connection_id: str = "",
 ) -> str:
     """
-    Domain von der Whitelist oder Blacklist entfernen.
+    Remove a domain from the whitelist or blacklist.
 
     Args:
-        domain: Domain-Name
-        list_type: 'allow' oder 'deny'
-        kind: 'exact' oder 'regex'
+        domain: Domain name
+        list_type: 'allow' or 'deny'
+        kind: 'exact' or 'regex'
     """
     if list_type not in ("allow", "deny"):
-        return "Fehler: list_type muss 'allow' oder 'deny' sein."
+        return _t("Fehler: list_type muss 'allow' oder 'deny' sein.", "Error: list_type must be 'allow' or 'deny'.")
     if kind not in ("exact", "regex"):
-        return "Fehler: kind muss 'exact' oder 'regex' sein."
+        return _t("Fehler: kind muss 'exact' oder 'regex' sein.", "Error: kind must be 'exact' or 'regex'.")
 
-    # Pi-hole v6: DELETE mit domain im Body oder als Path
+    # Pi-hole v6: DELETE with domain in body or as path
     body = {"domain": domain}
     await _pihole_request("DELETE", f"/domains/{list_type}/{kind}", body=body, connection_id=connection_id)
 
     label = "Whitelist" if list_type == "allow" else "Blacklist"
-    return f"Domain '{domain}' von der {label} ({kind}) entfernt."
+    return _t(f"Domain '{domain}' von der {label} ({kind}) entfernt.", f"Domain '{domain}' removed from {label} ({kind}).")
 
 
 @tool
 async def get_pihole_system(connection_id: str = "") -> dict:
     """
-    Pi-hole System-Informationen: Version, Uptime, Gravity-Größe, Speicher.
+    Pi-hole system information: version, uptime, gravity size, memory.
     """
-    # Versionen
+    # Versions
     version_data = await _pihole_request("GET", "/info/version", connection_id=connection_id)
     # System
     try:
@@ -415,8 +424,8 @@ async def get_pihole_system(connection_id: str = "") -> dict:
 @tool
 async def get_custom_dns_records(connection_id: str = "") -> dict:
     """
-    Ruft alle Local DNS Einträge (Custom DNS Hosts) aus dem Pi-hole ab.
-    Gibt ein Dictionary mit {Domain: IP} zurück.
+    Retrieve all local DNS entries (custom DNS hosts) from Pi-hole.
+    Returns a dictionary with {Domain: IP}.
     """
     data = await _pihole_request("GET", "/config", connection_id=connection_id)
     hosts = []
@@ -424,7 +433,7 @@ async def get_custom_dns_records(connection_id: str = "") -> dict:
     if "config" in data and "dns" in data["config"] and "hosts" in data["config"]["dns"]:
         hosts = data["config"]["dns"]["hosts"]
     elif "dns" in data and "hosts" in data["dns"]:
-        # Fallback für andere API-Response-Strukturen
+        # Fallback for other API response structures
         hosts = data["dns"]["hosts"]
         
     records = {}
@@ -440,30 +449,30 @@ async def get_custom_dns_records(connection_id: str = "") -> dict:
 @tool
 async def add_custom_dns_record(domain: str, ip: str, connection_id: str = "") -> str:
     """
-    Fügt einen neuen Local DNS Eintrag (Custom DNS Host) hinzu.
-    
+    Add a new local DNS entry (custom DNS host).
+
     Args:
-        domain: Der Domain-Name (z.B. 'service.local')
-        ip: Die IP-Adresse, auf die die Domain zeigen soll (z.B. '192.168.1.100')
+        domain: Domain name (e.g. 'service.local')
+        ip: IP address the domain should resolve to (e.g. '192.168.1.100')
     """
     import urllib.parse
     
-    # URL encoded Pfad für PUT Request bei v6: /api/config/dns/hosts/{IP}%20{domain}
+    # URL-encoded path for PUT request in v6: /api/config/dns/hosts/{IP}%20{domain}
     encoded_entry = urllib.parse.quote(f"{ip} {domain}")
     
     await _pihole_request("PUT", f"/config/dns/hosts/{encoded_entry}", connection_id=connection_id)
     
-    return f"Local DNS Eintrag hinzugefügt: {domain} -> {ip}"
+    return _t(f"Local DNS Eintrag hinzugefügt: {domain} -> {ip}", f"Local DNS entry added: {domain} -> {ip}")
 
 
 @tool
 async def remove_custom_dns_record(domain: str, ip: str, connection_id: str = "") -> str:
     """
-    Löscht einen Local DNS Eintrag (Custom DNS Host) in Pi-hole.
+    Delete a local DNS entry (custom DNS host) in Pi-hole.
     
     Args:
-        domain: Der Domain-Name (z.B. 'service.local')
-        ip: Die zugewiesene IP-Adresse des Eintrags (muss exakt übereinstimmen)
+        domain: Domain name (e.g. 'service.local')
+        ip: Assigned IP address of the entry (must match exactly)
     """
     import urllib.parse
     
@@ -471,14 +480,14 @@ async def remove_custom_dns_record(domain: str, ip: str, connection_id: str = ""
     
     await _pihole_request("DELETE", f"/config/dns/hosts/{encoded_entry}", connection_id=connection_id)
     
-    return f"Local DNS Eintrag gelöscht: {domain} -> {ip}"
+    return _t(f"Local DNS Eintrag gelöscht: {domain} -> {ip}", f"Local DNS entry deleted: {domain} -> {ip}")
 
 
 @tool
 async def get_cname_records(connection_id: str = "") -> dict:
     """
-    Ruft alle Local CNAME Records aus dem Pi-hole ab.
-    Gibt ein Dictionary mit {Domain: Target} zurück.
+    Retrieve all local CNAME records from Pi-hole.
+    Returns a dictionary with {Domain: Target}.
     """
     data = await _pihole_request("GET", "/config", connection_id=connection_id)
     cnames = []
@@ -499,38 +508,38 @@ async def get_cname_records(connection_id: str = "") -> dict:
 @tool
 async def add_cname_record(domain: str, target: str, connection_id: str = "") -> str:
     """
-    Fügt einen neuen Local CNAME Record hinzu.
+    Add a new local CNAME record.
     
     Args:
-        domain: Der Domain-Name (z.B. 'alias.local')
-        target: Das Ziel, auf das der CNAME zeigen soll (z.B. 'server.local')
+        domain: Domain name (e.g. 'alias.local')
+        target: Target the CNAME should point to (e.g. 'server.local')
     """
     import urllib.parse
     encoded_entry = urllib.parse.quote(f"{domain},{target}")
     await _pihole_request("PUT", f"/config/dns/cnameRecords/{encoded_entry}", connection_id=connection_id)
-    return f"CNAME Record hinzugefügt: {domain} -> {target}"
+    return _t(f"CNAME Record hinzugefügt: {domain} -> {target}", f"CNAME record added: {domain} -> {target}")
 
 
 @tool
 async def remove_cname_record(domain: str, target: str, connection_id: str = "") -> str:
     """
-    Löscht einen Local CNAME Record in Pi-hole.
+    Delete a local CNAME record in Pi-hole.
     
     Args:
-        domain: Der Domain-Name (z.B. 'alias.local')
-        target: Das zugewiesene Ziel (muss exakt übereinstimmen)
+        domain: Domain name (e.g. 'alias.local')
+        target: Assigned target (must match exactly)
     """
     import urllib.parse
     encoded_entry = urllib.parse.quote(f"{domain},{target}")
     await _pihole_request("DELETE", f"/config/dns/cnameRecords/{encoded_entry}", connection_id=connection_id)
-    return f"CNAME Record gelöscht: {domain} -> {target}"
+    return _t(f"CNAME Record gelöscht: {domain} -> {target}", f"CNAME record deleted: {domain} -> {target}")
 
 
 @tool
 async def get_dhcp_leases(connection_id: str = "") -> list[dict]:
     """
-    Ruft alle aktiven DHCP Leases vom Pi-hole ab.
-    Gibt die vergebenen IP-Adressen, MAC-Adressen und Hostnamen zurück.
+    Retrieve all active DHCP leases from Pi-hole.
+    Returns assigned IP addresses, MAC addresses and hostnames.
     """
     data = await _pihole_request("GET", "/dhcp/leases", connection_id=connection_id)
     return data.get("leases", [])
@@ -539,57 +548,57 @@ async def get_dhcp_leases(connection_id: str = "") -> list[dict]:
 @tool
 async def delete_dhcp_lease(ip: str, connection_id: str = "") -> str:
     """
-    Löscht einen aktiven DHCP Lease anhand der IP-Adresse.
+    Delete an active DHCP lease by IP address.
     
     Args:
-        ip: Die IP-Adresse, deren Lease gelöscht werden soll (z.B. '192.168.1.50')
+        ip: IP address whose lease should be deleted (e.g. '192.168.1.50')
     """
     await _pihole_request("DELETE", f"/dhcp/leases/{ip}", connection_id=connection_id)
-    return f"DHCP Lease für IP {ip} wurde gelöscht."
+    return _t(f"DHCP Lease für IP {ip} wurde gelöscht.", f"DHCP lease for IP {ip} has been deleted.")
 
 
 @tool
 async def update_gravity(connection_id: str = "") -> str:
     """
-    Triggert ein manuelles Gravity-Update (Download und Aktualisierung der Blocklisten).
-    Dieser Prozess kann einen Moment dauern.
+    Trigger a manual gravity update (download and refresh blocklists).
+    This process may take a moment.
     """
     await _pihole_request("POST", "/action/gravity", connection_id=connection_id)
-    return "Gravity-Update wurde erfolgreich gestartet."
+    return _t("Gravity-Update wurde erfolgreich gestartet.", "Gravity update started successfully.")
 
 
 @tool
 async def flush_dns_cache(connection_id: str = "") -> str:
     """
-    Startet den DNS Service auf dem Pi-hole neu und leert dabei den DNS Cache.
+    Restart the DNS service on Pi-hole and flush the DNS cache.
     """
     await _pihole_request("POST", "/action/restartdns", connection_id=connection_id)
-    return "DNS Server neu gestartet und Cache geleert."
+    return _t("DNS Server neu gestartet und Cache geleert.", "DNS server restarted and cache cleared.")
 
 
 @tool
 async def flush_logs(connection_id: str = "") -> str:
     """
-    Löscht/leert alle Query Logs (FTL/DNS Logs) im Pi-hole.
+    Delete/flush all query logs (FTL/DNS logs) in Pi-hole.
     """
     await _pihole_request("POST", "/action/flush/logs", connection_id=connection_id)
-    return "Logs wurden erfolgreich gelöscht."
+    return _t("Logs wurden erfolgreich gelöscht.", "Logs deleted successfully.")
 
 
 @tool
 async def flush_network_table(connection_id: str = "") -> str:
     """
-    Leert die Netzwerktabelle (ARP-Cache/bekannte Geräte) im Pi-hole Datenbank.
+    Flush the network table (ARP cache / known devices) in the Pi-hole database.
     """
     await _pihole_request("POST", "/action/flush/network", connection_id=connection_id)
-    return "Netzwerktabelle wurde erfolgreich geleert."
+    return _t("Netzwerktabelle wurde erfolgreich geleert.", "Network table flushed successfully.")
 
 
 @tool
 async def get_system_messages(connection_id: str = "") -> list[dict]:
     """
-    Ruft alle aktiven System-Warnungen und Meldungen (z.B. DNSMASQ_WARN) aus Pi-hole ab.
-    Gibt Meldungs-ID, Typ und Nachricht zurück.
+    Retrieve all active system warnings and messages (e.g. DNSMASQ_WARN) from Pi-hole.
+    Returns message ID, type and message text.
     """
     data = await _pihole_request("GET", "/info/messages", connection_id=connection_id)
     return data.get("messages", [])
@@ -598,11 +607,11 @@ async def get_system_messages(connection_id: str = "") -> list[dict]:
 @tool
 async def dismiss_system_message(message_id: str, connection_id: str = "") -> str:
     """
-    Löscht/verwirft eine bestimmte System-Warnung im Pi-hole anhand der ID.
+    Delete/dismiss a specific system warning in Pi-hole by ID.
     
     Args:
-        message_id: Die ID der Meldung, die gelöscht werden soll.
+        message_id: ID of the message to delete.
     """
     await _pihole_request("DELETE", f"/info/messages/{message_id}", connection_id=connection_id)
-    return f"Systemmeldung mit ID {message_id} wurde gelöscht."
+    return _t(f"Systemmeldung mit ID {message_id} wurde gelöscht.", f"System message with ID {message_id} deleted.")
 

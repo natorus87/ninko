@@ -1,4 +1,4 @@
-"""WordPress Modul – Package Init."""
+"""WordPress Module — Package init."""
 
 from .manifest import module_manifest
 from .agent import WordPressAgent

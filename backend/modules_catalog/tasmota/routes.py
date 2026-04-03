@@ -1,6 +1,4 @@
-"""
-Tasmota Modul – FastAPI Router für Dashboard-API.
-"""
+"""Tasmota module — FastAPI router for dashboard API."""
 
 from __future__ import annotations
 
@@ -16,7 +14,7 @@ router = APIRouter()
 
 @router.get("/status")
 async def get_status(connection_id: str = "") -> dict:
-    """REST-Endpunkt für das UI-Frontend - allgemeiner Status."""
+    """REST endpoint for the UI frontend — general status."""
     try:
         result = await get_tasmota_status.ainvoke({"connection_id": connection_id})
         return {"status": "ok", "data": result}
@@ -26,7 +24,7 @@ async def get_status(connection_id: str = "") -> dict:
 
 @router.get("/sensors")
 async def get_sensors(connection_id: str = "") -> dict:
-    """REST-Endpunkt für Sensor-Daten."""
+    """REST endpoint for sensor data."""
     try:
         result = await get_tasmota_sensors.ainvoke({"connection_id": connection_id})
         return {"status": "ok", "data": result}
@@ -36,7 +34,7 @@ async def get_sensors(connection_id: str = "") -> dict:
 
 @router.get("/power")
 async def get_power(connection_id: str = "") -> dict:
-    """REST-Endpunkt für Power-Status."""
+    """REST endpoint for power status."""
     try:
         result = await get_tasmota_power.ainvoke({"connection_id": connection_id})
         return {"status": "ok", "data": result}

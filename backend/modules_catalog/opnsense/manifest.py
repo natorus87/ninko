@@ -1,6 +1,4 @@
-"""
-OPNsense Modul – Manifest mit Metadaten und Health-Check.
-"""
+"""OPNsense module — manifest with metadata and health check."""
 
 from __future__ import annotations
 
@@ -13,7 +11,7 @@ logger = logging.getLogger("ninko.modules.opnsense")
 
 
 async def check_opnsense_health(connection_id: str = "") -> dict:
-    """Health-Check für OPNsense via API."""
+    """Health check for OPNsense via API."""
     import httpx
     from .tools import _get_opnsense_auth
 
@@ -22,7 +20,7 @@ async def check_opnsense_health(connection_id: str = "") -> dict:
         async with httpx.AsyncClient(timeout=5.0, verify=False) as client:
             resp = await client.get(f"https://{host}/api/core/system/status", auth=auth)
             if resp.status_code == 200:
-                return {"status": "ok", "detail": f"OPNsense unter {host} erreichbar"}
+                return {"status": "ok", "detail": f"OPNsense at {host} reachable"}
             return {"status": "error", "detail": f"HTTP {resp.status_code}"}
     except ValueError as e:
         return {"status": "error", "detail": str(e)}
@@ -34,7 +32,7 @@ module_manifest = ModuleManifest(
     name="opnsense",
     display_name="OPNsense",
     description="Management und Monitoring einer OPNsense Firewall via REST API.",
-    version="1.0.0",
+    version="1.1.0",
     author="Ninko",
     enabled_by_default=False,
     env_prefix="OPNSENSE_",
@@ -50,6 +48,10 @@ module_manifest = ModuleManifest(
         "firewall blockieren", "firewall erlauben",
         "firewall logs", "firewall log",
         "nat regel", "nat rule",
+        "firewall regel erstellen", "firewall regel löschen",
+        "nat regel erstellen", "nat regel löschen",
+        "firewall regel anlegen", "firewall regel entfernen",
+        "nat regel anlegen", "nat regel entfernen",
     ],
 
     api_prefix="/api/opnsense",

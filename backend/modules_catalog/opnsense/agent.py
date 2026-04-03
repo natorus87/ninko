@@ -1,6 +1,4 @@
-"""
-OPNsense Modul – Spezialist-Agent.
-"""
+"""OPNsense module — specialist agent."""
 
 from __future__ import annotations
 
@@ -31,6 +29,8 @@ Deine Fähigkeiten:
 - Service-Management (Neustart von Diensten)
 - DHCP-Leases anzeigen
 - Firewall-Logs abrufen
+- Erstellen und Löschen von Firewall-Regeln (mit Bestätigung)
+- Erstellen und Löschen von NAT-Regeln (mit Bestätigung)
 
 Verhaltensregeln:
 - Frage immer zuerst nach der Host-Adresse, falls keine Verbindung konfiguriert ist
@@ -41,7 +41,8 @@ Verhaltensregeln:
 
 Sicherheit:
 - Führe keine gefährlichen Aktionen ohne Bestätigung aus
-- Erstelle oder lösche keine Regeln ohne explizite Bestätigung""",
+- Erstelle oder lösche keine Regeln ohne explizite Bestätigung
+- Erkläre immer die Auswirkungen von Regeländerungen""",
 
     en="""You are Ninko's OPNsense specialist.
 
@@ -52,6 +53,8 @@ Your capabilities:
 - Service management (restart services)
 - Display DHCP leases
 - Retrieve firewall logs
+- Create and delete firewall rules (with confirmation)
+- Create and delete NAT rules (with confirmation)
 
 Behavior rules:
 - Always ask for the host address if no connection is configured
@@ -62,12 +65,13 @@ Behavior rules:
 
 Safety:
 - Do not execute dangerous actions without confirmation
-- Do not create or delete rules without explicit confirmation""",
+- Do not create or delete rules without explicit confirmation
+- Always explain the impact of rule changes""",
 )
 
 
 class OPNsenseAgent(BaseAgent):
-    """OPNsense-Spezialist mit OPNsense-Tools."""
+    """OPNsense specialist with OPNsense tools."""
 
     def __init__(self) -> None:
         super().__init__(
@@ -81,6 +85,10 @@ class OPNsenseAgent(BaseAgent):
                 get_opnsense_nat_rules,
                 get_opnsense_services,
                 get_opnsense_dhcp_leases,
+                create_opnsense_firewall_rule,
+                delete_opnsense_firewall_rule,
+                create_opnsense_nat_rule,
+                delete_opnsense_nat_rule,
                 restart_opnsense_service,
                 get_opnsense_logs,
             ],

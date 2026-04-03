@@ -1,4 +1,4 @@
-"""OPNsense Modul – Package Init."""
+"""OPNsense module — package init."""
 
 from .manifest import module_manifest
 from .agent import OPNsenseAgent

@@ -1,8 +1,8 @@
 """
-Teams Bot Helper – OAuth Token Handling & Messaging.
+Teams Bot Helper — OAuth Token Handling & Messaging.
 
-Voice-Reply: Wenn eine eingehende Audio-Anlage erkannt wird und voice_reply in der
-Connection-Konfiguration aktiviert ist, antwortet der Bot mit einem MP3-Anhang.
+Voice-Reply: When an incoming audio attachment is detected and voice_reply is enabled
+in the connection config, the bot replies with an MP3 attachment.
 """
 
 from __future__ import annotations
@@ -14,17 +14,18 @@ import httpx
 
 from core.vault import get_vault
 from fastapi import FastAPI
+from agents.base_agent import _t
 
 from .formatter import format_for_teams
 
 logger = logging.getLogger("ninko.modules.teams.bot")
 
-# Redis-Key für die letzte bekannte Teams-Konversation (für proaktive Nachrichten)
+# Redis key for the last known Teams conversation (for proactive messages)
 _LAST_CONV_KEY = "ninko:teams:last_conversation"
 
 
 async def get_teams_credentials(connection_id: str = "") -> tuple[str | None, str | None]:
-    """Holt App ID und Password aus dem Vault."""
+    """Fetch App ID and Password from the vault."""
     from core.connections import ConnectionManager
 
     if connection_id:
@@ -48,7 +49,7 @@ async def get_teams_credentials(connection_id: str = "") -> tuple[str | None, st
 
 
 async def get_teams_access_token(connection_id: str = "") -> str | None:
-    """Holt einen OAuth2 Bearer Token vom Microsoft Bot Framework."""
+    """Fetch an OAuth2 Bearer token from the Microsoft Bot Framework."""
     app_id, app_password = await get_teams_credentials(connection_id)
 
     if not app_id or not app_password:
@@ -67,7 +68,7 @@ async def get_teams_access_token(connection_id: str = "") -> str | None:
         if resp.status_code == 200:
             return resp.json().get("access_token")
         else:
-            logger.error("Fehler bei Token-Beschaffung: %s %s", resp.status_code, resp.text)
+            logger.error("Error obtaining token: %s %s", resp.status_code, resp.text)
             return None
 
 
@@ -78,10 +79,10 @@ async def send_teams_message(
     text: str,
     apply_format: bool = True,
 ) -> bool:
-    """Sendet eine Antwortnachricht via Microsoft Bot Framework."""
+    """Send a reply message via Microsoft Bot Framework."""
     token = await get_teams_access_token()
     if not token:
-        logger.error("Kann keine Teams-Nachricht senden: Kein Access Token.")
+        logger.error("Cannot send Teams message: No access token.")
         return False
 
     url = f"{service_url.rstrip('/')}/v3/conversations/{conversation_id}/activities"
@@ -93,7 +94,7 @@ async def send_teams_message(
         "Content-Type": "application/json",
     }
 
-    # Markdown formatieren (Tabellen → ASCII)
+    # Format Markdown (tables → ASCII)
     formatted_text = format_for_teams(text) if apply_format else text
 
     payload: dict[str, Any] = {
@@ -110,7 +111,7 @@ async def send_teams_message(
             return True
         else:
             logger.error(
-                "Fehler beim Senden der Teams-Nachricht: HTTP %s %s",
+                "Error sending Teams message: HTTP %s %s",
                 resp.status_code,
                 resp.text,
             )
@@ -125,19 +126,19 @@ async def send_teams_voice_reply(
     caption: str = "",
 ) -> bool:
     """
-    Sendet eine MP3-Audiodatei als Attachment in einer Teams-Nachricht.
-    Nutzt inline Base64-Daten (kein öffentlicher Upload-Server nötig).
+    Send an MP3 audio file as an attachment in a Teams message.
+    Uses inline Base64 data (no public upload server required).
 
     Args:
-        service_url: Teams Bot Framework Service URL.
-        conversation_id: Teams Konversations-ID.
-        reply_to_id: Activity ID zum Antworten (optional).
-        mp3_bytes: MP3-Audio als bytes.
-        caption: Optionaler Begleittext (z.B. "Sprachantwort").
+        service_url: Teams Bot Framework service URL.
+        conversation_id: Teams conversation ID.
+        reply_to_id: Activity ID to reply to (optional).
+        mp3_bytes: MP3 audio as bytes.
+        caption: Optional accompanying text (e.g. "Voice reply").
     """
     token = await get_teams_access_token()
     if not token:
-        logger.error("Kann keine Teams-Voice-Antwort senden: Kein Access Token.")
+        logger.error("Cannot send Teams voice reply: No access token.")
         return False
 
     url = f"{service_url.rstrip('/')}/v3/conversations/{conversation_id}/activities"
@@ -168,12 +169,12 @@ async def send_teams_voice_reply(
         resp = await client.post(url, headers=headers, json=payload)
         if resp.status_code in (200, 201, 202):
             logger.info(
-                "Teams Voice-Reply gesendet: %d KB MP3", len(mp3_bytes) // 1024
+                "Teams voice reply sent: %d KB MP3", len(mp3_bytes) // 1024
             )
             return True
         else:
             logger.error(
-                "Fehler beim Senden der Teams-Voice-Antwort: HTTP %s %s",
+                "Error sending Teams voice reply: HTTP %s %s",
                 resp.status_code,
                 resp.text[:200],
             )
@@ -184,7 +185,7 @@ async def _transcribe_teams_attachment(
     attachment: dict[str, Any],
 ) -> tuple[str | None, float, str]:
     """
-    Versucht, eine Teams-Audio-Anlage herunterzuladen und zu transkribieren.
+    Attempt to download and transcribe a Teams audio attachment.
 
     Returns:
         (text, avg_confidence, detected_language)
@@ -205,12 +206,12 @@ async def _transcribe_teams_attachment(
         text, confidence, detected_lang = await transcribe_bytes_extended(audio_bytes, name)
         return (text or None), confidence, detected_lang
     except Exception as exc:
-        logger.warning("Transkription des Teams-Audio-Anhangs fehlgeschlagen: %s", exc)
+        logger.warning("Teams audio attachment transcription failed: %s", exc)
         return None, -2.0, os.getenv("WHISPER_LANGUAGE", "de")
 
 
 async def handle_teams_turn(app: FastAPI, activity: dict[str, Any]) -> None:
-    """Verarbeitet eine eingehende Message Activity von Teams, ruft den Agent auf und sendet die Antwort."""
+    """Process an incoming Message Activity from Teams, call the agent, and send the reply."""
     import json
     import os
     import re
@@ -221,7 +222,7 @@ async def handle_teams_turn(app: FastAPI, activity: dict[str, Any]) -> None:
     detected_lang: str = os.getenv("WHISPER_LANGUAGE", "de")
     low_confidence = False
 
-    # Audio-Anhang transkribieren falls kein Text vorhanden
+    # Transcribe audio attachments if no text present
     if not text:
         for att in activity.get("attachments", []):
             ct = att.get("contentType", "")
@@ -230,7 +231,7 @@ async def handle_teams_turn(app: FastAPI, activity: dict[str, Any]) -> None:
                 if transcribed:
                     text = transcribed
                     is_voice = True
-                    # Konfidenz-Check
+                    # Confidence check
                     from core.config import get_settings as _get_cfg
                     _cfg = _get_cfg()
                     if confidence < _cfg.STT_CONFIDENCE_THRESHOLD:
@@ -243,23 +244,23 @@ async def handle_teams_turn(app: FastAPI, activity: dict[str, Any]) -> None:
     if not text:
         return
 
-    # Bot-Mentions strippen (Teams sendet z.B. "<at>Ninko</at> Hallo")
+    # Strip bot mentions (Teams sends e.g. "<at>Ninko</at> Hello")
     clean_text = re.sub(r"<[^>]+>", "", text).strip()
 
     service_url = activity.get("serviceUrl", "")
     conv_id = activity.get("conversation", {}).get("id", "")
     activity_id = activity.get("id", "")
 
-    # Absender-Identifikation (für Allowlist und Logging)
+    # Sender identification (for allowlist and logging)
     sender = activity.get("from", {})
     sender_id = sender.get("id", "")
     sender_name = sender.get("name", "Unbekannt")
 
     if not service_url or not conv_id:
-        logger.error("serviceUrl oder conversation.id fehlt im Teams-Payload.")
+        logger.error("serviceUrl or conversation.id missing in Teams payload.")
         return
 
-    # ── Allowlist-Check ───────────────────────────────────────────────────────
+    # ── Allowlist check ───────────────────────────────────────────────────────
     from core.connections import ConnectionManager
     conn = await ConnectionManager.get_default_connection("teams")
     if conn:
@@ -267,14 +268,14 @@ async def handle_teams_turn(app: FastAPI, activity: dict[str, Any]) -> None:
         if allowed_raw:
             allowed_ids = {s.strip() for s in str(allowed_raw).split(",") if s.strip()}
             if sender_id not in allowed_ids:
-                logger.warning(
-                    "Teams: Zugriff verweigert für Nutzer '%s' (ID: %s)",
+                    logger.warning(
+                        "Teams: Access denied for user '%s' (ID: %s)",
                     sender_name,
                     sender_id,
                 )
                 return
 
-    # Voice-Reply-Konfiguration aus Connection lesen
+    # Read voice-reply configuration from connection
     voice_reply = False
     voice_reply_text_too = True  # Teams-Empfehlung: Text immer mitschicken
     voice_lang: str | None = None
@@ -285,11 +286,11 @@ async def handle_teams_turn(app: FastAPI, activity: dict[str, Any]) -> None:
         voice_lang = conn.config.get("voice_lang") or None
         voice_name = conn.config.get("voice_name") or None
 
-    logger.info("Teams Nachricht von '%s' (%s): %s…", sender_name, sender_id, clean_text[:60])
+    logger.info("Teams message from '%s' (%s): %s…", sender_name, sender_id, clean_text[:60])
 
     session_id = f"teams_{conv_id}"
 
-    # ── Letzte Konversation in Redis speichern (für proaktive Nachrichten) ────
+    # ── Save last conversation in Redis (for proactive messages) ──────────────
     redis = get_redis()
     await redis.connection.set(
         _LAST_CONV_KEY,
@@ -297,29 +298,32 @@ async def handle_teams_turn(app: FastAPI, activity: dict[str, Any]) -> None:
         ex=86400,  # 24h TTL
     )
 
-    # ── Reset-Befehle ─────────────────────────────────────────────────────────
+    # ── Reset commands ────────────────────────────────────────────────────────
     if clean_text.lower() in ("/start", "/clear", "/reset"):
         await redis.clear_chat_history(session_id)
         await send_teams_message(
             service_url, conv_id, activity_id,
-            "♻️ Chat-Verlauf geleert. Wie kann ich helfen?",
+            "♻️ Chat history cleared. How can I help?",
             apply_format=False,
         )
         return
 
-    # ── Bei niedriger Konfidenz: Rückfrage statt Verarbeitung ────────────────
+    # ── Low confidence: ask for confirmation instead of processing ────────────
     if low_confidence:
         await send_teams_message(
             service_url, conv_id, activity_id,
-            f"🎙️ Ich habe verstanden:\n> *{clean_text}*\n\nIst das korrekt? (Antworte mit Ja oder schicke den Text nochmal.)",
+            _t(
+                f"🎙️ Ich habe verstanden:\n> *{clean_text}*\n\nIst das korrekt? (Antworte mit Ja oder schicke den Text nochmal.)",
+                f"🎙️ I understood:\n> *{clean_text}*\n\nIs this correct? (Reply with yes or send the text again.)",
+            ),
             apply_format=False,
         )
         return
 
-    # ── Sofortige Bestätigung senden ──────────────────────────────────────────
+    # ── Send immediate confirmation ───────────────────────────────────────────
     await send_teams_message(
         service_url, conv_id, activity_id,
-        "🔄 Ich arbeite an deiner Anfrage…",
+        _t("🔄 Ich arbeite an deiner Anfrage…", "🔄 Working on your request…"),
         apply_format=False,
     )
 
@@ -328,33 +332,39 @@ async def handle_teams_turn(app: FastAPI, activity: dict[str, Any]) -> None:
 
         orchestrator = app.state.orchestrator
 
-        # ── Safeguard-Check ────────────────────────────────────────────────────
+                    # ── Safeguard check ────────────────────────────────────────────────────
         safeguard = getattr(app.state, "safeguard", None)
         pending_key = SAFEGUARD_PENDING_KEY.format(session_id=session_id)
         pending_raw = await redis.connection.get(pending_key)
 
-        if pending_raw and is_bot_confirmation(clean_text):
-            # User hat bestätigt — gespeicherte Aktion ausführen
-            clean_text = pending_raw.decode() if isinstance(pending_raw, bytes) else pending_raw
-            await redis.connection.delete(pending_key)
-            logger.info("Safeguard: Teams-User bestätigte pending Aktion für %s.", session_id)
+            if pending_raw and is_bot_confirmation(clean_text):
+                # User confirmed — execute the stored action
+                clean_text = pending_raw.decode() if isinstance(pending_raw, bytes) else pending_raw
+                await redis.connection.delete(pending_key)
+                logger.info("Safeguard: Teams user confirmed pending action for %s.", session_id)
         elif safeguard:
             sg_result = await safeguard.check(clean_text)
             if sg_result.requires_confirmation:
                 await redis.connection.set(pending_key, clean_text, ex=300)
                 await send_teams_message(
                     service_url, conv_id, activity_id,
-                    f"⚠️ **Bestätigung erforderlich**\n\n"
-                    f"**Kategorie:** {sg_result.category.value}\n"
-                    f"**Begründung:** {sg_result.rationale}\n\n"
-                    f"Antworte mit **ja** um fortzufahren, oder schicke eine andere Nachricht um abzubrechen.",
+                    _t(
+                        f"⚠️ **Bestätigung erforderlich**\n\n"
+                        f"**Kategorie:** {sg_result.category.value}\n"
+                        f"**Begründung:** {sg_result.rationale}\n\n"
+                        f"Antworte mit **ja** um fortzufahren, oder schicke eine andere Nachricht um abzubrechen.",
+                        f"⚠️ **Confirmation required**\n\n"
+                        f"**Category:** {sg_result.category.value}\n"
+                        f"**Reason:** {sg_result.rationale}\n\n"
+                        f"Reply with **yes** to continue, or send another message to cancel.",
+                    ),
                     apply_format=False,
                 )
                 return
 
         history = await redis.get_chat_history(session_id)
 
-        # Ggf. erkannte Sprache als Kontext mitgeben
+        # Add detected language as context hint if applicable
         lang_hint = ""
         if os.getenv("WHISPER_LANGUAGE", "de") == "auto" and detected_lang and detected_lang != "de":
             lang_hint = f"[Erkannte Sprache: {detected_lang}] "
@@ -366,7 +376,7 @@ async def handle_teams_turn(app: FastAPI, activity: dict[str, Any]) -> None:
             session_id=session_id,
         )
 
-        # History speichern
+        # Save history
         await redis.store_chat_message(session_id=session_id, role="user", content=clean_text)
         await redis.store_chat_message(session_id=session_id, role="assistant", content=response_text)
 
@@ -377,7 +387,7 @@ async def handle_teams_turn(app: FastAPI, activity: dict[str, Any]) -> None:
             if not voice_reply_text_too:
                 return
 
-        # ── Text-Antwort ───────────────────────────────────────────────────────
+        # ── Text response ──────────────────────────────────────────────────────
         final_text = response_text
         if module_used and module_used != "Ninko":
             final_text += f"\n\n*(via {module_used})*"
@@ -385,11 +395,14 @@ async def handle_teams_turn(app: FastAPI, activity: dict[str, Any]) -> None:
         await send_teams_message(service_url, conv_id, activity_id, final_text)
 
     except Exception as e:
-        logger.exception("Interner Fehler in handle_teams_turn: %s", e)
+        logger.exception("Internal error in handle_teams_turn: %s", e)
         err_type = type(e).__name__
         await send_teams_message(
             service_url, conv_id, activity_id,
-            f"❌ Interner Fehler ({err_type}):\n{str(e)[:300]}\n\nBitte versuche es erneut.",
+            _t(
+                f"❌ Interner Fehler ({err_type}):\n{str(e)[:300]}\n\nBitte versuche es erneut.",
+                f"❌ Internal error ({err_type}):\n{str(e)[:300]}\n\nPlease try again.",
+            ),
             apply_format=False,
         )
 
@@ -403,8 +416,8 @@ async def _send_teams_voice_reply(
     voice: str | None = None,
 ) -> None:
     """
-    Synthetisiert Text mit Piper TTS und sendet ihn als Teams MP3-Attachment.
-    Fehler werden geloggt aber nicht propagiert (Best-Effort).
+    Synthesize text with Piper TTS and send it as a Teams MP3 attachment.
+    Errors are logged but not propagated (best-effort).
     """
     try:
         from core.tts import synthesize_reply
@@ -418,4 +431,4 @@ async def _send_teams_voice_reply(
             caption="🔊 Sprachantwort",
         )
     except Exception as exc:
-        logger.error("Teams Voice-Reply Fehler: %s", exc)
+        logger.error("Teams voice reply error: %s", exc)

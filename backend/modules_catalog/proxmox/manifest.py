@@ -1,5 +1,5 @@
 """
-Proxmox Modul – Manifest mit Metadaten und Health-Check.
+Proxmox module — Manifest with metadata and health check.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ logger = logging.getLogger("ninko.modules.proxmox")
 
 
 async def check_proxmox_health() -> dict:
-    """Health-Check für Proxmox-API-Verbindung über ConnectionManager."""
+    """Health check for Proxmox API connection via ConnectionManager."""
     try:
         from proxmoxer import ProxmoxAPI
         from core.connections import ConnectionManager
@@ -21,23 +21,23 @@ async def check_proxmox_health() -> dict:
 
         conn = await ConnectionManager.get_default_connection("proxmox")
         if not conn:
-            # Fallback auf Env-Variablen
+            # Fallback to env variables
             host = os.environ.get("PROXMOX_HOST", "")
             if not host:
-                return {"status": "ok", "detail": "Keine Verbindung konfiguriert (erwartet)"}
-            # Env-basierter Health-Check
+            return {"status": "ok", "detail": "No connection configured (expected)"}
+            # Env-based health check
             user = os.environ.get("PROXMOX_USER", "root@pam")
             token_id = os.environ.get("PROXMOX_TOKEN_ID", "")
             verify_ssl = os.environ.get("PROXMOX_VERIFY_SSL", "false").lower() == "true"
             vault = get_vault()
             token_secret = await vault.get_secret("PROXMOX_TOKEN_SECRET")
             if not token_secret:
-                return {"status": "error", "detail": "PROXMOX_TOKEN_SECRET nicht im Vault"}
+                return {"status": "error", "detail": "PROXMOX_TOKEN_SECRET not found in Vault"}
             proxmox = ProxmoxAPI(host, user=user, token_name=token_id, token_value=token_secret, verify_ssl=verify_ssl)
             version = proxmox.version.get()
-            return {"status": "ok", "detail": f"Proxmox VE {version.get('version', '?')} erreichbar (Env)"}
+            return {"status": "ok", "detail": f"Proxmox VE {version.get('version', '?')} reachable (Env)"}
 
-        # Connection-basierter Health-Check
+        # Connection-based health check
         vault = get_vault()
         host = conn.config.get("host", "")
         user = conn.config.get("user", "root@pam")
@@ -53,12 +53,12 @@ async def check_proxmox_health() -> dict:
             token_secret = await vault.get_secret(conn.vault_keys["token_secret"])
 
         if not token_secret or not token_id:
-            return {"status": "error", "detail": f"Keine Token-Credentials für '{conn.name}'"}
+            return {"status": "error", "detail": f"No token credentials for '{conn.name}'"}
 
         host_addr = host.replace("https://", "").replace("http://", "").split(":")[0]
         proxmox = ProxmoxAPI(host_addr, port=8006, user=base_user, token_name=token_id, token_value=token_secret, verify_ssl=verify_ssl)
 
-        # SSL-Fallback für Self-Signed Certs
+        # SSL fallback for self-signed certs
         try:
             version = proxmox.version.get()
         except Exception as e:
@@ -68,16 +68,16 @@ async def check_proxmox_health() -> dict:
             else:
                 raise
 
-        return {"status": "ok", "detail": f"Proxmox VE {version.get('version', '?')} erreichbar ({conn.name})"}
+        return {"status": "ok", "detail": f"Proxmox VE {version.get('version', '?')} reachable ({conn.name})"}
     except Exception as e:
-        return {"status": "error", "detail": f"Proxmox nicht erreichbar: {e}"}
+        return {"status": "error", "detail": f"Proxmox not reachable: {e}"}
 
 
 module_manifest = ModuleManifest(
     name="proxmox",
     display_name="Proxmox",
     description="Proxmox VE Management – VMs, Container, Nodes, Snapshots",
-    version="1.0.0",
+    version="1.1.0",
     author="Ninko Team",
     enabled_by_default=True,
     env_prefix="PROXMOX_",

@@ -5,6 +5,7 @@ from typing import List, Dict, Any, Optional
 from langchain_core.tools import tool
 from pydantic import ValidationError
 
+from agents.base_agent import _t
 from .schemas import (
     FritzDevice, FritzWanStatus, FritzBandwidth, FritzWlanStatus,
     FritzSmartHomeDevice, FritzCallEntry, FritzSystemInfo
@@ -31,7 +32,7 @@ async def _get_fc(connection_id: str = "") -> Any:
         pwd_key = conn_data.vault_keys.get("password") or conn_data.vault_keys.get("FRITZBOX_PASSWORD")
         pwd = await vault.get_secret(pwd_key) if pwd_key else ""
     else:
-        # Fallback: Env-Var (für k8s / docker-compose ohne UI-Konfiguration)
+        # Fallback: env var (for k8s / docker-compose without UI configuration)
         host = os.getenv("FRITZBOX_HOST", "192.168.178.1")
         user = os.getenv("FRITZBOX_USER", "")
         pwd = os.getenv("FRITZBOX_PASSWORD", "")
@@ -40,7 +41,10 @@ async def _get_fc(connection_id: str = "") -> Any:
         try:
             return FritzConnection(address=host, user=user, password=pwd, timeout=5)
         except Exception as e:
-            raise ValueError(f"FritzBox nicht erreichbar ({host}): {e}")
+            raise ValueError(_t(
+                f"FritzBox nicht erreichbar ({host}): {e}",
+                f"FritzBox unreachable ({host}): {e}",
+            ))
 
     return await asyncio.to_thread(_create)
 
@@ -48,7 +52,7 @@ async def _get_fc(connection_id: str = "") -> Any:
 
 @tool
 async def get_fritz_devices(connection_id: str = "") -> List[Dict]:
-    """Holt die Liste aller bekannten Geräte (Host, IP, MAC, Online-Status)."""
+    """Retrieve the list of all known devices (host, IP, MAC, online status)."""
     def _fetch(fc):
         from fritzconnection.lib.fritzhosts import FritzHosts
         fh = FritzHosts(fc)
@@ -68,12 +72,12 @@ async def get_fritz_devices(connection_id: str = "") -> List[Dict]:
         fc = await _get_fc(connection_id)
         return await asyncio.to_thread(_fetch, fc)
     except Exception as e:
-        logger.error(f"FritzBox (get_fritz_devices) Error: {e}")
+        logger.error("FritzBox (get_fritz_devices) error: %s", e)
         return [{"error": str(e)}]
 
 @tool
 async def get_fritz_wan_status(connection_id: str = "") -> Dict:
-    """Prüft den WAN (Internet) Verbindungsstatus und die öffentliche IP."""
+    """Check WAN (internet) connection status and public IP."""
     def _fetch(fc):
         from fritzconnection.lib.fritzstatus import FritzStatus
         fs = FritzStatus(fc)
@@ -87,12 +91,12 @@ async def get_fritz_wan_status(connection_id: str = "") -> Dict:
         fc = await _get_fc(connection_id)
         return await asyncio.to_thread(_fetch, fc)
     except Exception as e:
-        logger.error(f"FritzBox (get_fritz_wan_status) Error: {e}")
+        logger.error("FritzBox (get_fritz_wan_status) error: %s", e)
         return {"error": str(e)}
 
 @tool
 async def get_fritz_bandwidth(connection_id: str = "") -> Dict:
-    """Ermittelt die aktuell genutzte Bandbreite in bit/s."""
+    """Determine current bandwidth usage in bit/s."""
     
     def _fetch(fc):
         # Try to get transmission rate first, if available on newer fritzconnection
@@ -121,19 +125,19 @@ async def get_fritz_bandwidth(connection_id: str = "") -> Dict:
         fc = await _get_fc(connection_id)
         return await asyncio.to_thread(_fetch, fc)
     except Exception as e:
-        logger.error(f"FritzBox (get_fritz_bandwidth) Error: {e}")
+        logger.error("FritzBox (get_fritz_bandwidth) error: %s", e)
         return {"error": str(e)}
 
 # --- WLAN Tools ---
 
 @tool
 async def get_fritz_wlan_status(connection_id: str = "") -> List[Dict]:
-    """Ermittelt den Status aller WLAN-Netze (2.4GHz, 5GHz, Gastzugang)."""
+    """Determine status of all WLAN networks (2.4GHz, 5GHz, guest)."""
     
     def _fetch(fc):
         from fritzconnection.lib.fritzwlan import FritzWLAN
         networks = []
-        # Normalerweise gibt es Service 1 (2.4GHz), 2 (5GHz), 3 (Gast)
+        # Normally there are service 1 (2.4GHz), 2 (5GHz), 3 (guest)
         for i in range(1, 4):
             try:
                 fw = FritzWLAN(fc, service=i)
@@ -144,40 +148,43 @@ async def get_fritz_wlan_status(connection_id: str = "") -> List[Dict]:
                     channel=fw.channel
                 ).model_dump())
             except Exception:
-                pass # Möglicherweise wird Service 3 (Gast) nicht vom Modell unterstützt
+                pass  # Service 3 (guest) may not be supported by the model
         return networks
         
     try:
         fc = await _get_fc(connection_id)
         return await asyncio.to_thread(_fetch, fc)
     except Exception as e:
-        logger.error(f"FritzBox (get_fritz_wlan_status) Error: {e}")
+        logger.error("FritzBox (get_fritz_wlan_status) error: %s", e)
         return [{"error": str(e)}]
 
 @tool
 async def set_fritz_wlan_state(state: bool, service: int = 1, connection_id: str = "") -> str:
-    """Aktiviert oder deaktiviert das WLAN. service=1 (2.4GHz), service=2 (5GHz), service=3 (Gast)."""
+    """Enable or disable WLAN. service=1 (2.4GHz), service=2 (5GHz), service=3 (guest)."""
     
     def _exec(fc):
         fc.call_action(f"WLANConfiguration:{service}", "SetEnable", Enable=int(state))
-        return f"WLAN Service {service} wurde {'aktiviert' if state else 'deaktiviert'}."
+        return _t(
+            f"WLAN Service {service} wurde {'aktiviert' if state else 'deaktiviert'}.",
+            f"WLAN service {service} has been {'enabled' if state else 'disabled'}.",
+        )
         
     try:
         fc = await _get_fc(connection_id)
         return await asyncio.to_thread(_exec, fc)
     except Exception as e:
-        logger.error(f"FritzBox (set_fritz_wlan_state) Error: {e}")
-        return f"Fehler: {e}"
+        logger.error("FritzBox (set_fritz_wlan_state) error: %s", e)
+        return _t(f"Fehler: {e}", f"Error: {e}")
 
 @tool
 async def set_fritz_guest_wlan_state(state: bool, connection_id: str = "") -> str:
-    """Aktiviert oder deaktiviert spezifisch das Gast-WLAN."""
-    # Gast-WLAN ist meist Service 3
+    """Enable or disable the guest WLAN specifically."""
+    # Guest WLAN is usually service 3
     return await set_fritz_wlan_state.ainvoke({"state": state, "service": 3, "connection_id": connection_id})
 
 # --- Smart Home (AHA) Tools ---
-# Benötigt pyfritzhome, optional, wenn fritzconnection es nicht nativ hergibt.
-# Da pyfritzhome besser für AHA ist, holen wir es ebenfalls.
+# Requires pyfritzhome, optional if fritzconnection does not provide it natively.
+# Since pyfritzhome is better for AHA, we use it as well.
 
 async def _get_fh(connection_id: str = "") -> Any:
     """Helper to initialize pyfritzhome Fritzhome instance."""
@@ -196,7 +203,7 @@ async def _get_fh(connection_id: str = "") -> Any:
         pwd_key = conn_data.vault_keys.get("password") or conn_data.vault_keys.get("FRITZBOX_PASSWORD")
         pwd = await vault.get_secret(pwd_key) if pwd_key else ""
     else:
-        # Fallback: Env-Var (für k8s / docker-compose ohne UI-Konfiguration)
+        # Fallback: env var (for k8s / docker-compose without UI configuration)
         host = os.getenv("FRITZBOX_HOST", "192.168.178.1")
         user = os.getenv("FRITZBOX_USER", "")
         pwd = os.getenv("FRITZBOX_PASSWORD", "")
@@ -210,7 +217,7 @@ async def _get_fh(connection_id: str = "") -> Any:
 
 @tool
 async def get_fritz_smarthome_devices(connection_id: str = "") -> List[Dict]:
-    """Listet alle bekannten Smart-Home-Geräte (DECT Schalter, Thermostate) auf."""
+    """List all known smart home devices (DECT switches, thermostats)."""
     
     def _fetch(fh):
         devs = fh.get_devices()
@@ -236,12 +243,12 @@ async def get_fritz_smarthome_devices(connection_id: str = "") -> List[Dict]:
         fh = await _get_fh(connection_id)
         return await asyncio.to_thread(_fetch, fh)
     except Exception as e:
-        logger.error(f"FritzBox (get_fritz_smarthome_devices) Error: {e}")
+        logger.error("FritzBox (get_fritz_smarthome_devices) error: %s", e)
         return [{"error": str(e)}]
 
 @tool
 async def set_fritz_smarthome_switch(ain: str, state: bool, connection_id: str = "") -> str:
-    """Schaltet ein Smart-Home-Gerät anhand seiner AIN ein oder aus."""
+    """Switch a smart home device on or off by its AIN."""
     def _exec(fh):
         dev = fh.get_device_by_ain(ain)
         if state:
@@ -249,36 +256,42 @@ async def set_fritz_smarthome_switch(ain: str, state: bool, connection_id: str =
         else:
             dev.set_switch_state_off()
         fh.logout()
-        return f"Schalter '{dev.name}' auf {'AN' if state else 'AUS'} gesetzt."
+        return _t(
+            f"Schalter '{dev.name}' auf {'AN' if state else 'AUS'} gesetzt.",
+            f"Switch '{dev.name}' set to {'ON' if state else 'OFF'}.",
+        )
         
     try:
         fh = await _get_fh(connection_id)
         return await asyncio.to_thread(_exec, fh)
     except Exception as e:
-        logger.error(f"FritzBox (set_fritz_smarthome_switch) Error: {e}")
-        return f"Fehler: {e}"
+        logger.error("FritzBox (set_fritz_smarthome_switch) error: %s", e)
+        return _t(f"Fehler: {e}", f"Error: {e}")
 
 @tool
 async def set_fritz_smarthome_temperature(ain: str, temperature: float, connection_id: str = "") -> str:
-    """Setzt die Ziel-Temperatur (in °C) eines Heizkörperreglers anhand seiner AIN."""
+    """Set the target temperature (in °C) of a radiator controller by its AIN."""
     def _exec(fh):
         dev = fh.get_device_by_ain(ain)
         dev.set_target_temperature(temperature)
         fh.logout()
-        return f"Thermostat '{dev.name}' auf {temperature}°C gesetzt."
+        return _t(
+            f"Thermostat '{dev.name}' auf {temperature}°C gesetzt.",
+            f"Thermostat '{dev.name}' set to {temperature}°C.",
+        )
         
     try:
         fh = await _get_fh(connection_id)
         return await asyncio.to_thread(_exec, fh)
     except Exception as e:
-        logger.error(f"FritzBox (set_fritz_smarthome_temperature) Error: {e}")
-        return f"Fehler: {e}"
+        logger.error("FritzBox (set_fritz_smarthome_temperature) error: %s", e)
+        return _t(f"Fehler: {e}", f"Error: {e}")
 
 # --- System Tools ---
 
 @tool
 async def get_fritz_call_list(connection_id: str = "") -> List[Dict]:
-    """Holt die Anrufliste der FritzBox."""
+    """Retrieve the FritzBox call log."""
     
     def _fetch(fc):
         from fritzconnection.lib.fritzcall import FritzCall
@@ -303,12 +316,12 @@ async def get_fritz_call_list(connection_id: str = "") -> List[Dict]:
         fc = await _get_fc(connection_id)
         return await asyncio.to_thread(_fetch, fc)
     except Exception as e:
-        logger.error(f"FritzBox (get_fritz_call_list) Error: {e}")
+        logger.error("FritzBox (get_fritz_call_list) error: %s", e)
         return [{"error": str(e)}]
 
 @tool
 async def get_fritz_system_info(connection_id: str = "") -> Dict:
-    """Holt das FritzBox Modell und Firmware-Version sowie die Betriebszeit."""
+    """Retrieve the FritzBox model, firmware version and uptime."""
     
     def _fetch(fc):
         dev_info = fc.call_action("DeviceInfo1", "GetInfo")
@@ -326,20 +339,23 @@ async def get_fritz_system_info(connection_id: str = "") -> Dict:
         fc = await _get_fc(connection_id)
         return await asyncio.to_thread(_fetch, fc)
     except Exception as e:
-        logger.error(f"FritzBox (get_fritz_system_info) Error: {e}")
+        logger.error("FritzBox (get_fritz_system_info) error: %s", e)
         return {"error": str(e)}
 
 @tool
 async def reboot_fritzbox(connection_id: str = "") -> str:
-    """Löst einen kompletten Neustart der FritzBox aus."""
+    """Trigger a complete reboot of the FritzBox."""
     
     def _exec(fc):
         fc.call_action("DeviceConfig1", "Reboot")
-        return "FritzBox Neustart initiiert. Router ist für ca. 3 Minuten offline."
+        return _t(
+            "FritzBox Neustart initiiert. Router ist für ca. 3 Minuten offline.",
+            "FritzBox reboot initiated. Router will be offline for approximately 3 minutes.",
+        )
         
     try:
         fc = await _get_fc(connection_id)
         return await asyncio.to_thread(_exec, fc)
     except Exception as e:
-        logger.error(f"FritzBox (reboot_fritzbox) Error: {e}")
-        return f"Fehler beim Neustart: {e}"
+        logger.error("FritzBox (reboot_fritzbox) error: %s", e)
+        return _t(f"Fehler beim Neustart: {e}", f"Error during reboot: {e}")

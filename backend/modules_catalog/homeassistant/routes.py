@@ -14,8 +14,8 @@ class ActionRequest(BaseModel):
 @router.get("/status")
 async def get_homeassistant_status(connection_id: str = "") -> Dict[str, Any]:
     """
-    REST Endpunkt für das UI-Frontend.
-    Sollte aktuelle Statistiken oder Zustände zurückgeben.
+    REST endpoint for the UI frontend.
+    Returns current statistics or states.
     """
     try:
         client_config = await _get_api_client(connection_id)
@@ -38,7 +38,7 @@ async def get_homeassistant_status(connection_id: str = "") -> Dict[str, Any]:
 @router.post("/action")
 async def trigger_action(req: ActionRequest):
     """
-    REST Endpunkt für Frontend-Buttons.
+    REST endpoint for frontend buttons.
     """
     if req.action_type == "test":
         return {"message": "Test action successful from Home Assistant!"}
@@ -54,7 +54,7 @@ async def trigger_action(req: ActionRequest):
                 
                 # Filter logic for lights
                 lights = [item for item in data if item.get("entity_id", "").startswith("light.")]
-                return {"message": f"Daten erfolgreich abgerufen. {len(lights)} Lichter gefunden.", "lights": lights[:10]}
+                return {"message": f"Data fetched successfully. {len(lights)} lights found.", "lights": lights[:10]}
         except Exception as e:
              raise HTTPException(status_code=500, detail=str(e))
 

@@ -1,4 +1,4 @@
-"""Proxmox Modul – Package Init."""
+"""Proxmox module — Package init."""
 
 from .manifest import module_manifest
 from .agent import ProxmoxAgent

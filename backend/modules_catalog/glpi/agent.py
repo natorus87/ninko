@@ -1,6 +1,6 @@
 """
-GLPI Modul – Spezialist-Agent.
-Integriert sich mit Kubernetes-Modul via Redis PubSub Events.
+GLPI module — specialist agent.
+Integrates with Kubernetes module via Redis PubSub events.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ import json
 import logging
 import os
 
-from agents.base_agent import BaseAgent
+from agents.base_agent import BaseAgent, _t
 from core.redis_client import get_redis
 from .tools import (
     create_ticket,
@@ -28,7 +28,7 @@ from .tools import (
 
 logger = logging.getLogger("ninko.modules.glpi.agent")
 
-GLPI_SYSTEM_PROMPT = """Du bist der GLPI Helpdesk-Spezialist von Ninko.
+GLPI_SYSTEM_PROMPT_DE = """Du bist der GLPI Helpdesk-Spezialist von Ninko.
 
 Deine Fähigkeiten:
 - Ticket-Erstellung und -Verwaltung
@@ -54,14 +54,40 @@ Prioritäten:
 Status:
 1 = Neu, 2 = In Bearbeitung, 3 = Geplant, 4 = Wartend, 5 = Gelöst, 6 = Geschlossen"""
 
+GLPI_SYSTEM_PROMPT_EN = """You are the GLPI Helpdesk specialist of Ninko.
+
+Your capabilities:
+- Ticket creation and management
+- Ticket search by status, priority, keyword
+- Adding follow-ups and solutions
+- Closing tickets with resolution descriptions
+- User and group search
+- Ticket statistics
+
+Behavior rules:
+- Create tickets with clear, meaningful titles
+- ALWAYS call the appropriate tool directly — do not describe what you would do
+- If all required info is present: call `create_ticket` immediately, do not ask again
+- If priority/category is missing: ask briefly, then call `create_ticket` immediately
+- Show ticket details in a clear format
+- Use color indicators for priorities:
+  🔴 Very high/Critical, 🟠 High, 🟡 Medium, 🟢 Low
+- Link to GLPI when possible
+
+Priorities:
+1 = Very low, 2 = Low, 3 = Medium, 4 = High, 5 = Very high, 6 = Critical
+
+Status:
+1 = New, 2 = In progress, 3 = Planned, 4 = Pending, 5 = Solved, 6 = Closed"""
+
 
 class GlpiAgent(BaseAgent):
-    """GLPI Helpdesk-Spezialist mit Redis PubSub Event-Listener."""
+    """GLPI Helpdesk specialist with Redis PubSub event listener."""
 
     def __init__(self) -> None:
         super().__init__(
             name="glpi",
-            system_prompt=GLPI_SYSTEM_PROMPT,
+            system_prompt=_t(GLPI_SYSTEM_PROMPT_DE, GLPI_SYSTEM_PROMPT_EN),
             tools=[
                 create_ticket,
                 get_ticket,
@@ -77,21 +103,21 @@ class GlpiAgent(BaseAgent):
             ],
         )
 
-        # Auto-Incident-Ticket-Erstellung starten
+        # Auto-incident ticket creation
         auto_create = os.environ.get("GLPI_AUTO_CREATE_INCIDENTS", "false").lower() == "true"
         if auto_create:
             asyncio.get_event_loop().create_task(self._listen_for_incidents())
-            logger.info("GLPI Auto-Incident-Erstellung aktiviert.")
+            logger.info("GLPI auto-incident creation enabled.")
 
     async def _listen_for_incidents(self) -> None:
         """
-        Lauscht auf Redis PubSub Events von anderen Modulen.
-        Bei incident_detected Events: automatisch GLPI-Ticket erstellen.
+        Listens for Redis PubSub events from other modules.
+        On incident_detected events: automatically creates a GLPI ticket.
         """
         redis = get_redis()
         pubsub = await redis.subscribe_events()
 
-        logger.info("GLPI Event-Listener gestartet.")
+        logger.info("GLPI event listener started.")
 
         while True:
             try:
@@ -109,11 +135,11 @@ class GlpiAgent(BaseAgent):
                 await asyncio.sleep(0.5)
 
             except Exception as exc:
-                logger.error("GLPI Event-Listener Fehler: %s", exc)
+                logger.error("GLPI event listener error: %s", exc)
                 await asyncio.sleep(5)
 
     async def _handle_event(self, event: dict) -> None:
-        """Verarbeitet ein eingehendes Event."""
+        """Processes an incoming event."""
         event_type = event.get("event_type", "")
         severity = event.get("severity", "")
 
@@ -121,11 +147,11 @@ class GlpiAgent(BaseAgent):
             source = event.get("source_module", "unknown")
             data = event.get("data", {})
 
-            title = f"[Auto] {source.upper()} Incident: {data.get('error', data.get('namespace', 'Fehler erkannt'))}"
+            title = f"[Auto] {source.upper()} Incident: {data.get('error', data.get('namespace', 'Error detected'))}"
             description = (
-                f"Automatisch erstelltes Ticket von Ninko.\n\n"
-                f"Quell-Modul: {source}\n"
-                f"Schweregrad: {severity}\n"
+                f"Automatically created ticket by Ninko.\n\n"
+                f"Source module: {source}\n"
+                f"Severity: {severity}\n"
                 f"Details:\n{json.dumps(data, ensure_ascii=False, indent=2)}"
             )
 
@@ -139,9 +165,9 @@ class GlpiAgent(BaseAgent):
                     "ticket_type": 1,  # Incident
                 })
                 logger.info(
-                    "Auto-Ticket erstellt: %s → #%s",
+                    "Auto-ticket created: %s → #%s",
                     title,
                     result.get("ticket_id", "?"),
                 )
             except Exception as exc:
-                logger.error("Auto-Ticket-Erstellung fehlgeschlagen: %s", exc)
+                logger.error("Auto-ticket creation failed: %s", exc)

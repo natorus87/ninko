@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 from langchain_core.messages import HumanMessage
 
 from agents.base_agent import BaseAgent, _t
-from agents.core_tools import execute_cli_command, create_custom_agent, update_custom_agent, install_skill, create_dag_workflow, create_linear_workflow, execute_workflow, remember_fact, recall_memory, forget_fact, confirm_forget, call_module_agent, run_pipeline, configure_routing, get_routing_info
+from agents.core_tools import execute_cli_command, create_custom_agent, update_custom_agent, install_skill, create_dag_workflow, create_linear_workflow, execute_workflow, remember_fact, recall_memory, forget_fact, confirm_forget, call_module_agent, run_pipeline, configure_routing, get_routing_info, wait
 from modules.image_gen.tools import generate_image
 from core import status_bus
 
@@ -107,6 +107,40 @@ _SPEED_SIGNALS = frozenset({
     "einfach", "kürzer", "kürze",
 })
 
+# Explizite Agent-Erstellungs-Intention (DE + EN)
+_AGENT_CREATE_PATTERNS: tuple[re.Pattern, ...] = (
+    re.compile(r"\berstell(?:e|en|t)?\b.{0,40}\bagent(?:en)?\b", re.IGNORECASE),
+    re.compile(r"\bleg(?:e|en|t)?\b.{0,40}\bagent(?:en)?\b.{0,20}\ban\b", re.IGNORECASE),
+    re.compile(r"\bbau(?:e|en|t)?\b.{0,40}\bagent(?:en)?\b", re.IGNORECASE),
+    re.compile(r"\bcreate\b.{0,40}\bagent\b", re.IGNORECASE),
+    re.compile(r"\bbuild\b.{0,40}\bagent\b", re.IGNORECASE),
+    re.compile(r"\bmake\b.{0,40}\bagent\b", re.IGNORECASE),
+)
+
+# How-to / Anleitung statt Ausführung
+_AGENT_HOWTO_PATTERNS: tuple[re.Pattern, ...] = (
+    re.compile(r"\bwie\b.{0,30}\b(agent|agenten)\b.{0,20}\b(erstell|anleg|bau)\w*", re.IGNORECASE),
+    re.compile(r"\bhow\b.{0,20}\b(to\b.{0,10})?(create|build|make)\b.{0,30}\bagent\b", re.IGNORECASE),
+    re.compile(r"\banleitung\b.{0,40}\bagent\b", re.IGNORECASE),
+)
+
+# Explizite Workflow-Erstellungs-Intention (DE + EN)
+_WORKFLOW_CREATE_PATTERNS: tuple[re.Pattern, ...] = (
+    re.compile(r"\berstell(?:e|en|t)?\b.{0,40}\bworkflow\b", re.IGNORECASE),
+    re.compile(r"\bleg(?:e|en|t)?\b.{0,40}\bworkflow\b.{0,20}\ban\b", re.IGNORECASE),
+    re.compile(r"\bbau(?:e|en|t)?\b.{0,40}\bworkflow\b", re.IGNORECASE),
+    re.compile(r"\bcreate\b.{0,40}\bworkflow\b", re.IGNORECASE),
+    re.compile(r"\bbuild\b.{0,40}\bworkflow\b", re.IGNORECASE),
+    re.compile(r"\bautomatisier\w*\b.{0,40}\b(ablauf|prozess|workflow)\b", re.IGNORECASE),
+)
+
+# How-to / Anleitung statt Ausführung
+_WORKFLOW_HOWTO_PATTERNS: tuple[re.Pattern, ...] = (
+    re.compile(r"\bwie\b.{0,30}\bworkflow\b.{0,20}\b(erstell|anleg|bau)\w*", re.IGNORECASE),
+    re.compile(r"\bhow\b.{0,20}\b(to\b.{0,10})?(create|build|make)\b.{0,30}\bworkflow\b", re.IGNORECASE),
+    re.compile(r"\banleitung\b.{0,40}\bworkflow\b", re.IGNORECASE),
+)
+
 
 def get_session_routing_config(session_id: str) -> RoutingConfig | None:
     """Gibt die session-scoped Routing-Config zurück, falls vorhanden und nicht abgelaufen."""
@@ -178,7 +212,7 @@ class OrchestratorAgent(BaseAgent):
         super().__init__(
             name="orchestrator",
             system_prompt=SYSTEM_PROMPT,
-            tools=[execute_cli_command, create_custom_agent, update_custom_agent, install_skill, create_dag_workflow, create_linear_workflow, execute_workflow, remember_fact, recall_memory, forget_fact, confirm_forget, call_module_agent, run_pipeline, generate_image, configure_routing, get_routing_info],
+            tools=[execute_cli_command, create_custom_agent, update_custom_agent, install_skill, create_dag_workflow, create_linear_workflow, execute_workflow, remember_fact, recall_memory, forget_fact, confirm_forget, call_module_agent, run_pipeline, generate_image, configure_routing, get_routing_info, wait],
         )
         self.registry = registry
         self._routing_map: dict[str, str] = {}
@@ -341,6 +375,205 @@ class OrchestratorAgent(BaseAgent):
             len(self._routing_map),
             len(set(self._routing_map.values())),
         )
+
+    @staticmethod
+    def _wants_agent_creation(message: str) -> bool:
+        """Erkennt explizite Agent-Erstellung vs. bloße How-to-Fragen."""
+        msg = message.strip()
+        if not msg:
+            return False
+        if any(p.search(msg) for p in _AGENT_HOWTO_PATTERNS):
+            return False
+        return any(p.search(msg) for p in _AGENT_CREATE_PATTERNS)
+
+    @staticmethod
+    def _wants_workflow_creation(message: str) -> bool:
+        """Erkennt explizite Workflow-Erstellung vs. reine How-to-Fragen."""
+        msg = message.strip()
+        if not msg:
+            return False
+        if any(p.search(msg) for p in _WORKFLOW_HOWTO_PATTERNS):
+            return False
+        return any(p.search(msg) for p in _WORKFLOW_CREATE_PATTERNS)
+
+    async def _auto_create_custom_agent(self, message: str, session_id: str) -> tuple[str, bool]:
+        """Erstellt bei explizitem User-Wunsch deterministisch einen Custom-Agenten.
+
+        Verhindert den Fall, dass der ReAct-Loop nur eine Anleitung ausgibt,
+        obwohl der User einen echten Create-Call erwartet.
+        """
+        await status_bus.emit(session_id, _t("Erstelle Custom-Agent…", "Creating custom agent…"))
+
+        from core.llm_factory import get_llm
+        from core.agent_pool import get_agent_pool
+
+        modules = self.registry.list_modules()
+        module_names = [m.name for m in modules]
+        module_line = ", ".join(module_names) if module_names else "kubernetes, linux_server, docker"
+
+        prompt = f"""Du bist ein Agent-Builder für Ninko.
+Erzeuge aus der User-Anfrage ein JSON für create_custom_agent.
+
+USER-ANFRAGE:
+{message}
+
+VERFÜGBARE MODULE:
+{module_line}
+
+ANFORDERUNGEN:
+- Gib NUR ein JSON-Objekt zurück.
+- Felder: "name", "description", "system_prompt"
+- name: max 5 Wörter, klarer Funktionsname
+- description: 1 präziser Satz
+- system_prompt: Deutsch, strukturiert mit Abschnitten:
+  ## Aufgaben
+  ## Arbeitsweise
+  ## Kritische Aktionen
+  ## Eskalation
+- Bei destruktiven Aktionen immer Bestätigung verlangen.
+- Wenn Module sinnvoll sind, nenne call_module_agent("<modul>", "...") explizit.
+
+JSON-SCHEMA:
+{{
+  "name": "string",
+  "description": "string",
+  "system_prompt": "string"
+}}"""
+
+        try:
+            llm = get_llm()
+            response = await asyncio.wait_for(
+                llm.ainvoke([HumanMessage(content=prompt)]),
+                timeout=12.0,
+            )
+            raw = response.content if hasattr(response, "content") else str(response)
+            raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
+            m = re.search(r"\{[\s\S]*\}", raw)
+            if not m:
+                raise ValueError("Kein JSON-Objekt in der LLM-Antwort gefunden.")
+            spec = _json.loads(m.group(0))
+        except Exception as exc:
+            logger.warning("Auto-Create-Agent: Spec-Generierung fehlgeschlagen: %s", exc)
+            return _t(
+                "Fehler: Die Agent-Spezifikation konnte nicht erzeugt werden. "
+                "Bitte beschreibe Zweck, Module und gewünschtes Output-Format präziser.",
+                "Error: Failed to generate the agent specification. "
+                "Please describe purpose, modules, and expected output format more precisely.",
+            ), False
+
+        name = str(spec.get("name", "")).strip()[:80]
+        description = str(spec.get("description", "")).strip()[:400]
+        system_prompt = str(spec.get("system_prompt", "")).strip()
+
+        if not name or not system_prompt:
+            return _t(
+                "Fehler: Die erzeugte Agent-Spezifikation ist unvollständig (Name/System-Prompt).",
+                "Error: The generated agent specification is incomplete (name/system_prompt).",
+            ), False
+
+        if len(system_prompt) < 120:
+            return _t(
+                "Fehler: Die erzeugte Agent-Spezifikation ist zu kurz. "
+                "Bitte beschreibe den Use-Case genauer.",
+                "Error: The generated agent specification is too short. "
+                "Please provide a more detailed use case.",
+            ), False
+
+        pool = get_agent_pool()
+        agent_id, _ = await pool.register(name=name, system_prompt=system_prompt, description=description)
+        logger.info("Auto-Create-Agent erfolgreich: '%s' (%s)", name, agent_id)
+
+        return _t(
+            f"✅ Agent '{name}' wurde erstellt.\n\n"
+            f"- ID: `{agent_id}`\n"
+            f"- Beschreibung: {description or '-'}\n\n"
+            f"Du kannst ihn jetzt im Agenten-Editor anpassen oder direkt verwenden.",
+            f"✅ Agent '{name}' was created.\n\n"
+            f"- ID: `{agent_id}`\n"
+            f"- Description: {description or '-'}\n\n"
+            f"You can now refine it in the agent editor or use it directly.",
+        ), False
+
+    async def _auto_create_workflow(self, message: str, session_id: str) -> tuple[str, bool]:
+        """Erstellt bei explizitem User-Wunsch deterministisch einen Workflow."""
+        await status_bus.emit(session_id, _t("Erstelle Workflow…", "Creating workflow…"))
+        from core.llm_factory import get_llm
+
+        prompt = f"""Du bist ein Workflow-Builder für Ninko.
+Erzeuge aus der User-Anfrage ein JSON für create_linear_workflow.
+
+USER-ANFRAGE:
+{message}
+
+ANFORDERUNGEN:
+- Gib NUR ein JSON-Objekt zurück.
+- Felder: "name", "description", "steps"
+- name: kurz und eindeutig
+- description: 1 Satz
+- steps: Liste aus 2 bis 6 klaren, sequentiellen Schritten
+- Jeder Step ist eine konkrete Handlungsanweisung für den Orchestrator.
+- Kein Markdown, keine Kommentare.
+
+JSON-SCHEMA:
+{{
+  "name": "string",
+  "description": "string",
+  "steps": ["step 1", "step 2", "step 3"]
+}}"""
+
+        try:
+            llm = get_llm()
+            response = await asyncio.wait_for(
+                llm.ainvoke([HumanMessage(content=prompt)]),
+                timeout=12.0,
+            )
+            raw = response.content if hasattr(response, "content") else str(response)
+            raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
+            m = re.search(r"\{[\s\S]*\}", raw)
+            if not m:
+                raise ValueError("Kein JSON-Objekt in der LLM-Antwort gefunden.")
+            spec = _json.loads(m.group(0))
+        except Exception as exc:
+            logger.warning("Auto-Create-Workflow: Spec-Generierung fehlgeschlagen: %s", exc)
+            return _t(
+                "Fehler: Die Workflow-Spezifikation konnte nicht erzeugt werden. "
+                "Bitte beschreibe Ablauf und Ziel klarer.",
+                "Error: Failed to generate the workflow specification. "
+                "Please describe flow and goal more clearly.",
+            ), False
+
+        name = str(spec.get("name", "")).strip()[:120]
+        description = str(spec.get("description", "")).strip()[:500]
+        steps_raw = spec.get("steps", [])
+        steps = [str(s).strip() for s in (steps_raw if isinstance(steps_raw, list) else []) if str(s).strip()]
+
+        if not name:
+            return _t(
+                "Fehler: Die Workflow-Spezifikation enthält keinen gültigen Namen.",
+                "Error: The workflow specification has no valid name.",
+            ), False
+        if len(steps) < 2:
+            return _t(
+                "Fehler: Für einen Workflow werden mindestens 2 Schritte benötigt.",
+                "Error: A workflow needs at least 2 steps.",
+            ), False
+        if len(steps) > 6:
+            steps = steps[:6]
+
+        try:
+            result = await create_linear_workflow.ainvoke({
+                "name": name,
+                "description": description,
+                "steps": steps,
+            })
+        except Exception as exc:
+            logger.error("Auto-Create-Workflow: create_linear_workflow fehlgeschlagen: %s", exc, exc_info=True)
+            return _t(
+                "Fehler: Workflow konnte nicht erstellt werden.",
+                "Error: Workflow could not be created.",
+            ), False
+
+        return str(result), False
 
     def invalidate_routing_map(self) -> None:
         """Markiert die Routing-Map als veraltet (nach Modul-Änderungen aufrufen)."""
@@ -663,9 +896,6 @@ class OrchestratorAgent(BaseAgent):
 
         agent_name = pending.get("agent", "orchestrator")
 
-        # Redis-Key löschen (agent re-erstellt ihn falls weiterer Call Bestätigung braucht)
-        await redis.connection.delete(f"ninko:safeguard_tool_pending:{session_id}")
-
         # Richtige Agent-Instanz finden
         if agent_name in ("orchestrator", self.name):
             agent = self
@@ -778,6 +1008,20 @@ class OrchestratorAgent(BaseAgent):
                     force_module,
                     False,
                 )
+
+        # ── Explizite Agent-Erstellung: deterministischer Create-Fast-Path ──
+        # Verhindert "nur Anleitung", wenn der User klar "Agent erstellen" verlangt.
+        if self._wants_agent_creation(message):
+            logger.info("Explizite Agent-Erstellungs-Intention erkannt → Auto-Create-Fast-Path.")
+            response, did_compact = await self._auto_create_custom_agent(message, session_id)
+            return response, "orchestrator", did_compact
+
+        # ── Explizite Workflow-Erstellung: deterministischer Create-Fast-Path ─
+        # Verhindert "nur Anleitung", wenn der User klar "Workflow erstellen" verlangt.
+        if self._wants_workflow_creation(message):
+            logger.info("Explizite Workflow-Erstellungs-Intention erkannt → Auto-Create-Fast-Path.")
+            response, did_compact = await self._auto_create_workflow(message, session_id)
+            return response, "orchestrator", did_compact
 
         tier, target_module = self._classify_tier(message, chat_history, cfg)
         self._last_tier_used = tier

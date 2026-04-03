@@ -1,6 +1,4 @@
-"""
-Tasmota Modul – Spezialist-Agent.
-"""
+"""Tasmota module — specialist agent."""
 
 from __future__ import annotations
 
@@ -56,7 +54,7 @@ Safety:
 
 
 class TasmotaAgent(BaseAgent):
-    """Tasmota-Spezialist mit Tasmota-Tools."""
+    """Tasmota specialist with Tasmota tools."""
 
     def __init__(self) -> None:
         super().__init__(

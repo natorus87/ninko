@@ -1,5 +1,5 @@
 """
-Qdrant Modul – FastAPI Router für Dashboard-API.
+Qdrant Module — FastAPI Router for Dashboard API.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ router = APIRouter()
 
 
 def _error(msg: str, status: int = 502) -> JSONResponse:
-    logger.warning("Qdrant API Fehler: %s", msg)
+    logger.warning("Qdrant API error: %s", msg)
     return JSONResponse({"error": str(msg)}, status_code=status)
 
 
@@ -37,7 +37,7 @@ def _error(msg: str, status: int = 502) -> JSONResponse:
 
 @router.get("/collections")
 async def get_collections(connection_id: str = ""):
-    """Alle Collections mit Statistiken."""
+    """All collections with statistics."""
     try:
         return await list_knowledge_collections.ainvoke({"connection_id": connection_id})
     except Exception as e:
@@ -46,7 +46,7 @@ async def get_collections(connection_id: str = ""):
 
 @router.get("/collections/{name}/stats")
 async def collection_stats(name: str, connection_id: str = ""):
-    """Statistiken einer einzelnen Collection."""
+    """Statistics for a single collection."""
     try:
         return await get_collection_stats.ainvoke(
             {"collection": name, "connection_id": connection_id}
@@ -57,13 +57,13 @@ async def collection_stats(name: str, connection_id: str = ""):
 
 @router.post("/collections")
 async def create_collection(req: CreateCollectionRequest, connection_id: str = ""):
-    """Neue leere Collection erstellen."""
+    """Create a new empty collection."""
     try:
         from .tools import _get_qdrant_client, _ensure_collection
 
         client, _ = await _get_qdrant_client(connection_id)
         await _ensure_collection(client, req.name)
-        return {"message": f"Collection '{req.name}' erstellt.", "name": req.name}
+        return {"message": f"Collection '{req.name}' created.", "name": req.name}
     except Exception as e:
         return _error(str(e))
 
@@ -72,7 +72,7 @@ async def create_collection(req: CreateCollectionRequest, connection_id: str = "
 
 @router.post("/search")
 async def search(req: SearchRequest, connection_id: str = ""):
-    """Semantische Suche in der Wissensbank."""
+    """Semantic search in the knowledge bank."""
     try:
         results = await search_knowledge.ainvoke({
             "query": req.query,
@@ -82,7 +82,7 @@ async def search(req: SearchRequest, connection_id: str = ""):
             "tags": ",".join(req.tags) if req.tags else "",
             "connection_id": connection_id,
         })
-        # Score-Threshold clientseitig anwenden
+        # Apply score threshold client-side
         if req.score_threshold > 0:
             results = [r for r in results if r.get("score", 1.0) >= req.score_threshold]
         return results
@@ -94,7 +94,7 @@ async def search(req: SearchRequest, connection_id: str = ""):
 
 @router.post("/entries")
 async def add_entry(req: AddEntryRequest, connection_id: str = ""):
-    """Einzelnen Eintrag zur Wissensbank hinzufügen."""
+    """Add a single entry to the knowledge bank."""
     try:
         msg = await add_knowledge.ainvoke({
             "content": req.content,
@@ -112,7 +112,7 @@ async def add_entry(req: AddEntryRequest, connection_id: str = ""):
 
 @router.post("/entries/batch")
 async def batch_add_entries(req: BatchAddRequest, connection_id: str = ""):
-    """Mehrere Einträge in einem Request hinzufügen."""
+    """Add multiple entries in a single request."""
     results = []
     for entry in req.entries:
         try:
@@ -136,7 +136,7 @@ async def batch_add_entries(req: BatchAddRequest, connection_id: str = ""):
 
 @router.delete("/entries/{point_id}")
 async def delete_entry(point_id: str, collection: str = "", connection_id: str = ""):
-    """Einzelnen Eintrag per ID löschen."""
+    """Delete a single entry by ID."""
     try:
         msg = await delete_knowledge_by_id.ainvoke({
             "point_id": point_id,
@@ -150,13 +150,13 @@ async def delete_entry(point_id: str, collection: str = "", connection_id: str =
 
 @router.post("/entries/delete-by-filter")
 async def delete_by_filter(req: DeleteEntryRequest, connection_id: str = ""):
-    """Mehrere Einträge per Payload-Filter löschen (Kategorie oder Quelle)."""
+    """Delete multiple entries by payload filter (category or source)."""
     try:
         from qdrant_client.models import Filter, FieldCondition, MatchValue
         from .tools import _get_qdrant_client
 
         if not req.category and not req.source:
-            return _error("Mindestens category oder source muss angegeben werden.", 400)
+            return _error("At least 'category' or 'source' must be specified.", 400)
 
         client, default_collection = await _get_qdrant_client(connection_id)
         target = req.collection or default_collection
@@ -171,7 +171,7 @@ async def delete_by_filter(req: DeleteEntryRequest, connection_id: str = ""):
             collection_name=target,
             points_selector=Filter(must=conditions),
         )
-        return {"message": f"Einträge mit Filter gelöscht aus '{target}'."}
+        return {"message": f"Entries with filter deleted from '{target}'."}
     except Exception as e:
         return _error(str(e))
 
@@ -186,7 +186,7 @@ async def list_entries(
     category: str = "",
     connection_id: str = "",
 ):
-    """Einträge aus einer Collection auflisten (mit Pagination und optionalem Kategorie-Filter)."""
+    """List entries from a collection (with pagination and optional category filter)."""
     try:
         from qdrant_client.models import Filter, FieldCondition, MatchValue
         from .tools import _get_qdrant_client

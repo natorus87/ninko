@@ -1,14 +1,14 @@
 from core.module_registry import ModuleManifest
 
 async def check_email_health() -> dict:
-    """ Health Check für das Dashboard. """
-    return {"status": "ok", "detail": "Email-Modul initialisiert (Health über IMAP/SMTP Ping folgt)"}
+    """Health check for the dashboard."""
+    return {"status": "ok", "detail": "Email module initialized (health via IMAP/SMTP ping pending)"}
 
 module_manifest = ModuleManifest(
     name="email",
     display_name="Email (SMTP/IMAP)",
-    description="E-Mail Client für Ninko. Senden via SMTP und Lesen/Verwalten via IMAP. Unterstützt Basic Auth und MSAL (Microsoft 365 OAuth2).",
-    version="1.0.0",
+    description="Email client for Ninko. Send via SMTP and read/manage via IMAP. Supports Basic Auth and MSAL (Microsoft 365 OAuth2).",
+    version="1.1.0",
     author="Ninko",
     enabled_by_default=True,
     env_prefix="EMAIL_",

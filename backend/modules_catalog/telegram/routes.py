@@ -12,10 +12,10 @@ router = APIRouter()
 
 @router.get("/status")
 async def get_bot_status() -> dict[str, Any]:
-    """Prüft den Status des Telegram Long-Polling-Bots."""
+    """Check the status of the Telegram long-polling bot."""
     bot = get_telegram_bot()
     if not bot:
-        return {"running": False, "error": "Bot-Instanz nicht initialisiert."}
+        return {"running": False, "error": "Bot instance not initialized."}
 
     result: dict[str, Any] = {"running": bot.running}
 
@@ -31,7 +31,7 @@ async def get_bot_status() -> dict[str, Any]:
     except Exception:
         pass
 
-    # Default-Chat-ID und Allowlist aus Connection-Config für das Dashboard
+    # Default chat ID and allowlist from connection config for the dashboard
     try:
         from core.connections import ConnectionManager
         conn = await ConnectionManager.get_default_connection("telegram")
@@ -47,10 +47,10 @@ async def get_bot_status() -> dict[str, Any]:
 
 @router.post("/start")
 async def start_bot(request: Request) -> dict[str, Any]:
-    """Startet das Polling manuell."""
+    """Start polling manually."""
     bot = get_telegram_bot()
     if not bot:
-        raise HTTPException(status_code=500, detail="Telegram Bot nicht bereit")
+        raise HTTPException(status_code=500, detail="Telegram bot not ready")
 
     if bot.running:
         return {"status": "already_running"}
@@ -61,10 +61,10 @@ async def start_bot(request: Request) -> dict[str, Any]:
 
 @router.post("/stop")
 async def stop_bot() -> dict[str, Any]:
-    """Stoppt das Polling manuell."""
+    """Stop polling manually."""
     bot = get_telegram_bot()
     if not bot:
-        raise HTTPException(status_code=500, detail="Telegram Bot nicht bereit")
+        raise HTTPException(status_code=500, detail="Telegram bot not ready")
 
     await bot.stop()
     return {"status": "stopped"}
@@ -81,7 +81,7 @@ class AllowedIdsRequest(BaseModel):
 
 @router.get("/allowed-ids")
 async def get_allowed_ids() -> dict[str, Any]:
-    """Gibt die aktuelle Allowlist der erlaubten Chat-IDs zurück."""
+    """Return the current allowlist of permitted chat IDs."""
     from core.connections import ConnectionManager
 
     conn = await ConnectionManager.get_default_connection("telegram")
@@ -99,14 +99,14 @@ class DefaultChatIdRequest(BaseModel):
 
 @router.post("/default-chat-id")
 async def set_default_chat_id(body: DefaultChatIdRequest) -> dict[str, Any]:
-    """Setzt die Standard-Chat-ID für ausgehende Telegram-Nachrichten."""
+    """Set the default chat ID for outgoing Telegram messages."""
     from core.connections import ConnectionManager
 
     conn = await ConnectionManager.get_default_connection("telegram")
     if not conn:
         raise HTTPException(
             status_code=400,
-            detail="Keine Telegram-Verbindung konfiguriert. Bitte zuerst Bot-Token einrichten.",
+            detail="No Telegram connection configured. Please set up a bot token first.",
         )
 
     updated_config = dict(conn.config)
@@ -123,20 +123,20 @@ async def set_default_chat_id(body: DefaultChatIdRequest) -> dict[str, Any]:
 
 @router.post("/allowed-ids")
 async def set_allowed_ids(body: AllowedIdsRequest) -> dict[str, Any]:
-    """Aktualisiert die Allowlist der erlaubten Chat-IDs."""
+    """Update the allowlist of permitted chat IDs."""
     from core.connections import ConnectionManager
 
     conn = await ConnectionManager.get_default_connection("telegram")
     if not conn:
         raise HTTPException(
             status_code=400,
-            detail="Keine Telegram-Verbindung konfiguriert. Bitte zuerst Bot-Token einrichten.",
+            detail="No Telegram connection configured. Please set up a bot token first.",
         )
 
-    # IDs bereinigen, deduplizieren, Reihenfolge beibehalten
+    # Clean, deduplicate, and preserve order
     clean_ids = list(dict.fromkeys(s.strip() for s in body.ids if s.strip()))
 
-    # Config aktualisieren (bestehende Felder beibehalten)
+    # Update config (preserve existing fields)
     updated_config = dict(conn.config)
     updated_config["allowed_chat_ids"] = ",".join(clean_ids)
 
@@ -158,7 +158,7 @@ class VoiceReplyConfig(BaseModel):
 
 @router.get("/voice-reply")
 async def get_voice_reply_config() -> dict:
-    """Voice-Reply-Konfiguration aus der Telegram-Connection abrufen."""
+    """Retrieve voice-reply configuration from the Telegram connection."""
     from core.connections import ConnectionManager
 
     conn = await ConnectionManager.get_default_connection("telegram")
@@ -176,14 +176,14 @@ async def get_voice_reply_config() -> dict:
 
 @router.post("/voice-reply")
 async def set_voice_reply_config(body: VoiceReplyConfig) -> dict:
-    """Voice-Reply-Konfiguration in der Telegram-Connection speichern."""
+    """Save voice-reply configuration to the Telegram connection."""
     from core.connections import ConnectionManager
 
     conn = await ConnectionManager.get_default_connection("telegram")
     if not conn:
         raise HTTPException(
             status_code=400,
-            detail="Keine Telegram-Verbindung konfiguriert. Bitte zuerst Bot-Token einrichten.",
+            detail="No Telegram connection configured. Please set up a bot token first.",
         )
 
     updated_config = dict(conn.config)
@@ -200,16 +200,16 @@ async def set_voice_reply_config(body: VoiceReplyConfig) -> dict:
 
 @router.post("/send")
 async def send_message(body: SendMessageRequest) -> dict[str, Any]:
-    """Sendet eine Nachricht direkt über den Bot (für das Dashboard)."""
+    """Send a message directly via the bot (for the dashboard)."""
     bot = get_telegram_bot()
     if not bot:
-        raise HTTPException(status_code=500, detail="Telegram Bot nicht bereit")
+        raise HTTPException(status_code=500, detail="Telegram bot not ready")
 
     token = await bot.get_token()
     if not token:
-        raise HTTPException(status_code=400, detail="Kein Bot-Token konfiguriert")
+        raise HTTPException(status_code=400, detail="No bot token configured")
 
-    # Chat-ID: Parameter > Connection-Config
+    # Chat-ID: parameter > connection config
     chat_id = body.chat_id.strip()
     if not chat_id:
         try:
@@ -223,10 +223,10 @@ async def send_message(body: SendMessageRequest) -> dict[str, Any]:
     if not chat_id:
         raise HTTPException(
             status_code=400,
-            detail="Keine Chat-ID angegeben und keine Standard-Chat-ID konfiguriert.",
+            detail="No chat ID provided and no default chat ID configured.",
         )
 
     ok = await bot._send(token, int(chat_id), body.message, parse_mode="Markdown")
     if ok:
         return {"ok": True}
-    raise HTTPException(status_code=500, detail="Nachricht konnte nicht gesendet werden.")
+    raise HTTPException(status_code=500, detail="Message could not be sent.")

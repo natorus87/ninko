@@ -86,5 +86,33 @@ class AgentConfigStore:
         config = await self.get_config(agent_id)
         config.pop("safeguard_profile", None)
         redis = get_redis()
-        await redis.connection.hset(REDIS_KEY, agent_id, __import__("json").dumps(config))
+        await redis.connection.hset(REDIS_KEY, agent_id, json.dumps(config))
         logger.info("[AgentConfigStore] Agent '%s' safeguard_profile zurückgesetzt.", agent_id)
+
+    # ── Safeguard Custom Classifier Policy (pro Agent) ────────────────────────
+
+    async def get_classifier_policy(self, agent_id: str) -> str | None:
+        """
+        Returns the custom safeguard classifier policy for this agent, or None.
+        The policy text is injected into the LLM classifier system prompt
+        to enforce agent-specific safety rules (e.g. stricter Proxmox rules).
+        """
+        config = await self.get_config(agent_id)
+        return config.get("safeguard_classifier_policy", None)
+
+    async def set_classifier_policy(self, agent_id: str, policy: str) -> None:
+        """Set a custom safeguard classifier policy for this agent."""
+        await self.set_config(agent_id, "safeguard_classifier_policy", policy)
+        logger.info(
+            "[AgentConfigStore] Agent '%s' safeguard_classifier_policy updated (%d chars).",
+            agent_id, len(policy),
+        )
+
+    async def clear_classifier_policy(self, agent_id: str) -> None:
+        """Remove the custom classifier policy (falls back to global default)."""
+        from core.redis_client import get_redis
+        config = await self.get_config(agent_id)
+        config.pop("safeguard_classifier_policy", None)
+        redis = get_redis()
+        await redis.connection.hset(REDIS_KEY, agent_id, json.dumps(config))
+        logger.info("[AgentConfigStore] Agent '%s' safeguard_classifier_policy cleared.", agent_id)

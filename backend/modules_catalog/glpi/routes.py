@@ -1,5 +1,5 @@
 """
-GLPI Modul – FastAPI Router für Dashboard-API.
+GLPI module — FastAPI router for dashboard API.
 """
 
 from __future__ import annotations
@@ -24,13 +24,13 @@ router = APIRouter()
 
 @router.get("/stats")
 async def ticket_stats():
-    """Ticket-Statistiken."""
+    """Ticket statistics."""
     return await get_ticket_stats.ainvoke({})
 
 
 @router.get("/tickets")
 async def tickets(status: int = 0, priority: int = 0, keyword: str = "", limit: int = 10):
-    """Tickets suchen."""
+    """Search tickets."""
     return await search_tickets.ainvoke({
         "status": status,
         "priority": priority,
@@ -41,7 +41,7 @@ async def tickets(status: int = 0, priority: int = 0, keyword: str = "", limit: 
 
 @router.get("/tickets/{ticket_id}")
 async def ticket_detail(ticket_id: int):
-    """Ticket-Details."""
+    """Ticket details."""
     return await get_ticket.ainvoke({"ticket_id": ticket_id})
 
 
@@ -53,7 +53,7 @@ async def create_ticket_api(
     category_id: int = 0,
     ticket_type: int = 1,
 ):
-    """Neues Ticket erstellen."""
+    """Create a new ticket."""
     return await create_ticket_tool.ainvoke({
         "title": title,
         "description": description,
@@ -65,7 +65,7 @@ async def create_ticket_api(
 
 @router.post("/tickets/{ticket_id}/close")
 async def close_ticket_api(ticket_id: int, solution: str):
-    """Ticket schließen."""
+    """Close a ticket."""
     return await close_ticket_tool.ainvoke({
         "ticket_id": ticket_id,
         "solution": solution,
@@ -74,7 +74,7 @@ async def close_ticket_api(ticket_id: int, solution: str):
 
 @router.post("/tickets/{ticket_id}/followup")
 async def add_followup_api(ticket_id: int, content: str, is_private: bool = False):
-    """Follow-up hinzufügen."""
+    """Add a follow-up."""
     return await add_followup_tool.ainvoke({
         "ticket_id": ticket_id,
         "content": content,
@@ -84,5 +84,5 @@ async def add_followup_api(ticket_id: int, content: str, is_private: bool = Fals
 
 @router.get("/base-url")
 async def get_base_url():
-    """GLPI Base-URL für Direktlinks."""
+    """GLPI base URL for direct links."""
     return {"base_url": os.environ.get("GLPI_BASE_URL", "")}

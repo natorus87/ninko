@@ -1,6 +1,6 @@
 """
-Docker Modul – Manifest mit Metadaten und Health-Check.
-Verwaltet Docker-Hosts über die Docker Engine API.
+Docker Module — Manifest with metadata and health check.
+Manages Docker hosts via the Docker Engine API.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ logger = logging.getLogger("ninko.modules.docker")
 
 
 async def check_docker_health() -> dict:
-    """Health-Check für Docker Engine API-Verbindung."""
+    """Health check for Docker Engine API connection."""
     try:
         import httpx
 
@@ -41,8 +41,8 @@ async def check_docker_health() -> dict:
 module_manifest = ModuleManifest(
     name="docker",
     display_name="Docker",
-    description="Docker Host Management – Container, Images, Volumes, System-Info",
-    version="1.0.0",
+    description="Docker Host Management — Containers, Images, Volumes, System Info",
+    version="1.1.0",
     author="Ninko Team",
     enabled_by_default=False,
     env_prefix="DOCKER_",

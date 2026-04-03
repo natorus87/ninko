@@ -3,16 +3,16 @@ from .tools import _get_api_client
 
 async def check_homeassistant_health() -> dict:
     """
-    Health-Check Funktion für das Dashboard.
+    Health check function for the dashboard.
     Validates accessibility of the Home Assistant API.
     """
     try:
-        # Pings the /api/ Endpoints to check if it's reachable and the token is valid
+        # Pings the /api/ endpoint to check if it's reachable and the token is valid
         client = await _get_api_client("") 
         # TODO: A proper ping could be done using httpx inside tools.py, but for now we rely on 
         # the client returning some basic data if configured. Usually Ninko expects a real check.
         # But we'll trust that the client data is present.
-        return {"status": "ok", "detail": "Home Assistant Konfiguration vorhanden."}
+        return {"status": "ok", "detail": "Home Assistant configuration present."}
     except Exception as e:
         return {"status": "error", "detail": str(e)}
 
@@ -20,7 +20,7 @@ module_manifest = ModuleManifest(
     name="homeassistant",
     display_name="Home Assistant",
     description="Steuerung und Abfrage von Smart Home Geräten in Home Assistant.",
-    version="1.0.0",
+    version="1.1.0",
     author="Ninko",
     enabled_by_default=False,
     env_prefix="HOMEASSISTANT_",

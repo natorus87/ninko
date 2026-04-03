@@ -39,6 +39,7 @@ REDIS_KEY_LLM_PROVIDERS = "ninko:settings:llm_providers"
 #  LLM Settings
 # ═══════════════════════════════════════════════════════
 
+
 @router.get("/llm", response_model=LlmSettingsResponse)
 async def get_llm_settings() -> LlmSettingsResponse:
     """Aktuelle LLM-Konfiguration abrufen (Redis → Env → Default)."""
@@ -76,7 +77,9 @@ async def update_llm_settings(body: LlmSettings) -> LlmSettingsResponse:
     """LLM-Konfiguration aktualisieren und LLM-Factory neu initialisieren."""
     redis = get_redis()
     await redis.connection.set(REDIS_KEY_LLM, body.model_dump_json())
-    logger.info("LLM-Settings aktualisiert: backend=%s, model=%s", body.backend, body.model)
+    logger.info(
+        "LLM-Settings aktualisiert: backend=%s, model=%s", body.backend, body.model
+    )
 
     # LLM-Factory neu initialisieren
     _reconfigure_llm(body)
@@ -94,7 +97,11 @@ async def get_embed_model() -> dict:
     """Globales Embedding-Modell abrufen."""
     redis = get_redis()
     stored = await redis.connection.get(REDIS_KEY_EMBED_MODEL)
-    model = stored if isinstance(stored, str) else (stored.decode() if stored else get_settings().EMBED_MODEL)
+    model = (
+        stored
+        if isinstance(stored, str)
+        else (stored.decode() if stored else get_settings().EMBED_MODEL)
+    )
     return {"embed_model": model}
 
 
@@ -111,6 +118,7 @@ async def set_embed_model(body: dict) -> dict:
     # Sofort in Env übernehmen
     os.environ["EMBED_MODEL"] = model
     import core.config
+
     core.config._settings = None
 
     logger.info("Globales Embedding-Modell geändert zu: %s", model)
@@ -139,12 +147,17 @@ def _reconfigure_llm(settings: LlmSettings) -> None:
 
     # Context-Window-Cache leeren bei Backend-Wechsel
     from core.llm_factory import invalidate_context_window_cache
+
     invalidate_context_window_cache()
 
     # Settings-Singleton zurücksetzen damit neue Werte geladen werden
     import core.config
+
     core.config._settings = None
-    logger.info("LLM-Factory wird beim nächsten Aufruf neu initialisiert: backend=%s", settings.backend)
+    logger.info(
+        "LLM-Factory wird beim nächsten Aufruf neu initialisiert: backend=%s",
+        settings.backend,
+    )
 
 
 # ═══════════════════════════════════════════════════════
@@ -161,7 +174,11 @@ async def get_language() -> dict:
     redis = get_redis()
     stored = await redis.connection.get(REDIS_KEY_LANGUAGE)
     # redis-py mit decode_responses=True liefert bereits str, sonst bytes
-    lang = stored if isinstance(stored, str) else (stored.decode() if stored else get_settings().LANGUAGE)
+    lang = (
+        stored
+        if isinstance(stored, str)
+        else (stored.decode() if stored else get_settings().LANGUAGE)
+    )
     return {"language": lang}
 
 
@@ -170,7 +187,10 @@ async def set_language(body: dict) -> dict:
     """Sprache in Redis speichern und sofort in ENV übernehmen."""
     lang = body.get("language", "de")
     if lang not in SUPPORTED_LANGUAGES:
-        raise HTTPException(status_code=400, detail=f"Unsupported language: {lang}. Supported: {SUPPORTED_LANGUAGES}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported language: {lang}. Supported: {SUPPORTED_LANGUAGES}",
+        )
 
     redis = get_redis()
     await redis.connection.set(REDIS_KEY_LANGUAGE, lang)
@@ -178,6 +198,7 @@ async def set_language(body: dict) -> dict:
     # ENV direkt setzen damit get_settings() sofort die neue Sprache liefert
     os.environ["LANGUAGE"] = lang
     import core.config
+
     core.config._settings = None
 
     logger.info("Sprache geändert zu: %s", lang)
@@ -212,14 +233,16 @@ async def get_module_settings(request: Request) -> list[ModuleSettingsItem]:
         if not connection and mod.env_prefix:
             connection = _get_env_connection(mod.name, mod.env_prefix)
 
-        result.append(ModuleSettingsItem(
-            name=mod.name,
-            display_name=mod.display_name,
-            enabled=enabled,
-            description=mod.description,
-            version=mod.version,
-            connection=connection,
-        ))
+        result.append(
+            ModuleSettingsItem(
+                name=mod.name,
+                display_name=mod.display_name,
+                enabled=enabled,
+                description=mod.description,
+                version=mod.version,
+                connection=connection,
+            )
+        )
 
     return result
 
@@ -254,6 +277,7 @@ async def update_module_settings(
     secret_keys = _get_secret_keys(module_name)
     if secret_keys and body.connection:
         from core.vault import get_vault
+
         vault = get_vault()
         for key in secret_keys:
             value = body.connection.get(key, "")
@@ -287,17 +311,32 @@ def _get_env_connection(module_name: str, prefix: str) -> dict:
     """Liest aktuelle Connection-Parameter aus Env-Variablen."""
     params = {}
     mappings = {
-        "proxmox": ["PROXMOX_HOST", "PROXMOX_USER", "PROXMOX_TOKEN_ID", "PROXMOX_VERIFY_SSL"],
+        "proxmox": [
+            "PROXMOX_HOST",
+            "PROXMOX_USER",
+            "PROXMOX_TOKEN_ID",
+            "PROXMOX_VERIFY_SSL",
+        ],
         "glpi": ["GLPI_BASE_URL"],
         "kubernetes": [],
         "pihole": ["PIHOLE_URL"],
         "ionos": [],
         "fritzbox": ["FRITZBOX_HOST", "FRITZBOX_USER"],
-        "email": ["EMAIL_IMAP_SERVER", "EMAIL_IMAP_PORT", "EMAIL_SMTP_SERVER", "EMAIL_SMTP_PORT", "EMAIL_ADDRESS", "EMAIL_AUTH_TYPE", "EMAIL_CLIENT_ID", "EMAIL_TENANT_ID"],
+        "email": [
+            "EMAIL_IMAP_SERVER",
+            "EMAIL_IMAP_PORT",
+            "EMAIL_SMTP_SERVER",
+            "EMAIL_SMTP_PORT",
+            "EMAIL_ADDRESS",
+            "EMAIL_AUTH_TYPE",
+            "EMAIL_CLIENT_ID",
+            "EMAIL_TENANT_ID",
+        ],
         "docker": ["DOCKER_HOST", "DOCKER_PORT", "DOCKER_TLS", "DOCKER_API_VERSION"],
         "linux_server": ["LINUX_SERVER_HOST", "LINUX_SERVER_PORT", "LINUX_SERVER_USER"],
         "wordpress": ["WORDPRESS_URL", "WORDPRESS_USERNAME"],
         "checkmk": ["CHECKMK_URL", "CHECKMK_SITE", "CHECKMK_API_USERNAME"],
+        "synology": ["SYNOLOGY_URL", "SYNOLOGY_USERNAME"],
     }
     for key in mappings.get(module_name, []):
         val = os.environ.get(key, "")
@@ -320,19 +359,27 @@ def _get_secret_keys(module_name: str) -> list[str]:
         "linux_server": ["LINUX_SERVER_PASSWORD", "LINUX_SERVER_SSH_KEY"],
         "wordpress": ["WORDPRESS_APP_PASSWORD"],
         "checkmk": ["CHECKMK_API_PASSWORD", "CHECKMK_API_TOKEN"],
+        "synology": ["SYNOLOGY_PASSWORD", "SYNOLOGY_API_KEY"],
     }.get(module_name, [])
 
 
 def _apply_module_connection(module_name: str, connection: dict) -> None:
     """Setzt Connection-Parameter als Env-Variablen."""
     for key, value in connection.items():
-        if key and value and not key.endswith("SECRET") and not key.endswith("TOKEN") and not key.endswith("KEY"):
+        if (
+            key
+            and value
+            and not key.endswith("SECRET")
+            and not key.endswith("TOKEN")
+            and not key.endswith("KEY")
+        ):
             os.environ[key] = str(value)
 
 
 # ═══════════════════════════════════════════════════════
 #  LLM Multi-Provider Management
 # ═══════════════════════════════════════════════════════
+
 
 async def _load_providers(redis) -> list[dict]:
     raw = await redis.connection.get(REDIS_KEY_LLM_PROVIDERS)
@@ -347,7 +394,7 @@ def _apply_default_provider(providers: list[dict]) -> None:
     """Findet den Standard-Provider und konfiguriert die LLM-Factory entsprechend."""
     default = next((p for p in providers if p.get("is_default")), None)
     if not default and providers:
-        default = providers[0]        # Fallback: erster Provider
+        default = providers[0]  # Fallback: erster Provider
     if not default:
         return
 
@@ -363,21 +410,28 @@ def _apply_default_provider(providers: list[dict]) -> None:
     # SSL-Verify-Flag in Env schreiben (wird von llm_factory beim nächsten get_llm() gelesen)
     verify_ssl = bool(default.get("verify_ssl", True))
     import os
+
     os.environ["LLM_VERIFY_SSL"] = "true" if verify_ssl else "false"
 
     # Context-Window Override: wenn manuell gesetzt, direkt in Cache schreiben
     ctx_override = int(default.get("context_window") or 0)
     if ctx_override > 0:
         from core.llm_factory import invalidate_context_window_cache
+
         invalidate_context_window_cache(override=ctx_override)
         logger.info(
             "LLM-Factory auf Standard-Provider umgestellt: %s (%s, %s) — Context-Window Override: %d",
-            default.get("name"), settings.backend, settings.model, ctx_override,
+            default.get("name"),
+            settings.backend,
+            settings.model,
+            ctx_override,
         )
     else:
         logger.info(
             "LLM-Factory auf Standard-Provider umgestellt: %s (%s, %s)",
-            default.get("name"), settings.backend, settings.model,
+            default.get("name"),
+            settings.backend,
+            settings.model,
         )
 
 
@@ -394,6 +448,7 @@ async def create_llm_provider(body: LLMProviderCreate) -> dict:
     """Neuen LLM-Provider anlegen."""
     import uuid
     from datetime import datetime, timezone
+
     redis = get_redis()
     providers = await _load_providers(redis)
 
@@ -428,7 +483,9 @@ async def update_llm_provider(provider_id: str, body: LLMProviderCreate) -> dict
     providers = await _load_providers(redis)
     idx = next((i for i, p in enumerate(providers) if p["id"] == provider_id), None)
     if idx is None:
-        raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' nicht gefunden")
+        raise HTTPException(
+            status_code=404, detail=f"Provider '{provider_id}' nicht gefunden"
+        )
 
     if body.is_default:
         for p in providers:
@@ -451,7 +508,9 @@ async def delete_llm_provider(provider_id: str) -> dict:
     removed = [p for p in providers if p["id"] == provider_id]
     providers = [p for p in providers if p["id"] != provider_id]
     if len(providers) == original_len:
-        raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' nicht gefunden")
+        raise HTTPException(
+            status_code=404, detail=f"Provider '{provider_id}' nicht gefunden"
+        )
 
     # Neuen Standard setzen falls gelöschter Standard war
     if removed and removed[0].get("is_default") and providers:
@@ -468,11 +527,14 @@ async def delete_llm_provider(provider_id: str) -> dict:
 async def test_llm_provider(provider_id: str) -> dict:
     """Verbindungstest für einen LLM-Provider."""
     import httpx
+
     redis = get_redis()
     providers = await _load_providers(redis)
     provider = next((p for p in providers if p["id"] == provider_id), None)
     if not provider:
-        raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' nicht gefunden")
+        raise HTTPException(
+            status_code=404, detail=f"Provider '{provider_id}' nicht gefunden"
+        )
 
     base_url = provider.get("base_url", "")
     backend = provider.get("backend", "ollama")
@@ -494,7 +556,11 @@ async def test_llm_provider(provider_id: str) -> dict:
     verify_ssl = bool(provider.get("verify_ssl", True))
     logger.debug(
         "Provider-Test: id=%s backend=%s url=%s verify_ssl_raw=%r verify_ssl_bool=%r",
-        provider_id, backend, test_url, provider.get("verify_ssl"), verify_ssl,
+        provider_id,
+        backend,
+        test_url,
+        provider.get("verify_ssl"),
+        verify_ssl,
     )
     status = "unreachable"
     error = None
@@ -522,10 +588,18 @@ async def get_context_window() -> dict:
     Gibt zuerst einen manuell konfigurierten Override zurück (aus dem aktiven Provider),
     andernfalls den gecachten Wert aus der API-Abfrage (oder den Fallback 32768).
     """
-    from core.llm_factory import get_model_context_window, _cached_context_window, _DEFAULT_CONTEXT_WINDOW
+    from core.llm_factory import (
+        get_model_context_window,
+        _cached_context_window,
+        _DEFAULT_CONTEXT_WINDOW,
+    )
+
     redis = get_redis()
     providers = await _load_providers(redis)
-    default = next((p for p in providers if p.get("is_default")), providers[0] if providers else None)
+    default = next(
+        (p for p in providers if p.get("is_default")),
+        providers[0] if providers else None,
+    )
     override = int((default or {}).get("context_window") or 0)
     if override > 0:
         return {"context_window": override, "source": "manual"}
@@ -551,7 +625,9 @@ async def set_default_llm_provider(body: dict) -> dict:
         else:
             p["is_default"] = False
     if not found:
-        raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' nicht gefunden")
+        raise HTTPException(
+            status_code=404, detail=f"Provider '{provider_id}' nicht gefunden"
+        )
     await _save_providers(redis, providers)
     # LLM-Factory auf neuen Standard umstellen
     _apply_default_provider(providers)
@@ -561,6 +637,7 @@ async def set_default_llm_provider(body: dict) -> dict:
 # ═══════════════════════════════════════════════════════
 #  Kubernetes Cluster Settings
 # ═══════════════════════════════════════════════════════
+
 
 @router.get("/k8s/clusters", response_model=K8sClusterListResponse)
 async def list_k8s_clusters() -> K8sClusterListResponse:
@@ -583,13 +660,16 @@ async def list_k8s_clusters() -> K8sClusterListResponse:
     if not clusters:
         try:
             from kubernetes import config as k8s_config
+
             k8s_config.load_kube_config()
-            clusters = [K8sClusterInfo(
-                name="local",
-                context="current-context",
-                is_default=True,
-                has_kubeconfig=True,
-            )]
+            clusters = [
+                K8sClusterInfo(
+                    name="local",
+                    context="current-context",
+                    is_default=True,
+                    has_kubeconfig=True,
+                )
+            ]
         except Exception:
             pass
 
@@ -612,8 +692,11 @@ async def add_k8s_cluster(body: K8sClusterCreate) -> dict:
 
     # In Vault speichern
     from core.vault import get_vault
+
     vault = get_vault()
-    await vault.set_secret(f"K8S_KUBECONFIG_{body.name.upper()}", body.kubeconfig_base64)
+    await vault.set_secret(
+        f"K8S_KUBECONFIG_{body.name.upper()}", body.kubeconfig_base64
+    )
 
     # Cluster-Metadata in Redis
     raw = await redis.connection.get(REDIS_KEY_K8S_CLUSTERS)
@@ -621,18 +704,22 @@ async def add_k8s_cluster(body: K8sClusterCreate) -> dict:
 
     # Duplikat-Check
     if any(c["name"] == body.name for c in clusters):
-        raise HTTPException(status_code=409, detail=f"Cluster '{body.name}' existiert bereits")
+        raise HTTPException(
+            status_code=409, detail=f"Cluster '{body.name}' existiert bereits"
+        )
 
     # is_default: alle anderen auf False setzen
     if body.is_default:
         for c in clusters:
             c["is_default"] = False
 
-    clusters.append({
-        "name": body.name,
-        "context": body.context,
-        "is_default": body.is_default or len(clusters) == 0,
-    })
+    clusters.append(
+        {
+            "name": body.name,
+            "context": body.context,
+            "is_default": body.is_default or len(clusters) == 0,
+        }
+    )
 
     await redis.connection.set(REDIS_KEY_K8S_CLUSTERS, json.dumps(clusters))
     logger.info("K8s-Cluster hinzugefügt: %s", body.name)
@@ -652,10 +739,13 @@ async def delete_k8s_cluster(cluster_name: str) -> dict:
     clusters = [c for c in clusters if c["name"] != cluster_name]
 
     if len(clusters) == original_len:
-        raise HTTPException(status_code=404, detail=f"Cluster '{cluster_name}' nicht gefunden")
+        raise HTTPException(
+            status_code=404, detail=f"Cluster '{cluster_name}' nicht gefunden"
+        )
 
     # Secret löschen
     from core.vault import get_vault
+
     vault = get_vault()
     await vault.delete_secret(f"K8S_KUBECONFIG_{cluster_name.upper()}")
 
@@ -698,7 +788,14 @@ async def get_tts_settings() -> dict:
 @router.put("/tts")
 async def update_tts_settings(body: dict) -> dict:
     """TTS-Konfiguration in Redis speichern und sofort in ENV übernehmen."""
-    allowed = {"TTS_ENABLED", "PIPER_BINARY", "VOICES_DIR", "TTS_DEFAULT_LANG", "TTS_DEFAULT_VOICE", "TTS_SAMPLE_RATE"}
+    allowed = {
+        "TTS_ENABLED",
+        "PIPER_BINARY",
+        "VOICES_DIR",
+        "TTS_DEFAULT_LANG",
+        "TTS_DEFAULT_VOICE",
+        "TTS_SAMPLE_RATE",
+    }
     data = {k: v for k, v in body.items() if k in allowed}
 
     redis = get_redis()
@@ -708,11 +805,13 @@ async def update_tts_settings(body: dict) -> dict:
     for key, value in data.items():
         os.environ[key] = str(value).lower() if isinstance(value, bool) else str(value)
     import core.config
+
     core.config._settings = None
 
     # PiperService-Singleton zurücksetzen damit neues Binary genutzt wird
     try:
         import core.tts as _tts_mod
+
         _tts_mod._service = None
     except Exception:
         pass
@@ -728,9 +827,15 @@ async def update_tts_settings(body: dict) -> dict:
 REDIS_KEY_STT = "ninko:settings:stt"
 _STT_ALLOWED = {
     "STT_PROVIDER",
-    "WHISPER_MODEL_SIZE", "WHISPER_DEVICE", "WHISPER_COMPUTE_TYPE", "WHISPER_LANGUAGE",
-    "STT_API_URL", "STT_API_KEY", "STT_MODEL",
-    "STT_SPELLCHECK", "STT_CONFIDENCE_THRESHOLD",
+    "WHISPER_MODEL_SIZE",
+    "WHISPER_DEVICE",
+    "WHISPER_COMPUTE_TYPE",
+    "WHISPER_LANGUAGE",
+    "STT_API_URL",
+    "STT_API_KEY",
+    "STT_MODEL",
+    "STT_SPELLCHECK",
+    "STT_CONFIDENCE_THRESHOLD",
 }
 
 
@@ -774,6 +879,7 @@ async def update_stt_settings(body: dict) -> dict:
     for key, value in data.items():
         os.environ[key] = str(value).lower() if isinstance(value, bool) else str(value)
     import core.config
+
     core.config._settings = None
 
     # Whisper-Cache invalidieren wenn sich Modell-Parameter geändert haben
@@ -784,11 +890,15 @@ async def update_stt_settings(body: dict) -> dict:
     ):
         try:
             from api.routes_transcription import invalidate_whisper_cache
+
             invalidate_whisper_cache()
         except Exception:
             pass
 
-    logger.info("STT-Settings aktualisiert: %s", {k: v for k, v in data.items() if "KEY" not in k})
+    logger.info(
+        "STT-Settings aktualisiert: %s",
+        {k: v for k, v in data.items() if "KEY" not in k},
+    )
     return {"status": "saved", **{k: v for k, v in data.items() if "KEY" not in k}}
 
 
@@ -809,7 +919,9 @@ async def set_default_k8s_cluster(cluster_name: str) -> dict:
             c["is_default"] = False
 
     if not found:
-        raise HTTPException(status_code=404, detail=f"Cluster '{cluster_name}' nicht gefunden")
+        raise HTTPException(
+            status_code=404, detail=f"Cluster '{cluster_name}' nicht gefunden"
+        )
 
     await redis.connection.set(REDIS_KEY_K8S_CLUSTERS, json.dumps(clusters))
 

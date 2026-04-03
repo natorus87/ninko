@@ -1,6 +1,6 @@
 """
-Linux Server Modul – Manifest mit Metadaten und Health-Check.
-Verwaltet Linux-Server über SSH (Passwort & RSA-Key).
+Linux Server Module — Manifest with metadata and health check.
+Manages Linux servers via SSH (password & RSA-key).
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ logger = logging.getLogger("ninko.modules.linux_server")
 
 
 async def check_linux_server_health() -> dict:
-    """Health-Check: Prüft ob eine SSH-Verbindung konfiguriert ist."""
+    """Health check: verify an SSH connection is configured."""
     try:
         return {"status": "ok", "detail": "Linux Server Modul bereit (SSH)"}
     except Exception as e:
@@ -23,8 +23,8 @@ async def check_linux_server_health() -> dict:
 module_manifest = ModuleManifest(
     name="linux_server",
     display_name="Linux Server",
-    description="Linux Server Management über SSH – Befehle, Services, Monitoring, Dateien",
-    version="1.0.0",
+    description="Linux Server Management via SSH — commands, services, monitoring, files",
+    version="1.1.0",
     author="Ninko Team",
     enabled_by_default=False,
     env_prefix="LINUX_SERVER_",

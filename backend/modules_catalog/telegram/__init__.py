@@ -1,6 +1,6 @@
 """
-Telegram Bot Modul für Ninko.
-Erlaubt das Chatten mit dem Agenten via Telegram.
+Telegram Bot module for Ninko.
+Allows chatting with the agent via Telegram.
 """
 
 from .manifest import module_manifest

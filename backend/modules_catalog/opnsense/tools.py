@@ -1,6 +1,4 @@
-"""
-OPNsense Modul – LangGraph @tool-Funktionen.
-"""
+"""OPNsense module — LangGraph @tool functions."""
 
 from __future__ import annotations
 
@@ -14,19 +12,20 @@ from langchain_core.tools import tool
 
 from core.connections import ConnectionManager
 from core.vault import get_vault
+from agents.base_agent import _t
 
 logger = logging.getLogger("ninko.modules.opnsense.tools")
 
 
 async def _get_opnsense_auth(connection_id: str = "") -> tuple:
     """
-    Hilfsfunktion: Lädt Auth-Daten aus dem ConnectionManager oder Env-Variablen.
+    Helper: loads auth data from ConnectionManager or environment variables.
     Returns: (host, (api_key, api_secret))
     """
     if connection_id:
         conn = await ConnectionManager.get_connection("opnsense", connection_id)
         if not conn:
-            raise ValueError(f"OPNsense-Verbindung mit ID '{connection_id}' nicht gefunden.")
+            raise ValueError(f"OPNsense connection with ID '{connection_id}' not found.")
     else:
         conn = await ConnectionManager.get_default_connection("opnsense")
 
@@ -51,20 +50,21 @@ async def _get_opnsense_auth(connection_id: str = "") -> tuple:
 
     if not host:
         raise ValueError(
-            "Keine OPNsense-Verbindung konfiguriert. "
-            "Bitte im Dashboard unter Einstellungen → Modul → Zahnrad eine Verbindung anlegen, "
-            "oder die Env-Variablen OPNSENSE_HOST, OPNSENSE_API_KEY, OPNSENSE_API_SECRET setzen."
+            _t(
+                de="Keine OPNsense-Verbindung konfiguriert. Bitte im Dashboard unter Einstellungen → Modul → Zahnrad eine Verbindung anlegen, oder die Env-Variablen OPNSENSE_HOST, OPNSENSE_API_KEY, OPNSENSE_API_SECRET setzen.",
+                en="No OPNsense connection configured. Please create a connection in the dashboard under Settings → Module → gear icon, or set the environment variables OPNSENSE_HOST, OPNSENSE_API_KEY, OPNSENSE_API_SECRET.",
+            )
         )
 
     return host, (api_key, api_secret)
 
 
 async def _opnsense_request(endpoint: str, connection_id: str = "", method: str = "GET", json_data: dict | None = None) -> Any:
-    """Sendet eine Anfrage an die OPNsense API."""
+    """Sends a request to the OPNsense API."""
     host, auth = await _get_opnsense_auth(connection_id)
 
     if not host:
-        raise ValueError("Keine OPNsense-Host-Adresse angegeben.")
+        raise ValueError("No OPNsense host address provided.")
 
     url = f"https://{host}{endpoint}"
 
@@ -83,14 +83,13 @@ async def _opnsense_request(endpoint: str, connection_id: str = "", method: str 
             return resp.json()
     except httpx.HTTPError as e:
         logger.error("OPNsense API Error: %s", e)
-        raise ValueError(f"OPNsense API Fehler: {e}")
+        raise ValueError(f"OPNsense API error: {e}")
 
 
 @tool
 async def get_opnsense_system_status(connection_id: str = "") -> Dict:
     """
-    Ruft den System-Status der OPNsense Firewall ab (Version, Uptime, CPU, RAM, Disk).
-    Benutze dieses Tool, um allgemeine Systeminformationen zu erhalten.
+    Retrieves the system status of the OPNsense firewall (version, uptime, CPU, RAM, disk).
     Use this tool to get general system information about the OPNsense firewall.
     """
     try:
@@ -124,16 +123,15 @@ async def get_opnsense_system_status(connection_id: str = "") -> Dict:
             "host": host,
         }
     except Exception as e:
-        logger.error("Fehler beim Abrufen des OPNsense System-Status: %s", e)
+        logger.error("Failed to retrieve OPNsense system status: %s", e)
         return {"error": str(e)}
 
 
 @tool
 async def get_opnsense_interfaces(connection_id: str = "") -> List[Dict]:
     """
-    Ruft alle Netzwerk-Interfaces der OPNsense ab (LAN, WAN, OPT, etc.).
-    Benutze dieses Tool, um Interface-Informationen wie IP, MAC, Status zu erhalten.
-    Use this tool to get network interface information.
+    Retrieves all network interfaces of the OPNsense firewall (LAN, WAN, OPT, etc.).
+    Use this tool to get network interface information (IP, MAC, status).
     """
     try:
         result = await _opnsense_request("/api/interfaces/overview/interfacesInfo", connection_id, method="POST", json_data={})
@@ -153,15 +151,14 @@ async def get_opnsense_interfaces(connection_id: str = "") -> List[Dict]:
             for iface in interfaces
         ]
     except Exception as e:
-        logger.error("Fehler beim Abrufen der OPNsense Interfaces: %s", e)
+        logger.error("Failed to retrieve OPNsense interfaces: %s", e)
         return [{"error": str(e)}]
 
 
 @tool
 async def get_opnsense_gateways(connection_id: str = "") -> List[Dict]:
     """
-    Ruft den Status aller Gateways ab (Name, IP, Status, Latenz).
-    Benutze dieses Tool, um Gateway-Verbindungen und deren Status zu überprüfen.
+    Retrieves the status of all gateways (name, IP, status, latency).
     Use this tool to check gateway status and latency.
     """
     try:
@@ -179,15 +176,14 @@ async def get_opnsense_gateways(connection_id: str = "") -> List[Dict]:
             for gw in gateways
         ]
     except Exception as e:
-        logger.error("Fehler beim Abrufen der OPNsense Gateways: %s", e)
+        logger.error("Failed to retrieve OPNsense gateways: %s", e)
         return [{"error": str(e)}]
 
 
 @tool
 async def get_opnsense_firewall_rules(connection_id: str = "", interface: str = "") -> List[Dict]:
     """
-    Ruft die Firewall-Regeln ab. Optional gefiltert nach Interface (z.B. 'wan', 'lan').
-    Benutze dieses Tool, um aktive Firewall-Regeln anzuzeigen.
+    Retrieves firewall rules. Optionally filtered by interface (e.g. 'wan', 'lan').
     Use this tool to list active firewall rules.
     """
     try:
@@ -212,15 +208,14 @@ async def get_opnsense_firewall_rules(connection_id: str = "", interface: str = 
             for r in rules[:50]
         ]
     except Exception as e:
-        logger.error("Fehler beim Abrufen der OPNsense Firewall-Regeln: %s", e)
+        logger.error("Failed to retrieve OPNsense firewall rules: %s", e)
         return [{"error": str(e)}]
 
 
 @tool
 async def get_opnsense_nat_rules(connection_id: str = "") -> List[Dict]:
     """
-    Ruft die NAT-Regeln (Port Forwarding, Outbound NAT) ab.
-    Benutze dieses Tool, um NAT-Regeln anzuzeigen.
+    Retrieves NAT rules (port forwarding, outbound NAT).
     Use this tool to list NAT rules.
     """
     try:
@@ -243,15 +238,14 @@ async def get_opnsense_nat_rules(connection_id: str = "") -> List[Dict]:
             for r in rules[:50]
         ]
     except Exception as e:
-        logger.error("Fehler beim Abrufen der OPNsense NAT-Regeln: %s", e)
+        logger.error("Failed to retrieve OPNsense NAT rules: %s", e)
         return [{"error": str(e)}]
 
 
 @tool
 async def get_opnsense_services(connection_id: str = "") -> List[Dict]:
     """
-    Ruft den Status aller Services ab (DHCP, DNS, VPN, etc.).
-    Benutze dieses Tool, um zu sehen welche Dienste laufen.
+    Retrieves the status of all services (DHCP, DNS, VPN, etc.).
     Use this tool to check which services are running.
     """
     try:
@@ -268,15 +262,14 @@ async def get_opnsense_services(connection_id: str = "") -> List[Dict]:
             for s in services
         ]
     except Exception as e:
-        logger.error("Fehler beim Abrufen der OPNsense Services: %s", e)
+        logger.error("Failed to retrieve OPNsense services: %s", e)
         return [{"error": str(e)}]
 
 
 @tool
 async def get_opnsense_dhcp_leases(connection_id: str = "") -> List[Dict]:
     """
-    Ruft die aktuellen DHCP-Leases ab (vergebene IP-Adressen).
-    Benutze dieses Tool, um verbundene Geräte im Netzwerk zu sehen.
+    Retrieves current DHCP leases (assigned IP addresses).
     Use this tool to see DHCP leases and connected devices.
     """
     try:
@@ -295,15 +288,170 @@ async def get_opnsense_dhcp_leases(connection_id: str = "") -> List[Dict]:
             for lease in leases
         ]
     except Exception as e:
-        logger.error("Fehler beim Abrufen der OPNsense DHCP-Leases: %s", e)
+        logger.error("Failed to retrieve OPNsense DHCP leases: %s", e)
         return [{"error": str(e)}]
+
+
+@tool
+async def create_opnsense_firewall_rule(
+    interface: str,
+    action: str,
+    protocol: str,
+    source: str,
+    destination: str,
+    description: str = "",
+    connection_id: str = ""
+) -> str:
+    """
+    Creates a new firewall rule on OPNsense.
+    Use this tool to add a firewall rule. Requires confirmation.
+    """
+    try:
+        payload = {
+            "rule": {
+                "interface": interface,
+                "action": action,
+                "protocol": protocol,
+                "source": source,
+                "destination": destination,
+                "descr": description,
+                "enabled": "1",
+            }
+        }
+        result = await _opnsense_request(
+            "/api/firewall/filter/addRule",
+            connection_id,
+            method="POST",
+            json_data=payload
+        )
+        if result.get("status") == "ok":
+            return _t(
+                de=f"Firewall-Regel erstellt: {description}",
+                en=f"Firewall rule created: {description}",
+            )
+        return _t(
+            de=f"Fehler beim Erstellen der Regel: {result}",
+            en=f"Error creating rule: {result}",
+        )
+    except Exception as e:
+        logger.error("Failed to create OPNsense firewall rule: %s", e)
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+        )
+
+
+@tool
+async def delete_opnsense_firewall_rule(rule_uuid: str, connection_id: str = "") -> str:
+    """
+    Deletes a firewall rule by UUID. Use this tool to remove a firewall rule. Requires confirmation.
+    """
+    try:
+        result = await _opnsense_request(
+            f"/api/firewall/filter/deleteRule/{rule_uuid}",
+            connection_id,
+            method="POST"
+        )
+        if result.get("status") == "ok":
+            return _t(
+                de=f"Firewall-Regel {rule_uuid} gelöscht.",
+                en=f"Firewall rule {rule_uuid} deleted.",
+            )
+        return _t(
+            de=f"Fehler beim Löschen der Regel: {result}",
+            en=f"Error deleting rule: {result}",
+        )
+    except Exception as e:
+        logger.error("Failed to delete OPNsense firewall rule: %s", e)
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+        )
+
+
+@tool
+async def create_opnsense_nat_rule(
+    interface: str,
+    protocol: str,
+    source: str,
+    destination: str,
+    target: str,
+    target_port: str,
+    description: str = "",
+    connection_id: str = ""
+) -> str:
+    """
+    Creates a new NAT rule (port forwarding) on OPNsense.
+    Use this tool to add a NAT rule. Requires confirmation.
+    """
+    try:
+        payload = {
+            "rule": {
+                "interface": interface,
+                "protocol": protocol,
+                "source": source,
+                "destination": destination,
+                "target": target,
+                "target_port": target_port,
+                "descr": description,
+                "enabled": "1",
+            }
+        }
+        result = await _opnsense_request(
+            "/api/firewall/filter/addRule",
+            connection_id,
+            method="POST",
+            json_data=payload
+        )
+        if result.get("status") == "ok":
+            return _t(
+                de=f"NAT-Regel erstellt: {description}",
+                en=f"NAT rule created: {description}",
+            )
+        return _t(
+            de=f"Fehler beim Erstellen der NAT-Regel: {result}",
+            en=f"Error creating NAT rule: {result}",
+        )
+    except Exception as e:
+        logger.error("Failed to create OPNsense NAT rule: %s", e)
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+        )
+
+
+@tool
+async def delete_opnsense_nat_rule(rule_uuid: str, connection_id: str = "") -> str:
+    """
+    Deletes a NAT rule by UUID. Use this tool to remove a NAT rule. Requires confirmation.
+    """
+    try:
+        result = await _opnsense_request(
+            f"/api/firewall/filter/deleteRule/{rule_uuid}",
+            connection_id,
+            method="POST"
+        )
+        if result.get("status") == "ok":
+            return _t(
+                de=f"NAT-Regel {rule_uuid} gelöscht.",
+                en=f"NAT rule {rule_uuid} deleted.",
+            )
+        return _t(
+            de=f"Fehler beim Löschen der NAT-Regel: {result}",
+            en=f"Error deleting NAT rule: {result}",
+        )
+    except Exception as e:
+        logger.error("Failed to delete OPNsense NAT rule: %s", e)
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+        )
 
 
 @tool
 async def restart_opnsense_service(service_name: str, connection_id: str = "") -> str:
     """
-    Startet einen OPNsense Service neu (z.B. 'unbound', 'dhcpd', 'openvpn').
-    Benutze dieses Tool, um einen Dienst neu zu starten.
+    Restarts an OPNsense service (e.g. 'unbound', 'dhcpd', 'openvpn').
     Use this tool to restart a service on OPNsense.
     """
     try:
@@ -314,18 +462,26 @@ async def restart_opnsense_service(service_name: str, connection_id: str = "") -
         )
 
         if result.get("status") == "ok":
-            return f"Service '{service_name}' wurde neu gestartet."
-        return f"Fehler beim Neustart: {result}"
+            return _t(
+                de=f"Service '{service_name}' wurde neu gestartet.",
+                en=f"Service '{service_name}' has been restarted.",
+            )
+        return _t(
+            de=f"Fehler beim Neustart: {result}",
+            en=f"Restart failed: {result}",
+        )
     except Exception as e:
-        logger.error("Fehler beim Neustarten des OPNsense Service: %s", e)
-        return f"Fehler: {e}"
+        logger.error("Failed to restart OPNsense service: %s", e)
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+        )
 
 
 @tool
 async def get_opnsense_logs(lines: int = 50, connection_id: str = "") -> List[Dict]:
     """
-    Ruft die Firewall-Logs ab (letzte Einträge).
-    Benutze dieses Tool, um Firewall-Blockierungen und Verbindungen zu sehen.
+    Retrieves firewall logs (latest entries).
     Use this tool to see firewall logs.
     """
     try:
@@ -348,5 +504,5 @@ async def get_opnsense_logs(lines: int = 50, connection_id: str = "") -> List[Di
             for e in entries[:lines]
         ]
     except Exception as e:
-        logger.error("Fehler beim Abrufen der OPNsense Logs: %s", e)
+        logger.error("Failed to retrieve OPNsense logs: %s", e)
         return [{"error": str(e)}]

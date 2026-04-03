@@ -1,5 +1,5 @@
 """
-Template Modul – LangGraph @tool-Funktionen.
+Template Module — LangGraph @tool functions.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ from typing import Any
 
 from langchain_core.tools import tool
 
+from agents.base_agent import _t
 from core.connections import ConnectionManager
 from core.vault import get_vault
 
@@ -18,18 +19,23 @@ logger = logging.getLogger("ninko.modules.template.tools")
 
 async def _get_api_client(connection_id: str = "") -> dict:
     """
-    Hilfsfunktion: Lädt Konfiguration und Secrets aus dem ConnectionManager.
+    Helper: loads config and secrets from ConnectionManager.
 
-    Best-Practice Pattern:
-    1. Zuerst ConnectionManager (UI-Verbindungen aus Redis + Vault)
-    2. Dann Fallback auf Env-Variablen (z.B. TEMPLATE_URL, TEMPLATE_API_KEY)
-    3. Erst dann ValueError wenn gar nichts konfiguriert ist
+    Best-practice pattern:
+    1. ConnectionManager first (UI connections from Redis + Vault)
+    2. Fallback to env vars (e.g. TEMPLATE_URL, TEMPLATE_API_KEY)
+    3. ValueError only if nothing is configured
     """
     # ── 1. ConnectionManager ──
     if connection_id:
         conn = await ConnectionManager.get_connection("template", connection_id)
         if not conn:
-            raise ValueError(f"Template-Verbindung mit ID '{connection_id}' nicht gefunden.")
+            raise ValueError(
+                _t(
+                    de=f"Template-Verbindung mit ID '{connection_id}' nicht gefunden.",
+                    en=f"Template connection with ID '{connection_id}' not found.",
+                )
+            )
     else:
         conn = await ConnectionManager.get_default_connection("template")
 
@@ -48,66 +54,76 @@ async def _get_api_client(connection_id: str = "") -> dict:
 
     if not base_url:
         raise ValueError(
-            "Keine Template-Verbindung konfiguriert. "
-            "Bitte im Dashboard unter Einstellungen → Modul → Zahnrad eine Verbindung anlegen, "
-            "oder die Env-Variablen TEMPLATE_URL / TEMPLATE_API_KEY setzen."
+            _t(
+                de=(
+                    "Keine Template-Verbindung konfiguriert. "
+                    "Bitte im Dashboard unter Einstellungen → Modul → Zahnrad eine Verbindung anlegen, "
+                    "oder die Env-Variablen TEMPLATE_URL / TEMPLATE_API_KEY setzen."
+                ),
+                en=(
+                    "No Template connection configured. "
+                    "Please create a connection in Settings → Module → Gear, "
+                    "or set the env vars TEMPLATE_URL / TEMPLATE_API_KEY."
+                ),
+            )
         )
 
     return {"base_url": base_url, "api_key": api_key}
 
 
 # ═══════════════════════════════════════════════════════
-# Agent Tools (Dem LLM zugänglich)
+# Agent Tools (exposed to LLM)
 #
-# WICHTIG: Docstrings müssen präzise sein — das LLM liest sie zur Tool-Auswahl!
-# Empfehlung: Docstrings auf Deutsch schreiben (Default-Sprache).
-# Bei englischer UI (LANGUAGE=en) wird das Tool dennoch korrekt gewählt,
-# da das LLM den Kontext versteht.
+# IMPORTANT: Docstrings must be precise — the LLM reads them for tool selection.
+# ALWAYS write docstrings in English.
 #
-# Tool-Status-Labels (für den Lade-Spinner im Chat) in base_agent._TOOL_LABELS
-# eintragen:
+# Tool status labels (chat loading spinner) in base_agent._TOOL_LABELS:
 #   "beispiel_tool": ("Führe Beispiel aus", "Running example"),
 #   "lade_daten":    ("Lade Daten",         "Loading data"),
 #
-# SAFEGUARD – _TOOL_READONLY (backend/core/safeguard.py):
-# Alle rein lesenden Tools (get_*, list_*, search_*, inspect_*, check_*)
-# MÜSSEN in _TOOL_READONLY eingetragen werden, damit der Safeguard-LLM
-# nicht bei jeder Status-Abfrage anschlägt.
-# Faustregel:
-#   READ-ONLY  → get_*/list_*/search_*/inspect_*/check_*/ha_get_* → in _TOOL_READONLY eintragen
-#   WRITE/ACTION → start_*/stop_*/restart_*/delete_*/create_*/set_*/add_*/update_* → NICHT eintragen
+# SAFEGUARD — _TOOL_READONLY (backend/core/safeguard.py):
+# All read-only tools (get_*, list_*, search_*, inspect_*, check_*)
+# MUST be registered in _TOOL_READONLY so the safeguard classifier
+# skips them without an LLM call.
+# Rule:
+#   READ-ONLY  → get_*/list_*/search_*/inspect_*/check_*/ha_get_* → add to _TOOL_READONLY
+#   WRITE/ACTION → start_*/stop_*/restart_*/delete_*/create_*/set_*/add_*/update_* → do NOT add
 # ═══════════════════════════════════════════════════════
 
 @tool
 async def beispiel_tool(parameter: str, connection_id: str = "") -> str:
     """
-    Ein einfaches Beispiel-Tool.
-    Benutze dieses Tool, wenn der User nach einem Beispiel oder Test fragt.
+    Run a simple example operation against the API.
     Use this tool when the user asks for an example or a test.
     """
     try:
         client = await _get_api_client(connection_id)
-        # TODO: Hier den echten API-Aufruf durchführen
-        return f"Das Beispiel-Tool wurde erfolgreich mit Parameter '{parameter}' ausgeführt."
+        # TODO: implement the real API call here
+        logger.info("beispiel_tool called with parameter=%s", parameter)
+        return f"Example tool executed successfully with parameter '{parameter}'."
     except Exception as e:
-        logger.error("Fehler im beispiel_tool: %s", e)
-        return f"Fehler: {e}"
+        logger.error("beispiel_tool failed: %s", e)
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+        )
 
 
 @tool
 async def lade_daten(connection_id: str = "") -> dict:
     """
-    Lädt Beispieldaten von der API.
-    Benutze dies, wenn der User nach Daten-Auswertungen fragt.
+    Load sample data from the API.
     Use this when the user asks for data analysis or reports.
     """
     try:
         client = await _get_api_client(connection_id)
-        # TODO: Hier den echten API-Aufruf durchführen
+        # TODO: implement the real API call here
+        logger.info("lade_daten called")
         return {
             "status": "success",
             "items": [1, 2, 3],
             "source": client["base_url"],
         }
     except Exception as e:
+        logger.error("lade_daten failed: %s", e)
         return {"error": str(e)}

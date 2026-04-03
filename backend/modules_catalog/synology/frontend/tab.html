@@ -1,0 +1,124 @@
+<!-- Synology Dashboard Tab -->
+<style>
+#synology-tab-content .cl-select { position:relative; display:inline-block; user-select:none; }
+#synology-tab-content .cl-select-btn {
+    display:flex; align-items:center; justify-content:space-between; gap:0.5rem;
+    padding:0.45rem 0.75rem; border-radius:4px; cursor:pointer; touch-action:manipulation;
+    border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-primary);
+    font-size:0.875rem; white-space:nowrap; min-width:200px;
+    transition: border-color 0.15s;
+}
+#synology-tab-content .cl-select-btn:hover { border-color:var(--accent-blue); }
+#synology-tab-content .cl-select-arrow { font-size:0.65rem; opacity:0.7; transition:transform 0.15s; }
+#synology-tab-content .cl-select.open .cl-select-arrow { transform:rotate(180deg); }
+#synology-tab-content .cl-select-dropdown {
+    display:none; position:absolute; top:calc(100% + 4px); left:0; min-width:100%;
+    background:var(--bg-card); border:1px solid var(--border-color);
+    border-radius:4px; box-shadow:0 4px 16px rgba(0,0,0,0.4);
+    z-index:999; overflow:hidden; max-height:260px; overflow-y:auto;
+    overscroll-behavior: contain;
+}
+#synology-tab-content .cl-select.open .cl-select-dropdown { display:block; }
+#synology-tab-content .cl-select-option {
+    padding:0.45rem 0.75rem; cursor:pointer; font-size:0.875rem;
+    color:var(--text-primary); white-space:nowrap;
+    transition: background-color 0.1s;
+}
+#synology-tab-content .cl-select-option:hover { background:rgba(255,255,255,0.07); }
+#synology-tab-content .cl-select-option.selected { color:var(--accent-blue); }
+</style>
+
+<div id="synology-tab-content" class="module-tab-content">
+    <!-- Status Cards -->
+    <div class="k8s-cluster-status" id="synology-stats">
+        <div class="status-card">
+            <span class="status-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                     stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round"
+                     aria-hidden="true">
+                    <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+                    <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+                    <line x1="6" y1="6" x2="6.01" y2="6"/>
+                    <line x1="6" y1="18" x2="6.01" y2="18"/>
+                </svg>
+            </span>
+            <span class="status-value" id="synology-model"
+                  style="font-variant-numeric: tabular-nums">-</span>
+            <span class="status-label">Model</span>
+        </div>
+        <div class="status-card">
+            <span class="status-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                     stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round"
+                     aria-hidden="true">
+                    <path d="M12 2v4"/>
+                    <path d="M12 18v4"/>
+                    <path d="M4.93 4.93l2.83 2.83"/>
+                    <path d="M16.24 16.24l2.83 2.83"/>
+                    <path d="M2 12h4"/>
+                    <path d="M18 12h4"/>
+                    <path d="M4.93 19.07l2.83-2.83"/>
+                    <path d="M16.24 7.76l2.83-2.83"/>
+                </svg>
+            </span>
+            <span class="status-value" id="synology-version"
+                  style="font-variant-numeric: tabular-nums">-</span>
+            <span class="status-label">DSM Version</span>
+        </div>
+        <div class="status-card running" id="synology-status-card">
+            <span class="status-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                     stroke="var(--accent-green)" stroke-width="2.5"
+                     stroke-linecap="round" stroke-linejoin="round"
+                     aria-hidden="true">
+                    <polyline points="20 6 9 17 4 12"/>
+                </svg>
+            </span>
+            <span class="status-value" id="synology-status"
+                  style="font-variant-numeric: tabular-nums">-</span>
+            <span class="status-label">Status</span>
+        </div>
+    </div>
+
+    <!-- Controls Toolbar -->
+    <div style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap; margin-bottom:1.5rem;">
+        <div class="cl-select" id="synology-conn-select">
+            <div class="cl-select-btn" onclick="SynologyTab.toggleSelect('synology-conn-select')"
+                 role="button" aria-haspopup="listbox" aria-label="Connection auswählen">
+                <span class="cl-select-label">Lade Verbindungen…</span>
+                <span class="cl-select-arrow" aria-hidden="true">▼</span>
+            </div>
+            <div class="cl-select-dropdown" id="synology-conn-options" role="listbox"></div>
+        </div>
+
+        <button type="button" class="btn btn-refresh" data-action="synology-refresh">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
+                 stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round"
+                 aria-hidden="true">
+                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                <path d="M21 3v5h-5"/>
+                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                <path d="M8 16H3v5"/>
+            </svg>
+            Aktualisieren
+        </button>
+    </div>
+
+    <!-- Content Section -->
+    <div class="k8s-section">
+        <h3 class="section-title" style="text-wrap:balance">Storage</h3>
+        <div id="synology-storage" class="nodes-grid">
+            <p class="empty-state">Keine Daten geladen. Verbindung wählen und aktualisieren.</p>
+        </div>
+    </div>
+
+    <div class="k8s-section">
+        <h3 class="section-title" style="text-wrap:balance">Packages</h3>
+        <div id="synology-packages" class="nodes-grid">
+            <p class="empty-state">Keine Daten geladen.</p>
+        </div>
+    </div>
+</div>

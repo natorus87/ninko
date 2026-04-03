@@ -1,4 +1,4 @@
-"""Docker Modul – Package Init."""
+"""Docker Module — Package Init."""
 
 from .manifest import module_manifest
 from .agent import DockerAgent

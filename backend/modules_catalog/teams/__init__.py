@@ -1,5 +1,5 @@
 """
-Microsoft Teams Modul für Ninko.
+Microsoft Teams module for Ninko.
 """
 
 from .manifest import module_manifest

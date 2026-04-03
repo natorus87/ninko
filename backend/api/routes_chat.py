@@ -22,6 +22,7 @@ from core.redis_client import get_redis
 from core.context_manager import get_context_manager
 from core import status_bus
 from agents.base_agent import _t, _TOOL_SAFEGUARD_SENTINEL
+from core.safeguard import ActionCategory
 
 logger = logging.getLogger("ninko.api.chat")
 router = APIRouter(prefix="/api/chat", tags=["Chat"])
@@ -83,6 +84,23 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
             f"ninko:safeguard_tool_pending:{body.session_id}"
         )
         if pending_raw:
+            # Audit: user confirmed the pending tool call
+            try:
+                _pending_info = json.loads(pending_raw)
+                safeguard = getattr(request.app.state, "safeguard", None)
+                if safeguard:
+                    await safeguard._audit_log(
+                        action="tool_confirmed",
+                        category=ActionCategory(_pending_info.get("category", "STATE_CHANGING")),
+                        text=body.message,
+                        session_id=body.session_id,
+                        agent_id=_pending_info.get("agent", ""),
+                        tool_name=_pending_info.get("tool_name", ""),
+                        outcome="confirmed",
+                        rationale=_pending_info.get("rationale", ""),
+                    )
+            except Exception:
+                pass
             # Redis-Key nicht löschen — resume_tool_execution() macht das selbst
             response_text, did_compact = await orchestrator.resume_tool_execution(
                 body.session_id

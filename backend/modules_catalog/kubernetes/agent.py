@@ -1,10 +1,10 @@
 """
-Kubernetes Modul – Spezialist-Agent.
+Kubernetes module – specialist agent.
 """
 
 from __future__ import annotations
 
-from agents.base_agent import BaseAgent
+from agents.base_agent import BaseAgent, _t
 from .tools import (
     get_cluster_status,
     list_namespaces,
@@ -26,7 +26,8 @@ from .tools import (
     create_namespace,
 )
 
-K8S_SYSTEM_PROMPT = """Du bist der Kubernetes-Spezialist von Ninko.
+K8S_SYSTEM_PROMPT = _t(
+    de="""Du bist der Kubernetes-Spezialist von Ninko.
 
 Deine Fähigkeiten:
 - Cluster-Status und Health-Monitoring
@@ -49,11 +50,36 @@ Verhaltensregeln:
 Bei Fehlern:
 - Zeige zuerst den aktuellen Status
 - Analysiere Logs und Events
-- Schlage konkrete Maßnahmen vor"""
+- Schlage konkrete Maßnahmen vor""",
+
+    en="""You are Ninko's Kubernetes specialist.
+
+Your capabilities:
+- Cluster status and health monitoring
+- Pod management: list, retrieve logs, restart, create
+- Deployment management: status, scaling, rollout restarts, create
+- Create and apply resources: apply_manifest (YAML string → create or update)
+- Delete resources: delete_resource (any kind/name)
+- Retrieve YAML manifests: get_resource_yaml
+- Create namespaces: create_namespace
+- Service, Ingress and PVC overview
+- Event analysis and error diagnostics
+
+Behavior rules:
+- For create/apply/delete: execute the action directly without asking
+- For destructive actions on production resources (scale to 0, delete Deployment): request brief confirmation
+- For test/dev resources (e.g. nginx-test-pod): execute directly
+- Use apply_manifest with complete YAML when the user wants to create a Pod, Deployment, Service, etc.
+- After creation: verify status with get_all_pods or get_deployment_status
+
+On errors:
+- Show current status first
+- Analyze logs and events
+- Suggest concrete actions""")
 
 
 class KubernetesAgent(BaseAgent):
-    """Kubernetes-Spezialist mit allen K8s-Tools."""
+    """Kubernetes specialist with all K8s tools."""
 
     def __init__(self) -> None:
         super().__init__(

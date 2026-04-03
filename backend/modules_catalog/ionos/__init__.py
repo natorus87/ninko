@@ -1,4 +1,4 @@
-"""IONOS DNS Modul – Package Init."""
+"""IONOS DNS Module — Package Init."""
 
 from .manifest import module_manifest
 from .agent import IonosAgent

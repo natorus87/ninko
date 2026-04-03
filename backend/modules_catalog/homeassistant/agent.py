@@ -1,5 +1,5 @@
 import logging
-from agents.base_agent import BaseAgent
+from agents.base_agent import BaseAgent, _t
 from .tools import (
     ha_get_entity_state,
     ha_get_entity_details,
@@ -12,15 +12,15 @@ logger = logging.getLogger("ninko.modules.homeassistant.agent")
 
 class HomeAssistantAgent(BaseAgent):
     """
-    Der LLM-Agent für das Home Assistant Modul.
-    Erbt von BaseAgent und bekommt spezifische HA Tools injiziert.
+    LLM agent for the Home Assistant module.
+    Inherits from BaseAgent and receives specific HA tools.
     """
 
     def __init__(self):
         super().__init__(
             name="homeassistant",
 
-            system_prompt=(
+            system_prompt=_t(
                 "Du bist der Smart Home und IoT Spezialist von Ninko. "
                 "Du steuerst und überwachst Home Assistant Umgebungen im Namen des Benutzers.\n\n"
                 "GERÄTE FINDEN — Strategie:\n"
@@ -38,7 +38,25 @@ class HomeAssistantAgent(BaseAgent):
                 "service_data_json='{\"brightness_pct\": 80}'\n"
                 "- Vor komplexen Climate-Aufrufen: 'ha_get_entity_details' für verfügbare Modi/Grenzen.\n\n"
                 "'ha_list_entities' enthält bereits den Status — danach NICHT noch 'ha_get_entity_state' aufrufen.\n"
-                "Gehe effizient vor – so wenige Tool-Aufrufe wie möglich."
+                "Gehe effizient vor – so wenige Tool-Aufrufe wie möglich.",
+                "You are the Smart Home and IoT specialist of Ninko. "
+                "You control and monitor Home Assistant environments on behalf of the user.\n\n"
+                "FINDING DEVICES — Strategy:\n"
+                "1. User mentions a device name (e.g. 'Thermostat Office', 'Shelly Kitchen') → "
+                "call 'ha_find_device'. Returns real device names + rooms + all entities.\n"
+                "2. User mentions a domain or general term (e.g. 'all lights', 'sensors in living room') → "
+                "call 'ha_list_entities' with domain_filter and/or name_search.\n"
+                "3. Known entity_id → use directly.\n\n"
+                "CONTROLLING DEVICES:\n"
+                "- Set temperature: service_name='climate.set_temperature', "
+                "service_data_json='{\"temperature\": 22}'\n"
+                "- Heating mode: service_name='climate.set_hvac_mode', "
+                "service_data_json='{\"hvac_mode\": \"heat\"}'\n"
+                "- Lights: 'light.turn_on' / 'light.turn_off', optional "
+                "service_data_json='{\"brightness_pct\": 80}'\n"
+                "- Before complex climate calls: use 'ha_get_entity_details' for available modes/limits.\n\n"
+                "'ha_list_entities' already includes the status — do NOT call 'ha_get_entity_state' after it.\n"
+                "Be efficient — use as few tool calls as possible."
             ),
 
             tools=[ha_find_device, ha_list_entities, ha_get_entity_state, ha_get_entity_details, ha_call_service],

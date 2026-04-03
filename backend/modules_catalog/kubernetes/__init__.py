@@ -1,4 +1,4 @@
-"""Kubernetes Modul – Package Init."""
+"""Kubernetes module — Package init."""
 
 from .manifest import module_manifest
 from .agent import KubernetesAgent

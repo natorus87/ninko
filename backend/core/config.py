@@ -68,6 +68,7 @@ class CoreSettings(BaseSettings):
     # ── Monitoring ─────────────────────────────────────
     MONITOR_INTERVAL_SECONDS: int = 300
     MONITOR_AUTO_REMEDIATE: bool = False
+    AGENT_TIMEOUT_SECONDS: int = 1800
 
     # ── TTS (Piper) ────────────────────────────────────
     TTS_ENABLED: bool = False

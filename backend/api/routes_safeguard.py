@@ -20,6 +20,11 @@ Per-Agent Profil:
     POST   /api/safeguard/agents/{agent_id}/profile    body: {"profile_id": "..."}
     DELETE /api/safeguard/agents/{agent_id}/profile
 
+Per-Agent Custom Classifier Policy:
+    GET    /api/safeguard/agents/{agent_id}/policy
+    POST   /api/safeguard/agents/{agent_id}/policy     body: {"policy": "..."}
+    DELETE /api/safeguard/agents/{agent_id}/policy
+
 Ältere Per-Agent Toggle-Routen (backward-compat):
     GET  /api/safeguard/agents/{agent_id}
     POST /api/safeguard/agents/{agent_id}/enable
@@ -43,6 +48,10 @@ REDIS_KEY_SAFEGUARD = "ninko:settings:safeguard"
 
 class ProfileAssignRequest(BaseModel):
     profile_id: str
+
+
+class ClassifierPolicyRequest(BaseModel):
+    policy: str
 
 
 def _get_safeguard(request: Request):
@@ -235,3 +244,45 @@ async def agent_safeguard_disable(agent_id: str, request: Request) -> dict:
     sg = _get_safeguard(request)
     await sg.disable_for_agent(agent_id)
     return {"agent_id": agent_id, "safeguard": "disabled"}
+
+
+# ─── Per-Agent Classifier Policy ──────────────────────────────────────────────
+
+@router.get("/agents/{agent_id}/policy")
+async def get_agent_classifier_policy(agent_id: str, request: Request) -> dict:
+    """Custom safeguard classifier policy für einen Agent abrufen."""
+    sg = _get_safeguard(request)
+    if sg.agent_store is None:
+        raise HTTPException(status_code=503, detail="AgentConfigStore nicht verfügbar.")
+    policy = await sg.agent_store.get_classifier_policy(agent_id)
+    return {
+        "agent_id": agent_id,
+        "policy": policy or "",
+        "has_custom_policy": policy is not None,
+    }
+
+
+@router.post("/agents/{agent_id}/policy")
+async def set_agent_classifier_policy(
+    agent_id: str,
+    body: ClassifierPolicyRequest,
+    request: Request,
+) -> dict:
+    """Custom safeguard classifier policy für einen Agent setzen."""
+    sg = _get_safeguard(request)
+    if sg.agent_store is None:
+        raise HTTPException(status_code=503, detail="AgentConfigStore nicht verfügbar.")
+    if not body.policy.strip():
+        raise HTTPException(status_code=400, detail="Policy text must not be empty.")
+    await sg.agent_store.set_classifier_policy(agent_id, body.policy)
+    return {"agent_id": agent_id, "policy_set": True}
+
+
+@router.delete("/agents/{agent_id}/policy")
+async def clear_agent_classifier_policy(agent_id: str, request: Request) -> dict:
+    """Custom safeguard classifier policy für einen Agent entfernen."""
+    sg = _get_safeguard(request)
+    if sg.agent_store is None:
+        raise HTTPException(status_code=503, detail="AgentConfigStore nicht verfügbar.")
+    await sg.agent_store.clear_classifier_policy(agent_id)
+    return {"agent_id": agent_id, "policy_cleared": True}

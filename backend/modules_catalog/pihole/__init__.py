@@ -1,4 +1,4 @@
-"""Pi-hole Modul – Package Init."""
+"""Pi-hole module — package init."""
 
 from .manifest import module_manifest
 from .agent import PiholeAgent

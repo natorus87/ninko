@@ -212,12 +212,34 @@ const OPNsenseTab = {
                         </div>
                     `).join('')}
                 </div>
+
+                <div class="opnsense-card">
+                    <h4>🔧 Write-Operationen</h4>
+                    <div class="opnsense-stat">
+                        <span class="opnsense-stat-label">Firewall-Regel erstellen</span>
+                        <span class="opnsense-stat-value"><button class="btn btn-sm" onclick="OPNsenseTab.showCreateRuleDialog()">➕ Regel</button></span>
+                    </div>
+                    <div class="opnsense-stat">
+                        <span class="opnsense-stat-label">NAT-Regel erstellen</span>
+                        <span class="opnsense-stat-value"><button class="btn btn-sm" onclick="OPNsenseTab.showCreateNatRuleDialog()">➕ NAT</button></span>
+                    </div>
+                </div>
             `;
         } catch (err) {
             console.error('OPNsense Refresh Fehler:', err);
             const container = document.getElementById('opnsense-content');
             if (container) container.innerHTML = '<p class="empty-state text-error">Fehler beim Laden.</p>';
         }
+    },
+
+    showCreateRuleDialog() {
+        const msg = `Ich möchte eine Firewall-Regel erstellen. Bitte frage mich nach den Details (Interface, Aktion, Quelle, Ziel, Protokoll, Beschreibung).`;
+        Ninko.sendMessage(msg, 'opnsense');
+    },
+
+    showCreateNatRuleDialog() {
+        const msg = `Ich möchte eine NAT-Regel erstellen. Bitte frage mich nach den Details (Interface, Protokoll, Quelle, Ziel, Target, Port, Beschreibung).`;
+        Ninko.sendMessage(msg, 'opnsense');
     },
 
     destroy() {

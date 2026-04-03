@@ -1,9 +1,9 @@
 """
-Telegram Long-Polling-Bot für Ninko.
-Verbindet sich mit der Telegram API, empfängt Nachrichten und leitet sie an den Orchestrator weiter.
+Telegram Long-Polling Bot for Ninko.
+Connects to the Telegram API, receives messages and forwards them to the orchestrator.
 
-Voice-Reply: Wenn eine eingehende Sprachnachricht erkannt wird und voice_reply in der
-Connection-Konfiguration aktiviert ist, antwortet der Bot mit einer Sprachnachricht (OGG/Opus).
+Voice-Reply: When an incoming voice message is detected and voice_reply is enabled
+in the connection config, the bot replies with a voice message (OGG/Opus).
 """
 
 from __future__ import annotations
@@ -18,35 +18,36 @@ import httpx
 from fastapi import FastAPI
 
 from core.redis_client import get_redis
+from agents.base_agent import _t
 from .formatter import format_for_telegram
 
 
 def _clean_for_tts(text: str) -> str:
-    """Bereinigt Text vor der TTS-Synthese: entfernt Emojis, Markdown, Tabellen, HTML."""
-    # Tabellenzeilen entfernen (Zeilen mit ≥ 2 Pipes)
+    """Clean text before TTS synthesis: remove emojis, Markdown, tables, HTML."""
+    # Remove table rows (lines with ≥ 2 pipes)
     lines = [ln for ln in text.split("\n") if ln.count("|") < 2]
     text = "\n".join(lines)
 
-    # Kontext-Präfixe und Chat-ID-Referenzen entfernen
+    # Remove context prefixes and chat ID references
     text = re.sub(r"\[(?:Telegram Chat-ID|Teams User|Erkannte Sprache):[^\]]+\]\n?", "", text)
     text = re.sub(r"(?:Telegram\s+)?Chat-?ID[:\s]+\d+", "", text)
 
-    # "via modul"-Fußzeile entfernen
+    # Remove "via module" footer
     text = re.sub(r"\n\n_via [^_\n]+_\s*$", "", text)
 
-    # HTML-Tags
+    # HTML tags
     text = re.sub(r"<[^>]+>", "", text)
 
-    # Markdown-Formatierung
-    text = re.sub(r"```[\s\S]*?```", "", text)          # Code-Blöcke
-    text = re.sub(r"`([^`]+)`", r"\1", text)             # Inline-Code
+    # Markdown formatting
+    text = re.sub(r"```[\s\S]*?```", "", text)          # Code blocks
+    text = re.sub(r"`([^`]+)`", r"\1", text)             # Inline code
     text = re.sub(r"\*{1,3}([^*]+)\*{1,3}", r"\1", text) # Bold/Italic
-    text = re.sub(r"_([^_\n]+)_", r"\1", text)           # Kursiv Underscore
-    text = re.sub(r"~~([^~]+)~~", r"\1", text)           # Durchgestrichen
-    text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)  # Überschriften
+    text = re.sub(r"_([^_\n]+)_", r"\1", text)           # Underscore italic
+    text = re.sub(r"~~([^~]+)~~", r"\1", text)           # Strikethrough
+    text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)  # Headings
     text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)  # Links
 
-    # Emojis entfernen
+    # Remove emojis
     text = re.sub(
         "["
         "\U0001F300-\U0001F9FF"
@@ -60,26 +61,26 @@ def _clean_for_tts(text: str) -> str:
         text,
     )
 
-    # Whitespace normalisieren
+    # Normalize whitespace
     text = re.sub(r"\n{3,}", "\n\n", text)
     text = re.sub(r"[ \t]+", " ", text)
     return text.strip()
 
 logger = logging.getLogger("ninko.modules.telegram.bot")
 
-# Maximale Nachrichtenlänge (Telegram-Limit: 4096)
+# Maximum message length (Telegram limit: 4096)
 _MAX_MSG_LEN = 4000
 
 
 def _strip_pipeline_headers(text: str) -> str:
-    """Entfernt 'Schritt N – modul:' Header und Telegram-Send-Bestätigungen aus Pipeline-Antworten."""
-    # **Schritt 1 – modul:** (Markdown bold)
+    """Remove 'Step N – module:' headers and Telegram send confirmations from pipeline responses."""
+    # **Step 1 – module:** (Markdown bold)
     text = re.sub(r'\*\*Schritt\s+\d+\s*[–-]\s*\w+:\*\*\s*\n?', '', text)
-    # Schritt 1 – modul: (plain)
+    # Step 1 – module: (plain)
     text = re.sub(r'(?m)^Schritt\s+\d+\s*[–-]\s*\w+:\s*\n?', '', text)
-    # Telegram-Send-Bestätigung (wird vom Telegram-Modul separat gesendet)
+    # Telegram send confirmation (sent separately by the Telegram module)
     text = re.sub(r'✅\s*Telegram-?\s*Nachricht\s+.*?(?:gesendet|erfolgreich)[^\n]*\n?', '', text, flags=re.IGNORECASE)
-    # Mehrfache Leerzeilen normalisieren
+    # Normalize multiple blank lines
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
 
@@ -94,7 +95,7 @@ class TelegramBot:
         self._cleared_sessions: set[str] = set()
 
     async def get_token(self) -> str | None:
-        """Lädt das aktuelle Telegram Bot Token aus dem ConnectionManager."""
+        """Load the current Telegram bot token from the ConnectionManager."""
         from core.connections import ConnectionManager
         from core.vault import get_vault
 
@@ -109,21 +110,21 @@ class TelegramBot:
         return None
 
     async def start(self) -> None:
-        """Startet die Polling-Schleife als Background-Task."""
+        """Start the polling loop as a background task."""
         if self.running:
             return
 
         token = await self.get_token()
         if not token:
-            logger.warning("Telegram Bot Token fehlt. Polling-Start abgebrochen.")
+            logger.warning("Telegram bot token missing. Polling start aborted.")
             return
 
         self.running = True
         self.task = asyncio.create_task(self._poll_loop())
-        logger.info("Telegram Bot Polling gestartet.")
+        logger.info("Telegram bot polling started.")
 
     async def stop(self) -> None:
-        """Stoppt die Polling-Schleife."""
+        """Stop the polling loop."""
         if not self.running:
             return
 
@@ -135,16 +136,16 @@ class TelegramBot:
             except asyncio.CancelledError:
                 pass
         self.task = None
-        logger.info("Telegram Bot Polling gestoppt.")
+        logger.info("Telegram bot polling stopped.")
 
     async def _poll_loop(self) -> None:
-        """Hauptschleife für Long-Polling."""
+        """Main long-polling loop."""
         timeout_s = 30
 
         while self.running:
             token = await self.get_token()
             if not token:
-                logger.error("Telegram Token während Polling verloren.")
+                logger.error("Telegram token lost during polling.")
                 await asyncio.sleep(10)
                 continue
 
@@ -164,7 +165,7 @@ class TelegramBot:
                             updates = data.get("result", [])
                             for update in updates:
                                 self.offset = update["update_id"] + 1
-                                # Jedes Update als unabhängigen Task verarbeiten
+                                # Process each update as an independent task
                                 asyncio.create_task(
                                     self.handle_update(update, token)
                                 )
@@ -172,7 +173,7 @@ class TelegramBot:
                             logger.error("Telegram API Error: %s", data.get("description"))
                             await asyncio.sleep(5)
                     elif resp.status_code == 401:
-                        logger.error("Telegram Unauthorized. Stoppe Polling.")
+                        logger.error("Telegram Unauthorized. Stopping polling.")
                         self.running = False
                         break
                     else:
@@ -182,9 +183,9 @@ class TelegramBot:
             except asyncio.CancelledError:
                 break
             except httpx.ReadTimeout:
-                continue  # Normal bei Long-Polling ohne neue Nachrichten
+                continue  # Normal for long-polling with no new messages
             except Exception as e:
-                logger.exception("Fehler in Telegram Polling-Loop: %s", e)
+                logger.exception("Error in Telegram polling loop: %s", e)
                 await asyncio.sleep(10)
 
     async def _send(
@@ -195,8 +196,8 @@ class TelegramBot:
         parse_mode: str = "",
     ) -> bool:
         """
-        Sendet eine Nachricht. Versucht zuerst mit parse_mode, fällt bei Fehler auf
-        plain text zurück. Gibt True zurück wenn erfolgreich.
+        Send a message. Tries parse_mode first, falls back to plain text on error.
+        Returns True on success.
         """
         payload: dict[str, Any] = {"chat_id": chat_id, "text": text}
         if parse_mode:
@@ -211,9 +212,9 @@ class TelegramBot:
                 if resp.status_code == 200 and resp.json().get("ok"):
                     return True
 
-                # Markdown-Parse-Fehler → Fallback auf plain text
+                # Markdown parse error → fallback to plain text
                 if parse_mode and resp.status_code == 400:
-                    logger.debug("Markdown-Parsing fehlgeschlagen, sende plain text.")
+                    logger.debug("Markdown parsing failed, sending plain text.")
                     plain_payload = {"chat_id": chat_id, "text": text}
                     resp2 = await client.post(
                         f"https://api.telegram.org/bot{token}/sendMessage",
@@ -221,14 +222,14 @@ class TelegramBot:
                     )
                     return resp2.status_code == 200 and resp2.json().get("ok")
 
-                logger.warning("sendMessage Fehler: %s %s", resp.status_code, resp.text[:100])
+                logger.warning("sendMessage error: %s %s", resp.status_code, resp.text[:100])
                 return False
         except Exception as exc:
-            logger.error("_send Fehler: %s", exc)
+            logger.error("_send error: %s", exc)
             return False
 
     async def _react(self, token: str, chat_id: int, message_id: int, emoji: str = "👍") -> None:
-        """Setzt eine Emoji-Reaktion auf eine Nachricht (Best-Effort, kein Fehler nach oben)."""
+        """Set an emoji reaction on a message (best-effort, no error propagation)."""
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 await client.post(
@@ -243,7 +244,7 @@ class TelegramBot:
             pass
 
     async def _keep_typing(self, token: str, chat_id: int) -> None:
-        """Sendet alle 4s eine 'typing'-Aktion bis der Task gecancelt wird."""
+        """Send a 'typing' action every 4s until the task is cancelled."""
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 while True:
@@ -262,11 +263,11 @@ class TelegramBot:
         self, file_id: str, token: str
     ) -> tuple[str | None, float, str]:
         """
-        Lädt eine Telegram-Voice-Datei herunter und transkribiert sie.
+        Download a Telegram voice file and transcribe it.
 
         Returns:
             (text, avg_confidence, detected_language)
-            text ist None bei Fehler.
+            text is None on error.
         """
         try:
             from api.routes_transcription import transcribe_bytes_extended
@@ -291,13 +292,13 @@ class TelegramBot:
             text, confidence, detected_lang = await transcribe_bytes_extended(audio_bytes, filename)
             return (text or None), confidence, detected_lang
         except Exception as exc:
-            logger.error("Fehler beim Transkribieren der Telegram-Voice-Nachricht: %s", exc)
+            logger.error("Error transcribing Telegram voice message: %s", exc)
             return None, -2.0, "de"
 
     async def _send_voice(self, token: str, chat_id: int, ogg_bytes: bytes) -> bool:
         """
-        Sendet eine Sprachnachricht via Telegram sendVoice API.
-        Erwartet OGG/Opus-Bytes (Telegram-Anforderung für Voice-Messages).
+        Send a voice message via Telegram sendVoice API.
+        Expects OGG/Opus bytes (Telegram requirement for voice messages).
         """
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -313,17 +314,17 @@ class TelegramBot:
                 )
                 return False
         except Exception as exc:
-            logger.error("_send_voice Fehler: %s", exc)
+            logger.error("_send_voice error: %s", exc)
             return False
 
     async def _send_photo(self, token: str, chat_id: int, image_path: str, caption: str = "") -> bool:
         """
-        Sendet ein generiertes Bild als Foto via Telegram sendPhoto API.
-        Lädt das Bild lokal und sendet es als multipart/form-data.
+        Send a generated image as a photo via Telegram sendPhoto API.
+        Loads the image locally and sends it as multipart/form-data.
         """
         try:
             from pathlib import Path
-            # URL-Pfad → Dateisystem-Pfad: /api/images/xxx.png → /app/data/images/xxx.png
+            # URL path → filesystem path: /api/images/xxx.png → /app/data/images/xxx.png
             filename = image_path.rsplit("/", 1)[-1]
             candidates = [
                 Path("/app/data/images") / filename,
@@ -336,7 +337,7 @@ class TelegramBot:
                     img_file = c
                     break
             if not img_file:
-                logger.warning("Bild-Datei nicht gefunden: %s (versucht: %s)", filename, [str(c) for c in candidates])
+                logger.warning("Image file not found: %s (tried: %s)", filename, [str(c) for c in candidates])
                 return False
 
             image_bytes = img_file.read_bytes()
@@ -355,11 +356,11 @@ class TelegramBot:
                 logger.warning("sendPhoto Fehler: %s %s", resp.status_code, resp.text[:200])
                 return False
         except Exception as exc:
-            logger.error("_send_photo Fehler: %s", exc)
+                logger.error("_send_photo error: %s", exc)
             return False
 
     async def handle_update(self, update: dict[str, Any], token: str) -> None:
-        """Verarbeitet ein einzelnes Telegram-Update."""
+        """Process a single Telegram update."""
         msg = update.get("message")
         if not msg:
             return
@@ -371,7 +372,7 @@ class TelegramBot:
         detected_lang: str = os.getenv("WHISPER_LANGUAGE", "de")
         low_confidence = False
 
-        # Voice-Nachrichten transkribieren (kein Status-Text, nur stiller Typing-Indikator)
+        # Transcribe voice messages (no status text, silent typing indicator only)
         voice = msg.get("voice") or msg.get("audio")
         if not text and voice:
             file_id = voice.get("file_id")
@@ -379,9 +380,9 @@ class TelegramBot:
                 is_voice = True
                 text, confidence, detected_lang = await self._transcribe_voice(file_id, token)
                 if not text:
-                    await self._send(token, chat_id, "❌ Transkription fehlgeschlagen. Bitte als Text senden.")
+                    await self._send(token, chat_id, "❌ Transcription failed. Please send as text.")
                     return
-                # Konfidenz-Check
+                # Confidence check
                 import core.config as _cfg_mod
                 _cfg = _cfg_mod.get_settings()
                 if confidence < _cfg.STT_CONFIDENCE_THRESHOLD:
@@ -394,7 +395,7 @@ class TelegramBot:
         if not chat_id or not text:
             return
 
-        # Allowlist-Check: nur erlaubte Chat-IDs zulassen
+        # Allowlist check: only permit allowed chat IDs
         from core.connections import ConnectionManager
         conn = await ConnectionManager.get_default_connection("telegram")
         if conn:
@@ -403,11 +404,11 @@ class TelegramBot:
                 allowed_ids = {s.strip() for s in str(allowed_raw).split(",") if s.strip()}
                 if str(chat_id) not in allowed_ids:
                     logger.warning(
-                        "Telegram: Zugriff verweigert für Chat-ID %s (nicht in Allowlist)", chat_id
+                        "Telegram: Access denied for chat ID %s (not in allowlist)", chat_id
                     )
                     return
 
-        # Voice-Reply-Konfiguration aus Connection lesen
+        # Read voice-reply configuration from connection
         voice_reply = False
         voice_reply_text_too = False
         voice_lang: str | None = None
@@ -418,9 +419,9 @@ class TelegramBot:
             voice_lang = conn.config.get("voice_lang") or None
             voice_name = conn.config.get("voice_name") or None
 
-        logger.info("Telegram Nachricht von Chat %s: %s…", chat_id, text[:60])
+        logger.info("Telegram message from chat %s: %s…", chat_id, text[:60])
 
-        # Befehle ohne Orchestrator abfangen
+        # Intercept commands without orchestrator
         cmd = text.strip().lower().split("@")[0]  # /clear@botname → /clear
 
         if cmd == "/chatid":
@@ -432,24 +433,27 @@ class TelegramBot:
             try:
                 redis = get_redis()
                 await redis.clear_chat_history(session_id_local)
-                # Race-condition-Schutz: in-flight Requests sollen History nicht zurückschreiben
+                # Race-condition protection: in-flight requests should not write back history
                 self._cleared_sessions.add(session_id_local)
-                await self._send(token, chat_id, "♻️ Chat-Verlauf geleert. Wie kann ich helfen?")
+                await self._send(token, chat_id, "♻️ Chat history cleared. How can I help?")
             except Exception as exc:
-                logger.error("Fehler beim Löschen der Chat-History für %s: %s", chat_id, exc)
-                await self._send(token, chat_id, f"❌ Fehler beim Löschen des Verlaufs: {exc}")
+                logger.error("Error clearing chat history for %s: %s", chat_id, exc)
+                await self._send(token, chat_id, f"❌ Error clearing history: {exc}")
             return
 
-        # ── Bei niedriger Konfidenz: Rückfrage statt Verarbeitung ─────────────
+        # ── Low confidence: ask for confirmation instead of processing ─────────
         if low_confidence:
             await self._send(
                 token, chat_id,
-                f'🎙️ Ich habe verstanden:\n<i>"{text}"</i>\n\nIst das korrekt? (Antworte mit Ja oder schicke den Text nochmal.)',
+                _t(
+                    f'🎙️ Ich habe verstanden:\n<i>"{text}"</i>\n\nIst das korrekt? (Antworte mit Ja oder schicke den Text nochmal.)',
+                    f'🎙️ I understood:\n<i>"{text}"</i>\n\nIs this correct? (Reply with yes or send the text again.)',
+                ),
                 parse_mode="HTML",
             )
             return
 
-        # ── Reaktion auf die Nachricht + stiller Typing-Indikator ─────────────
+        # ── React to the message + silent typing indicator ────────────────────
         if message_id:
             await self._react(token, chat_id, message_id, "⚡")
         typing_task = asyncio.create_task(self._keep_typing(token, chat_id))
@@ -461,33 +465,39 @@ class TelegramBot:
             redis = get_redis()
             session_id = f"telegram_{chat_id}"
 
-            # ── Safeguard-Check ────────────────────────────────────────────────
+            # ── Safeguard check ────────────────────────────────────────────────
             safeguard = getattr(self.app.state, "safeguard", None)
             pending_key = SAFEGUARD_PENDING_KEY.format(session_id=session_id)
             pending_raw = await redis.connection.get(pending_key)
 
             if pending_raw and is_bot_confirmation(text):
-                # User hat bestätigt — gespeicherte Aktion ausführen
+                # User confirmed — execute the stored action
                 text = pending_raw.decode() if isinstance(pending_raw, bytes) else pending_raw
                 await redis.connection.delete(pending_key)
-                logger.info("Safeguard: Telegram-User bestätigte pending Aktion für %s.", session_id)
+                logger.info("Safeguard: Telegram user confirmed pending action for %s.", session_id)
             elif safeguard:
                 sg_result = await safeguard.check(text)
                 if sg_result.requires_confirmation:
                     await redis.connection.set(pending_key, text, ex=300)
                     await self._send(
                         token, chat_id,
-                        f"⚠️ <b>Bestätigung erforderlich</b>\n\n"
-                        f"<b>Kategorie:</b> {sg_result.category.value}\n"
-                        f"<b>Begründung:</b> {sg_result.rationale}\n\n"
-                        f"Antworte mit <b>ja</b> um fortzufahren, oder schicke eine andere Nachricht um abzubrechen.",
+                        _t(
+                            f"⚠️ <b>Bestätigung erforderlich</b>\n\n"
+                            f"<b>Kategorie:</b> {sg_result.category.value}\n"
+                            f"<b>Begründung:</b> {sg_result.rationale}\n\n"
+                            f"Antworte mit <b>ja</b> um fortzufahren, oder schicke eine andere Nachricht um abzubrechen.",
+                            f"⚠️ <b>Confirmation required</b>\n\n"
+                            f"<b>Category:</b> {sg_result.category.value}\n"
+                            f"<b>Reason:</b> {sg_result.rationale}\n\n"
+                            f"Reply with <b>yes</b> to continue, or send another message to cancel.",
+                        ),
                         parse_mode="HTML",
                     )
                     return
 
             history = await redis.get_chat_history(session_id)
 
-            # Chat-ID + ggf. erkannte Sprache als Kontext mitgeben
+            # Chat-ID + detected language as context hint
             lang_hint = ""
             if os.getenv("WHISPER_LANGUAGE", "de") == "auto" and detected_lang and detected_lang != "de":
                 lang_hint = f"[Erkannte Sprache: {detected_lang}] "
@@ -499,64 +509,64 @@ class TelegramBot:
                 session_id=session_id,
             )
 
-            # History speichern – überspringen wenn Session inzwischen geclearet wurde
+            # Save history — skip if session was cleared in the meantime
             if session_id in self._cleared_sessions:
                 self._cleared_sessions.discard(session_id)
-                logger.info("History-Speicherung für %s übersprungen (Session wurde geclearet).", session_id)
+                logger.info("History save for %s skipped (session was cleared).", session_id)
             else:
                 if did_compact:
                     await redis.store_chat_message(
                         session_id=session_id,
                         role="system_compaction",
-                        content="Der Gesprächsverlauf wurde komprimiert.",
+                        content="Conversation history has been compressed.",
                     )
                 await redis.store_chat_message(session_id=session_id, role="user", content=text)
                 await redis.store_chat_message(session_id=session_id, role="assistant", content=response_text)
 
-            # ── Kontext-Komprimierung: User informieren ────────────────────────
+            # ── Context compression: inform user ──────────────────────────────
             if did_compact:
                 await self._send(
                     token, chat_id,
-                    "🗜️ <i>Gesprächsverlauf wurde komprimiert – ältere Details wurden zusammengefasst.</i>",
+                    "🗜️ <i>Conversation history has been compressed — older details have been summarized.</i>",
                     parse_mode="HTML",
                 )
 
-            # ── Voice-Reply: bei Sprachnachricht immer Voice, kein Text ───────
+            # ── Voice-Reply: always voice for voice inputs, no text ────────────
             if is_voice:
                 await self._send_voice_reply(token, chat_id, response_text,
                                              lang=voice_lang, voice=voice_name)
                 return
 
-            # ── Telegram-Modul hat bereits direkt gesendet → nicht nochmal senden ──
-            # Das Modul ruft send_telegram_message auf → Nachricht bereits zugestellt.
-            # Ausnahme: Fehlermeldungen immer zurücksenden.
+            # ── Telegram module already sent directly → don't send again ───────
+            # The module calls send_telegram_message → message already delivered.
+            # Exception: error messages are always sent back.
             if module_used == "telegram" and not any(
                 response_text.lower().startswith(p) for p in ("fehler", "error")
             ):
                 logger.debug(
-                    "Telegram-Modul hat bereits gesendet für Chat %s – Bot-Antwort unterdrückt.",
+                    "Telegram module already sent for chat %s — suppressing bot response.",
                     chat_id,
                 )
                 return
 
-            # ── Text-Antwort (nur für Text-Eingaben) ───────────────────────────
+            # ── Text response (for text inputs only) ──────────────────────────
             final_text = _strip_pipeline_headers(response_text)
             if module_used:
                 final_text += f"\n\n_via {module_used}_"
 
-            # ── Bild-Generierung: Marker, URL, oder Phrase erkennen ────────
+            # ── Image generation: detect marker, URL, or phrase ────────────
             image_path = None
-            # 1. [KUMIO_IMAGE:url] Marker
+            # 1. [KUMIO_IMAGE:url] marker
             m = re.search(r'\[KUMIO_IMAGE:(/api/images/[^\]]+)\]', final_text)
             if not m:
                 # 2. /api/images/ URL irgendwo im Text
                 m = re.search(r'(/api/images/[\w\-]+\.\w+)', final_text)
             if m:
                 image_path = m.group(1)
-                logger.info("Bild-Pfad erkannt im Text: %s", image_path)
+                logger.info("Image path detected in text: %s", image_path)
             elif re.search(r'[Bb]ild\s+(?:erfolgreich\s+)?generiert|[Bb]ild\s+erstellt|generate_image', response_text, re.IGNORECASE):
-                # 3. Tool wurde aufgerufen aber LLM hat URL weggelassen → neuestes Bild nehmen
-                #    WICHTIG: response_text (roh) statt final_text (gefiltert) nutzen
+                # 3. Tool was called but LLM omitted URL → use most recent image
+                #    IMPORTANT: use response_text (raw) not final_text (filtered)
                 try:
                     from pathlib import Path
                     img_dir = Path("/app/data/images")
@@ -564,40 +574,43 @@ class TelegramBot:
                         imgs = sorted(img_dir.glob("*.png"), key=lambda p: p.stat().st_mtime, reverse=True)
                         if imgs:
                             age_seconds = __import__("time").time() - imgs[0].stat().st_mtime
-                            if age_seconds < 300:  # Nur Bilder < 5 Minuten alt
+                            if age_seconds < 300:  # Only images less than 5 minutes old
                                 image_path = f"/api/images/{imgs[0].name}"
-                                logger.info("Bild-URL fehlt in Response, nutze neuestes Bild (%ds alt): %s", age_seconds, image_path)
+                                logger.info("Image URL missing in response, using newest image (%ds old): %s", age_seconds, image_path)
                 except Exception as e:
-                    logger.debug("Fehler beim Suchen des neuesten Bildes: %s", e)
+                    logger.debug("Error searching for newest image: %s", e)
 
             if image_path:
-                # Text ohne Marker/URL für Caption
+                # Text without markers/URL for caption
                 caption = re.sub(r'\[KUMIO_IMAGE:[^\]]+\]\s*\n?', '', final_text).strip()
                 caption = re.sub(r'/api/images/[\w\-]+\.\w+\s*\n?', '', caption).strip()
                 caption = format_for_telegram(caption)[:1024]  # Telegram caption limit
                 try:
                     await self._send_photo(token, chat_id, image_path, caption)
                 except Exception as img_err:
-                    logger.warning("Bild-Sendung fehlgeschlagen, fallback auf Text: %s", img_err)
+                    logger.warning("Image send failed, falling back to text: %s", img_err)
                     fallback = format_for_telegram(final_text)
                     await self._send(token, chat_id, fallback, parse_mode="HTML")
                 return
 
             final_text = format_for_telegram(final_text)
 
-            # Antwort in Chunks senden (Telegram-Limit 4096 Zeichen)
+            # Send response in chunks (Telegram limit: 4096 characters)
             chunks = [final_text[i : i + _MAX_MSG_LEN] for i in range(0, len(final_text), _MAX_MSG_LEN)]
             for chunk in chunks:
                 await self._send(token, chat_id, chunk, parse_mode="HTML")
 
         except Exception as exc:
-            logger.exception("Fehler bei Telegram-Orchestrator-Verarbeitung: %s", exc)
-            # Sprechende Fehlermeldung statt generischem Text
+            logger.exception("Error in Telegram orchestrator processing: %s", exc)
+            # Descriptive error message instead of generic text
             err_type = type(exc).__name__
             await self._send(
                 token,
                 chat_id,
-                f"❌ Fehler bei der Verarbeitung ({err_type}):\n{str(exc)[:300]}\n\nBitte versuche es erneut.",
+                _t(
+                    f"❌ Fehler bei der Verarbeitung ({err_type}):\n{str(exc)[:300]}\n\nBitte versuche es erneut.",
+                    f"❌ Error during processing ({err_type}):\n{str(exc)[:300]}\n\nPlease try again.",
+                ),
             )
         finally:
             typing_task.cancel()
@@ -611,9 +624,9 @@ class TelegramBot:
         lang: str | None = None, voice: str | None = None,
     ) -> None:
         """
-        Synthetisiert Text mit Piper TTS und sendet ihn als Telegram-Sprachnachricht.
-        Konvertiert WAV → OGG/Opus für das Telegram sendVoice API.
-        Fehler werden geloggt aber nicht nach oben propagiert (Best-Effort).
+        Synthesize text with Piper TTS and send it as a Telegram voice message.
+        Converts WAV → OGG/Opus for the Telegram sendVoice API.
+        Errors are logged but not propagated (best-effort).
         """
         try:
             from core.tts import synthesize_reply, is_tts_available
@@ -621,12 +634,12 @@ class TelegramBot:
 
             clean_text = _clean_for_tts(text)
             if not clean_text:
-                logger.warning("Voice-Reply: bereinigter Text leer, sende Text-Fallback.")
+                logger.warning("Voice-Reply: cleaned text empty, sending text fallback.")
                 await self._send(token, chat_id, text)
                 return
 
             if not is_tts_available():
-                logger.warning("Voice-Reply: TTS nicht verfügbar, sende Text-Fallback.")
+                logger.warning("Voice-Reply: TTS not available, sending text fallback.")
                 await self._send(token, chat_id, format_for_telegram(text), parse_mode="HTML")
                 return
 
@@ -635,12 +648,12 @@ class TelegramBot:
             ok = await self._send_voice(token, chat_id, ogg_bytes)
             if ok:
                 logger.info(
-                    "Voice-Reply gesendet an Chat %s: %d KB OGG", chat_id, len(ogg_bytes) // 1024
+                    "Voice-Reply sent to chat %s: %d KB OGG", chat_id, len(ogg_bytes) // 1024
                 )
             else:
-                logger.warning("Voice-Reply sendVoice fehlgeschlagen für Chat %s", chat_id)
+                logger.warning("Voice-Reply sendVoice failed for chat %s", chat_id)
         except Exception as exc:
-            logger.error("Voice-Reply Fehler für Chat %s: %s", chat_id, exc)
+            logger.error("Voice-Reply error for chat %s: %s", chat_id, exc)
 
 
 # ── Globaler Bot-State ────────────────────────────────────────────────────────

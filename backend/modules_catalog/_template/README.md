@@ -100,6 +100,10 @@ Register all **read-only** tools in the `_TOOL_READONLY` frozenset so they skip 
 Rule: `get_*`, `list_*`, `search_*`, `inspect_*`, `check_*` → add here.
 `create_*`, `delete_*`, `restart_*`, `set_*` → do NOT add (require confirmation).
 
+> **Important:** If a module has a generic catch-all tool (e.g. `send_*_command` that accepts arbitrary commands),
+> do NOT add it to `_TOOL_READONLY` — the safeguard LLM classifier must evaluate each call individually.
+> Write-tools like `set_*_power` or `restart_*_service` must also remain outside `_TOOL_READONLY`.
+
 ---
 
 ### 5. `backend/agents/base_agent.py` — _TOOL_LABELS (chat spinner text)
@@ -371,7 +375,9 @@ All `<style>` rules in `tab.html` **must be scoped** to the tab's root ID to avo
 
 ## Multilingual Support
 
-Use `_t(de, en)` from `base_agent.py` in `agent.py`:
+**Default language is English.** German is the primary user-facing language, but all code-facing text (docstrings, log messages, error strings) must be in English. User-visible text uses `_t(de, en)`.
+
+### System prompts (`agent.py`)
 
 ```python
 from .tools import my_tool
@@ -384,6 +390,56 @@ SYSTEM_PROMPT = _t(
 ```
 
 Never write `"Antworte immer auf Deutsch"` — language injection is handled automatically by `base_agent.py`.
+
+### Tool docstrings — English only
+
+The LLM reads tool docstrings for reasoning. **Always write them in English**, even if the user communicates in German:
+
+```python
+@tool
+def get_mymodule_status(connection_id: str = "") -> Dict:
+    """Retrieve the current system status of MyModule.
+    
+    Returns operational metrics including uptime, version, and health state.
+    """
+```
+
+```python
+# ✗ Wrong — mixed language or German-only
+def get_mymodule_status(connection_id: str = "") -> Dict:
+    """Gibt den aktuellen System-Status zurück."""
+```
+
+### Log messages — English only
+
+```python
+# ✓ Correct
+logger.info("Retrieved %s devices from MyModule", len(devices))
+logger.error("Connection failed: %s", exc)
+
+# ✗ Wrong
+logger.info("%s Geräte von MyModule abgerufen", len(devices))
+```
+
+### Error responses (`raise ToolException`) — bilingual via `_t()`
+
+```python
+from agents.base_agent import _t
+
+raise ToolException(_t(
+    "Keine Verbindung zu MyModule.",
+    "No connection to MyModule.",
+))
+```
+
+### Frontend strings (`tab.html` / `tab.js`) — use `_i18n()` or English fallback
+
+For module-specific UI strings, hardcode English as default and add German translations only for critical labels:
+
+```js
+// ✓ Acceptable for plugin tab.js (no i18n access)
+container.innerHTML = `<p class="empty-state">No devices found.</p>`;
+```
 
 ---
 
@@ -405,6 +461,5 @@ git push origin main
 > ```bash
 > docker compose build backend && docker compose up -d --no-deps backend
 > docker tag ninko-backend:latest natorus87/ninko-backend:latest && docker push natorus87/ninko-backend:latest
-> docker tag ninko-backend:latest natorus87/kumio-backend:latest && docker push natorus87/kumio-backend:latest
-> kubectl rollout restart deployment/kumio-backend -n kumio
+> kubectl rollout restart deployment/ninko-backend -n ninko
 > ```

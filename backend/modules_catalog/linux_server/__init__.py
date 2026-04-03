@@ -1,4 +1,4 @@
-"""Linux Server Modul – Package Init."""
+"""Linux Server Module — Package Init."""
 
 from .manifest import module_manifest
 from .agent import LinuxServerAgent

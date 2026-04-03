@@ -1,5 +1,5 @@
 """
-Webhooks und API-Endpoints für Microsoft Teams Bot Framework.
+Webhooks and API endpoints for Microsoft Teams Bot Framework.
 """
 
 import asyncio
@@ -18,8 +18,8 @@ router = APIRouter()
 @router.post("/messages")
 async def messages_webhook(request: Request) -> dict[str, Any]:
     """
-    Webhook Endpoint für Microsoft Teams.
-    Gibt sofort 200 zurück – Verarbeitung erfolgt als Background-Task.
+    Webhook endpoint for Microsoft Teams.
+    Returns 200 immediately — processing happens as a background task.
     """
     try:
         activity = await request.json()
@@ -35,7 +35,7 @@ async def messages_webhook(request: Request) -> dict[str, Any]:
 
 @router.get("/status")
 async def get_teams_status() -> dict[str, Any]:
-    """Gibt Konfigurations- und Verbindungsstatus zurück."""
+    """Return configuration and connection status."""
     from core.connections import ConnectionManager
     from core.redis_client import get_redis
 
@@ -52,7 +52,7 @@ async def get_teams_status() -> dict[str, Any]:
     except Exception:
         result["allowed_ids"] = []
 
-    # Letzte bekannte Konversation
+    # Last known conversation
     try:
         redis = get_redis()
         raw_conv = await redis.connection.get(_LAST_CONV_KEY)
@@ -73,7 +73,7 @@ class AllowedIdsRequest(BaseModel):
 
 @router.get("/allowed-ids")
 async def get_allowed_ids() -> dict[str, Any]:
-    """Gibt die aktuelle Allowlist der erlaubten Teams-Nutzer-IDs zurück."""
+    """Return the current allowlist of permitted Teams user IDs."""
     from core.connections import ConnectionManager
 
     conn = await ConnectionManager.get_default_connection("teams")
@@ -87,17 +87,17 @@ async def get_allowed_ids() -> dict[str, Any]:
 
 @router.post("/allowed-ids")
 async def set_allowed_ids(body: AllowedIdsRequest) -> dict[str, Any]:
-    """Aktualisiert die Allowlist der erlaubten Teams-Nutzer-IDs."""
+    """Update the allowlist of permitted Teams user IDs."""
     from core.connections import ConnectionManager
 
     conn = await ConnectionManager.get_default_connection("teams")
     if not conn:
         raise HTTPException(
             status_code=400,
-            detail="Keine Teams-Verbindung konfiguriert. Bitte zuerst App ID und Password einrichten.",
+            detail="No Teams connection configured. Please set up App ID and Password first.",
         )
 
-    # IDs bereinigen und deduplizieren
+    # Clean and deduplicate IDs
     clean_ids = list(dict.fromkeys(s.strip() for s in body.ids if s.strip()))
 
     updated_config = dict(conn.config)
@@ -121,7 +121,7 @@ class VoiceReplyConfig(BaseModel):
 
 @router.get("/voice-reply")
 async def get_voice_reply_config() -> dict:
-    """Voice-Reply-Konfiguration aus der Teams-Connection abrufen."""
+    """Retrieve voice-reply configuration from the Teams connection."""
     from core.connections import ConnectionManager
 
     conn = await ConnectionManager.get_default_connection("teams")
@@ -139,14 +139,14 @@ async def get_voice_reply_config() -> dict:
 
 @router.post("/voice-reply")
 async def set_voice_reply_config(body: VoiceReplyConfig) -> dict:
-    """Voice-Reply-Konfiguration in der Teams-Connection speichern."""
+    """Save voice-reply configuration to the Teams connection."""
     from core.connections import ConnectionManager
 
     conn = await ConnectionManager.get_default_connection("teams")
     if not conn:
         raise HTTPException(
             status_code=400,
-            detail="Keine Teams-Verbindung konfiguriert. Bitte zuerst App ID und Password einrichten.",
+            detail="No Teams connection configured. Please set up App ID and Password first.",
         )
 
     updated_config = dict(conn.config)

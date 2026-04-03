@@ -1,5 +1,5 @@
 """
-Docker Modul – FastAPI Router für Dashboard-API.
+Docker Module — FastAPI Router for Dashboard API.
 """
 
 from __future__ import annotations
@@ -34,49 +34,49 @@ router = APIRouter()
 
 @router.get("/containers")
 async def containers(all: bool = True, connection_id: str = ""):
-    """Alle Docker-Container."""
+    """List all Docker containers."""
     return await list_containers.ainvoke({"all": all, "connection_id": connection_id})
 
 
 @router.get("/containers/{container_id}")
 async def container_inspect(container_id: str, connection_id: str = ""):
-    """Detaillierte Container-Informationen."""
+    """Return detailed container information."""
     return await inspect_container.ainvoke({"container_id": container_id, "connection_id": connection_id})
 
 
 @router.post("/containers/{container_id}/start")
 async def container_start(container_id: str, connection_id: str = ""):
-    """Container starten."""
+    """Start a container."""
     return await start_container_tool.ainvoke({"container_id": container_id, "connection_id": connection_id})
 
 
 @router.post("/containers/{container_id}/stop")
 async def container_stop(container_id: str, timeout: int = 10, connection_id: str = ""):
-    """Container stoppen."""
+    """Stop a container."""
     return await stop_container_tool.ainvoke({"container_id": container_id, "timeout": timeout, "connection_id": connection_id})
 
 
 @router.post("/containers/{container_id}/restart")
 async def container_restart(container_id: str, timeout: int = 10, connection_id: str = ""):
-    """Container neu starten."""
+    """Restart a container."""
     return await restart_container_tool.ainvoke({"container_id": container_id, "timeout": timeout, "connection_id": connection_id})
 
 
 @router.delete("/containers/{container_id}")
 async def container_remove(container_id: str, force: bool = False, connection_id: str = ""):
-    """Container entfernen."""
+    """Remove a container."""
     return await remove_container_tool.ainvoke({"container_id": container_id, "force": force, "connection_id": connection_id})
 
 
 @router.get("/containers/{container_id}/logs")
 async def container_logs(container_id: str, tail: int = 100, connection_id: str = ""):
-    """Container-Logs abrufen."""
+    """Retrieve container logs."""
     return await get_container_logs.ainvoke({"container_id": container_id, "tail": tail, "connection_id": connection_id})
 
 
 @router.get("/containers/{container_id}/stats")
 async def container_stats(container_id: str, connection_id: str = ""):
-    """Container-Ressourcen-Statistiken."""
+    """Return container resource statistics."""
     return await get_container_stats.ainvoke({"container_id": container_id, "connection_id": connection_id})
 
 
@@ -86,7 +86,7 @@ async def container_stats(container_id: str, connection_id: str = ""):
 
 @router.get("/images")
 async def images(all: bool = False, connection_id: str = ""):
-    """Alle Docker-Images."""
+    """List all Docker images."""
     return await list_images.ainvoke({"all": all, "connection_id": connection_id})
 
 
@@ -96,7 +96,7 @@ async def images(all: bool = False, connection_id: str = ""):
 
 @router.get("/volumes")
 async def volumes(connection_id: str = ""):
-    """Alle Docker-Volumes."""
+    """List all Docker volumes."""
     return await list_volumes.ainvoke({"connection_id": connection_id})
 
 
@@ -106,17 +106,17 @@ async def volumes(connection_id: str = ""):
 
 @router.get("/info")
 async def docker_info(connection_id: str = ""):
-    """Docker-System-Informationen."""
+    """Return Docker system information."""
     return await get_docker_info.ainvoke({"connection_id": connection_id})
 
 
 @router.get("/version")
 async def docker_version(connection_id: str = ""):
-    """Docker-Version."""
+    """Return Docker Engine version."""
     return await get_docker_version.ainvoke({"connection_id": connection_id})
 
 
 @router.get("/disk-usage")
 async def disk_usage(connection_id: str = ""):
-    """Docker-Speicherauslastung."""
+    """Return Docker storage usage."""
     return await get_docker_disk_usage.ainvoke({"connection_id": connection_id})

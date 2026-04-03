@@ -92,6 +92,13 @@
       "author": "Ninko Team"
     },
     {
+      "name": "synology",
+      "display_name": "Synology NAS",
+      "description": "Synology NAS Management – System-Status, Storage, Packages, Services, Tasks",
+      "version": "1.0.0",
+      "author": "Ninko Team"
+    },
+    {
       "name": "tasmota",
       "display_name": "Tasmota",
       "description": "Steuerung und Monitoring von Tasmota-Geräten (ESP8266/ESP32) via HTTP REST API.",

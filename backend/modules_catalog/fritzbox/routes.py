@@ -14,7 +14,7 @@ router = APIRouter(tags=["FritzBox"])
 
 @router.get("/status")
 async def get_status(connection_id: str = ""):
-    """Holt WAN-Status, WLAN-Status, Systeminfos und Bandbreite für das Dashboard."""
+    """Fetch WAN status, WLAN status, system info and bandwidth for the dashboard."""
     try:
         wan = await get_fritz_wan_status.ainvoke({"connection_id": connection_id})
         wlan = await get_fritz_wlan_status.ainvoke({"connection_id": connection_id})
@@ -26,20 +26,20 @@ async def get_status(connection_id: str = ""):
             "wan": wan if "error" not in wan else {"connected": False, "ip_address": "N/A"},
             "wlan": wlan if not (isinstance(wlan, list) and wlan and "error" in wlan[0]) else [],
             "bandwidth": bw if "error" not in bw else {"ds_current": 0, "us_current": 0},
-            "system": sys if "error" not in sys else {"model": "Fehler / Nicht Erreichbar", "firmware_version": "-", "uptime": 0}
+            "system": sys if "error" not in sys else {"model": "Error / Unreachable", "firmware_version": "-", "uptime": 0}
         }
     except Exception as e:
-        logger.error(f"Error fetching FritzBox status: {e}")
+        logger.error("Error fetching FritzBox status: %s", e)
         return {
             "wan": {"connected": False, "ip_address": "N/A"},
             "wlan": [],
             "bandwidth": {"ds_current": 0, "us_current": 0},
-            "system": {"model": "FritzBox nicht konfiguriert oder offline", "firmware_version": "-", "uptime": 0}
+            "system": {"model": "FritzBox not configured or offline", "firmware_version": "-", "uptime": 0}
         }
 
 @router.get("/devices")
 async def get_devices(connection_id: str = ""):
-    """Holt die Liste aller Geräte im Heimnetz."""
+    """Retrieve the list of all devices on the home network."""
     try:
         devices = await get_fritz_devices.ainvoke({"connection_id": connection_id})
         # devices is either a list of dicts or [{"error": "..."}]
@@ -47,5 +47,5 @@ async def get_devices(connection_id: str = ""):
             return [] # gracefully return empty list to frontend
         return devices
     except Exception as e:
-        logger.error(f"Error fetching FritzBox devices: {e}")
+        logger.error("Error fetching FritzBox devices: %s", e)
         return []

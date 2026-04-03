@@ -1,5 +1,5 @@
 """
-Proxmox Modul – FastAPI Router für Dashboard-API.
+Proxmox module — FastAPI Router for dashboard API.
 """
 
 from __future__ import annotations
@@ -26,53 +26,53 @@ router = APIRouter()
 
 @router.get("/nodes")
 async def nodes():
-    """Alle Proxmox-Nodes."""
+    """All Proxmox nodes."""
     return await get_nodes.ainvoke({})
 
 
 @router.get("/nodes/{node}")
 async def node_status(node: str):
-    """Status eines einzelnen Nodes."""
+    """Status of a single node."""
     return await get_node_status.ainvoke({"node": node})
 
 
 @router.get("/vms")
 async def all_vms():
-    """Alle VMs auf allen Nodes."""
+    """All VMs across all nodes."""
     return await list_all_vms.ainvoke({})
 
 
 @router.get("/vms/{node}")
 async def vms_on_node(node: str):
-    """VMs auf einem bestimmten Node."""
+    """VMs on a specific node."""
     return await list_vms.ainvoke({"node": node})
 
 
 @router.get("/vm/{node}/{vmid}")
 async def vm_status(node: str, vmid: int):
-    """Status einer einzelnen VM."""
+    """Status of a single VM."""
     return await get_vm_status.ainvoke({"node": node, "vmid": vmid})
 
 
 @router.post("/vm/{node}/{vmid}/start")
 async def start_vm_api(node: str, vmid: int):
-    """VM starten."""
+    """Start a VM."""
     return await start_vm_tool.ainvoke({"node": node, "vmid": vmid})
 
 
 @router.post("/vm/{node}/{vmid}/stop")
 async def stop_vm_api(node: str, vmid: int):
-    """VM stoppen."""
+    """Stop a VM."""
     return await stop_vm_tool.ainvoke({"node": node, "vmid": vmid})
 
 
 @router.post("/vm/{node}/{vmid}/reboot")
 async def reboot_vm_api(node: str, vmid: int):
-    """VM neu starten."""
+    """Restart a VM."""
     return await reboot_vm_tool.ainvoke({"node": node, "vmid": vmid})
 
 
 @router.get("/containers/{node}")
 async def containers_on_node(node: str):
-    """LXC-Container auf einem Node."""
+    """LXC containers on a node."""
     return await list_containers.ainvoke({"node": node})

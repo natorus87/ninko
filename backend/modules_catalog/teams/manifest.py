@@ -1,5 +1,5 @@
 """
-Microsoft Teams Modul – Manifest mit Metadaten und Health-Check.
+Microsoft Teams Module — manifest with metadata and health check.
 """
 
 from __future__ import annotations
@@ -15,22 +15,22 @@ logger = logging.getLogger("ninko.modules.teams")
 
 
 async def check_teams_health(connection_id: str = "") -> dict:
-    """Health-Check für den Teams Bot via Azure/BotFramework OAuth Token Endpoint."""
+    """Health check for the Teams Bot via Azure/BotFramework OAuth Token Endpoint."""
     try:
         token = await get_teams_access_token(connection_id)
         if token:
-            return {"status": "ok", "detail": "Erfolgreich an Microsoft Bot Framework authentifiziert."}
+            return {"status": "ok", "detail": "Successfully authenticated with Microsoft Bot Framework."}
         else:
-            return {"status": "warning", "detail": "Kein gültiges Token erhalten oder konfiguriert."}
+            return {"status": "warning", "detail": "No valid token received or configured."}
     except Exception as e:
-        return {"status": "error", "detail": f"Authentifizierung fehlgeschlagen: {e}"}
+        return {"status": "error", "detail": f"Authentication failed: {e}"}
 
 
 module_manifest = ModuleManifest(
     name="teams",
     display_name="Microsoft Teams",
     description="Ermöglicht das Chatten mit dem Ninko Orchestrator über Microsoft Teams",
-    version="1.0.0",
+    version="1.1.0",
     author="Ninko Team",
     enabled_by_default=True,
     env_prefix="TEAMS_",

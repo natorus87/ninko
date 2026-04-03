@@ -1,4 +1,4 @@
-"""Tasmota Modul – Package Init."""
+"""Tasmota module — package init."""
 
 from .manifest import module_manifest
 from .agent import TasmotaAgent

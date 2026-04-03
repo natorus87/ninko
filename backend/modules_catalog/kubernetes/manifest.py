@@ -1,5 +1,5 @@
 """
-Kubernetes Modul – Manifest mit Metadaten und Health-Check.
+Kubernetes module — Manifest with metadata and health check.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ logger = logging.getLogger("ninko.modules.kubernetes")
 
 
 async def check_k8s_health() -> dict:
-    """Health-Check für Kubernetes-Cluster-Verbindung."""
+    """Health check for Kubernetes cluster connection."""
     try:
         from kubernetes import client, config
         from .tools import _get_k8s_client
@@ -21,17 +21,17 @@ async def check_k8s_health() -> dict:
         version = client.VersionApi().get_code()
         return {
             "status": "ok",
-            "detail": f"Kubernetes {version.git_version} erreichbar",
+            "detail": f"Kubernetes {version.git_version} reachable",
         }
     except Exception as e:
-        return {"status": "error", "detail": f"Cluster nicht erreichbar: {e}"}
+        return {"status": "error", "detail": f"Cluster not reachable: {e}"}
 
 
 module_manifest = ModuleManifest(
     name="kubernetes",
     display_name="Kubernetes",
     description="Kubernetes Cluster Management – Pods, Deployments, Services, Health-Monitoring",
-    version="1.0.0",
+    version="1.1.0",
     author="Ninko Team",
     enabled_by_default=True,
     env_prefix="K8S_",

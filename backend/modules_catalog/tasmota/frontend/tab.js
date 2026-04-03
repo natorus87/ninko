@@ -156,10 +156,14 @@ const TasmotaTab = {
             const sensors = sensorsData.data || {};
             const power = powerData.data || {};
 
-            const formatUptime = (secs) => {
-                const d = Math.floor(secs / 86400);
-                const h = Math.floor((secs % 86400) / 3600);
-                const m = Math.floor((secs % 3600) / 60);
+            const formatUptime = (uptime) => {
+                if (!uptime) return '-';
+                // Tasmota returns uptime as string like "12T22:35:44" or "22:35:44"
+                if (typeof uptime === 'string') return uptime;
+                // Fallback: seconds as number
+                const d = Math.floor(uptime / 86400);
+                const h = Math.floor((uptime % 86400) / 3600);
+                const m = Math.floor((uptime % 3600) / 60);
                 return `${d}d ${h}h ${m}m`;
             };
 
@@ -177,8 +181,8 @@ const TasmotaTab = {
                         <span class="tasmota-stat-value">${status.ip_address || '-'}</span>
                     </div>
                     <div class="tasmota-stat">
-                        <span class="tasmota-stat-label">Modell</span>
-                        <span class="tasmota-stat-value">${status.model || '-'}</span>
+                        <span class="tasmota-stat-label">Gerätename</span>
+                        <span class="tasmota-stat-value">${status.friendly_name || status.device_name || '-'}</span>
                     </div>
                     <div class="tasmota-stat">
                         <span class="tasmota-stat-label">Firmware</span>
@@ -198,7 +202,7 @@ const TasmotaTab = {
                     <h4>🔌 Power</h4>
                     <div class="tasmota-stat">
                         <span class="tasmota-stat-label">Relais 1</span>
-                        <span class="tasmota-stat-value ${power.power1 ? 'power-on' : 'power-off'}">${power.power1 ? 'AN' : 'AUS'}</span>
+                        <span class="tasmota-stat-value ${power.relays?.POWER ? 'power-on' : 'power-off'}">${power.relays?.POWER ? 'AN' : 'AUS'}</span>
                     </div>
                 </div>
 

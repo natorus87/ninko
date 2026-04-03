@@ -1,6 +1,6 @@
 """
-WordPress Modul – Manifest mit Metadaten und Health-Check.
-Verwaltet WordPress-Instanzen über die WP REST API v2.
+WordPress Module — Manifest with metadata and health check.
+Manages WordPress instances via WP REST API v2.
 """
 
 from __future__ import annotations
@@ -13,9 +13,9 @@ logger = logging.getLogger("ninko.modules.wordpress")
 
 
 async def check_wordpress_health() -> dict:
-    """Health-Check für die WordPress REST API."""
+    """Health check for WordPress REST API."""
     try:
-        return {"status": "ok", "detail": "WordPress Modul bereit (REST API v2)"}
+        return {"status": "ok", "detail": "WordPress module ready (REST API v2)"}
     except Exception as e:
         return {"status": "error", "detail": str(e)}
 
@@ -24,7 +24,7 @@ module_manifest = ModuleManifest(
     name="wordpress",
     display_name="WordPress",
     description="WordPress-Verwaltung – Plugins, Seiten, Beiträge, Benutzer, Einstellungen",
-    version="1.0.0",
+    version="1.1.0",
     author="Ninko Team",
     enabled_by_default=False,
     env_prefix="WORDPRESS_",

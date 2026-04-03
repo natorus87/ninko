@@ -1,6 +1,6 @@
 """
-Linux Server Modul – LangGraph @tool-Funktionen.
-SSH-basiertes Server-Management mit Passwort und RSA-Key Auth.
+Linux Server Module — LangGraph @tool functions.
+SSH-based server management with password and RSA-key auth.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from typing import Any
 
 from langchain_core.tools import tool
 
+from agents.base_agent import _t
 from core.connections import ConnectionManager
 from core.vault import get_vault
 
@@ -21,16 +22,21 @@ logger = logging.getLogger("ninko.modules.linux_server.tools")
 
 async def _get_ssh_client(connection_id: str = "") -> dict:
     """
-    Erstellt SSH-Connection-Config aus dem ConnectionManager.
+    Build SSH connection config from ConnectionManager.
 
-    Rückgabe: dict mit host, port, username, password, ssh_key
-    Fallback auf Env-Variablen: LINUX_SERVER_HOST, LINUX_SERVER_PORT,
+    Returns: dict with host, port, username, password, ssh_key
+    Falls back to env vars: LINUX_SERVER_HOST, LINUX_SERVER_PORT,
     LINUX_SERVER_USER, LINUX_SERVER_PASSWORD, LINUX_SERVER_SSH_KEY
     """
     if connection_id:
         conn = await ConnectionManager.get_connection("linux_server", connection_id)
         if not conn:
-            raise ValueError(f"Linux-Server-Verbindung mit ID '{connection_id}' nicht gefunden.")
+            raise ValueError(
+                _t(
+                    de=f"Linux-Server-Verbindung mit ID '{connection_id}' nicht gefunden.",
+                    en=f"Linux Server connection with ID '{connection_id}' not found.",
+                )
+            )
     else:
         conn = await ConnectionManager.get_default_connection("linux_server")
 
@@ -51,7 +57,6 @@ async def _get_ssh_client(connection_id: str = "") -> dict:
         if key_path:
             ssh_key = await vault.get_secret(key_path)
     else:
-        # Env-Fallback
         host = os.environ.get("LINUX_SERVER_HOST", "")
         port = int(os.environ.get("LINUX_SERVER_PORT", "22"))
         username = os.environ.get("LINUX_SERVER_USER", "root")
@@ -60,9 +65,18 @@ async def _get_ssh_client(connection_id: str = "") -> dict:
 
     if not host:
         raise ValueError(
-            "Keine Linux-Server-Verbindung konfiguriert. "
-            "Bitte im Dashboard unter Einstellungen → Modul → Zahnrad eine Verbindung anlegen, "
-            "oder die Env-Variablen LINUX_SERVER_HOST / LINUX_SERVER_USER / LINUX_SERVER_PASSWORD setzen."
+            _t(
+                de=(
+                    "Keine Linux-Server-Verbindung konfiguriert. "
+                    "Bitte im Dashboard unter Einstellungen → Modul → Zahnrad eine Verbindung anlegen, "
+                    "oder die Env-Variablen LINUX_SERVER_HOST / LINUX_SERVER_USER / LINUX_SERVER_PASSWORD setzen."
+                ),
+                en=(
+                    "No Linux Server connection configured. "
+                    "Please create a connection in Settings → Module → Gear, "
+                    "or set the env vars LINUX_SERVER_HOST / LINUX_SERVER_USER / LINUX_SERVER_PASSWORD."
+                ),
+            )
         )
 
     return {
@@ -80,8 +94,8 @@ async def _run_ssh_command(
     timeout: int = 30,
 ) -> dict:
     """
-    Führt einen Befehl über SSH aus.
-    Unterstützt Passwort- und RSA-Key-Authentifizierung.
+    Execute a command over SSH.
+    Supports password and RSA-key authentication.
     """
     import paramiko
 
@@ -97,7 +111,7 @@ async def _run_ssh_command(
         "timeout": timeout,
     }
 
-    # Auth: RSA-Key bevorzugt, dann Passwort
+    # Auth: RSA-key preferred, then password
     if cfg["ssh_key"]:
         try:
             pkey = paramiko.RSAKey.from_private_key(io.StringIO(cfg["ssh_key"]))
@@ -107,7 +121,7 @@ async def _run_ssh_command(
                 pkey = paramiko.Ed25519Key.from_private_key(io.StringIO(cfg["ssh_key"]))
                 connect_kwargs["pkey"] = pkey
             except Exception as e:
-                logger.warning("SSH-Key konnte nicht geladen werden: %s", e)
+                logger.warning("Failed to load SSH key: %s", e)
                 if cfg["password"]:
                     connect_kwargs["password"] = cfg["password"]
     elif cfg["password"]:
@@ -132,25 +146,36 @@ async def _run_ssh_command(
 
 
 def _truncate_output(text: str, max_lines: int = 100, max_chars: int = 4000) -> str:
-    """Kürzt lange Ausgaben."""
+    """Truncate long output."""
     lines = text.split("\n")
     if len(lines) > max_lines:
         text = "\n".join(lines[:max_lines])
-        text += f"\n[…{len(lines) - max_lines} Zeilen gekürzt]"
+        text += _t(
+            de=f"\n[…{len(lines) - max_lines} Zeilen gekürzt]",
+            en=f"\n[…{len(lines) - max_lines} lines truncated]",
+        )
     if len(text) > max_chars:
-        text = text[:max_chars] + "\n[…Ausgabe gekürzt]"
+        text = text[:max_chars] + _t(
+            de="\n[…Ausgabe gekürzt]",
+            en="\n[…output truncated]",
+        )
     return text
 
 
+def _error_message(e: Exception) -> str:
+    """Return a bilingual error message string."""
+    return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+
+
 # ═══════════════════════════════════════════════════════
-# SSH Befehls-Tools
+# SSH Command Tools
 # ═══════════════════════════════════════════════════════
 
 @tool
 async def run_command(cmd: str, connection_id: str = "") -> dict:
     """
-    Führt einen beliebigen Shell-Befehl auf dem Linux-Server über SSH aus.
-    Nutze dieses Tool für alle Befehle, die kein spezifisches Tool haben.
+    Execute an arbitrary shell command on the Linux server over SSH.
+    Use this tool for commands that have no specific tool.
     """
     try:
         result = await _run_ssh_command(cmd, connection_id)
@@ -163,12 +188,12 @@ async def run_command(cmd: str, connection_id: str = "") -> dict:
 
 
 # ═══════════════════════════════════════════════════════
-# System-Info Tools
+# System Info Tools
 # ═══════════════════════════════════════════════════════
 
 @tool
 async def get_system_info(connection_id: str = "") -> dict:
-    """Gibt grundlegende System-Informationen zurück (Hostname, OS, Kernel, Uptime, CPU, RAM)."""
+    """Return basic system information (hostname, OS, kernel, uptime, CPU, RAM)."""
     try:
         cmds = {
             "hostname": "hostname",
@@ -196,20 +221,20 @@ async def get_system_info(connection_id: str = "") -> dict:
 
 @tool
 async def get_disk_usage(connection_id: str = "") -> str:
-    """Gibt die Festplattennutzung aller gemounteten Dateisysteme zurück (df -h)."""
+    """Return disk usage of all mounted filesystems (df -h)."""
     try:
         result = await _run_ssh_command("df -h --output=source,size,used,avail,pcent,target 2>/dev/null || df -h", connection_id)
         return _truncate_output(result["output"])
     except Exception as e:
-        return f"Fehler: {e}"
+        return _error_message(e)
 
 
 @tool
 async def get_top_processes(sort_by: str = "cpu", count: int = 10, connection_id: str = "") -> str:
     """
-    Gibt die aktivsten Prozesse zurück.
-    sort_by: 'cpu' oder 'mem' (Speicher).
-    count: Anzahl der anzuzeigenden Prozesse.
+    Return the most active processes.
+    sort_by: 'cpu' or 'mem'.
+    count: number of processes to show.
     """
     try:
         sort_flag = "-pcpu" if sort_by == "cpu" else "-pmem"
@@ -217,7 +242,7 @@ async def get_top_processes(sort_by: str = "cpu", count: int = 10, connection_id
         result = await _run_ssh_command(cmd, connection_id)
         return _truncate_output(result["output"])
     except Exception as e:
-        return f"Fehler: {e}"
+        return _error_message(e)
 
 
 # ═══════════════════════════════════════════════════════
@@ -227,7 +252,7 @@ async def get_top_processes(sort_by: str = "cpu", count: int = 10, connection_id
 @tool
 async def list_services(status_filter: str = "all", connection_id: str = "") -> str:
     """
-    Listet systemd-Services auf.
+    List systemd services.
     status_filter: 'all', 'running', 'failed', 'stopped'
     """
     try:
@@ -237,22 +262,26 @@ async def list_services(status_filter: str = "all", connection_id: str = "") -> 
         result = await _run_ssh_command(cmd, connection_id)
         return _truncate_output(result["output"], max_lines=50)
     except Exception as e:
-        return f"Fehler: {e}"
+        return _error_message(e)
 
 
 @tool
 async def service_action(service: str, action: str, connection_id: str = "") -> dict:
     """
-    Führt eine systemd-Aktion auf einem Service aus.
+    Execute a systemd action on a service.
     action: 'start', 'stop', 'restart', 'status', 'enable', 'disable'
     """
     valid_actions = {"start", "stop", "restart", "status", "enable", "disable"}
     if action not in valid_actions:
-        return {"error": f"Ungültige Aktion '{action}'. Erlaubt: {', '.join(valid_actions)}"}
+        return {"error": _t(
+            de=f"Ungültige Aktion '{action}'. Erlaubt: {', '.join(valid_actions)}",
+            en=f"Invalid action '{action}'. Allowed: {', '.join(valid_actions)}",
+        )}
 
     try:
         cmd = f"systemctl {action} {service}"
         result = await _run_ssh_command(cmd, connection_id)
+        logger.info("Service %s %s: exit_code=%d", service, action, result["exit_code"])
         return {
             "service": service,
             "action": action,
@@ -261,19 +290,20 @@ async def service_action(service: str, action: str, connection_id: str = "") -> 
             "success": result["exit_code"] == 0,
         }
     except Exception as e:
+        logger.error("service_action failed: %s", e)
         return {"service": service, "action": action, "error": str(e), "success": False}
 
 
 # ═══════════════════════════════════════════════════════
-# Log-Tools
+# Log Tools
 # ═══════════════════════════════════════════════════════
 
 @tool
 async def get_journal(service: str = "", lines: int = 50, connection_id: str = "") -> str:
     """
-    Gibt Logs aus dem systemd-Journal zurück.
-    service: Service-Name (z.B. 'nginx', 'sshd'). Leer = alle.
-    lines: Anzahl der Zeilen.
+    Return logs from the systemd journal.
+    service: service name (e.g. 'nginx', 'sshd'). Empty = all.
+    lines: number of lines.
     """
     try:
         unit_flag = f"-u {service}" if service else ""
@@ -281,34 +311,38 @@ async def get_journal(service: str = "", lines: int = 50, connection_id: str = "
         result = await _run_ssh_command(cmd, connection_id)
         return _truncate_output(result["output"], max_lines=lines)
     except Exception as e:
-        return f"Fehler: {e}"
+        return _error_message(e)
 
 
 @tool
 async def get_logfile(path: str, lines: int = 50, connection_id: str = "") -> str:
     """
-    Gibt die letzten Zeilen einer Log-Datei zurück.
-    Beispiel: path='/var/log/syslog', lines=100
+    Return the last lines of a log file.
+    Example: path='/var/log/syslog', lines=100
     """
     try:
         cmd = f"tail -n {lines} {path} 2>/dev/null"
         result = await _run_ssh_command(cmd, connection_id)
         if result["exit_code"] != 0:
-            return f"Fehler: Datei '{path}' nicht lesbar oder nicht vorhanden."
+            return _t(
+                de=f"Fehler: Datei '{path}' nicht lesbar oder nicht vorhanden.",
+                en=f"Error: File '{path}' is not readable or does not exist.",
+            )
         return _truncate_output(result["output"], max_lines=lines)
     except Exception as e:
-        return f"Fehler: {e}"
+        return _error_message(e)
 
 
 # ═══════════════════════════════════════════════════════
-# Paket-Management
+# Package Management
 # ═══════════════════════════════════════════════════════
 
 @tool
 async def apt_update(connection_id: str = "") -> dict:
-    """Führt apt update durch (Paketlisten aktualisieren)."""
+    """Run apt update (refresh package lists)."""
     try:
         result = await _run_ssh_command("apt-get update 2>&1", connection_id, timeout=120)
+        logger.info("apt update: exit_code=%d", result["exit_code"])
         return {
             "exit_code": result["exit_code"],
             "output": _truncate_output(result["output"], max_lines=30),
@@ -321,8 +355,8 @@ async def apt_update(connection_id: str = "") -> dict:
 @tool
 async def apt_upgrade(packages: str = "", connection_id: str = "") -> dict:
     """
-    Führt apt upgrade durch. Bei packages="" werden alle Pakete aktualisiert.
-    Bei packages="nginx mysql-server" werden nur diese aktualisiert.
+    Run apt upgrade. With packages="" all packages are upgraded.
+    With packages="nginx mysql-server" only those are upgraded.
     """
     try:
         if packages:
@@ -330,6 +364,7 @@ async def apt_upgrade(packages: str = "", connection_id: str = "") -> dict:
         else:
             cmd = "DEBIAN_FRONTEND=noninteractive apt-get upgrade -y 2>&1"
         result = await _run_ssh_command(cmd, connection_id, timeout=300)
+        logger.info("apt upgrade: exit_code=%d", result["exit_code"])
         return {
             "exit_code": result["exit_code"],
             "output": _truncate_output(result["output"], max_lines=30),
@@ -342,13 +377,14 @@ async def apt_upgrade(packages: str = "", connection_id: str = "") -> dict:
 @tool
 async def apt_install(packages: str, connection_id: str = "") -> dict:
     """
-    Installiert Pakete über apt. Mehrere Pakete durch Leerzeichen getrennt.
-    Beispiel: packages='htop vim curl'
-    DESTRUKTIV – erfordert Bestätigung.
+    Install packages via apt. Multiple packages separated by spaces.
+    Example: packages='htop vim curl'
+    DESTRUCTIVE — requires confirmation.
     """
     try:
         cmd = f"DEBIAN_FRONTEND=noninteractive apt-get install -y {packages} 2>&1"
         result = await _run_ssh_command(cmd, connection_id, timeout=300)
+        logger.info("apt install %s: exit_code=%d", packages, result["exit_code"])
         return {
             "packages": packages,
             "exit_code": result["exit_code"],
@@ -360,59 +396,65 @@ async def apt_install(packages: str, connection_id: str = "") -> dict:
 
 
 # ═══════════════════════════════════════════════════════
-# Datei-Management
+# File Management
 # ═══════════════════════════════════════════════════════
 
 @tool
 async def read_file(path: str, max_lines: int = 200, connection_id: str = "") -> str:
     """
-    Liest den Inhalt einer Datei auf dem Server.
-    Beispiel: path='/etc/nginx/nginx.conf'
+    Read the contents of a file on the server.
+    Example: path='/etc/nginx/nginx.conf'
     """
     try:
         cmd = f"head -n {max_lines} {path} 2>/dev/null"
         result = await _run_ssh_command(cmd, connection_id)
         if result["exit_code"] != 0:
-            return f"Fehler: Datei '{path}' nicht lesbar oder nicht vorhanden."
+            return _t(
+                de=f"Fehler: Datei '{path}' nicht lesbar oder nicht vorhanden.",
+                en=f"Error: File '{path}' is not readable or does not exist.",
+            )
         return _truncate_output(result["output"], max_lines=max_lines)
     except Exception as e:
-        return f"Fehler: {e}"
+        return _error_message(e)
 
 
 @tool
 async def list_directory(path: str = "/var/log", connection_id: str = "") -> str:
     """
-    Listet den Inhalt eines Verzeichnisses auf.
-    Beispiel: path='/etc/nginx/sites-available'
+    List the contents of a directory.
+    Example: path='/etc/nginx/sites-available'
     """
     try:
         cmd = f"ls -lah {path} 2>/dev/null"
         result = await _run_ssh_command(cmd, connection_id)
         if result["exit_code"] != 0:
-            return f"Fehler: Verzeichnis '{path}' nicht lesbar."
+            return _t(
+                de=f"Fehler: Verzeichnis '{path}' nicht lesbar.",
+                en=f"Error: Directory '{path}' is not readable.",
+            )
         return _truncate_output(result["output"])
     except Exception as e:
-        return f"Fehler: {e}"
+        return _error_message(e)
 
 
 # ═══════════════════════════════════════════════════════
-# Netzwerk
+# Network
 # ═══════════════════════════════════════════════════════
 
 @tool
 async def get_network_info(connection_id: str = "") -> str:
-    """Gibt Netzwerk-Informationen zurück (IP-Adressen, offene Ports, DNS)."""
+    """Return network information (IP addresses, open ports, DNS)."""
     try:
         cmd = "ip -4 addr show | grep inet; echo '---'; ss -tlnp 2>/dev/null | head -20; echo '---'; cat /etc/resolv.conf | grep nameserver"
         result = await _run_ssh_command(cmd, connection_id)
         return _truncate_output(result["output"])
     except Exception as e:
-        return f"Fehler: {e}"
+        return _error_message(e)
 
 
 @tool
 async def check_port(host: str, port: int, connection_id: str = "") -> dict:
-    """Prüft ob ein Port auf einem Host erreichbar ist (netcat oder /dev/tcp)."""
+    """Check whether a port on a host is reachable (netcat or /dev/tcp)."""
     try:
         cmd = f"timeout 3 bash -c 'echo > /dev/tcp/{host}/{port}' 2>&1 && echo 'OPEN' || echo 'CLOSED'"
         result = await _run_ssh_command(cmd, connection_id)
@@ -431,45 +473,54 @@ async def check_port(host: str, port: int, connection_id: str = "") -> dict:
 
 @tool
 async def list_users(connection_id: str = "") -> str:
-    """Listet alle Benutzer mit Login-Shell auf (/etc/passwd)."""
+    """List all users with login shell (/etc/passwd)."""
     try:
         cmd = "grep -v '/nologin\\|/false' /etc/passwd | cut -d: -f1,3,6,7 | column -t -s:"
         result = await _run_ssh_command(cmd, connection_id)
         return _truncate_output(result["output"])
     except Exception as e:
-        return f"Fehler: {e}"
+        return _error_message(e)
 
 
 @tool
 async def check_last_logins(count: int = 10, connection_id: str = "") -> str:
-    """Zeigt die letzten Login-Versuche an (last)."""
+    """Show the last login attempts (last)."""
     try:
         cmd = f"last -n {count} --time-format iso 2>/dev/null || last -n {count}"
         result = await _run_ssh_command(cmd, connection_id)
         return _truncate_output(result["output"], max_lines=count)
     except Exception as e:
-        return f"Fehler: {e}"
+        return _error_message(e)
 
 
 # ═══════════════════════════════════════════════════════
-# Steuerungs-Tools
+# Control Tools
 # ═══════════════════════════════════════════════════════
 
 @tool
 async def reboot_server(connection_id: str = "") -> dict:
-    """Startet den Server neu. DESTRUKTIV – erfordert explizite Bestätigung."""
+    """Reboot the server. DESTRUCTIVE — requires explicit confirmation."""
     return {
         "action": "reboot",
         "status": "confirmation_required",
-        "detail": "Soll der Server wirklich neu gestartet werden? Dies unterbricht alle laufenden Dienste! Bestätige mit 'Ja'.",
+        "detail": _t(
+            de="Soll der Server wirklich neu gestartet werden? Dies unterbricht alle laufenden Dienste! Bestätige mit 'Ja'.",
+            en="Should the server really be rebooted? This will interrupt all running services! Confirm with 'Yes'.",
+        ),
     }
 
 
 @tool
 async def confirm_reboot(connection_id: str = "") -> dict:
-    """Bestätigte Server-Neustart. Nur nach expliziter User-Bestätigung aufrufen."""
+    """Confirmed server reboot. Only call after explicit user confirmation."""
     try:
-        result = await _run_ssh_command("reboot", connection_id, timeout=5)
-        return {"action": "reboot", "status": "success", "detail": "Neustart wurde eingeleitet."}
+        await _run_ssh_command("reboot", connection_id, timeout=5)
+        return {"action": "reboot", "status": "success", "detail": _t(
+            de="Neustart wurde eingeleitet.",
+            en="Reboot initiated.",
+        )}
     except Exception:
-        return {"action": "reboot", "status": "success", "detail": "Neustart wurde eingeleitet (Verbindung getrennt wie erwartet)."}
+        return {"action": "reboot", "status": "success", "detail": _t(
+            de="Neustart wurde eingeleitet (Verbindung getrennt wie erwartet).",
+            en="Reboot initiated (connection dropped as expected).",
+        )}

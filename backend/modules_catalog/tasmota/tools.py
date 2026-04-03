@@ -1,29 +1,29 @@
-"""
-Tasmota Modul – LangGraph @tool-Funktionen.
-"""
+"""Tasmota module — LangGraph @tool functions."""
 
 from __future__ import annotations
 
 import logging
 import os
+import asyncio
 from typing import Any, Dict, List, Optional
 
 import httpx
 from langchain_core.tools import tool
 
 from core.connections import ConnectionManager
+from agents.base_agent import _t
 
 logger = logging.getLogger("ninko.modules.tasmota.tools")
 
 
 async def _get_tasmota_host(connection_id: str = "") -> str:
     """
-    Hilfsfunktion: Lädt die Host-Adresse aus dem ConnectionManager oder Env-Variablen.
+    Helper: loads the host address from ConnectionManager or environment variables.
     """
     if connection_id:
         conn = await ConnectionManager.get_connection("tasmota", connection_id)
         if not conn:
-            raise ValueError(f"Tasmota-Verbindung mit ID '{connection_id}' nicht gefunden.")
+            raise ValueError(f"Tasmota connection with ID '{connection_id}' not found.")
     else:
         conn = await ConnectionManager.get_default_connection("tasmota")
 
@@ -35,11 +35,11 @@ async def _get_tasmota_host(connection_id: str = "") -> str:
 
 async def _tasmota_request(host: str, command: str, timeout: float = 5.0) -> Dict:
     """
-    Sendet einen HTTP-Befehl an ein Tasmota-Gerät.
+    Sends an HTTP command to a Tasmota device.
     Tasmota API: http://<host>/cm?cmnd=<command>
     """
     if not host:
-        raise ValueError("Keine Tasmota-Host-Adresse angegeben.")
+        raise ValueError("No Tasmota host address provided.")
 
     url = f"http://{host}/cm?cmnd={command}"
     async with httpx.AsyncClient(timeout=timeout) as client:
@@ -51,73 +51,92 @@ async def _tasmota_request(host: str, command: str, timeout: float = 5.0) -> Dic
 @tool
 async def get_tasmota_status(connection_id: str = "") -> Dict:
     """
-    Ruft den allgemeinen Status eines Tasmota-Geräts ab (Hostname, IP, Uptime, Last, WLAN-RSSI).
-    Benutze dieses Tool, um Informationen über ein Tasmota-Gerät zu erhalten.
+    Retrieves the general status of a Tasmota device (hostname, IP, uptime, firmware, model).
     Use this tool to get general information about a Tasmota device.
     """
     try:
         host = await _get_tasmota_host(connection_id)
         if not host:
             raise ValueError(
-                "Keine Tasmota-Verbindung konfiguriert. "
-                "Bitte im Dashboard unter Einstellungen → Modul → Zahnrad eine Verbindung anlegen, "
-                "oder die Env-Variable TASMOTA_HOST setzen."
+                _t(
+                    de="Keine Tasmota-Verbindung konfiguriert. Bitte im Dashboard unter Einstellungen → Modul → Zahnrad eine Verbindung anlegen, oder die Env-Variable TASMOTA_HOST setzen.",
+                    en="No Tasmota connection configured. Please create a connection in the dashboard under Settings → Module → gear icon, or set the environment variable TASMOTA_HOST.",
+                )
             )
 
-        result = await _tasmota_request(host, "Status")
-        status = result.get("Status", {})
+        # Fetch Status + Status 2 (firmware) in parallel
+        status_result, fw_result = await asyncio.gather(
+            _tasmota_request(host, "Status"),
+            _tasmota_request(host, "Status 2"),
+        )
+        status = status_result.get("Status", {})
+        fw = fw_result.get("StatusFWR", {})
+
+        friendly = status.get("FriendlyName", [])
+        wifi = status.get("Wifi", {})
 
         return {
+            "device_name": status.get("DeviceName", ""),
+            "friendly_name": friendly[0] if isinstance(friendly, list) and friendly else "",
             "hostname": status.get("Hostname", ""),
             "ip_address": status.get("IPAddress", ""),
-            "uptime": status.get("Uptime", 0),
-            "load": status.get("Load", 0),
-            "wifi_rssi": status.get("Wifi", {}).get("RSSI", 0) if isinstance(status.get("Wifi"), dict) else 0,
-            "model": status.get("Module", ""),
-            "firmware": status.get("Version", ""),
+            "uptime": status.get("Uptime", ""),
+            "module_id": status.get("Module", 0),
+            "firmware": fw.get("Version", ""),
+            "hardware": fw.get("Hardware", ""),
+            "wifi_rssi": wifi.get("RSSI", 0) if isinstance(wifi, dict) else 0,
         }
     except Exception as e:
-        logger.error("Fehler beim Abrufen des Tasmota-Status: %s", e)
+        logger.error("Failed to retrieve Tasmota status: %s", e)
         return {"error": str(e)}
 
 
 @tool
 async def get_tasmota_power(connection_id: str = "") -> Dict:
     """
-    Ruft den Power-Status aller Relais eines Tasmota-Geräts ab.
-    Zeigt, welche Schalter ein- oder ausgeschaltet sind.
+    Retrieves the power status of all relays on a Tasmota device.
     Use this tool to check which switches are on or off.
     """
     try:
         host = await _get_tasmota_host(connection_id)
         if not host:
-            raise ValueError("Keine Tasmota-Host-Adresse konfiguriert.")
+            raise ValueError(_t(
+                de="Keine Tasmota-Host-Adresse konfiguriert.",
+                en="No Tasmota host address configured.",
+            ))
 
         result = await _tasmota_request(host, "Power")
-        power_state = result.get("POWER1", result.get("POWER", "OFF"))
+        # Single-relay: {"POWER": "ON"}, Multi-relay: {"POWER1": "ON", "POWER2": "OFF"}
+        relays = {}
+        for key, val in result.items():
+            if key.startswith("POWER"):
+                if isinstance(val, str):
+                    relays[key] = val.upper() == "ON"
+        # Also check bare "POWER" key for single-relay
+        if "POWER" in result and isinstance(result["POWER"], str):
+            relays["POWER"] = result["POWER"].upper() == "ON"
 
-        return {
-            "power1": power_state.upper() == "ON" if isinstance(power_state, str) else None,
-            "raw": result,
-        }
+        return {"relays": relays, "raw": result}
     except Exception as e:
-        logger.error("Fehler beim Abrufen des Power-Status: %s", e)
+        logger.error("Failed to retrieve Tasmota power status: %s", e)
         return {"error": str(e)}
 
 
 @tool
 async def set_tasmota_power(state: bool, relay: int = 1, connection_id: str = "") -> str:
     """
-    Schaltet ein Relais eines Tasmota-Geräts ein oder aus.
-    state: True = einschalten, False = ausschalten.
-    relay: Relais-Nummer (1-4), Standard ist 1.
-    Benutze dieses Tool, um Steckdosen, Lichter oder andere Schalter zu steuern.
+    Switches a relay on a Tasmota device on or off.
+    state: True = on, False = off.
+    relay: relay number (1-4), default is 1.
     Use this tool to turn switches or outlets on or off.
     """
     try:
         host = await _get_tasmota_host(connection_id)
         if not host:
-            return "Fehler: Keine Tasmota-Host-Adresse konfiguriert."
+            return _t(
+                de="Fehler: Keine Tasmota-Host-Adresse konfiguriert.",
+                en="Error: No Tasmota host address configured.",
+            )
 
         command = f"Power{relay}" if relay > 1 else "Power"
         value = "ON" if state else "OFF"
@@ -125,62 +144,80 @@ async def set_tasmota_power(state: bool, relay: int = 1, connection_id: str = ""
         result = await _tasmota_request(host, f"{command} {value}")
         actual = result.get(command, result.get("POWER", ""))
 
-        return f"Relais {relay} wurde auf {'AN' if actual.upper() == 'ON' else 'AUS'} gesetzt."
+        return _t(
+            de=f"Relais {relay} wurde auf {'AN' if actual.upper() == 'ON' else 'AUS'} gesetzt.",
+            en=f"Relay {relay} has been set to {'ON' if actual.upper() == 'ON' else 'OFF'}.",
+        )
     except Exception as e:
-        logger.error("Fehler beim Schalten des Tasmota-Relais: %s", e)
-        return f"Fehler: {e}"
+        logger.error("Failed to switch Tasmota relay: %s", e)
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+        )
 
 
 @tool
 async def get_tasmota_sensors(connection_id: str = "") -> Dict:
     """
-    Ruft alle verfügbaren Sensor-Daten eines Tasmota-Geräts ab.
-    Einschließlich Temperatur, Feuchtigkeit, Luftdruck, Leistung, Strom, Spannung.
-    Benutze dieses Tool, um Messwerte wie Temperatur oder Stromverbrauch zu erhalten.
+    Retrieves all available sensor data from a Tasmota device.
+    Includes temperature, humidity, pressure, power, current, voltage.
     Use this tool to get sensor readings like temperature, humidity, or power consumption.
     """
     try:
         host = await _get_tasmota_host(connection_id)
         if not host:
-            raise ValueError("Keine Tasmota-Host-Adresse konfiguriert.")
+            raise ValueError(_t(
+                de="Keine Tasmota-Host-Adresse konfiguriert.",
+                en="No Tasmota host address configured.",
+            ))
 
         result = await _tasmota_request(host, "StatusSNS")
         sensors = result.get("StatusSNS", {})
 
-        data = {}
+        # Flatten top-level dicts (e.g. "DHT11": {"Temperature": 22})
+        # but keep track of nested dicts that need special handling (ENERGY)
+        energy_data = {}
+        flat = {}
         for key, val in sensors.items():
-            if isinstance(val, dict):
-                data.update(val)
+            if key == "ENERGY" and isinstance(val, dict):
+                energy_data = val
+            elif isinstance(val, dict):
+                flat.update(val)
             else:
-                data[key] = val
+                flat[key] = val
 
         return {
-            "temperature": data.get("Temperature"),
-            "humidity": data.get("Humidity"),
-            "pressure": data.get("Pressure"),
-            "power": data.get("Power"),
-            "current": data.get("Current"),
-            "voltage": data.get("Voltage"),
-            "energy_today": data.get("ENERGY", {}).get("Today") if isinstance(data.get("ENERGY"), dict) else None,
-            "energy_yesterday": data.get("ENERGY", {}).get("Yesterday") if isinstance(data.get("ENERGY"), dict) else None,
+            "temperature": flat.get("Temperature"),
+            "humidity": flat.get("Humidity"),
+            "pressure": flat.get("Pressure"),
+            "power": flat.get("Power"),
+            "current": flat.get("Current"),
+            "voltage": flat.get("Voltage"),
+            "energy_today": energy_data.get("Today"),
+            "energy_yesterday": energy_data.get("Yesterday"),
+            "energy_power": energy_data.get("Power"),
+            "energy_voltage": energy_data.get("Voltage"),
+            "energy_current": energy_data.get("Current"),
             "raw": result,
         }
     except Exception as e:
-        logger.error("Fehler beim Abrufen der Sensor-Daten: %s", e)
+        logger.error("Failed to retrieve Tasmota sensor data: %s", e)
         return {"error": str(e)}
 
 
 @tool
 async def get_tasmota_wifi_info(connection_id: str = "") -> Dict:
     """
-    Ruft WLAN-Informationen eines Tasmota-Geräts ab (SSID, RSSI, Signal in dBm).
-    Benutze dieses Tool, um die WLAN-Qualität des Geräts zu überprüfen.
+    Retrieves WiFi information from a Tasmota device (SSID, RSSI, signal in dBm).
     Use this tool to check the WiFi signal strength of the device.
     """
     try:
         host = await _get_tasmota_host(connection_id)
         if not host:
-            raise ValueError("Keine Tasmota-Host-Adresse konfiguriert.")
+            raise ValueError(_t(
+                de="Keine Tasmota-Host-Adresse konfiguriert.",
+                en="No Tasmota host address configured.",
+            ))
 
         result = await _tasmota_request(host, "Status 5")
         status5 = result.get("StatusNET", {})
@@ -193,21 +230,23 @@ async def get_tasmota_wifi_info(connection_id: str = "") -> Dict:
             "signal_dbm": status5.get("Signal", 0),
         }
     except Exception as e:
-        logger.error("Fehler beim Abrufen der WLAN-Info: %s", e)
+        logger.error("Failed to retrieve Tasmota WiFi info: %s", e)
         return {"error": str(e)}
 
 
 @tool
 async def send_tasmota_command(command: str, connection_id: str = "") -> Dict:
     """
-    Sendet einen beliebigen Tasmota-Befehl an das Gerät.
-    Nutze dies für fortgeschrittene Befehle wie Restart, Reset, Rule-Ausführung.
+    Sends an arbitrary Tasmota command to the device.
     Use this tool to send custom Tasmota commands (e.g., Restart, Reset).
     """
     try:
         host = await _get_tasmota_host(connection_id)
         if not host:
-            raise ValueError("Keine Tasmota-Host-Adresse konfiguriert.")
+            raise ValueError(_t(
+                de="Keine Tasmota-Host-Adresse konfiguriert.",
+                en="No Tasmota host address configured.",
+            ))
 
         result = await _tasmota_request(host, command)
         return {
@@ -216,7 +255,7 @@ async def send_tasmota_command(command: str, connection_id: str = "") -> Dict:
             "success": True,
         }
     except Exception as e:
-        logger.error("Fehler beim Senden des Tasmota-Befehls: %s", e)
+        logger.error("Failed to send Tasmota command: %s", e)
         return {
             "command": command,
             "error": str(e),

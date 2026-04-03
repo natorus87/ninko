@@ -1,6 +1,6 @@
 """
-Docker Modul – LangGraph @tool-Funktionen.
-Verwaltet Docker-Hosts über die Docker Engine REST API.
+Docker Module — LangGraph @tool functions.
+Manages Docker hosts via the Docker Engine REST API.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ from typing import Any
 import httpx
 from langchain_core.tools import tool
 
+from agents.base_agent import _t
 from core.connections import ConnectionManager
 from core.vault import get_vault
 
@@ -19,7 +20,7 @@ logger = logging.getLogger("ninko.modules.docker.tools")
 
 
 def _format_bytes(b: int | float) -> str:
-    """Formatiert Bytes in lesbare Größe."""
+    """Format bytes into human-readable string."""
     b = float(b)
     for unit in ("B", "KB", "MB", "GB", "TB"):
         if b < 1024:
@@ -30,17 +31,21 @@ def _format_bytes(b: int | float) -> str:
 
 async def _get_docker_client(connection_id: str = "") -> dict:
     """
-    Erstellt Docker API Connection-Config aus dem ConnectionManager.
-    Gibt dict mit base_url und optionalen TLS/Auth-Parametern zurück.
+    Build Docker API connection config from ConnectionManager.
+    Returns dict with base_url and optional TLS/Auth parameters.
     """
     if connection_id:
         conn = await ConnectionManager.get_connection("docker", connection_id)
         if not conn:
-            raise ValueError(f"Docker-Verbindung mit ID '{connection_id}' nicht gefunden.")
+            raise ValueError(
+                _t(
+                    de=f"Docker-Verbindung mit ID '{connection_id}' nicht gefunden.",
+                    en=f"Docker connection with ID '{connection_id}' not found.",
+                )
+            )
     else:
         conn = await ConnectionManager.get_default_connection("docker")
         if not conn:
-            # Fallback auf Env-Variablen
             host = os.environ.get("DOCKER_HOST", "localhost")
             port = os.environ.get("DOCKER_PORT", "2375")
             use_tls = os.environ.get("DOCKER_TLS", "false").lower() == "true"
@@ -61,7 +66,6 @@ async def _get_docker_client(connection_id: str = "") -> dict:
     if api_version:
         base_url = f"{base_url}/v{api_version}"
 
-    # Optional: TLS-Zertifikate aus Vault
     headers = {}
     vault = get_vault()
 
@@ -79,7 +83,7 @@ async def _get_docker_client(connection_id: str = "") -> dict:
 
 
 async def _docker_api(method: str, path: str, connection_id: str = "", json_body: dict | None = None, params: dict | None = None) -> Any:
-    """Führt einen Docker Engine API-Aufruf durch."""
+    """Execute a Docker Engine API call."""
     client_cfg = await _get_docker_client(connection_id)
     base_url = client_cfg["base_url"]
     headers = client_cfg.get("headers", {})
@@ -119,11 +123,12 @@ async def _docker_api(method: str, path: str, connection_id: str = "", json_body
 @tool
 async def list_containers(all: bool = True, connection_id: str = "") -> list[dict]:
     """
-    Listet alle Docker-Container auf dem Host auf.
-    Setze all=true für alle Container (auch gestoppte), all=false nur laufende.
+    List all Docker containers on the host.
+    Set all=true for all containers (including stopped), all=false for running only.
     """
     params = {"all": 1 if all else 0, "size": 1}
     containers = await _docker_api("GET", "/containers/json", connection_id, params=params)
+    logger.info("Listed %d containers", len(containers))
     return [
         {
             "id": c["Id"][:12],
@@ -143,10 +148,11 @@ async def list_containers(all: bool = True, connection_id: str = "") -> list[dic
 @tool
 async def inspect_container(container_id: str, connection_id: str = "") -> dict:
     """
-    Gibt detaillierte Informationen über einen Container zurück.
-    container_id kann der Name oder die ID des Containers sein.
+    Return detailed information about a container.
+    container_id can be the container name or ID.
     """
     data = await _docker_api("GET", f"/containers/{container_id}/json", connection_id)
+    logger.info("Inspected container %s", container_id)
     return {
         "id": data["Id"][:12],
         "name": data["Name"].lstrip("/"),
@@ -166,38 +172,42 @@ async def inspect_container(container_id: str, connection_id: str = "") -> dict:
 
 @tool
 async def start_container(container_id: str, connection_id: str = "") -> dict:
-    """Startet einen Docker-Container."""
-    result = await _docker_api("POST", f"/containers/{container_id}/start", connection_id)
-    return {"action": "start", "target": container_id, "status": "success", "detail": f"Container {container_id} wird gestartet."}
+    """Start a Docker container."""
+    await _docker_api("POST", f"/containers/{container_id}/start", connection_id)
+    logger.info("Started container %s", container_id)
+    return {"action": "start", "target": container_id, "status": "success", "detail": f"Container {container_id} starting."}
 
 
 @tool
 async def stop_container(container_id: str, timeout: int = 10, connection_id: str = "") -> dict:
-    """Stoppt einen Docker-Container. timeout gibt die Wartezeit in Sekunden vor dem SIGKILL an."""
-    result = await _docker_api("POST", f"/containers/{container_id}/stop", connection_id, params={"t": timeout})
-    return {"action": "stop", "target": container_id, "status": "success", "detail": f"Container {container_id} wird gestoppt."}
+    """Stop a Docker container. timeout is the wait time in seconds before SIGKILL."""
+    await _docker_api("POST", f"/containers/{container_id}/stop", connection_id, params={"t": timeout})
+    logger.info("Stopped container %s (timeout=%ds)", container_id, timeout)
+    return {"action": "stop", "target": container_id, "status": "success", "detail": f"Container {container_id} stopping."}
 
 
 @tool
 async def restart_container(container_id: str, timeout: int = 10, connection_id: str = "") -> dict:
-    """Startet einen Docker-Container neu."""
-    result = await _docker_api("POST", f"/containers/{container_id}/restart", connection_id, params={"t": timeout})
-    return {"action": "restart", "target": container_id, "status": "success", "detail": f"Container {container_id} wird neu gestartet."}
+    """Restart a Docker container."""
+    await _docker_api("POST", f"/containers/{container_id}/restart", connection_id, params={"t": timeout})
+    logger.info("Restarted container %s", container_id)
+    return {"action": "restart", "target": container_id, "status": "success", "detail": f"Container {container_id} restarting."}
 
 
 @tool
 async def remove_container(container_id: str, force: bool = False, connection_id: str = "") -> dict:
-    """Entfernt einen Docker-Container. Bei force=true wird ein laufender Container erzwungen gestoppt."""
+    """Remove a Docker container. With force=true, a running container is stopped and removed."""
     params = {"force": 1 if force else 0, "v": 1}
-    result = await _docker_api("DELETE", f"/containers/{container_id}", connection_id, params=params)
-    return {"action": "remove", "target": container_id, "status": "success", "detail": f"Container {container_id} wurde entfernt."}
+    await _docker_api("DELETE", f"/containers/{container_id}", connection_id, params=params)
+    logger.info("Removed container %s (force=%s)", container_id, force)
+    return {"action": "remove", "target": container_id, "status": "success", "detail": f"Container {container_id} removed."}
 
 
 @tool
 async def get_container_logs(container_id: str, tail: int = 100, connection_id: str = "") -> str:
     """
-    Gibt die Logs eines Containers zurück.
-    tail gibt an, wie viele Zeilen von Ende angezeigt werden sollen.
+    Return the logs of a container.
+    tail specifies how many lines from the end to show.
     """
     params = {"stdout": 1, "stderr": 1, "tail": tail, "timestamps": 1}
     client_cfg = await _get_docker_client(connection_id)
@@ -216,12 +226,13 @@ async def get_container_logs(container_id: str, tail: int = 100, connection_id: 
         resp = await client.get(url, headers=headers, params=params)
         if resp.status_code >= 400:
             raise RuntimeError(f"Docker API Error {resp.status_code}: {resp.text[:500]}")
+        logger.info("Fetched logs for container %s (%d lines)", container_id, tail)
         return resp.text
 
 
 @tool
 async def get_container_stats(container_id: str, connection_id: str = "") -> dict:
-    """Gibt aktuelle Ressourcen-Statistiken (CPU, RAM, Netzwerk, Disk) eines laufenden Containers zurück."""
+    """Return current resource statistics (CPU, RAM, network, disk) of a running container."""
     params = {"stream": 0}
     stats = await _docker_api("GET", f"/containers/{container_id}/stats", connection_id, params=params)
 
@@ -258,9 +269,10 @@ async def get_container_stats(container_id: str, connection_id: str = "") -> dic
 
 @tool
 async def list_images(all: bool = False, connection_id: str = "") -> list[dict]:
-    """Listet alle Docker-Images auf dem Host auf."""
+    """List all Docker images on the host."""
     params = {"all": 1 if all else 0}
     images = await _docker_api("GET", "/images/json", connection_id, params=params)
+    logger.info("Listed %d images", len(images))
     return [
         {
             "id": img["Id"].replace("sha256:", "")[:12],
@@ -275,20 +287,22 @@ async def list_images(all: bool = False, connection_id: str = "") -> list[dict]:
 @tool
 async def pull_image(image_name: str, tag: str = "latest", connection_id: str = "") -> dict:
     """
-    Lädt ein Image von Docker Hub oder einer Registry herunter.
-    Beispiel: image_name='nginx', tag='latest'
+    Pull an image from Docker Hub or a registry.
+    Example: image_name='nginx', tag='latest'
     """
     params = {"fromImage": image_name, "tag": tag}
-    result = await _docker_api("POST", "/images/create", connection_id, params=params)
-    return {"action": "pull", "image": f"{image_name}:{tag}", "status": "success", "detail": f"Image {image_name}:{tag} wurde heruntergeladen."}
+    await _docker_api("POST", "/images/create", connection_id, params=params)
+    logger.info("Pulled image %s:%s", image_name, tag)
+    return {"action": "pull", "image": f"{image_name}:{tag}", "status": "success", "detail": f"Image {image_name}:{tag} downloaded."}
 
 
 @tool
 async def remove_image(image_id: str, force: bool = False, connection_id: str = "") -> dict:
-    """Entfernt ein Docker-Image. Bei force=true werden auch verwendete Images entfernt."""
+    """Remove a Docker image. With force=true, images in use are also removed."""
     params = {"force": 1 if force else 0}
-    result = await _docker_api("DELETE", f"/images/{image_id}", connection_id, params=params)
-    return {"action": "remove", "target": image_id, "status": "success", "detail": f"Image {image_id} wurde entfernt."}
+    await _docker_api("DELETE", f"/images/{image_id}", connection_id, params=params)
+    logger.info("Removed image %s (force=%s)", image_id, force)
+    return {"action": "remove", "target": image_id, "status": "success", "detail": f"Image {image_id} removed."}
 
 
 # ═══════════════════════════════════════════════════════
@@ -297,8 +311,9 @@ async def remove_image(image_id: str, force: bool = False, connection_id: str = 
 
 @tool
 async def list_volumes(connection_id: str = "") -> list[dict]:
-    """Listet alle Docker-Volumes auf dem Host auf."""
+    """List all Docker volumes on the host."""
     data = await _docker_api("GET", "/volumes", connection_id)
+    logger.info("Listed volumes")
     return [
         {
             "name": v.get("Name", ""),
@@ -314,10 +329,11 @@ async def list_volumes(connection_id: str = "") -> list[dict]:
 
 @tool
 async def remove_volume(volume_name: str, force: bool = False, connection_id: str = "") -> dict:
-    """Entfernt ein Docker-Volume."""
+    """Remove a Docker volume."""
     params = {"force": 1 if force else 0}
-    result = await _docker_api("DELETE", f"/volumes/{volume_name}", connection_id, params=params)
-    return {"action": "remove", "target": volume_name, "status": "success", "detail": f"Volume {volume_name} wurde entfernt."}
+    await _docker_api("DELETE", f"/volumes/{volume_name}", connection_id, params=params)
+    logger.info("Removed volume %s (force=%s)", volume_name, force)
+    return {"action": "remove", "target": volume_name, "status": "success", "detail": f"Volume {volume_name} removed."}
 
 
 # ═══════════════════════════════════════════════════════
@@ -326,8 +342,9 @@ async def remove_volume(volume_name: str, force: bool = False, connection_id: st
 
 @tool
 async def get_docker_info(connection_id: str = "") -> dict:
-    """Gibt System-Informationen über den Docker-Host zurück (Anzahl Container, Images, Ressourcen)."""
+    """Return system information about the Docker host (container counts, images, resources)."""
     info = await _docker_api("GET", "/info", connection_id)
+    logger.info("Fetched Docker info")
     return {
         "containers_running": info.get("ContainersRunning", 0),
         "containers_paused": info.get("ContainersPaused", 0),
@@ -344,8 +361,9 @@ async def get_docker_info(connection_id: str = "") -> dict:
 
 @tool
 async def get_docker_version(connection_id: str = "") -> dict:
-    """Gibt die Docker Engine Version und API-Version zurück."""
+    """Return the Docker Engine version and API version."""
     version = await _docker_api("GET", "/version", connection_id)
+    logger.info("Fetched Docker version")
     return {
         "version": version.get("Version", ""),
         "api_version": version.get("ApiVersion", ""),
@@ -359,8 +377,9 @@ async def get_docker_version(connection_id: str = "") -> dict:
 
 @tool
 async def get_docker_disk_usage(connection_id: str = "") -> dict:
-    """Gibt die Speicherauslastung des Docker-Systems zurück (Images, Container, Volumes, Build Cache)."""
+    """Return Docker system storage usage (images, containers, volumes, build cache)."""
     data = await _docker_api("GET", "/system/df", connection_id)
+    logger.info("Fetched Docker disk usage")
     return {
         "images": {
             "count": len(data.get("Images", [])),

@@ -1,10 +1,10 @@
 """
-Proxmox Modul – Spezialist-Agent.
+Proxmox module — specialist agent.
 """
 
 from __future__ import annotations
 
-from agents.base_agent import BaseAgent
+from agents.base_agent import BaseAgent, _t
 from .tools import (
     get_nodes,
     get_node_status,
@@ -25,7 +25,8 @@ from .tools import (
     get_vm_config,
 )
 
-PROXMOX_SYSTEM_PROMPT = """Du bist der Proxmox-Spezialist von Ninko.
+PROXMOX_SYSTEM_PROMPT = _t(
+    de="""Du bist der Proxmox-Spezialist von Ninko.
 
 Deine Fähigkeiten:
 - Node-Status und Ressourcen-Monitoring (CPU, RAM)
@@ -43,11 +44,31 @@ Verhaltensregeln:
 Sicherheit:
 - Stopp und Reset erfordern explizite Bestätigung
 - Bei VMs mit unklarem Status: erst Status prüfen bevor Aktion
-- Keine parallelen destruktiven Aktionen auf mehrere VMs"""
+- Keine parallelen destruktiven Aktionen auf mehrere VMs""",
+
+    en="""You are Ninko's Proxmox specialist.
+
+Your capabilities:
+- Node status and resource monitoring (CPU, RAM)
+- VM management: list, start, stop, restart, reset
+- LXC container management
+- Task overview and VM configuration
+
+Behavior rules:
+- Be precise and security-conscious
+- For destructive actions (stop, reset) ALWAYS request confirmation
+- Show resources (CPU, RAM) in readable formats (%, GB)
+- Warn on high resource utilization
+- Document every intervention
+
+Security:
+- Stop and reset require explicit confirmation
+- For VMs with unclear status: check status first before acting
+- No parallel destructive actions on multiple VMs""")
 
 
 class ProxmoxAgent(BaseAgent):
-    """Proxmox-Spezialist mit allen Proxmox-Tools."""
+    """Proxmox specialist with all Proxmox tools."""
 
     def __init__(self) -> None:
         super().__init__(

@@ -1,5 +1,5 @@
 """
-Qdrant Modul – Initialisierung für ModuleRegistry.
+Qdrant Module — Initialization for ModuleRegistry.
 """
 
 from .manifest import module_manifest

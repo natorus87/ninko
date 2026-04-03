@@ -1,6 +1,6 @@
 """
-Proxmox Modul – LangGraph @tool-Funktionen.
-Vollständige Implementierung mit proxmoxer.
+Proxmox module — LangGraph @tool functions.
+Full implementation using proxmoxer.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ logger = logging.getLogger("ninko.modules.proxmox.tools")
 
 
 async def _get_proxmox_client(connection_id: str = ""):
-    """Erstellt eine authentifizierte Proxmox-API-Verbindung basierend auf ConnectionManager."""
+    """Creates an authenticated Proxmox API connection via ConnectionManager."""
     from proxmoxer import ProxmoxAPI
     from core.vault import get_vault
     from core.connections import ConnectionManager
@@ -22,11 +22,11 @@ async def _get_proxmox_client(connection_id: str = ""):
     if connection_id:
         conn = await ConnectionManager.get_connection("proxmox", connection_id)
         if not conn:
-            raise ValueError(f"Proxmox Verbindung mit ID '{connection_id}' nicht gefunden.")
+            raise ValueError(f"Proxmox connection with ID '{connection_id}' not found.")
     else:
         conn = await ConnectionManager.get_default_connection("proxmox")
         if not conn:
-            raise ValueError("Keine Standard-Proxmox-Verbindung konfiguriert.")
+            raise ValueError("No default Proxmox connection configured.")
 
     vault = get_vault()
 
@@ -35,19 +35,19 @@ async def _get_proxmox_client(connection_id: str = ""):
     token_id = conn.config.get("token_id", "")
     verify_ssl = conn.config.get("verify_ssl", "false").lower() == "true"
 
-    # Token-ID aus User-Feld extrahieren falls nicht explizit gespeichert
-    # (User-Feld könnte "root@pam!Ninko" enthalten → token_id = "Ninko")
+    # Extract token ID from user field if not explicitly stored
+    # (user field may contain "root@pam!Ninko" → token_id = "Ninko")
     if not token_id and "!" in user:
         token_id = user.split("!", 1)[1]
 
-    # Hole Secret aus Vault anhand der gespeicherten Keys
+    # Retrieve secret from Vault using stored keys
     token_secret = None
     if "token_secret" in conn.vault_keys:
         token_secret = await vault.get_secret(conn.vault_keys["token_secret"])
 
     if token_secret and token_id:
-        # User-Feld bereinigen: falls "!token" angehängt ist, entfernen
-        # (proxmoxer baut selbst "user!token_name" zusammen)
+        # Clean user field: remove appended "!token" if present
+        # (proxmoxer builds "user!token_name" on its own)
         base_user = user.split("!")[0]
         host_addr = host.replace("https://", "").replace("http://", "").split(":")[0]
 
@@ -60,14 +60,14 @@ async def _get_proxmox_client(connection_id: str = ""):
             verify_ssl=verify_ssl,
         )
 
-        # Test-Call: SSL-Fehler früh erkennen und ohne Verifikation neu starten
+        # Test call: detect SSL errors early and retry without verification
         if verify_ssl:
             try:
                 px.version.get()
             except Exception as e:
                 err_str = str(e).lower()
                 if "ssl" in err_str or "certificate" in err_str:
-                    logger.warning("SSL-Verifikation fehlgeschlagen, retry ohne verify_ssl")
+                    logger.warning("SSL verification failed, retrying without verify_ssl")
                     px = ProxmoxAPI(
                         host_addr,
                         port=8006,
@@ -79,7 +79,7 @@ async def _get_proxmox_client(connection_id: str = ""):
 
         return px
 
-    # Fallback: Passwort
+    # Fallback: password
     password = None
     if "password" in conn.vault_keys:
         password = await vault.get_secret(conn.vault_keys["password"])
@@ -92,11 +92,11 @@ async def _get_proxmox_client(connection_id: str = ""):
             verify_ssl=verify_ssl,
         )
 
-    raise ValueError(f"Keine validen Anmeldedaten für Proxmox-Verbindung '{conn.name}' gefunden.")
+    raise ValueError(f"No valid credentials found for Proxmox connection '{conn.name}'.")
 
 
 def _format_bytes(b: int) -> str:
-    """Formatiert Bytes in lesbare Größe."""
+    """Format bytes into a human-readable size."""
     for unit in ("B", "KB", "MB", "GB", "TB"):
         if b < 1024:
             return f"{b:.1f} {unit}"
@@ -106,13 +106,13 @@ def _format_bytes(b: int) -> str:
 
 @tool
 async def get_nodes(connection_id: str = "") -> list[dict]:
-    """Gibt alle Proxmox-Nodes mit Status-Informationen zurück."""
+    """Returns all Proxmox nodes with status information."""
     proxmox = await _get_proxmox_client(connection_id)
     nodes_basic = proxmox.nodes.get()
     result = []
     for n in nodes_basic:
         node_name = n["node"]
-        # Detail-Status laden (CPU, RAM, etc.)
+        # Load detailed status (CPU, RAM, etc.)
         try:
             status = proxmox.nodes(node_name).status.get()
             cpu_info = status.get("cpuinfo", {})
@@ -142,7 +142,7 @@ async def get_nodes(connection_id: str = "") -> list[dict]:
 
 @tool
 async def get_node_status(node: str, connection_id: str = "") -> dict:
-    """Gibt detaillierten Status eines einzelnen Nodes zurück."""
+    """Returns detailed status of a single node."""
     proxmox = await _get_proxmox_client(connection_id)
     status = proxmox.nodes(node).status.get()
     return {
@@ -161,7 +161,7 @@ async def get_node_status(node: str, connection_id: str = "") -> dict:
 
 @tool
 async def list_all_vms(connection_id: str = "") -> list[dict]:
-    """Listet alle VMs auf allen Nodes auf."""
+    """Lists all VMs across all nodes."""
     proxmox = await _get_proxmox_client(connection_id)
     all_vms = []
 
@@ -184,7 +184,7 @@ async def list_all_vms(connection_id: str = "") -> list[dict]:
                     "uptime": vm.get("uptime", 0),
                 })
         except Exception as e:
-            logger.warning("Fehler beim Lesen der VMs auf %s: %s", node, e)
+            logger.warning("Failed to read VMs on %s: %s", node, e)
 
         # LXC Container
         try:
@@ -202,14 +202,14 @@ async def list_all_vms(connection_id: str = "") -> list[dict]:
                     "uptime": ct.get("uptime", 0),
                 })
         except Exception as e:
-            logger.warning("Fehler beim Lesen der Container auf %s: %s", node, e)
+            logger.warning("Failed to read containers on %s: %s", node, e)
 
     return sorted(all_vms, key=lambda x: x["vmid"])
 
 
 @tool
 async def list_vms(node: str, connection_id: str = "") -> list[dict]:
-    """Listet alle VMs auf einem bestimmten Node auf."""
+    """Lists all VMs on a specific node."""
     proxmox = await _get_proxmox_client(connection_id)
     vms = proxmox.nodes(node).qemu.get()
     return [
@@ -230,7 +230,7 @@ async def list_vms(node: str, connection_id: str = "") -> list[dict]:
 
 @tool
 async def get_vm_status(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Gibt den detaillierten Status einer VM zurück."""
+    """Returns the detailed status of a VM."""
     proxmox = await _get_proxmox_client(connection_id)
     try:
         status = proxmox.nodes(node).qemu(vmid).status.current.get()
@@ -249,7 +249,7 @@ async def get_vm_status(node: str, vmid: int, connection_id: str = "") -> dict:
             "uptime": status.get("uptime", 0),
         }
     except Exception:
-        # Vielleicht LXC
+        # Maybe it's an LXC container
         status = proxmox.nodes(node).lxc(vmid).status.current.get()
         return {
             "vmid": vmid,
@@ -266,7 +266,7 @@ async def get_vm_status(node: str, vmid: int, connection_id: str = "") -> dict:
 
 @tool
 async def start_vm(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Startet eine VM."""
+    """Starts a VM."""
     proxmox = await _get_proxmox_client(connection_id)
     try:
         proxmox.nodes(node).qemu(vmid).status.start.post()
@@ -275,7 +275,7 @@ async def start_vm(node: str, vmid: int, connection_id: str = "") -> dict:
             "target": f"VM {vmid}",
             "node": node,
             "status": "success",
-            "detail": f"VM {vmid} auf Node '{node}' wird gestartet.",
+            "detail": f"VM {vmid} on node '{node}' is being started.",
         }
     except Exception as e:
         return {"action": "start", "target": f"VM {vmid}", "node": node, "status": "error", "detail": str(e)}
@@ -283,7 +283,7 @@ async def start_vm(node: str, vmid: int, connection_id: str = "") -> dict:
 
 @tool
 async def stop_vm(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Stoppt eine VM (DESTRUKTIV – erfordert Bestätigung)."""
+    """Stops a VM (DESTRUCTIVE — requires confirmation)."""
     confirm = os.environ.get("PROXMOX_CONFIRM_DESTRUCTIVE", "true").lower()
     if confirm == "true":
         return {
@@ -291,31 +291,31 @@ async def stop_vm(node: str, vmid: int, connection_id: str = "") -> dict:
             "target": f"VM {vmid}",
             "node": node,
             "status": "confirmation_required",
-            "detail": f"Soll VM {vmid} auf Node '{node}' wirklich gestoppt werden? Bitte bestätige mit 'Ja'.",
+            "detail": f"Should VM {vmid} on node '{node}' really be stopped? Please confirm with 'Yes'.",
         }
 
     proxmox = await _get_proxmox_client(connection_id)
     try:
         proxmox.nodes(node).qemu(vmid).status.stop.post()
-        return {"action": "stop", "target": f"VM {vmid}", "node": node, "status": "success", "detail": f"VM {vmid} wird gestoppt."}
+        return {"action": "stop", "target": f"VM {vmid}", "node": node, "status": "success", "detail": f"VM {vmid} is being stopped."}
     except Exception as e:
         return {"action": "stop", "target": f"VM {vmid}", "node": node, "status": "error", "detail": str(e)}
 
 
 @tool
 async def reboot_vm(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Startet eine VM neu (Reboot)."""
+    """Restarts a VM (reboot)."""
     proxmox = await _get_proxmox_client(connection_id)
     try:
         proxmox.nodes(node).qemu(vmid).status.reboot.post()
-        return {"action": "reboot", "target": f"VM {vmid}", "node": node, "status": "success", "detail": f"VM {vmid} wird neu gestartet."}
+        return {"action": "reboot", "target": f"VM {vmid}", "node": node, "status": "success", "detail": f"VM {vmid} is being restarted."}
     except Exception as e:
         return {"action": "reboot", "target": f"VM {vmid}", "node": node, "status": "error", "detail": str(e)}
 
 
 @tool
 async def reset_vm(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Hard-Reset einer VM (DESTRUKTIV – erfordert Bestätigung)."""
+    """Hard-reset of a VM (DESTRUCTIVE — requires confirmation)."""
     confirm = os.environ.get("PROXMOX_CONFIRM_DESTRUCTIVE", "true").lower()
     if confirm == "true":
         return {
@@ -323,42 +323,42 @@ async def reset_vm(node: str, vmid: int, connection_id: str = "") -> dict:
             "target": f"VM {vmid}",
             "node": node,
             "status": "confirmation_required",
-            "detail": f"Hard-Reset für VM {vmid} auf Node '{node}'? Dies kann zu Datenverlust führen! Bestätige mit 'Ja'.",
+            "detail": f"Hard-reset VM {vmid} on node '{node}'? This may cause data loss! Confirm with 'Yes'.",
         }
 
     proxmox = await _get_proxmox_client(connection_id)
     try:
         proxmox.nodes(node).qemu(vmid).status.reset.post()
-        return {"action": "reset", "target": f"VM {vmid}", "node": node, "status": "success", "detail": f"VM {vmid} wird zurückgesetzt."}
+        return {"action": "reset", "target": f"VM {vmid}", "node": node, "status": "success", "detail": f"VM {vmid} is being reset."}
     except Exception as e:
         return {"action": "reset", "target": f"VM {vmid}", "node": node, "status": "error", "detail": str(e)}
 
 
 @tool
 async def suspend_vm(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Suspendiert eine VM."""
+    """Suspends a VM."""
     proxmox = await _get_proxmox_client(connection_id)
     try:
         proxmox.nodes(node).qemu(vmid).status.suspend.post()
-        return {"action": "suspend", "target": f"VM {vmid}", "node": node, "status": "success", "detail": f"VM {vmid} wurde suspendiert."}
+        return {"action": "suspend", "target": f"VM {vmid}", "node": node, "status": "success", "detail": f"VM {vmid} has been suspended."}
     except Exception as e:
         return {"action": "suspend", "target": f"VM {vmid}", "node": node, "status": "error", "detail": str(e)}
 
 
 @tool
 async def resume_vm(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Setzt eine suspendierte VM fort."""
+    """Resumes a suspended VM."""
     proxmox = await _get_proxmox_client(connection_id)
     try:
         proxmox.nodes(node).qemu(vmid).status.resume.post()
-        return {"action": "resume", "target": f"VM {vmid}", "node": node, "status": "success", "detail": f"VM {vmid} wurde fortgesetzt."}
+        return {"action": "resume", "target": f"VM {vmid}", "node": node, "status": "success", "detail": f"VM {vmid} has been resumed."}
     except Exception as e:
         return {"action": "resume", "target": f"VM {vmid}", "node": node, "status": "error", "detail": str(e)}
 
 
 @tool
 async def list_containers(node: str, connection_id: str = "") -> list[dict]:
-    """Listet alle LXC-Container auf einem Node auf."""
+    """Lists all LXC containers on a node."""
     proxmox = await _get_proxmox_client(connection_id)
     containers = proxmox.nodes(node).lxc.get()
     return [
@@ -378,18 +378,18 @@ async def list_containers(node: str, connection_id: str = "") -> list[dict]:
 
 @tool
 async def start_container(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Startet einen LXC-Container."""
+    """Starts an LXC container."""
     proxmox = await _get_proxmox_client(connection_id)
     try:
         proxmox.nodes(node).lxc(vmid).status.start.post()
-        return {"action": "start", "target": f"CT {vmid}", "node": node, "status": "success", "detail": f"Container {vmid} wird gestartet."}
+        return {"action": "start", "target": f"CT {vmid}", "node": node, "status": "success", "detail": f"Container {vmid} is being started."}
     except Exception as e:
         return {"action": "start", "target": f"CT {vmid}", "node": node, "status": "error", "detail": str(e)}
 
 
 @tool
 async def stop_container(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Stoppt einen LXC-Container (DESTRUKTIV)."""
+    """Stops an LXC container (DESTRUCTIVE)."""
     confirm = os.environ.get("PROXMOX_CONFIRM_DESTRUCTIVE", "true").lower()
     if confirm == "true":
         return {
@@ -397,31 +397,31 @@ async def stop_container(node: str, vmid: int, connection_id: str = "") -> dict:
             "target": f"CT {vmid}",
             "node": node,
             "status": "confirmation_required",
-            "detail": f"Container {vmid} auf Node '{node}' stoppen? Bestätige mit 'Ja'.",
+            "detail": f"Stop container {vmid} on node '{node}'? Confirm with 'Yes'.",
         }
 
     proxmox = await _get_proxmox_client(connection_id)
     try:
         proxmox.nodes(node).lxc(vmid).status.stop.post()
-        return {"action": "stop", "target": f"CT {vmid}", "node": node, "status": "success", "detail": f"Container {vmid} wird gestoppt."}
+        return {"action": "stop", "target": f"CT {vmid}", "node": node, "status": "success", "detail": f"Container {vmid} is being stopped."}
     except Exception as e:
         return {"action": "stop", "target": f"CT {vmid}", "node": node, "status": "error", "detail": str(e)}
 
 
 @tool
 async def reboot_container(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Startet einen LXC-Container neu."""
+    """Restarts an LXC container."""
     proxmox = await _get_proxmox_client(connection_id)
     try:
         proxmox.nodes(node).lxc(vmid).status.reboot.post()
-        return {"action": "reboot", "target": f"CT {vmid}", "node": node, "status": "success", "detail": f"Container {vmid} wird neu gestartet."}
+        return {"action": "reboot", "target": f"CT {vmid}", "node": node, "status": "success", "detail": f"Container {vmid} is being restarted."}
     except Exception as e:
         return {"action": "reboot", "target": f"CT {vmid}", "node": node, "status": "error", "detail": str(e)}
 
 
 @tool
 async def get_recent_tasks(node: str, connection_id: str = "") -> list[dict]:
-    """Gibt die letzten Tasks eines Nodes zurück."""
+    """Returns the recent tasks of a node."""
     proxmox = await _get_proxmox_client(connection_id)
     tasks = proxmox.nodes(node).tasks.get(limit=20)
     return [
@@ -440,7 +440,7 @@ async def get_recent_tasks(node: str, connection_id: str = "") -> list[dict]:
 
 @tool
 async def get_vm_config(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Gibt die Konfiguration einer VM zurück."""
+    """Returns the configuration of a VM."""
     proxmox = await _get_proxmox_client(connection_id)
     try:
         config = proxmox.nodes(node).qemu(vmid).config.get()
