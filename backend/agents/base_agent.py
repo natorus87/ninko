@@ -225,6 +225,26 @@ _TOOL_LABELS: dict[str, tuple[str, str]] = {
     "disable_cisco_interface": ("Deaktiviere Interface", "Disabling interface"),
     "create_cisco_vlan": ("Erstelle VLAN", "Creating VLAN"),
     "set_cisco_interface_vlan": ("Setze VLAN", "Setting VLAN"),
+    # MikroTik
+    "get_mikrotik_identity": ("Lade Geräteinfo", "Loading device info"),
+    "list_mikrotik_interfaces": ("Lade Interfaces", "Loading interfaces"),
+    "get_mikrotik_interface_stats": ("Lade Interface-Stats", "Loading interface stats"),
+    "list_mikrotik_routes": ("Lade Routen", "Loading routes"),
+    "list_mikrotik_dhcp_leases": ("Lade DHCP-Leases", "Loading DHCP leases"),
+    "list_mikrotik_firewall_rules": ("Lade Firewall", "Loading firewall rules"),
+    "list_mikrotik_queues": ("Lade Queues", "Loading queues"),
+    "list_mikrotik_wireless_clients": (
+        "Lade Wireless-Clients",
+        "Loading wireless clients",
+    ),
+    "enable_mikrotik_interface": ("Aktiviere Interface", "Enabling interface"),
+    "disable_mikrotik_interface": ("Deaktiviere Interface", "Disabling interface"),
+    "reboot_mikrotik": ("Neustart Router", "Rebooting router"),
+    "create_mikrotik_firewall_rule": (
+        "Erstelle Firewall-Regel",
+        "Creating firewall rule",
+    ),
+    "add_mikrotik_ip_address": ("Füge IP hinzu", "Adding IP address"),
     # Redmine
     "get_redmine_projects": ("Lade Projekte", "Loading projects"),
     "get_redmine_project": ("Lade Projekt", "Loading project"),
