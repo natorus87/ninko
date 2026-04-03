@@ -321,7 +321,7 @@ async def move_email(uid: str, source_folder: str, dest_folder: str, connection_
         mail.select(source_folder)
         res, data = mail.uid('COPY', uid, dest_folder)
         if res == "OK":
-            mail.uid('STORE', uid, '+FLAGS', '(\Deleted)')
+            mail.uid('STORE', uid, '+FLAGS', '(\\Deleted)')
             mail.expunge()
         mail.logout()
         return _t(
@@ -343,7 +343,7 @@ async def delete_email(uid: str, folder: str, hard_delete: bool = False, connect
         def _delete():
             mail = _create_imap_connection(ctx)
             mail.select(folder)
-            mail.uid('STORE', uid, '+FLAGS', '(\Deleted)')
+            mail.uid('STORE', uid, '+FLAGS', '(\\Deleted)')
             mail.expunge()
             mail.logout()
             return _t(

@@ -71,9 +71,10 @@ async def check_lenovo_xclarity_health() -> dict:
                 return {"status": "error", "detail": f"HTTP {resp.status}"}
 
     except aiohttp.ClientResponseError as e:
-        return {"status": "error", "detail": f"HTTP {e.status}: {e.message}"}
-    except Exception as e:
-        return {"status": "error", "detail": str(e)}
+        return {"status": "error", "detail": f"HTTP {e.status}"}
+    except Exception:
+        logger.exception("Lenovo XClarity health check failed")
+        return {"status": "error", "detail": "Health check failed"}
 
 
 module_manifest = ModuleManifest(

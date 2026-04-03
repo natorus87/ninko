@@ -19,6 +19,14 @@ from core.vault import get_vault
 logger = logging.getLogger("ninko.modules.lenovo_xclarity.tools")
 
 
+def _public_tool_error() -> str:
+    """Generic user-facing error text without leaking internals."""
+    return _t(
+        de="Anfrage fehlgeschlagen. Prüfe die Server-Logs.",
+        en="Request failed. Check server logs.",
+    )
+
+
 async def _get_api_client(connection_id: str = "") -> dict:
     """Get XClarity API client with auth."""
     if connection_id:
@@ -34,7 +42,7 @@ async def _get_api_client(connection_id: str = "") -> dict:
         conn = await ConnectionManager.get_default_connection("lenovo_xclarity")
 
     if conn:
-        base_url = conn.config.get("url", "")
+        base_url = conn.config.get("url", "").strip()
         user = conn.config.get("user", "admin")
         vault = get_vault()
         password = None
@@ -43,6 +51,22 @@ async def _get_api_client(connection_id: str = "") -> dict:
             password = await vault.get_secret(password_path)
         if not password:
             password = os.environ.get("XCLARITY_PASSWORD", "")
+        if base_url and not base_url.startswith(("http://", "https://")):
+            base_url = f"https://{base_url}"
+        if not base_url:
+            raise ValueError(
+                _t(
+                    de="XClarity-Verbindung ohne URL konfiguriert.",
+                    en="XClarity connection is missing URL.",
+                )
+            )
+        if not password:
+            raise ValueError(
+                _t(
+                    de="XClarity-Verbindung ohne Passwort konfiguriert.",
+                    en="XClarity connection is missing password.",
+                )
+            )
         return {"base_url": base_url, "user": user, "password": password}
 
     base_url = os.environ.get("XCLARITY_HOST", "")
@@ -55,6 +79,14 @@ async def _get_api_client(connection_id: str = "") -> dict:
             _t(
                 de="Keine XClarity-Verbindung konfiguriert.",
                 en="No XClarity connection configured.",
+            )
+        )
+
+    if not password:
+        raise ValueError(
+            _t(
+                de="XCLARITY_PASSWORD fehlt.",
+                en="XCLARITY_PASSWORD is missing.",
             )
         )
 
@@ -116,7 +148,7 @@ async def list_xclarity_servers(connection_id: str = "") -> str:
         return "\n".join(lines)
     except Exception as e:
         logger.error("list_xclarity_servers failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _public_tool_error()
 
 
 @tool
@@ -159,7 +191,7 @@ async def get_xclarity_server_details(server_name: str, connection_id: str = "")
         return "\n".join(lines)
     except Exception as e:
         logger.error("get_xclarity_server_details failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _public_tool_error()
 
 
 @tool
@@ -188,7 +220,7 @@ async def list_xclarity_chassis(connection_id: str = "") -> str:
         return "\n".join(lines)
     except Exception as e:
         logger.error("list_xclarity_chassis failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _public_tool_error()
 
 
 @tool
@@ -217,7 +249,7 @@ async def list_xclarity_storage(connection_id: str = "") -> str:
         return "\n".join(lines)
     except Exception as e:
         logger.error("list_xclarity_storage failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _public_tool_error()
 
 
 @tool
@@ -252,7 +284,7 @@ async def get_xclarity_server_health(server_name: str, connection_id: str = "") 
         return "\n".join(lines)
     except Exception as e:
         logger.error("get_xclarity_server_health failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _public_tool_error()
 
 
 @tool
@@ -284,7 +316,7 @@ async def list_xclarity_events(connection_id: str = "") -> str:
         return "\n".join(lines)
     except Exception as e:
         logger.error("list_xclarity_events failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _public_tool_error()
 
 
 @tool
@@ -322,7 +354,7 @@ async def get_xclarity_firmware(server_name: str, connection_id: str = "") -> st
         return "\n".join(lines)
     except Exception as e:
         logger.error("get_xclarity_firmware failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _public_tool_error()
 
 
 # ═══════════════════════════════════════════════════════
@@ -366,7 +398,7 @@ async def power_on_xclarity_server(server_name: str, connection_id: str = "") ->
         )
     except Exception as e:
         logger.error("power_on_xclarity_server failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _public_tool_error()
 
 
 @tool
@@ -405,7 +437,7 @@ async def power_off_xclarity_server(server_name: str, connection_id: str = "") -
         )
     except Exception as e:
         logger.error("power_off_xclarity_server failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _public_tool_error()
 
 
 @tool
@@ -444,7 +476,7 @@ async def restart_xclarity_server(server_name: str, connection_id: str = "") -> 
         )
     except Exception as e:
         logger.error("restart_xclarity_server failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _public_tool_error()
 
 
 @tool
@@ -482,5 +514,5 @@ async def identify_xclarity_server(server_name: str, connection_id: str = "") ->
             en=f"✅ Server LED activated: {server_name}",
         )
     except Exception as e:
-        logger.error("identify_xclarity_server failed: %e", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        logger.error("identify_xclarity_server failed: %s", e)
+        return _public_tool_error()

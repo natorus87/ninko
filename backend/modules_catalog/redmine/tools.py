@@ -116,7 +116,7 @@ async def get_redmine_projects(connection_id: str = "") -> dict:
         }
     except Exception as e:
         logger.error("get_redmine_projects failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -139,7 +139,7 @@ async def get_redmine_project(project_id: str, connection_id: str = "") -> dict:
         }
     except Exception as e:
         logger.error("get_redmine_project failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -176,7 +176,7 @@ async def get_redmine_issues(
         }
     except Exception as e:
         logger.error("get_redmine_issues failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -200,7 +200,7 @@ async def get_redmine_issue(issue_id: str, connection_id: str = "") -> dict:
         }
     except Exception as e:
         logger.error("get_redmine_issue failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -243,7 +243,7 @@ async def create_redmine_issue(
         }
     except Exception as e:
         logger.error("create_redmine_issue failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -283,7 +283,7 @@ async def update_redmine_issue(
         }
     except Exception as e:
         logger.error("update_redmine_issue failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -308,7 +308,7 @@ async def get_redmine_users(connection_id: str = "") -> dict:
         }
     except Exception as e:
         logger.error("get_redmine_users failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -346,7 +346,7 @@ async def get_redmine_time_entries(
         }
     except Exception as e:
         logger.error("get_redamine_time_entries failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -386,7 +386,7 @@ async def log_redmine_time(
         }
     except Exception as e:
         logger.error("log_redmine_time failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -409,7 +409,7 @@ async def get_redmine_issue_statuses(connection_id: str = "") -> dict:
         }
     except Exception as e:
         logger.error("get_redmine_issue_statuses failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -432,7 +432,7 @@ async def get_redmine_priorities(connection_id: str = "") -> dict:
         }
     except Exception as e:
         logger.error("get_redmine_priorities failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -460,7 +460,7 @@ async def search_redmine_issues(
         }
     except Exception as e:
         logger.error("search_redmine_issues failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -502,4 +502,4 @@ async def get_redmine_issue_counts(
         }
     except Exception as e:
         logger.error("get_redmine_issue_counts failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}

@@ -128,7 +128,7 @@ async def get_jira_projects(connection_id: str = "") -> dict:
         }
     except Exception as e:
         logger.error("get_jira_projects failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -153,7 +153,7 @@ async def get_jira_project(project_key: str, connection_id: str = "") -> dict:
         }
     except Exception as e:
         logger.error("get_jira_project failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -197,7 +197,7 @@ async def get_jira_issues(
         }
     except Exception as e:
         logger.error("get_jira_issues failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -223,14 +223,14 @@ async def get_jira_issue(issue_key: str, connection_id: str = "") -> dict:
         }
     except Exception as e:
         logger.error("get_jira_issue failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
 async def create_jira_issue(
     project_key: str,
-    issue_type: str = "Task",
     summary: str,
+    issue_type: str = "Task",
     description: str = "",
     priority: str = "",
     assignee: str = "",
@@ -276,7 +276,7 @@ async def create_jira_issue(
         }
     except Exception as e:
         logger.error("create_jira_issue failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -329,7 +329,7 @@ async def update_jira_issue(
         }
     except Exception as e:
         logger.error("update_jira_issue failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -359,7 +359,7 @@ async def get_jira_boards(project_key: str = "", connection_id: str = "") -> dic
         }
     except Exception as e:
         logger.error("get_jira_boards failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -385,7 +385,7 @@ async def get_jira_sprints(board_id: str, connection_id: str = "") -> dict:
         }
     except Exception as e:
         logger.error("get_jira_sprints failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -410,7 +410,7 @@ async def get_jira_sprint(sprint_id: str, connection_id: str = "") -> dict:
         }
     except Exception as e:
         logger.error("get_jira_sprint failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -437,7 +437,7 @@ async def search_jira(jql: str, max_results: int = 25, connection_id: str = "") 
         }
     except Exception as e:
         logger.error("search_jira failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -462,7 +462,7 @@ async def get_jira_issue_transitions(issue_key: str, connection_id: str = "") ->
         }
     except Exception as e:
         logger.error("get_jira_issue_transitions failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -492,7 +492,7 @@ async def transition_jira_issue(
         }
     except Exception as e:
         logger.error("transition_jira_issue failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -517,7 +517,7 @@ async def get_jira_priorities(connection_id: str = "") -> dict:
         }
     except Exception as e:
         logger.error("get_jira_priorities failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -554,4 +554,4 @@ async def get_jira_issue_counts(
         }
     except Exception as e:
         logger.error("get_jira_issue_counts failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}

@@ -5,10 +5,19 @@
         connectionId: ""
     };
 
+    function escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
+
     async function loadStatus() {
         try {
             const url = state.connectionId
-                ? `/api/lenovo_xclarity/status?connection_id=${state.connectionId}`
+                ? `/api/lenovo_xclarity/status?connection_id=${encodeURIComponent(state.connectionId)}`
                 : `/api/lenovo_xclarity/status`;
             const res = await fetch(url);
             if (!res.ok) throw new Error("Status API Error");
@@ -16,7 +25,7 @@
 
             if (data.error) {
                 document.getElementById('xclarity-info').innerHTML =
-                    '<p class="empty-state text-error">Verbindungsfehler: ' + data.error + '</p>';
+                    '<p class="empty-state text-error">Verbindungsfehler: ' + escapeHtml(data.error) + '</p>';
                 return;
             }
 

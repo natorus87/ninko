@@ -24,7 +24,7 @@ async def check_proxmox_health() -> dict:
             # Fallback to env variables
             host = os.environ.get("PROXMOX_HOST", "")
             if not host:
-            return {"status": "ok", "detail": "No connection configured (expected)"}
+                return {"status": "ok", "detail": "No connection configured (expected)"}
             # Env-based health check
             user = os.environ.get("PROXMOX_USER", "root@pam")
             token_id = os.environ.get("PROXMOX_TOKEN_ID", "")

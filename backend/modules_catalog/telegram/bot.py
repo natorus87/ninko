@@ -356,7 +356,7 @@ class TelegramBot:
                 logger.warning("sendPhoto Fehler: %s %s", resp.status_code, resp.text[:200])
                 return False
         except Exception as exc:
-                logger.error("_send_photo error: %s", exc)
+            logger.error("_send_photo error: %s", exc)
             return False
 
     async def handle_update(self, update: dict[str, Any], token: str) -> None:

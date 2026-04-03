@@ -10,7 +10,7 @@ from fastapi import APIRouter
 
 logger = logging.getLogger("ninko.modules.lenovo_xclarity.routes")
 
-router = APIRouter(prefix="/api/lenovo_xclarity", tags=["lenovo_xclarity"])
+router = APIRouter(tags=["lenovo_xclarity"])
 
 
 @router.get("/health")
@@ -37,5 +37,6 @@ async def get_status(connection_id: str = ""):
             "chassis_count": len(chassis.get("chassisList", [])),
             "storage_count": len(storage.get("storageList", [])),
         }
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        logger.exception("Failed to load Lenovo XClarity status")
+        return {"error": "Request failed. Check server logs."}

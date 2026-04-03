@@ -56,12 +56,34 @@ node_modules/
 .pytest_cache/
 htmlcov/
 .coverage
+.coverage.*
 
 # Temporäre Dateien
 *.tmp
 *.todo
 *.bak
 changes/
+
+# Python Tooling Caches
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.pytype/
+.hypothesis/
+
+# Lokale Shell/Env-Tools
+.envrc
+.direnv/
+
+# Lokale Docker Overrides
+docker-compose.override.yml
+docker-compose.*.local.yml
+
+# Zusätzliche Laufzeitdaten
+data/chroma/
+data/chromadb/
+data/redis/
+data/tmp/
 
 # AI-Assistenten-Konfiguration
 CLAUDE.md

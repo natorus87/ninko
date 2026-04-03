@@ -268,8 +268,8 @@ async def handle_teams_turn(app: FastAPI, activity: dict[str, Any]) -> None:
         if allowed_raw:
             allowed_ids = {s.strip() for s in str(allowed_raw).split(",") if s.strip()}
             if sender_id not in allowed_ids:
-                    logger.warning(
-                        "Teams: Access denied for user '%s' (ID: %s)",
+                logger.warning(
+                    "Teams: Access denied for user '%s' (ID: %s)",
                     sender_name,
                     sender_id,
                 )
@@ -332,16 +332,16 @@ async def handle_teams_turn(app: FastAPI, activity: dict[str, Any]) -> None:
 
         orchestrator = app.state.orchestrator
 
-                    # ── Safeguard check ────────────────────────────────────────────────────
+        # ── Safeguard check ────────────────────────────────────────────────────
         safeguard = getattr(app.state, "safeguard", None)
         pending_key = SAFEGUARD_PENDING_KEY.format(session_id=session_id)
         pending_raw = await redis.connection.get(pending_key)
 
-            if pending_raw and is_bot_confirmation(clean_text):
-                # User confirmed — execute the stored action
-                clean_text = pending_raw.decode() if isinstance(pending_raw, bytes) else pending_raw
-                await redis.connection.delete(pending_key)
-                logger.info("Safeguard: Teams user confirmed pending action for %s.", session_id)
+        if pending_raw and is_bot_confirmation(clean_text):
+            # User confirmed — execute the stored action
+            clean_text = pending_raw.decode() if isinstance(pending_raw, bytes) else pending_raw
+            await redis.connection.delete(pending_key)
+            logger.info("Safeguard: Teams user confirmed pending action for %s.", session_id)
         elif safeguard:
             sg_result = await safeguard.check(clean_text)
             if sg_result.requires_confirmation:

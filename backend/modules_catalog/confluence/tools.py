@@ -129,7 +129,7 @@ async def get_confluence_spaces(connection_id: str = "") -> dict:
         }
     except Exception as e:
         logger.error("get_confluence_spaces failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -154,7 +154,7 @@ async def get_confluence_space(space_id: str, connection_id: str = "") -> dict:
         }
     except Exception as e:
         logger.error("get_confluence_space failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -190,7 +190,7 @@ async def get_confluence_pages(
         }
     except Exception as e:
         logger.error("get_confluence_pages failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -216,7 +216,7 @@ async def get_confluence_page(page_id: str, connection_id: str = "") -> dict:
         }
     except Exception as e:
         logger.error("get_confluence_page failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -256,7 +256,7 @@ async def create_confluence_page(
         }
     except Exception as e:
         logger.error("create_confluence_page failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -294,7 +294,7 @@ async def update_confluence_page(
         }
     except Exception as e:
         logger.error("update_confluence_page failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -329,7 +329,7 @@ async def get_confluence_blog_posts(
         }
     except Exception as e:
         logger.error("get_confluence_blog_posts failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -369,7 +369,7 @@ async def create_confluence_blog_post(
         }
     except Exception as e:
         logger.error("create_confluence_blog_post failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -409,7 +409,7 @@ async def search_confluence(
         }
     except Exception as e:
         logger.error("search_confluence failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -436,7 +436,7 @@ async def get_confluence_labels(connection_id: str = "") -> dict:
         }
     except Exception as e:
         logger.error("get_confluence_labels failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
 
 
 @tool
@@ -463,4 +463,4 @@ async def get_confluence_page_history(page_id: str, connection_id: str = "") -> 
         }
     except Exception as e:
         logger.error("get_confluence_page_history failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check server logs."}
