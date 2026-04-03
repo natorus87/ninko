@@ -85,6 +85,13 @@
       "author": "Ninko Team"
     },
     {
+      "name": "microsoft_entra",
+      "display_name": "Microsoft Entra",
+      "description": "Microsoft Entra ID (formerly Azure AD) – Users, Groups, Applications, Devices.",
+      "version": "1.0.0",
+      "author": "Ninko"
+    },
+    {
       "name": "opnsense",
       "display_name": "OPNsense",
       "description": "Management und Monitoring einer OPNsense Firewall via REST API.",

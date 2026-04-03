@@ -1,0 +1,69 @@
+<!-- Microsoft Entra Dashboard Tab -->
+<style>
+#entra-tab-content .entra-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+</style>
+
+<div id="entra-tab-content" class="module-tab-content">
+    <div class="entra-grid">
+        <div class="status-card" id="entra-card-users">
+            <span class="status-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                     stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+            </span>
+            <span class="status-value" id="entra-users-count">-</span>
+            <span class="status-label">Benutzer</span>
+        </div>
+        <div class="status-card" id="entra-card-groups">
+            <span class="status-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                     stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+            </span>
+            <span class="status-value" id="entra-groups-count">-</span>
+            <span class="status-label">Gruppen</span>
+        </div>
+        <div class="status-card" id="entra-card-devices">
+            <span class="status-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                     stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                    <line x1="8" y1="21" x2="16" y2="21"/>
+                    <line x1="12" y1="17" x2="12" y2="21"/>
+                </svg>
+            </span>
+            <span class="status-value" id="entra-devices-count">-</span>
+            <span class="status-label">Geräte</span>
+        </div>
+    </div>
+
+    <div style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap; margin-bottom:1.5rem;">
+        <button type="button" class="btn btn-refresh" data-action="entra-refresh">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                <path d="M21 3v5h-5"/>
+                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                <path d="M8 16H3v5"/>
+            </svg>
+            Aktualisieren
+        </button>
+    </div>
+
+    <div class="k8s-section">
+        <h3 class="section-title" style="text-wrap:balance">Letzte Aktivitäten</h3>
+        <div id="entra-activities" class="nodes-grid">
+            <p class="empty-state">Keine Daten geladen.</p>
+        </div>
+    </div>
+</div>
