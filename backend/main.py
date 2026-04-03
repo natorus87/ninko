@@ -42,6 +42,7 @@ from api.routes_safeguard import router as safeguard_router
 from api.routes_safeguard_profiles import router as safeguard_profiles_router
 from api.routes_safeguard_audit import router as safeguard_audit_router
 from api.routes_auth import router as auth_router
+from api.routes_themes import router as themes_router
 
 # Logging konfigurieren
 settings = get_settings()
@@ -410,6 +411,8 @@ def _required_role_for_request(path: str, method: str) -> str | None:
         return ROLE_ADMIN if is_mutating else ROLE_READ
     if path.startswith("/api/connections"):
         return ROLE_WRITE if is_mutating else ROLE_READ
+    if path.startswith("/api/themes"):
+        return ROLE_WRITE if is_mutating else ROLE_READ
     if path.startswith("/api/agents"):
         return ROLE_WRITE if is_mutating else ROLE_READ
     if path.startswith("/api/workflows"):
@@ -472,6 +475,7 @@ async def add_no_cache_header(request: Request, call_next):
 # ── Core-Routen ──────────────────────────────────────
 app.include_router(chat_router)
 app.include_router(auth_router)
+app.include_router(themes_router)
 app.include_router(modules_router)
 app.include_router(memory_router)
 app.include_router(secrets_router)

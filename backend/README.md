@@ -25,6 +25,7 @@ Ninko is a modular, AI-powered IT-Operations platform with an immutable core and
 | `redis_client.py` | Shared async Redis client |
 | `workflow_engine.py` | Async DAG execution engine (Trigger, Agent, Condition, Loop, Variable, End nodes) |
 | `log_handler.py` | Custom RedisLogHandler — intercepts Python logs to Redis list |
+| `theme_manager.py` | Theme loader/store for built-in + custom themes, active theme persistence |
 
 ### Agents (`agents/`)
 | File | Description |
@@ -48,6 +49,7 @@ Ninko is a modular, AI-powered IT-Operations platform with an immutable core and
 - `routes_tts.py` — Text-to-Speech synthesis (Piper)
 - `routes_transcription.py` — Speech-to-Text (faster-whisper)
 - `routes_image_gen.py` — Image generation
+- `routes_themes.py` — Theme management (presets, custom themes, repos, activation)
 - `routes_logs.py` — Log viewing
 - `routes_safeguard.py` — Safeguard middleware control
 
@@ -88,6 +90,12 @@ Pydantic models for API request/response validation.
 ### Connection Management
 - Two systems: legacy `ninko:settings:modules` (Redis) and ConnectionManager (`ninko:connections:{module_id}`)
 - Secrets stored in Vault or SQLite fallback
+
+### Theme Management
+- Built-in themes in `backend/themes/`
+- Custom themes in `data/themes/`
+- Active theme key: `ninko:settings:theme_active`
+- API-driven theme activation and GitHub repo installation
 
 ## Dependencies
 

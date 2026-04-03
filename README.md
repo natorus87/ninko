@@ -11,7 +11,7 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.9.2-blue.svg" alt="Version"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.9.3-blue.svg" alt="Version"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-beta-orange.svg" alt="Status"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.12-blue.svg" alt="Python"></a>
   <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.115-green.svg" alt="FastAPI"></a>
@@ -32,6 +32,7 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 - **Long-term memory** – ChromaDB-backed semantic memory across all sessions
 - **Local LLMs** – Ollama, LM Studio, or any OpenAI-compatible API (no cloud required)
 - **Workflow engine** – Visual DAG editor for automated multi-step tasks
+- **Theme system** – Built-in presets, custom token-based themes, and GitHub theme repository import
 - **Dynamic agents** – AI creates specialized agents at runtime on demand
 - **Skills system** – Reusable procedural knowledge as SKILL.md files
 - **TTS/STT** – Piper (local) + Whisper for voice input and output

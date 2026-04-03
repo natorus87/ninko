@@ -23,7 +23,8 @@ Please open an [issue](../../issues/new) including:
 2. Create a feature branch: `git checkout -b feature/my-feature`
 3. Commit your changes
 4. Run tests: `python backend/test_services.py`
-5. Open a PR with a description of your changes
+5. Update documentation (`CHANGELOG.md`, `TODO.md`/`DONE.md`, relevant READMEs) when behavior or APIs change
+6. Open a PR with a description of your changes
 
 ## Development setup
 

@@ -19,7 +19,7 @@ The frontend is a modular, SPA-like interface built with vanilla JavaScript (no 
   - Agent/Skill/Workflow CRUD
   - Voice input (WebRTC)
   - Text-to-Speech playback
-  - Theme switching
+  - Theme switching + runtime token themes
 
 ### Styling
 - **style.css** — CSS custom properties design system with dark/light themes
@@ -43,6 +43,7 @@ The frontend is a modular, SPA-like interface built with vanilla JavaScript (no 
 - **Automatisierung** — Sub-tabs: Tasks, Agents, Workflows
 - **Module** — Dynamic module dashboards (Kubernetes, Proxmox, GLPI, Pi-hole, etc.)
 - **Settings** — LLM providers, module config, language, TTS, logs
+- **Themes** — Presets, custom token editor, GitHub theme repos/install
 
 ### Visual Workflow Editor
 - Drag-and-drop node canvas (Trigger, Agent, Condition, Loop, Variable, End)
@@ -58,6 +59,7 @@ The frontend is a modular, SPA-like interface built with vanilla JavaScript (no 
 
 ### Theme System
 CSS custom properties in `:root` for dark mode, `.light-mode` class overrides for light mode.
+Additional active-theme token overrides are applied at runtime to `document.documentElement.style` from `/api/themes/active`.
 
 ### Module Loading
 Modules are loaded dynamically from `/api/modules/{name}/frontend/tab.js` and appended to the DOM as IIFE scripts.

@@ -1,0 +1,10 @@
+{
+  "id": "default",
+  "name": "Ninko Default",
+  "description": "Original Ninko look.",
+  "version": "1.0.0",
+  "author": "Ninko",
+  "preview_url": "",
+  "tokens_dark": {},
+  "tokens_light": {}
+}

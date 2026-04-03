@@ -4,6 +4,47 @@ Stand: 2026-04-03
 
 ---
 
+## Theme-System (Vorlagen + Custom + Repo) ✅ *2026-04-03*
+
+### Implementierte Funktionen
+- [x] Theme-Backend mit persistenter Aktivierung (`ninko:settings:theme_active`)
+- [x] Custom-Theme CRUD (create/update/delete/duplicate)
+- [x] Theme-Repo-Verwaltung (GitHub-Repos hinzufügen/löschen/listen)
+- [x] Theme-Installation aus Repo (`install-from-repo`)
+- [x] Frontend Settings → Themes (Vorlagen, Editor, Repo-Install)
+- [x] Runtime-Anwendung von CSS-Tokens bei Start und Light/Dark-Wechsel
+
+### Dateien geändert
+- `backend/schemas/theme.py` (neu)
+- `backend/core/theme_manager.py` (neu)
+- `backend/api/routes_themes.py` (neu)
+- `backend/themes/default/theme.json` (neu)
+- `backend/themes/arctic/theme.json` (neu)
+- `backend/main.py`
+- `frontend/index.html`
+- `frontend/app.js`
+
+---
+
+## Core-Module Hardening & Bugfixes ✅ *2026-04-03*
+
+### Implementierte Funktionen
+- [x] CodeLab Chat-Weiterleitung repariert (`Ninko.sendMessage`)
+- [x] CodeLab-Ausführung gehärtet (isoliertes Python, restriktive Env, RLIMITs, Timeout-Kill-Group)
+- [x] WebSearch-Frontend XSS-Schutz für dynamische Tabellenwerte
+- [x] Interne Fehlerdetails in `codelab`/`web_search` API-Responses reduziert
+- [x] WebSearch Header-Handling verbessert (`Host: localhost` entfernt)
+
+### Dateien geändert
+- `backend/modules/codelab/tools.py`
+- `backend/modules/codelab/routes.py`
+- `backend/modules/codelab/frontend/tab.js`
+- `backend/modules/web_search/tools.py`
+- `backend/modules/web_search/routes.py`
+- `backend/modules/web_search/frontend/tab.js`
+
+---
+
 ## OPNsense-Modul: Write-Operationen ✅ *2026-04-02*
 
 ### Implementierte Funktionen

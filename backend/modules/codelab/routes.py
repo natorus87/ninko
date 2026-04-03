@@ -33,7 +33,7 @@ async def run_code(req: ExecuteRequest):
         return result
     except Exception as e:
         logger.exception("Fehler bei Code-Ausführung")
-        return _error(str(e), 500)
+        return _error("Code-Ausführung fehlgeschlagen.", 500)
 
 
 @router.get("/languages")
@@ -42,7 +42,8 @@ async def languages():
     try:
         return get_available_languages.invoke({})
     except Exception as e:
-        return _error(str(e), 500)
+        logger.exception("Fehler beim Laden der verfügbaren Sprachen")
+        return _error("Verfügbare Sprachen konnten nicht geladen werden.", 500)
 
 
 _STYLE_LABELS: dict[str, str] = {
@@ -71,4 +72,4 @@ async def improve_text(req: ImproveTextRequest):
         return {"result": response.content, "error": ""}
     except Exception as e:
         logger.exception("Fehler bei Textverbesserung")
-        return _error(str(e), 500)
+        return _error("Textverbesserung fehlgeschlagen.", 500)

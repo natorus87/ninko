@@ -1,6 +1,15 @@
 (async function initWebSearchTab() {
 
     const WebSearchTab = {
+        _escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        },
+
         async init() {
             await this.refresh();
         },
@@ -56,10 +65,10 @@
                     ? '<span class="status-badge status-ok">aktiv</span>'
                     : '<span class="status-badge status-error">blockiert</span>';
                 const reason = e.reason
-                    ? `<span style="color:var(--text-muted);font-size:0.82rem;">${e.reason}</span>`
+                    ? `<span style="color:var(--text-muted);font-size:0.82rem;">${this._escapeHtml(e.reason)}</span>`
                     : '';
                 return `<tr>
-                    <td><strong>${e.name}</strong></td>
+                    <td><strong>${this._escapeHtml(e.name)}</strong></td>
                     <td>${badge}</td>
                     <td>${reason}</td>
                 </tr>`;
@@ -74,7 +83,7 @@
                 document.getElementById('websearch-conn-label').textContent = 'Fehler';
             }
             const tbody = document.getElementById('websearch-engine-tbody');
-            if (tbody) tbody.innerHTML = `<tr><td colspan="3" style="color:var(--error-color)">${msg}</td></tr>`;
+            if (tbody) tbody.innerHTML = `<tr><td colspan="3" style="color:var(--error-color)">${this._escapeHtml(msg)}</td></tr>`;
         },
     };
 

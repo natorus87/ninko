@@ -1,0 +1,32 @@
+{
+  "id": "arctic",
+  "name": "Arctic Flow",
+  "description": "Cool blue professional theme.",
+  "version": "1.0.0",
+  "author": "Ninko",
+  "preview_url": "",
+  "tokens_dark": {
+    "--bg-primary": "#0a111a",
+    "--bg-secondary": "#121d2b",
+    "--bg-tertiary": "#17263a",
+    "--text-primary": "#f4fbff",
+    "--text-secondary": "#b4cbe0",
+    "--border-color": "#2a4058",
+    "--primary-color": "#3a97ff",
+    "--primary-color-rgb": "58, 151, 255",
+    "--accent-blue": "#57a8ff",
+    "--accent-purple": "#7f7bff"
+  },
+  "tokens_light": {
+    "--bg-primary": "#f4f8fc",
+    "--bg-secondary": "#edf3fb",
+    "--bg-tertiary": "#e2ebf8",
+    "--text-primary": "#0f2742",
+    "--text-secondary": "#45627f",
+    "--border-color": "#c8d7eb",
+    "--primary-color": "#1d76d8",
+    "--primary-color-rgb": "29, 118, 216",
+    "--accent-blue": "#1d76d8",
+    "--accent-purple": "#5a73c9"
+  }
+}

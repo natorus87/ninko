@@ -215,7 +215,7 @@
             const chatInput = document.getElementById('chat-input');
             if (chatInput && msgs[action]) {
                 chatInput.value = msgs[action];
-                if (typeof app !== 'undefined' && typeof app.sendMessage === 'function') app.sendMessage();
+                if (typeof Ninko !== 'undefined' && typeof Ninko.sendMessage === 'function') Ninko.sendMessage();
             }
         },
 

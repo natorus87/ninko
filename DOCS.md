@@ -23,6 +23,7 @@ This document covers the Ninko platform in depth: the dashboard, AI agent archit
 15. [Security](#15-security)
 16. [Developing a Module](#16-developing-a-module)
 17. [Startup Sequence & Persistence Reference](#17-startup-sequence--persistence-reference)
+18. [Theme System (Branding & Design Tokens)](#18-theme-system-branding--design-tokens)
 
 ---
 
@@ -1092,6 +1093,45 @@ If your module has secret connection fields (ending in `_KEY`, `_PASSWORD`, `_TO
 | Piper TTS | Inside `ninko-backend` | — |
 
 > **Piper TTS** is only included in the image when built with `--build-arg INSTALL_PIPER=true`. `docker compose build backend` handles this automatically.
+
+---
+
+## 18. Theme System (Branding & Design Tokens)
+
+Ninko supports persistent dashboard theming with built-in presets, custom themes, and GitHub repository imports.
+
+### Data Model
+
+- `ThemeDefinition` contains:
+  - metadata: `id`, `name`, `description`, `version`, `author`, `preview_url`
+  - token maps: `tokens_dark`, `tokens_light` (CSS custom property overrides)
+
+### Persistence
+
+- Built-in themes are loaded from `backend/themes/<theme_id>/theme.json`.
+- Custom themes are stored in `data/themes/<theme_id>/theme.json`.
+- Active theme is persisted in Redis key: `ninko:settings:theme_active`.
+
+### API Endpoints
+
+- `GET /api/themes/` — list available themes + active theme
+- `GET /api/themes/item/{theme_id}` — detailed theme payload
+- `GET/PUT /api/themes/active` — read/set active theme
+- `POST/PUT/DELETE /api/themes/custom...` — custom theme CRUD
+- `POST /api/themes/custom/{theme_id}/duplicate` — duplicate theme
+- `GET/POST/PUT/DELETE /api/themes/repos...` — manage GitHub theme repos
+- `GET /api/themes/repos/{repo_id}/themes` — list available remote themes
+- `POST /api/themes/install-from-repo/{theme_id}` — install selected theme
+
+### Frontend Runtime Behavior
+
+- Settings → Themes provides:
+  - preset activation
+  - custom editor for dark/light token JSON
+  - repository management and one-click theme installation
+- On startup and on light/dark toggle:
+  - active tokens are applied to `document.documentElement.style`
+  - mode-specific token set is used automatically (`tokens_dark` vs `tokens_light`)
 
 ---
 

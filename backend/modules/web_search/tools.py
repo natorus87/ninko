@@ -32,7 +32,6 @@ async def perform_web_search(query: str, connection_id: str = "") -> List[Dict[s
     headers = {
         "X-Forwarded-For": "127.0.0.1",
         "X-Real-IP": "127.0.0.1",
-        "Host": "localhost"
     }
     
     try:
@@ -64,6 +63,6 @@ async def perform_web_search(query: str, connection_id: str = "") -> List[Dict[s
     except httpx.HTTPStatusError as e:
         logger.error(f"HTTP Fehler bei Web-Suche: {e.response.status_code} - {e.response.text}")
         return [{"title": "Error", "url": "", "content": f"Such-Backend meldete einen HTTP Fehler: {e.response.status_code}."}]
-    except Exception as e:
+    except Exception:
         logger.exception("Unerwarteter Fehler bei der Web-Suche")
-        return [{"title": "Error", "url": "", "content": f"Interner Fehler bei der Web-Suche: {e}"}]
+        return [{"title": "Error", "url": "", "content": "Interner Fehler bei der Web-Suche."}]

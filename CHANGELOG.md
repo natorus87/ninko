@@ -7,6 +7,40 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.9.3] – 2026-04-03
+
+### Added
+
+- **Theme management system (end-to-end)**:
+  - Backend:
+    - `backend/schemas/theme.py` with `ThemeDefinition`, `ThemeSummary`, `ThemeListResponse`, `ThemeRepo`.
+    - `backend/core/theme_manager.py` for built-in/custom theme loading, token sanitization, active-theme persistence (`ninko:settings:theme_active`).
+    - `backend/api/routes_themes.py` with CRUD for custom themes, active theme switching, theme repository management, and install-from-repo support.
+    - New built-in themes: `backend/themes/default/theme.json`, `backend/themes/arctic/theme.json`.
+  - Frontend:
+    - New Settings sub-tab **Themes** with preset activation, custom theme editor (dark/light token JSON), repository integration, and install flow.
+    - Runtime CSS token application on startup and on light/dark mode toggle.
+
+### Fixed
+
+- **CodeLab chat integration bug**: "Verbessern/Erklären/Review" buttons in the CodeLab tab now correctly send prompts via `Ninko.sendMessage()` (previously referenced non-existent `app.sendMessage()`).
+- **Web Search XSS hardening**: escaped engine names/reasons and error messages before rendering in `innerHTML`.
+- **Web Search networking robustness**: removed hardcoded `Host: localhost` header from SearXNG tool requests.
+- **Error leak reduction**:
+  - `codelab` routes now return generic 500 error messages instead of raw internal exception strings.
+  - `web_search` routes/tools no longer expose raw exception text to end users.
+
+### Changed
+
+- **CodeLab execution hardening**:
+  - Added input/output size limits.
+  - Switched Python execution to isolated mode (`python3 -I -B -u`).
+  - Added constrained subprocess environment (`PATH`, `HOME`, `TMPDIR`, locale vars only).
+  - Enforced POSIX resource limits (CPU, memory, file size, open files, process count, core dumps).
+  - Improved timeout cleanup by terminating full process groups on POSIX.
+
+---
+
 ## [0.9.2] – 2026-04-02
 
 ### Added

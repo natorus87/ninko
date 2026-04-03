@@ -109,6 +109,30 @@ docker compose up -d backend
 
 ## 📝 Recent Development History
 
+### Phase 20: Theme System & Module Hardening (Apr 2026)
+- **Task**: Implemented end-to-end dashboard theming and hardened core modules (`codelab`, `web_search`).
+- **Theme Backend**:
+  - Added `backend/schemas/theme.py` for structured theme payloads.
+  - Added `backend/core/theme_manager.py` for built-in/custom loading, token sanitization, and active theme persistence in Redis (`ninko:settings:theme_active`).
+  - Added `backend/api/routes_themes.py` with:
+    - Theme list/detail/active endpoints
+    - Custom theme CRUD + duplicate
+    - GitHub theme repo management
+    - Install-from-repo flow
+- **Theme Frontend**:
+  - New Settings sub-tab **Themes** with preset activation, custom JSON token editor (`tokens_dark`/`tokens_light`), and repo installer UI.
+  - Runtime token application hooked into startup + light/dark toggle.
+- **CodeLab Hardening**:
+  - Reworked subprocess execution to use a constrained environment and temporary working directory.
+  - Added POSIX `resource` limits (CPU, RAM, file size, open files, process count).
+  - Python execution now uses isolated mode (`-I -B`).
+  - Timeout handling kills whole process group on POSIX.
+  - Fixed chat integration in CodeLab tab (`Ninko.sendMessage`).
+- **Web Search Hardening**:
+  - Removed hardcoded `Host: localhost` request header.
+  - Added frontend output escaping for dynamic engine/error rendering to reduce XSS risk.
+  - Replaced raw exception leaks with generic user-facing error messages.
+
 ### Phase 19: Extended Automation & Centralized Logging (Feb 2026)
 - **Task**: Integrated a new layer for structured automation (Workflows) and centralized oversight (Logs, Agents).
 - **Agenten (Aufgaben)**: Generic agent definitions with system prompts and module-tool selection. This allows users to create specialized AI personas without touching Python code.
@@ -242,6 +266,11 @@ docker compose up -d backend
 ### Frontend tab.js: Unexpected token 'export'
 - **Cause**: Using ES module `export` syntax in a `<script>` tag loaded without `type="module"`.
 - **Fix**: Replace `export async function initTab()` with an IIFE: `(async function init() { ... })();`
+
+### Code Sandbox ≠ Security Boundary
+- **Issue**: Executing user code in the main backend process context is high-risk even without `shell=True`.
+- **Mitigation implemented**: strict env, isolated temp dir, RLIMITs, timeout process-group kill, output/input limits.
+- **Remaining recommendation**: run code execution in a dedicated hardened worker/container (no network, read-only rootfs) for true isolation.
 
 ### Pi-hole v6 Auth (429 Too Many Requests)
 - **Cause**: Repeated failed auth attempts or too many open sessions.
@@ -399,6 +428,5 @@ Der WebSearch-Agent lief in eine Endlosschleife: Das Routing-Keyword `"aktuell"`
 - Ensure `routing_keywords` remain unique enough to avoid orchestrator confusion.
 - Document new tools in `tools.py` docstrings (Agent uses them for reasoning!).
 - When adding secret fields (e.g., `_KEY`, `_PASSWORD`, `_TOKEN`, `_SECRET`), register them in `routes_settings.py:_get_secret_keys()` and add the module name to `_get_env_connection()`.
-
 
 

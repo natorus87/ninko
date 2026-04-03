@@ -114,6 +114,10 @@
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
                                 <span data-i18n="settings.system">System</span>
                             </button>
+                            <button class="settings-tab" data-settings-tab="themes" onclick="Ninko.switchSettingsTab('themes')">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3L4 7.5v9L12 21l8-4.5v-9z"></path><path d="M12 12l8-4.5"></path><path d="M12 12L4 7.5"></path><path d="M12 12v9"></path></svg>
+                                Themes
+                            </button>
                             <button class="settings-tab" data-settings-tab="language" onclick="Ninko.switchSettingsTab('language')">
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
                                 <span data-i18n="settings.language">Sprache</span>
@@ -955,6 +959,98 @@
                                 <h4>Secrets</h4>
                                 <div id="settings-secrets">
                                     <button class="btn btn-outline" onclick="Ninko.viewSecrets()">Secrets verwalten</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Themes Tab -->
+                        <div class="settings-panel" id="settings-panel-themes">
+                            <div class="setting-group">
+                                <h4>Theme-Vorlagen</h4>
+                                <p class="setting-desc">Aktiviere ein Theme oder öffne es im Editor.</p>
+                                <div id="themes-active-indicator" class="save-status" style="margin-bottom:0.5rem;"></div>
+                                <div id="themes-presets-list" class="modules-grid">
+                                    <p class="text-muted">Lade Themes…</p>
+                                </div>
+                            </div>
+
+                            <div class="setting-group">
+                                <h4>Custom Theme Editor</h4>
+                                <p class="setting-desc">Eigene Themes als Tokens für Dark/Light Mode erstellen.</p>
+                                <div class="form-row">
+                                    <label class="form-label" for="theme-editor-id">Theme ID</label>
+                                    <input id="theme-editor-id" type="text" class="form-input" placeholder="my-theme">
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="theme-editor-name">Name</label>
+                                    <input id="theme-editor-name" type="text" class="form-input" placeholder="My Theme">
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="theme-editor-description">Beschreibung</label>
+                                    <input id="theme-editor-description" type="text" class="form-input" placeholder="Kurze Beschreibung">
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="theme-editor-author">Autor</label>
+                                    <input id="theme-editor-author" type="text" class="form-input" placeholder="Ninko User">
+                                </div>
+                                <div class="form-row" style="display:flex; gap:0.75rem;">
+                                    <div style="flex:1;">
+                                        <label class="form-label" for="theme-editor-version">Version</label>
+                                        <input id="theme-editor-version" type="text" class="form-input" placeholder="1.0.0">
+                                    </div>
+                                    <div style="flex:1;">
+                                        <label class="form-label" for="theme-editor-preview">Preview URL</label>
+                                        <input id="theme-editor-preview" type="text" class="form-input" placeholder="">
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="theme-editor-tokens-dark">Tokens Dark (JSON)</label>
+                                    <textarea id="theme-editor-tokens-dark" class="form-input" rows="7" placeholder='{"--primary-color":"#3b8ee8"}'></textarea>
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="theme-editor-tokens-light">Tokens Light (JSON)</label>
+                                    <textarea id="theme-editor-tokens-light" class="form-input" rows="7" placeholder='{"--primary-color":"#1a6bcc"}'></textarea>
+                                </div>
+                                <div class="form-actions">
+                                    <span id="theme-editor-status" class="save-status"></span>
+                                    <button class="btn btn-outline btn-sm" onclick="Ninko.resetThemeEditor()">Neu</button>
+                                    <button class="btn btn-outline btn-sm" onclick="Ninko.duplicateThemeFromEditor()">Duplizieren</button>
+                                    <button class="btn btn-outline btn-sm" onclick="Ninko.deleteThemeFromEditor()">Löschen</button>
+                                    <button class="btn btn-primary btn-sm" onclick="Ninko.saveThemeFromEditor()">Speichern</button>
+                                </div>
+                            </div>
+
+                            <div class="setting-group">
+                                <h4>Theme-Repositories</h4>
+                                <p class="setting-desc">Themes direkt aus GitHub-Repositories laden und installieren.</p>
+                                <div class="form-row">
+                                    <label class="form-label" for="theme-repo-name">Name</label>
+                                    <input id="theme-repo-name" type="text" class="form-input" placeholder="Meine Theme-Repo">
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="theme-repo-url">GitHub URL</label>
+                                    <input id="theme-repo-url" type="text" class="form-input" placeholder="https://github.com/owner/repo">
+                                </div>
+                                <div class="form-row" style="display:flex; gap:0.75rem;">
+                                    <div style="flex:1;">
+                                        <label class="form-label" for="theme-repo-branch">Branch</label>
+                                        <input id="theme-repo-branch" type="text" class="form-input" placeholder="main">
+                                    </div>
+                                    <div style="flex:1;">
+                                        <label class="form-label" for="theme-repo-path">Themes Pfad</label>
+                                        <input id="theme-repo-path" type="text" class="form-input" placeholder="backend/themes">
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="theme-repo-token">GitHub Token (optional)</label>
+                                    <input id="theme-repo-token" type="password" class="form-input" placeholder="ghp_...">
+                                </div>
+                                <div class="form-actions">
+                                    <span id="theme-repo-status" class="save-status"></span>
+                                    <button class="btn btn-primary btn-sm" onclick="Ninko.addThemeRepo()">Repo hinzufügen</button>
+                                </div>
+                                <div id="theme-repos-list" style="margin-top:0.75rem;">
+                                    <p class="text-muted">Lade Theme-Repos…</p>
                                 </div>
                             </div>
                         </div>

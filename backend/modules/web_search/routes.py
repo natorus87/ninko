@@ -34,7 +34,8 @@ async def get_status():
     except httpx.TimeoutException:
         return {"connected": False, "error": "Timeout", "engines": []}
     except Exception as exc:
-        return {"connected": False, "error": str(exc), "engines": []}
+        logger.exception("Web-Search Statusprüfung fehlgeschlagen: %s", exc)
+        return {"connected": False, "error": "SearXNG derzeit nicht erreichbar.", "engines": []}
 
     # Engines aus server-timing-Header: total_0_wikipedia;dur=137
     timing_header = resp.headers.get("server-timing", "")

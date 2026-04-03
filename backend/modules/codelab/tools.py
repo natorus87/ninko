@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import shutil
+import signal
 import tempfile
 import time
 from pathlib import Path
@@ -15,12 +17,20 @@ from langchain_core.tools import tool
 
 logger = logging.getLogger("ninko.modules.codelab")
 
+_MAX_CODE_CHARS = 100_000
+_MAX_STDOUT_CHARS = 20_000
+_MAX_STDERR_CHARS = 5_000
+_MAX_MEMORY_BYTES = 256 * 1024 * 1024
+_MAX_FILESIZE_BYTES = 5 * 1024 * 1024
+_MAX_NOFILE = 64
+_MAX_NPROC = 16
+
 # Unterstützte Sprachen mit Ausführungs-Kommandos
 _LANGUAGES: dict[str, dict] = {
     "python": {
         "binary": "python3",
         "ext": ".py",
-        "cmd": lambda f: ["python3", "-u", f],
+        "cmd": lambda f: ["python3", "-I", "-B", "-u", f],
     },
     "bash": {
         "binary": "bash",
@@ -49,6 +59,41 @@ def _available_languages() -> list[str]:
     return result
 
 
+def _build_sandbox_env(tmp_dir: str) -> dict[str, str]:
+    """Erzeugt ein minimales Environment für Subprozesse."""
+    safe_path = os.environ.get("PATH", "/usr/bin:/bin")
+    return {
+        "PATH": safe_path,
+        "HOME": tmp_dir,
+        "TMPDIR": tmp_dir,
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "",
+    }
+
+
+def _make_preexec(timeout: int):
+    """
+    Setzt harte Ressourcenlimits pro Ausführung.
+    Hinweis: gilt nur auf POSIX-Systemen.
+    """
+    def _preexec() -> None:
+        import resource
+
+        os.setsid()
+        cpu = max(1, min(timeout + 1, 60))
+        resource.setrlimit(resource.RLIMIT_CPU, (cpu, cpu))
+        resource.setrlimit(resource.RLIMIT_AS, (_MAX_MEMORY_BYTES, _MAX_MEMORY_BYTES))
+        resource.setrlimit(resource.RLIMIT_FSIZE, (_MAX_FILESIZE_BYTES, _MAX_FILESIZE_BYTES))
+        resource.setrlimit(resource.RLIMIT_NOFILE, (_MAX_NOFILE, _MAX_NOFILE))
+        resource.setrlimit(resource.RLIMIT_NPROC, (_MAX_NPROC, _MAX_NPROC))
+        resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+
+    return _preexec
+
+
 @tool
 async def execute_code(code: str, language: str = "python", timeout: int = 15) -> dict:
     """
@@ -65,6 +110,17 @@ async def execute_code(code: str, language: str = "python", timeout: int = 15) -
     """
     language = language.lower().strip()
     timeout = max(1, min(timeout, 60))
+    code = code or ""
+
+    if len(code) > _MAX_CODE_CHARS:
+        return {
+            "stdout": "",
+            "stderr": f"Code ist zu groß ({len(code)} Zeichen, max {_MAX_CODE_CHARS}).",
+            "exit_code": 1,
+            "duration_ms": 0.0,
+            "language": language,
+            "error": "Code zu groß.",
+        }
 
     if language not in _LANGUAGES:
         available = _available_languages()
@@ -88,24 +144,23 @@ async def execute_code(code: str, language: str = "python", timeout: int = 15) -
             "error": f"Binary '{cfg['binary']}' nicht gefunden.",
         }
 
-    # Code in temporäre Datei schreiben
-    with tempfile.NamedTemporaryFile(
-        suffix=cfg["ext"],
-        mode="w",
-        encoding="utf-8",
-        delete=False,
-    ) as tmp:
-        tmp.write(code)
-        tmp_path = tmp.name
+    with tempfile.TemporaryDirectory(prefix="codelab-") as tmp_dir:
+        tmp_path = str(Path(tmp_dir) / f"main{cfg['ext']}")
+        Path(tmp_path).write_text(code, encoding="utf-8")
 
-    try:
         cmd = cfg["cmd"](tmp_path)
         t_start = time.perf_counter()
+        sandbox_env = _build_sandbox_env(tmp_dir)
+        preexec = _make_preexec(timeout) if os.name == "posix" else None
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,
+            stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            cwd=tmp_dir,
+            env=sandbox_env,
+            preexec_fn=preexec,
         )
 
         try:
@@ -113,7 +168,13 @@ async def execute_code(code: str, language: str = "python", timeout: int = 15) -
                 proc.communicate(), timeout=timeout
             )
         except asyncio.TimeoutError:
-            proc.kill()
+            if os.name == "posix":
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except Exception:
+                    proc.kill()
+            else:
+                proc.kill()
             await proc.communicate()
             return {
                 "stdout": "",
@@ -129,11 +190,10 @@ async def execute_code(code: str, language: str = "python", timeout: int = 15) -
         stdout = stdout_bytes.decode("utf-8", errors="replace")
         stderr = stderr_bytes.decode("utf-8", errors="replace")
 
-        # Ausgabe begrenzen (max 20 KB)
-        if len(stdout) > 20_000:
-            stdout = stdout[:20_000] + "\n… (Ausgabe gekürzt)"
-        if len(stderr) > 5_000:
-            stderr = stderr[:5_000] + "\n… (Fehlerausgabe gekürzt)"
+        if len(stdout) > _MAX_STDOUT_CHARS:
+            stdout = stdout[:_MAX_STDOUT_CHARS] + "\n… (Ausgabe gekürzt)"
+        if len(stderr) > _MAX_STDERR_CHARS:
+            stderr = stderr[:_MAX_STDERR_CHARS] + "\n… (Fehlerausgabe gekürzt)"
 
         logger.info(
             "CodeLab: %s ausgeführt, exit=%d, %.0fms",
@@ -148,8 +208,6 @@ async def execute_code(code: str, language: str = "python", timeout: int = 15) -
             "language": language,
             "error": "",
         }
-    finally:
-        Path(tmp_path).unlink(missing_ok=True)
 
 
 @tool
