@@ -28,7 +28,7 @@ router = APIRouter()
 
 
 @router.get("/projects")
-async def get_projects(connection_id: str = "") -> dict:
+async def get_projects(connection_id: str = "") -> dict[str, Any]:
     """REST endpoint for the UI frontend."""
     try:
         result = await get_redmine_projects.ainvoke({"connection_id": connection_id})
@@ -41,7 +41,7 @@ async def get_projects(connection_id: str = "") -> dict:
 @router.get("/issues")
 async def get_issues(
     project_id: str = "", status: str = "open", connection_id: str = ""
-) -> dict:
+) -> dict[str, Any]:
     """Get issues."""
     try:
         result = await get_redmine_issues.ainvoke(
@@ -65,7 +65,7 @@ async def hrm_proxy(
     params_json: str = "",
     payload_json: str = "",
     method: str = "",
-) -> dict:
+) -> dict[str, Any]:
     """
     Proxy for AlphaNodes HRM endpoints.
     method supports GET/POST/PUT/DELETE, endpoint is relative to hrm prefix.
@@ -94,7 +94,7 @@ async def reporting_proxy(
     params_json: str = "",
     payload_json: str = "",
     method: str = "",
-) -> dict:
+) -> dict[str, Any]:
     """
     Proxy for AlphaNodes Reporting endpoints.
     method supports GET/POST/PUT/DELETE, endpoint is relative to reporting prefix.
@@ -123,7 +123,7 @@ async def hrm_attendances(
     limit: int = 100,
     offset: int = 0,
     connection_id: str = "",
-) -> dict:
+) -> dict[str, Any]:
     try:
         result = await get_redmine_hrm_attendances.ainvoke(
             {
@@ -145,7 +145,7 @@ async def hrm_attendances(
 async def hrm_create_attendance(
     attendance_payload: dict[str, Any],
     connection_id: str = "",
-) -> dict:
+) -> dict[str, Any]:
     try:
         result = await create_redmine_hrm_attendance.ainvoke(
             {"attendance_payload": attendance_payload, "connection_id": connection_id}
@@ -157,7 +157,9 @@ async def hrm_create_attendance(
 
 
 @router.get("/hrm/attendances/{attendance_id}")
-async def hrm_attendance_by_id(attendance_id: str, connection_id: str = "") -> dict:
+async def hrm_attendance_by_id(
+    attendance_id: str, connection_id: str = ""
+) -> dict[str, Any]:
     try:
         result = await get_redmine_hrm_attendance.ainvoke(
             {"attendance_id": attendance_id, "connection_id": connection_id}
@@ -174,7 +176,7 @@ async def hrm_user_capacity(
     from_date: str = "",
     to_date: str = "",
     connection_id: str = "",
-) -> dict:
+) -> dict[str, Any]:
     try:
         result = await get_redmine_hrm_user_capacity.ainvoke(
             {
@@ -197,7 +199,7 @@ async def hrm_holidays(
     limit: int = 100,
     offset: int = 0,
     connection_id: str = "",
-) -> dict:
+) -> dict[str, Any]:
     try:
         result = await get_redmine_hrm_holidays.ainvoke(
             {
@@ -222,7 +224,7 @@ async def reporting_budgets(
     limit: int = 100,
     offset: int = 0,
     connection_id: str = "",
-) -> dict:
+) -> dict[str, Any]:
     try:
         result = await get_redmine_reporting_budgets.ainvoke(
             {
@@ -248,7 +250,7 @@ async def project_budgets(
     limit: int = 100,
     offset: int = 0,
     connection_id: str = "",
-) -> dict:
+) -> dict[str, Any]:
     try:
         result = await get_redmine_project_budgets.ainvoke(
             {
@@ -275,7 +277,7 @@ async def reporting_time_logs(
     limit: int = 100,
     offset: int = 0,
     connection_id: str = "",
-) -> dict:
+) -> dict[str, Any]:
     try:
         result = await get_redmine_reporting_time_logs.ainvoke(
             {
