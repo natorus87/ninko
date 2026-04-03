@@ -191,5 +191,10 @@ class ConnectionManager:
         redis = get_redis()
         key = ConnectionManager._get_redis_key(module_id)
         data = [json.loads(c.model_dump_json()) for c in connections]
-        logger.info(f"Speichere {len(connections)} Verbindungen für {module_id} in Redis Key {key}")
+        logger.info(
+            "Speichere %d Verbindungen für %s in Redis Key %s",
+            len(connections),
+            module_id,
+            key,
+        )
         await redis.connection.set(key, json.dumps(data))

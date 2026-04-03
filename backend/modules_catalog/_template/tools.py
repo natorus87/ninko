@@ -73,21 +73,8 @@ async def _get_api_client(connection_id: str = "") -> dict:
 
 # ═══════════════════════════════════════════════════════
 # Agent Tools (exposed to LLM)
-#
-# IMPORTANT: Docstrings must be precise — the LLM reads them for tool selection.
-# ALWAYS write docstrings in English.
-#
-# Tool status labels (chat loading spinner) in base_agent._TOOL_LABELS:
-#   "beispiel_tool": ("Führe Beispiel aus", "Running example"),
-#   "lade_daten":    ("Lade Daten",         "Loading data"),
-#
-# SAFEGUARD — _TOOL_READONLY (backend/core/safeguard.py):
-# All read-only tools (get_*, list_*, search_*, inspect_*, check_*)
-# MUST be registered in _TOOL_READONLY so the safeguard classifier
-# skips them without an LLM call.
-# Rule:
-#   READ-ONLY  → get_*/list_*/search_*/inspect_*/check_*/ha_get_* → add to _TOOL_READONLY
-#   WRITE/ACTION → start_*/stop_*/restart_*/delete_*/create_*/set_*/add_*/update_* → do NOT add
+# IMPORTANT: Keep docstrings precise (LLM uses them for tool selection).
+# Register read-only tools in safeguard._TOOL_READONLY.
 # ═══════════════════════════════════════════════════════
 
 @tool
@@ -98,14 +85,16 @@ async def beispiel_tool(parameter: str, connection_id: str = "") -> str:
     """
     try:
         client = await _get_api_client(connection_id)
-        # TODO: implement the real API call here
         logger.info("beispiel_tool called with parameter=%s", parameter)
-        return f"Example tool executed successfully with parameter '{parameter}'."
-    except Exception as e:
+        return (
+            "Example tool executed successfully with parameter "
+            f"'{parameter}' (source: {client['base_url']})."
+        )
+    except ValueError as e:
         logger.error("beispiel_tool failed: %s", e)
         return _t(
-            de=f"Fehler: {e}",
-            en=f"Error: {e}",
+            de="Anfrage fehlgeschlagen. Prüfe die Verbindungskonfiguration.",
+            en="Request failed. Check connection configuration.",
         )
 
 
@@ -117,13 +106,12 @@ async def lade_daten(connection_id: str = "") -> dict:
     """
     try:
         client = await _get_api_client(connection_id)
-        # TODO: implement the real API call here
         logger.info("lade_daten called")
         return {
             "status": "success",
             "items": [1, 2, 3],
             "source": client["base_url"],
         }
-    except Exception as e:
+    except ValueError as e:
         logger.error("lade_daten failed: %s", e)
-        return {"error": str(e)}
+        return {"error": "Request failed. Check connection configuration."}

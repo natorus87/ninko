@@ -69,7 +69,7 @@ async def _get_k8s_client(
         config_dict = yaml.safe_load(kubeconfig_str)
         config.load_kube_config_from_dict(config_dict)
     except Exception as e:
-        logger.error(f"Failed to parse kubeconfig: {e}")
+        logger.error("Failed to parse kubeconfig: %s", e)
         raise ValueError(f"Invalid kubeconfig for connection '{conn.name}'. Please check the file.")
 
     return client.CoreV1Api(), client.AppsV1Api(), client.NetworkingV1Api()

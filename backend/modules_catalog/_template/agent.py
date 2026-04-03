@@ -18,7 +18,9 @@ TEMPLATE_SYSTEM_PROMPT = _t(
     de="""Du bist der Template-Spezialist von Ninko.
 
 Deine Fähigkeiten:
-- TODO: Beschreibe hier die Fähigkeiten des Moduls
+- Führe Beispiel-Operationen über die Modul-Tools aus
+- Lade strukturierte Daten für Dashboards oder Auswertungen
+- Erkläre bei Fehlern klar, welche Konfiguration fehlt
 
 Verhaltensregeln:
 - Sei präzise und hilfreich
@@ -31,7 +33,9 @@ Sicherheit:
     en="""You are Ninko's Template specialist.
 
 Your capabilities:
-- TODO: Describe the module's capabilities here
+- Run example operations via the module tools
+- Load structured data for dashboards and analysis
+- Explain clearly which configuration is missing when a tool fails
 
 Behavior rules:
 - Be precise and helpful

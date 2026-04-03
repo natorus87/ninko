@@ -5,6 +5,7 @@ Redmine Modul – FastAPI Router für Dashboard-API.
 from __future__ import annotations
 
 import logging
+from typing import Any
 from fastapi import APIRouter, Request
 
 from .tools import (
@@ -142,7 +143,7 @@ async def hrm_attendances(
 
 @router.post("/hrm/attendances")
 async def hrm_create_attendance(
-    attendance_payload: dict,
+    attendance_payload: dict[str, Any],
     connection_id: str = "",
 ) -> dict:
     try:

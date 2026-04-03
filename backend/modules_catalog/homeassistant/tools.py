@@ -72,10 +72,10 @@ async def ha_get_entity_state(entity_id: str, connection_id: str = "") -> str:
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
             return f"Entity '{entity_id}' was not found."
-        logger.error(f"HTTP error in ha_get_entity_state: {e}")
+        logger.error("HTTP error in ha_get_entity_state: %s", e)
         return f"Error communicating with Home Assistant: {e}"
     except Exception as e:
-        logger.error(f"Error in ha_get_entity_state: {e}")
+        logger.error("Error in ha_get_entity_state: %s", e)
         return f"An unexpected error occurred: {e}"
 
 @tool
@@ -124,10 +124,10 @@ async def ha_call_service(service_name: str, entity_id: str, service_data_json: 
             extra_info = f" mit Parametern {service_data_json}" if service_data_json else ""
             return f"Service '{service_name}' was called successfully for '{entity_id}'{extra_info}."
     except httpx.HTTPError as e:
-        logger.error(f"HTTP error in ha_call_service: {e}")
+        logger.error("HTTP error in ha_call_service: %s", e)
         return f"Error communicating with Home Assistant API: {e}"
     except Exception as e:
-        logger.error(f"Error in ha_call_service: {e}")
+        logger.error("Error in ha_call_service: %s", e)
         return f"An unexpected error occurred: {e}"
 
 @tool
@@ -197,7 +197,7 @@ async def ha_list_entities(domain_filter: str = "", name_search: str = "", conne
 
             return header + "\n" + "\n".join(entities)
     except Exception as e:
-        logger.error(f"Error in ha_list_entities: {e}")
+        logger.error("Error in ha_list_entities: %s", e)
         return f"Error listing entities: {e}"
 
 
@@ -335,7 +335,7 @@ async def ha_find_device(search: str, connection_id: str = "") -> str:
             )
         return f"Error communicating with Home Assistant: {e}"
     except Exception as e:
-        logger.error(f"Error in ha_find_device: {e}")
+        logger.error("Error in ha_find_device: %s", e)
         return f"An unexpected error occurred: {e}"
 
 
@@ -378,5 +378,5 @@ async def ha_get_entity_details(entity_id: str, connection_id: str = "") -> str:
             return f"Entity '{entity_id}' was not found."
         return f"Error communicating with Home Assistant: {e}"
     except Exception as e:
-        logger.error(f"Error in ha_get_entity_details: {e}")
+        logger.error("Error in ha_get_entity_details: %s", e)
         return f"An unexpected error occurred: {e}"

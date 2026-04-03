@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json as _json
 import logging
+import os
 import re
 from typing import Any, Sequence, TYPE_CHECKING
 
@@ -39,7 +40,7 @@ def _get_language() -> str:
         from core.config import get_settings
 
         return get_settings().LANGUAGE
-    except Exception:
+    except (ImportError, AttributeError):
         return "de"
 
 
@@ -197,6 +198,18 @@ _TOOL_LABELS: dict[str, tuple[str, str]] = {
     "create_openproject_work_package": ("Erstelle Task", "Creating task"),
     "update_openproject_work_package": ("Aktualisiere Task", "Updating task"),
     "log_openproject_time": ("Buche Zeit", "Logging time"),
+    # Nextcloud
+    "list_nextcloud_files": ("Lade Dateien", "Loading files"),
+    "search_nextcloud_files": ("Suche Dateien", "Searching files"),
+    "list_nextcloud_users": ("Lade Benutzer", "Loading users"),
+    "get_nextcloud_user": ("Lade Benutzerdetails", "Loading user details"),
+    "list_nextcloud_shares": ("Lade Shares", "Loading shares"),
+    "get_nextcloud_storage": ("Lade Speicher", "Loading storage"),
+    "create_nextcloud_folder": ("Erstelle Ordner", "Creating folder"),
+    "upload_nextcloud_file": ("Lade Datei hoch", "Uploading file"),
+    "delete_nextcloud_file": ("Lösche Datei", "Deleting file"),
+    "create_nextcloud_share": ("Erstelle Share", "Creating share"),
+    "create_nextcloud_user": ("Erstelle Benutzer", "Creating user"),
     # Redmine
     "get_redmine_projects": ("Lade Projekte", "Loading projects"),
     "get_redmine_project": ("Lade Projekt", "Loading project"),
@@ -275,17 +288,18 @@ class _StatusEmitter(AsyncCallbackHandler):
         await status_bus.emit(self.session_id, _t("Denke nach…", "Thinking…"))
 
 
+_DEFAULT_AGENT_TIMEOUT_SECONDS = 1800
 # Ab dieser Tool-Anzahl wird JIT Tool Injection aktiviert
-_JIT_THRESHOLD = 6
+_DEFAULT_JIT_THRESHOLD = 6
 # Max. Tools nach JIT-Filterung (Kontext-Sparsamkeit)
-_JIT_MAX_TOOLS = 8
+_DEFAULT_JIT_MAX_TOOLS = 8
 
 # Strong references to background tasks to prevent premature GC
 _background_tasks: set[asyncio.Task] = set()
 
 # Auto-Memorize Cooldown: (agent_name, session_id) → letzter Zeitstempel (monotonic)
 _memorize_cooldowns: dict[tuple[str, str], float] = {}
-_MEMORIZE_COOLDOWN_SECS = 60.0  # Max 1 Auto-Memorize pro Minute pro Agent
+_DEFAULT_MEMORIZE_COOLDOWN_SECS = 60.0  # Max 1 Auto-Memorize pro Minute pro Agent
 # Agenten die kein Auto-Memorize brauchen (Background-Loops)
 _MEMORIZE_EXCLUDED_AGENTS = {"monitor", "scheduler"}
 _MEMORIZE_STOP_WORDS = {
@@ -333,9 +347,41 @@ def _get_agent_timeout_seconds() -> int:
         from core.config import get_settings
 
         timeout = int(get_settings().AGENT_TIMEOUT_SECONDS)
-        return timeout if timeout > 0 else 1800
-    except Exception:
-        return 1800
+        return timeout if timeout > 0 else _DEFAULT_AGENT_TIMEOUT_SECONDS
+    except (ImportError, AttributeError, TypeError, ValueError):
+        return _DEFAULT_AGENT_TIMEOUT_SECONDS
+
+
+def _get_jit_threshold() -> int:
+    """JIT-Schwelle aus Env laden (Fallback auf Default)."""
+    try:
+        value = int(os.getenv("NINKO_AGENT_JIT_THRESHOLD", str(_DEFAULT_JIT_THRESHOLD)))
+        return max(1, value)
+    except ValueError:
+        return _DEFAULT_JIT_THRESHOLD
+
+
+def _get_jit_max_tools() -> int:
+    """Maximale Anzahl JIT-Tools aus Env laden (Fallback auf Default)."""
+    try:
+        value = int(os.getenv("NINKO_AGENT_JIT_MAX_TOOLS", str(_DEFAULT_JIT_MAX_TOOLS)))
+        return max(1, value)
+    except ValueError:
+        return _DEFAULT_JIT_MAX_TOOLS
+
+
+def _get_memorize_cooldown_secs() -> float:
+    """Auto-Memorize-Cooldown aus Env laden (Fallback auf Default)."""
+    try:
+        value = float(
+            os.getenv(
+                "NINKO_AGENT_MEMORIZE_COOLDOWN_SECS",
+                str(_DEFAULT_MEMORIZE_COOLDOWN_SECS),
+            )
+        )
+        return max(0.0, value)
+    except ValueError:
+        return _DEFAULT_MEMORIZE_COOLDOWN_SECS
 
 
 # Sprachanweisungen für Language-Injection am Ende jedes System-Prompts
@@ -424,7 +470,10 @@ class BaseAgent:
         Gibt nur die für diese Anfrage relevanten Tools zurück.
         Reduziert Kontext-Overhead bei Agenten mit vielen Tools.
         """
-        if len(self.tools) <= _JIT_THRESHOLD:
+        jit_threshold = _get_jit_threshold()
+        jit_max_tools = _get_jit_max_tools()
+
+        if len(self.tools) <= jit_threshold:
             return self.tools
 
         msg_lower = message.lower()
@@ -448,9 +497,9 @@ class BaseAgent:
         if len(relevant) < 3:
             return self.tools
 
-        # Sortiert nach Score, max. _JIT_MAX_TOOLS
+        # Sortiert nach Score, max. JIT-Max-Tools
         top = sorted(scored, key=lambda x: x[0], reverse=True)
-        selected = [t for _, t in top[:_JIT_MAX_TOOLS]]
+        selected = [t for _, t in top[:jit_max_tools]]
         logger.debug(
             "JIT Tool Injection: Agent '%s' %d → %d Tools.",
             self.name,
@@ -781,7 +830,7 @@ class BaseAgent:
             if (
                 len(response) >= 80
                 and self.name not in _MEMORIZE_EXCLUDED_AGENTS
-                and (_now - _last) >= _MEMORIZE_COOLDOWN_SECS
+                and (_now - _last) >= _get_memorize_cooldown_secs()
             ):
                 _memorize_cooldowns[_cooldown_key] = _now
                 _task = asyncio.create_task(self._auto_memorize(message, response))

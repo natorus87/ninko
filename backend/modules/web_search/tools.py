@@ -22,7 +22,7 @@ async def perform_web_search(query: str, connection_id: str = "") -> List[Dict[s
     searxng_url = os.getenv("SEARXNG_URL", "http://localhost:8080").rstrip("/")
     search_endpoint = f"{searxng_url}/search"
     
-    logger.info(f"Führe Web-Suche durch: '{query}' via {search_endpoint}")
+    logger.info("Führe Web-Suche durch: '%s' via %s", query, search_endpoint)
     
     params = {
         "q": query,
@@ -43,7 +43,7 @@ async def perform_web_search(query: str, connection_id: str = "") -> List[Dict[s
             results = data.get("results", [])
             
             if not results:
-                logger.warning(f"Keine Suchergebnisse gefunden für Query: {query}")
+                logger.warning("Keine Suchergebnisse gefunden für Query: %s", query)
                 return [{"title": "Web Search", "url": "", "content": "Keine Ergebnisse gefunden."}]
                 
             formatted_results = []
@@ -58,10 +58,14 @@ async def perform_web_search(query: str, connection_id: str = "") -> List[Dict[s
             return formatted_results
             
     except httpx.TimeoutException:
-        logger.error(f"Timeout bei Web-Suche nach '{query}'")
+        logger.error("Timeout bei Web-Suche nach '%s'", query)
         return [{"title": "Error", "url": "", "content": "Zeitüberschreitung bei der Kommunikation mit dem Such-Backend (SearXNG)."}]
     except httpx.HTTPStatusError as e:
-        logger.error(f"HTTP Fehler bei Web-Suche: {e.response.status_code} - {e.response.text}")
+        logger.error(
+            "HTTP Fehler bei Web-Suche: %s - %s",
+            e.response.status_code,
+            e.response.text,
+        )
         return [{"title": "Error", "url": "", "content": f"Such-Backend meldete einen HTTP Fehler: {e.response.status_code}."}]
     except Exception:
         logger.exception("Unerwarteter Fehler bei der Web-Suche")

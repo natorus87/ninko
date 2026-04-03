@@ -77,7 +77,7 @@
       "version": "1.0.0",
       "author": "Ninko Team"
     },
-    {
+{
       "name": "linux_server",
       "display_name": "Linux Server",
       "description": "Linux Server Management über SSH – Befehle, Services, Monitoring, Dateien",
@@ -85,23 +85,9 @@
       "author": "Ninko Team"
     },
     {
-      "name": "lenovo_xclarity",
-      "display_name": "Lenovo XClarity",
-      "description": "Lenovo XClarity Administrator – ThinkSystem/ThinkBlade Server Management.",
-      "version": "1.0.0",
-      "author": "Ninko"
-    },
-    {
-      "name": "microsoft_entra",
-      "display_name": "Microsoft Entra",
-      "description": "Microsoft Entra ID (formerly Azure AD) – Users, Groups, Applications, Devices.",
-      "version": "1.0.0",
-      "author": "Ninko"
-    },
-    {
-      "name": "microsoft_intune",
-      "display_name": "Microsoft Intune",
-      "description": "Microsoft Intune MDM – Mobile Device Management, Policies, Apps, Compliance.",
+      "name": "nextcloud",
+      "display_name": "Nextcloud",
+      "description": "Nextcloud File Sync and Share – Files, Folders, Shares, Users.",
       "version": "1.0.0",
       "author": "Ninko"
     },

@@ -18,6 +18,14 @@ from core.vault import get_vault
 
 logger = logging.getLogger("ninko.modules.redmine.tools")
 
+_REDMINE_TOOL_EXCEPTIONS = (
+    httpx.HTTPError,
+    ValueError,
+    KeyError,
+    TypeError,
+    json.JSONDecodeError,
+)
+
 
 def _public_error() -> dict:
     return {"error": "Request failed. Check server logs."}
@@ -181,7 +189,7 @@ async def get_redmine_projects(connection_id: str = "") -> dict:
             "projects": result.get("projects", []),
             "total": result.get("total_count", 0),
         }
-    except Exception as e:
+    except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error("get_redmine_projects failed: %s", e)
         return _public_error()
 
@@ -204,7 +212,7 @@ async def get_redmine_project(project_id: str, connection_id: str = "") -> dict:
             "status": "success",
             "project": result.get("project", {}),
         }
-    except Exception as e:
+    except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error("get_redmine_project failed: %s", e)
         return _public_error()
 
@@ -241,7 +249,7 @@ async def get_redmine_issues(
             "issues": result.get("issues", []),
             "total": result.get("total_count", 0),
         }
-    except Exception as e:
+    except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error("get_redmine_issues failed: %s", e)
         return _public_error()
 
@@ -265,7 +273,7 @@ async def get_redmine_issue(issue_id: str, connection_id: str = "") -> dict:
             "status": "success",
             "issue": result.get("issue", {}),
         }
-    except Exception as e:
+    except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error("get_redmine_issue failed: %s", e)
         return _public_error()
 
@@ -308,7 +316,7 @@ async def create_redmine_issue(
             "message": f"Issue created: #{result.get('issue', {}).get('id')}",
             "issue": result.get("issue", {}),
         }
-    except Exception as e:
+    except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error("create_redmine_issue failed: %s", e)
         return _public_error()
 
@@ -348,7 +356,7 @@ async def update_redmine_issue(
             "message": f"Issue #{issue_id} updated.",
             "issue": result.get("issue", {}),
         }
-    except Exception as e:
+    except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error("update_redmine_issue failed: %s", e)
         return _public_error()
 
@@ -373,7 +381,7 @@ async def get_redmine_users(connection_id: str = "") -> dict:
             "users": result.get("users", []),
             "total": result.get("total_count", 0),
         }
-    except Exception as e:
+    except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error("get_redmine_users failed: %s", e)
         return _public_error()
 
@@ -411,7 +419,7 @@ async def get_redmine_time_entries(
             "time_entries": result.get("time_entries", []),
             "total": result.get("total_count", 0),
         }
-    except Exception as e:
+    except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error("get_redamine_time_entries failed: %s", e)
         return _public_error()
 
@@ -451,7 +459,7 @@ async def log_redmine_time(
             "message": f"Time logged: {hours}h on issue #{issue_id}",
             "time_entry": result.get("time_entry", {}),
         }
-    except Exception as e:
+    except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error("log_redmine_time failed: %s", e)
         return _public_error()
 
@@ -474,7 +482,7 @@ async def get_redmine_issue_statuses(connection_id: str = "") -> dict:
             "status": "success",
             "statuses": result.get("issue_statuses", []),
         }
-    except Exception as e:
+    except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error("get_redmine_issue_statuses failed: %s", e)
         return _public_error()
 
@@ -497,7 +505,7 @@ async def get_redmine_priorities(connection_id: str = "") -> dict:
             "status": "success",
             "priorities": result.get("issue_priorities", []),
         }
-    except Exception as e:
+    except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error("get_redmine_priorities failed: %s", e)
         return _public_error()
 
@@ -525,7 +533,7 @@ async def search_redmine_issues(
             "issues": result.get("issues", []),
             "total": result.get("total_count", 0),
         }
-    except Exception as e:
+    except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error("search_redmine_issues failed: %s", e)
         return _public_error()
 
@@ -567,7 +575,7 @@ async def get_redmine_issue_counts(
             "closed": closed_count,
             "total": len(issues),
         }
-    except Exception as e:
+    except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error("get_redmine_issue_counts failed: %s", e)
         return _public_error()
 
@@ -611,7 +619,7 @@ async def call_redmine_hrm_api(
             "endpoint": full_endpoint,
             "data": result,
         }
-    except Exception as e:
+    except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error("call_redmine_hrm_api failed: %s", e)
         return _public_error()
 
@@ -657,7 +665,7 @@ async def call_redmine_reporting_api(
             "endpoint": full_endpoint,
             "data": result,
         }
-    except Exception as e:
+    except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error("call_redmine_reporting_api failed: %s", e)
         return _public_error()
 
@@ -691,7 +699,7 @@ async def get_redmine_hrm_attendances(
                 "connection_id": connection_id,
             }
         )
-    except Exception as e:
+    except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error("get_redmine_hrm_attendances failed: %s", e)
         return _public_error()
 
@@ -717,7 +725,7 @@ async def create_redmine_hrm_attendance(
                 "connection_id": connection_id,
             }
         )
-    except Exception as e:
+    except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error("create_redmine_hrm_attendance failed: %s", e)
         return _public_error()
 
@@ -739,7 +747,7 @@ async def get_redmine_hrm_attendance(
                 "connection_id": connection_id,
             }
         )
-    except Exception as e:
+    except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error("get_redmine_hrm_attendance failed: %s", e)
         return _public_error()
 
@@ -768,7 +776,7 @@ async def get_redmine_hrm_user_capacity(
                 "connection_id": connection_id,
             }
         )
-    except Exception as e:
+    except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error("get_redmine_hrm_user_capacity failed: %s", e)
         return _public_error()
 
@@ -800,7 +808,7 @@ async def get_redmine_hrm_holidays(
                 "connection_id": connection_id,
             }
         )
-    except Exception as e:
+    except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error("get_redmine_hrm_holidays failed: %s", e)
         return _public_error()
 
@@ -834,7 +842,7 @@ async def get_redmine_reporting_budgets(
                 "connection_id": connection_id,
             }
         )
-    except Exception as e:
+    except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error("get_redmine_reporting_budgets failed: %s", e)
         return _public_error()
 
@@ -874,7 +882,7 @@ async def get_redmine_project_budgets(
             "endpoint": f"projects/{project_id}/budgets.json",
             "data": data,
         }
-    except Exception as e:
+    except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error("get_redmine_project_budgets failed: %s", e)
         return _public_error()
 
@@ -910,6 +918,6 @@ async def get_redmine_reporting_time_logs(
                 "connection_id": connection_id,
             }
         )
-    except Exception as e:
+    except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error("get_redmine_reporting_time_logs failed: %s", e)
         return _public_error()

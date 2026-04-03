@@ -5,6 +5,7 @@ Lenovo XClarity Administrator API.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from typing import Optional
@@ -17,6 +18,14 @@ from core.connections import ConnectionManager
 from core.vault import get_vault
 
 logger = logging.getLogger("ninko.modules.lenovo_xclarity.tools")
+
+_XCLARITY_TOOL_EXCEPTIONS = (
+    aiohttp.ClientError,
+    asyncio.TimeoutError,
+    ValueError,
+    KeyError,
+    TypeError,
+)
 
 
 def _public_tool_error() -> str:
@@ -146,7 +155,7 @@ async def list_xclarity_servers(connection_id: str = "") -> str:
         lines.append(f"\n✓ {total} Server")
 
         return "\n".join(lines)
-    except Exception as e:
+    except _XCLARITY_TOOL_EXCEPTIONS as e:
         logger.error("list_xclarity_servers failed: %s", e)
         return _public_tool_error()
 
@@ -189,7 +198,7 @@ async def get_xclarity_server_details(server_name: str, connection_id: str = "")
             lines.append(f"  Serial: {server.get('serialNumber')}")
 
         return "\n".join(lines)
-    except Exception as e:
+    except _XCLARITY_TOOL_EXCEPTIONS as e:
         logger.error("get_xclarity_server_details failed: %s", e)
         return _public_tool_error()
 
@@ -218,7 +227,7 @@ async def list_xclarity_chassis(connection_id: str = "") -> str:
         lines.append(f"\n✓ {total} Chassis")
 
         return "\n".join(lines)
-    except Exception as e:
+    except _XCLARITY_TOOL_EXCEPTIONS as e:
         logger.error("list_xclarity_chassis failed: %s", e)
         return _public_tool_error()
 
@@ -247,7 +256,7 @@ async def list_xclarity_storage(connection_id: str = "") -> str:
         lines.append(f"\n✓ {total} Storage")
 
         return "\n".join(lines)
-    except Exception as e:
+    except _XCLARITY_TOOL_EXCEPTIONS as e:
         logger.error("list_xclarity_storage failed: %s", e)
         return _public_tool_error()
 
@@ -282,7 +291,7 @@ async def get_xclarity_server_health(server_name: str, connection_id: str = "") 
         lines.append(f"  Overall Health: {server.get('overallHealth', 'unknown')}")
 
         return "\n".join(lines)
-    except Exception as e:
+    except _XCLARITY_TOOL_EXCEPTIONS as e:
         logger.error("get_xclarity_server_health failed: %s", e)
         return _public_tool_error()
 
@@ -314,7 +323,7 @@ async def list_xclarity_events(connection_id: str = "") -> str:
             lines.append(f"  {sev_icon} [{severity}] {msg}")
 
         return "\n".join(lines)
-    except Exception as e:
+    except _XCLARITY_TOOL_EXCEPTIONS as e:
         logger.error("list_xclarity_events failed: %s", e)
         return _public_tool_error()
 
@@ -352,7 +361,7 @@ async def get_xclarity_firmware(server_name: str, connection_id: str = "") -> st
             lines.append(f"  {f.get('name', '-')}: {f.get('version', '-')}")
 
         return "\n".join(lines)
-    except Exception as e:
+    except _XCLARITY_TOOL_EXCEPTIONS as e:
         logger.error("get_xclarity_firmware failed: %s", e)
         return _public_tool_error()
 
@@ -396,7 +405,7 @@ async def power_on_xclarity_server(server_name: str, connection_id: str = "") ->
             de=f"✅ Server wird eingeschaltet: {server_name}",
             en=f"✅ Server powering on: {server_name}",
         )
-    except Exception as e:
+    except _XCLARITY_TOOL_EXCEPTIONS as e:
         logger.error("power_on_xclarity_server failed: %s", e)
         return _public_tool_error()
 
@@ -435,7 +444,7 @@ async def power_off_xclarity_server(server_name: str, connection_id: str = "") -
             de=f"✅ Server wird ausgeschaltet: {server_name}",
             en=f"✅ Server powering off: {server_name}",
         )
-    except Exception as e:
+    except _XCLARITY_TOOL_EXCEPTIONS as e:
         logger.error("power_off_xclarity_server failed: %s", e)
         return _public_tool_error()
 
@@ -474,7 +483,7 @@ async def restart_xclarity_server(server_name: str, connection_id: str = "") -> 
             de=f"✅ Server wird neu gestartet: {server_name}",
             en=f"✅ Server restarting: {server_name}",
         )
-    except Exception as e:
+    except _XCLARITY_TOOL_EXCEPTIONS as e:
         logger.error("restart_xclarity_server failed: %s", e)
         return _public_tool_error()
 
@@ -513,6 +522,6 @@ async def identify_xclarity_server(server_name: str, connection_id: str = "") ->
             de=f"✅ Server-LED wird aktiviert: {server_name}",
             en=f"✅ Server LED activated: {server_name}",
         )
-    except Exception as e:
+    except _XCLARITY_TOOL_EXCEPTIONS as e:
         logger.error("identify_xclarity_server failed: %s", e)
         return _public_tool_error()

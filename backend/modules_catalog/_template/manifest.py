@@ -5,7 +5,6 @@ Template Modul – Manifest mit Metadaten und Health-Check.
 from __future__ import annotations
 
 import logging
-import os
 
 from core.module_registry import ModuleManifest
 
@@ -14,19 +13,15 @@ logger = logging.getLogger("ninko.modules.template")
 
 async def check_template_health() -> dict:
     """Health-Check für die Ziel-API."""
-    try:
-        # TODO: Implementiere echten Health-Check (z.B. GET /api/status)
-        return {"status": "ok", "detail": "Template Service erreichbar"}
-    except Exception as e:
-        return {"status": "error", "detail": str(e)}
+    return {"status": "ok", "detail": "Template service reachable"}
 
 
 module_manifest = ModuleManifest(
     name="template",
     display_name="Template Modul",
-    description="Eine Vorlage zum Erstellen neuer Ninko Module.",
+    description="Vorlage zum Erstellen neuer Ninko-Module.",
     version="1.0.0",
-    author="Dein Name",
+    author="Ninko Team",
     enabled_by_default=False,  # Standardmäßig deaktiviert
     env_prefix="TEMPLATE_",    # Präfix für Env-Variablen
 
