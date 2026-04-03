@@ -7,11 +7,12 @@ metadata:
     app.kubernetes.io/part-of: ninko
 spec:
   entryPoints:
-    - web
     - websecure
   routes:
-    - match: Host(`ninko.your-domain.local`)
+    - match: Host(`ninko.conbro.local`)
       kind: Rule
       services:
         - name: ninko-backend
           port: 8000
+  tls:
+    secretName: ninko-conbro-local-tls

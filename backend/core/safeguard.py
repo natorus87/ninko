@@ -1011,8 +1011,39 @@ _TOOL_READONLY: frozenset[str] = frozenset(
         "check_synology_updates",
         "get_synology_network_info",
         "get_synology_users",
+        "get_synology_groups",
     }
-)
+    # Redmine read-only
+    "get_redmine_projects", "get_redmine_project", "get_redmine_issues",
+    "get_redmine_issue", "get_redmine_users", "get_redmine_time_entries",
+    "get_redmine_issue_statuses", "get_redmine_priorities", "search_redmine_issues",
+    "get_redmine_issue_counts",
+    # GLPI read-only
+    "get_ticket", "search_tickets", "search_users", "list_groups",
+    "list_categories", "get_ticket_stats", "get_ticket_attachments",
+    "get_ticket_followups", "get_ticket_solutions",
+    # Confluence read-only
+    "get_confluence_spaces",
+    "get_confluence_space",
+    "get_confluence_pages",
+    "get_confluence_page",
+    "get_confluence_blog_posts",
+    "search_confluence",
+    "get_confluence_labels",
+    "get_confluence_page_history",
+    # Jira read-only
+    "get_jira_projects",
+    "get_jira_project",
+    "get_jira_issues",
+    "get_jira_issue",
+    "get_jira_boards",
+    "get_jira_sprints",
+    "get_jira_sprint",
+    "search_jira",
+    "get_jira_issue_transitions",
+    "get_jira_priorities",
+    "get_jira_issue_counts",
+})
 
 
 def _keyword_prefilter(text: str) -> SafeguardResult | None:

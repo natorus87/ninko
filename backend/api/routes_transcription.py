@@ -23,11 +23,14 @@ import logging
 import os
 import tempfile
 import threading
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
+
+from core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +83,46 @@ class TranscriptionResponse(BaseModel):
     language: str
 
 
+def _parse_csv_set(raw: str) -> set[str]:
+    return {x.strip().lower() for x in (raw or "").split(",") if x.strip()}
+
+
+def _validate_upload_meta(
+    *,
+    filename: str,
+    content_type: str,
+    byte_len: int,
+) -> None:
+    cfg = get_settings()
+    max_bytes = int(cfg.TRANSCRIPTION_MAX_UPLOAD_BYTES)
+    if byte_len <= 0:
+        raise HTTPException(status_code=400, detail="Leere Audio-Datei empfangen.")
+    if byte_len > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"Audio-Datei zu groß ({byte_len} Bytes). "
+                f"Maximum: {max_bytes} Bytes."
+            ),
+        )
+
+    ext = Path(filename).suffix.lower()
+    allowed_ext = _parse_csv_set(cfg.TRANSCRIPTION_ALLOWED_EXTENSIONS)
+    if ext not in allowed_ext:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Dateiendung '{ext or '<none>'}' nicht erlaubt.",
+        )
+
+    allowed_mime = _parse_csv_set(cfg.TRANSCRIPTION_ALLOWED_MIME)
+    ctype = (content_type or "").split(";")[0].strip().lower()
+    if ctype and ctype not in allowed_mime:
+        raise HTTPException(
+            status_code=415,
+            detail=f"MIME-Type '{ctype}' nicht erlaubt.",
+        )
+
+
 # ── Provider-Implementierungen ────────────────────────────────────────────────
 
 async def _transcribe_whisper(tmp_path: str) -> tuple[str, float, str]:
@@ -121,7 +164,7 @@ async def _transcribe_openai_compatible(tmp_path: str, filename: str) -> tuple[s
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
-    ext = "." + filename.rsplit(".", 1)[-1].lower()
+    ext = Path(filename).suffix.lower() or ".webm"
     mime = "audio/webm" if ext == ".webm" else "audio/ogg" if ext == ".ogg" else "audio/mpeg"
 
     with open(tmp_path, "rb") as f:
@@ -154,11 +197,13 @@ async def transcribe_audio(file: UploadFile = File(...)) -> TranscriptionRespons
     Wird vom Chat-Dashboard (Mikrofon-Button) und den Bot-Modulen genutzt.
     """
     content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Leere Audio-Datei empfangen.")
-
     filename = file.filename or "audio.webm"
-    ext = "." + filename.rsplit(".", 1)[-1].lower()
+    _validate_upload_meta(
+        filename=filename,
+        content_type=file.content_type or "",
+        byte_len=len(content),
+    )
+    ext = Path(filename).suffix.lower() or ".ogg"
 
     tmp_path: str | None = None
     try:
@@ -218,6 +263,11 @@ async def transcribe_bytes_extended(
     Returns:
         (text, avg_confidence, detected_language)
     """
+    _validate_upload_meta(
+        filename=filename,
+        content_type="",
+        byte_len=len(audio_bytes),
+    )
     ext = "." + filename.rsplit(".", 1)[-1].lower()
     tmp_path: str | None = None
     try:

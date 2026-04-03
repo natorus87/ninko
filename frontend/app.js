@@ -83,6 +83,17 @@ const Ninko = {
     _safeguardPendingMessage: null,
     _confirmedPending: false,
     _forcedModule: null,
+    _branding: {
+        brand_name: 'Ninko',
+        page_title: 'Ninko',
+        logo_url: '/static/images/logo_icon.png',
+        welcome_mode: 'image',
+        welcome_title: 'Ninko',
+        welcome_text: '',
+        welcome_image_url: '/static/images/logo_dashboard_new.png?v=3',
+        welcome_show_eyes: true,
+        show_quick_actions: true,
+    },
 
     // ─── SVG Icon Library (Lucide-style, currentColor) ───
     _ic: {
@@ -135,6 +146,9 @@ const Ninko = {
                 }
             } catch { /* Fallback */ }
         }
+
+        await this.loadBrandingSettings();
+        this.applyBranding();
 
         this.switchTab('chat');
 
@@ -966,23 +980,7 @@ const Ninko = {
     newChat() {
         this._chatMessages = [];
         // Save current session to history first
-        const container = document.getElementById('chat-messages');
-        container.innerHTML = `
-            <div class="welcome-message">
-                <div class="logo-wrapper">
-                    <img src="/static/images/logo_dashboard_new.png?v=3" alt="Ninko Core" class="welcome-illustration" />
-                    <div class="eye eye-left"></div>
-                    <div class="eye eye-right"></div>
-                </div>
-                <h2>Ninko</h2>
-                <p>${t('chat.welcome.desc')}</p>
-                <div class="quick-actions">
-                    <button class="quick-action" onclick="Ninko.sendQuick(this.dataset.msg)" data-msg="${t('quick.createAgentMsg')}">${t('quick.createAgent')}</button>
-                    <button class="quick-action" onclick="Ninko.sendQuick(this.dataset.msg)" data-msg="${t('quick.rememberFactMsg')}">${t('quick.rememberFact')}</button>
-                    <button class="quick-action" onclick="Ninko.sendQuick(this.dataset.msg)" data-msg="${t('quick.webSearchMsg')}">${t('quick.webSearch')}</button>
-                    <button class="quick-action" onclick="Ninko.sendQuick(this.dataset.msg)" data-msg="${t('quick.showAgentsMsg')}">${t('quick.showAgents')}</button>
-                </div>
-            </div>`;
+        this.renderWelcomeState();
 
         // Switch back to centered state
         this._setChatState('centered');
@@ -1004,6 +1002,60 @@ const Ninko = {
         if (label) label.textContent = t('chat.newChat');
 
         this.renderHistory();
+    },
+
+    getWelcomeHtml() {
+        const b = this._branding || {};
+        const mode = b.welcome_mode || 'image';
+        const title = this._escapeHtml(b.welcome_title || b.brand_name || 'Ninko');
+        const fallbackText = t('chat.welcome.desc');
+        const text = this._escapeHtml((b.welcome_text || '').trim() || fallbackText);
+
+        const quickActions = b.show_quick_actions === false ? '' : `
+            <div class="quick-actions">
+                <button class="quick-action" onclick="Ninko.sendQuick(this.dataset.msg)" data-msg="${t('quick.createAgentMsg')}">${t('quick.createAgent')}</button>
+                <button class="quick-action" onclick="Ninko.sendQuick(this.dataset.msg)" data-msg="${t('quick.rememberFactMsg')}">${t('quick.rememberFact')}</button>
+                <button class="quick-action" onclick="Ninko.sendQuick(this.dataset.msg)" data-msg="${t('quick.webSearchMsg')}">${t('quick.webSearch')}</button>
+                <button class="quick-action" onclick="Ninko.sendQuick(this.dataset.msg)" data-msg="${t('quick.showAgentsMsg')}">${t('quick.showAgents')}</button>
+            </div>
+        `;
+
+        if (mode === 'off') {
+            return `<div class="welcome-message">
+                <h2>${title}</h2>
+                <p>${text}</p>
+                ${quickActions}
+            </div>`;
+        }
+
+        if (mode === 'text') {
+            return `<div class="welcome-message">
+                <h2>${title}</h2>
+                <p>${text}</p>
+                ${quickActions}
+            </div>`;
+        }
+
+        const imageUrl = this._escapeHtml(b.welcome_image_url || '/static/images/logo_dashboard_new.png?v=3');
+        const eyes = b.welcome_show_eyes === false
+            ? ''
+            : '<div class="eye eye-left"></div><div class="eye eye-right"></div>';
+        return `<div class="welcome-message">
+            <div class="logo-wrapper">
+                <img src="${imageUrl}" alt="${title}" class="welcome-illustration" />
+                ${eyes}
+            </div>
+            <h2>${title}</h2>
+            <p>${text}</p>
+            ${quickActions}
+        </div>`;
+    },
+
+    renderWelcomeState() {
+        const container = document.getElementById('chat-messages');
+        if (!container) return;
+        container.innerHTML = this.getWelcomeHtml();
+        this._setChatState('centered');
     },
 
     // ─── Context Clear ───
@@ -1857,6 +1909,210 @@ const Ninko = {
     },
 
     // ─── Settings ───
+    async loadBrandingSettings() {
+        try {
+            const res = await fetch('/api/settings/branding', { cache: 'no-store' });
+            if (!res.ok) return;
+            const data = await res.json();
+            this._branding = { ...this._branding, ...(data || {}) };
+        } catch { /* ignore */ }
+    },
+
+    applyBranding() {
+        const b = this._branding || {};
+        const pageTitle = (b.page_title || b.brand_name || 'Ninko').trim() || 'Ninko';
+        document.title = pageTitle;
+        const desc = document.querySelector('meta[name="description"]');
+        if (desc) {
+            desc.setAttribute('content', `${b.brand_name || 'Ninko'} – IT-Operations-AI-Agent Dashboard`);
+        }
+
+        const logoImg = document.querySelector('.logo-icon img');
+        if (logoImg) {
+            logoImg.src = b.logo_url || '/static/images/logo_icon.png';
+            logoImg.alt = b.brand_name || 'Ninko';
+        }
+        document.querySelectorAll('.logo-text').forEach(el => {
+            el.textContent = b.brand_name || 'Ninko';
+        });
+
+        const chatTitle = document.querySelector('.welcome-message h2');
+        if (chatTitle) {
+            this.renderWelcomeState();
+        }
+    },
+
+    async loadBrandingForm() {
+        await this.loadBrandingSettings();
+        const b = this._branding || {};
+        const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
+        setVal('branding-brand-name', b.brand_name || '');
+        setVal('branding-page-title', b.page_title || '');
+        setVal('branding-logo-url', b.logo_url || '');
+        setVal('branding-welcome-mode', b.welcome_mode || 'image');
+        setVal('branding-welcome-title', b.welcome_title || '');
+        setVal('branding-welcome-text', b.welcome_text || '');
+        setVal('branding-welcome-image-url', b.welcome_image_url || '');
+        const logoInput = document.getElementById('branding-logo-url');
+        const welcomeInput = document.getElementById('branding-welcome-image-url');
+        if (logoInput && !logoInput.dataset.boundPreview) {
+            logoInput.addEventListener('input', () => this.refreshBrandingPreviews());
+            logoInput.dataset.boundPreview = '1';
+        }
+        if (welcomeInput && !welcomeInput.dataset.boundPreview) {
+            welcomeInput.addEventListener('input', () => this.refreshBrandingPreviews());
+            welcomeInput.dataset.boundPreview = '1';
+        }
+        const eyes = document.getElementById('branding-welcome-eyes');
+        if (eyes) eyes.checked = b.welcome_show_eyes !== false;
+        const quick = document.getElementById('branding-quick-actions');
+        if (quick) quick.checked = b.show_quick_actions !== false;
+        this.onBrandingModeChange();
+        this.refreshBrandingPreviews();
+    },
+
+    onBrandingModeChange() {
+        const mode = document.getElementById('branding-welcome-mode')?.value || 'image';
+        const imgRow = document.getElementById('branding-welcome-image-row');
+        const eyeRow = document.getElementById('branding-welcome-eyes-row');
+        if (imgRow) imgRow.style.display = mode === 'image' ? '' : 'none';
+        if (eyeRow) eyeRow.style.display = mode === 'image' ? '' : 'none';
+        this.refreshBrandingPreviews();
+    },
+
+    refreshBrandingPreviews() {
+        const logoUrl = document.getElementById('branding-logo-url')?.value?.trim() || '/static/images/logo_icon.png';
+        const welcomeUrl = document.getElementById('branding-welcome-image-url')?.value?.trim() || '/static/images/logo_dashboard_new.png?v=3';
+        const logoPreview = document.getElementById('branding-logo-preview');
+        const welcomePreview = document.getElementById('branding-welcome-preview');
+        if (logoPreview) logoPreview.src = logoUrl;
+        if (welcomePreview) welcomePreview.src = welcomeUrl;
+    },
+
+    _brandingAssetFilenameFromUrl(url) {
+        if (!url) return '';
+        const m = url.match(/\/api\/settings\/branding\/assets\/([^?#]+)/);
+        return m ? decodeURIComponent(m[1]) : '';
+    },
+
+    async saveBrandingSettings() {
+        const status = document.getElementById('branding-save-status');
+        if (status) status.textContent = 'Speichere…';
+        try {
+            const payload = {
+                brand_name: document.getElementById('branding-brand-name')?.value.trim() || 'Ninko',
+                page_title: document.getElementById('branding-page-title')?.value.trim() || 'Ninko',
+                logo_url: document.getElementById('branding-logo-url')?.value.trim() || '/static/images/logo_icon.png',
+                welcome_mode: document.getElementById('branding-welcome-mode')?.value || 'image',
+                welcome_title: document.getElementById('branding-welcome-title')?.value.trim() || 'Ninko',
+                welcome_text: document.getElementById('branding-welcome-text')?.value || '',
+                welcome_image_url: document.getElementById('branding-welcome-image-url')?.value.trim() || '/static/images/logo_dashboard_new.png?v=3',
+                welcome_show_eyes: !!document.getElementById('branding-welcome-eyes')?.checked,
+                show_quick_actions: !!document.getElementById('branding-quick-actions')?.checked,
+            };
+            const res = await fetch('/api/settings/branding', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.detail || 'Fehler beim Speichern');
+            }
+            const data = await res.json();
+            this._branding = { ...this._branding, ...(data || {}) };
+            this.applyBranding();
+            this.refreshBrandingPreviews();
+            if (status) status.textContent = 'Gespeichert';
+            showNotification('Branding gespeichert', 'success');
+        } catch (e) {
+            if (status) status.textContent = 'Fehler';
+            showNotification(e.message || 'Fehler beim Speichern', 'error');
+        }
+    },
+
+    async resetBrandingSettings() {
+        const status = document.getElementById('branding-save-status');
+        if (status) status.textContent = 'Lade Defaults…';
+        try {
+            const res = await fetch('/api/settings/branding/reset', { method: 'POST' });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.detail || 'Reset fehlgeschlagen');
+            }
+            const data = await res.json();
+            this._branding = { ...this._branding, ...(data || {}) };
+            await this.loadBrandingForm();
+            this.applyBranding();
+            if (status) status.textContent = 'Defaults geladen';
+            showNotification('Branding auf Defaults gesetzt', 'info');
+        } catch (e) {
+            if (status) status.textContent = 'Fehler';
+            showNotification(e.message || 'Reset fehlgeschlagen', 'error');
+        }
+    },
+
+    async uploadBrandingAsset(kind) {
+        const isLogo = kind === 'logo';
+        const fileInput = document.getElementById(isLogo ? 'branding-logo-file' : 'branding-welcome-file');
+        const targetInput = document.getElementById(isLogo ? 'branding-logo-url' : 'branding-welcome-image-url');
+        const status = document.getElementById('branding-save-status');
+        if (!fileInput || !targetInput || !fileInput.files || fileInput.files.length === 0) {
+            showNotification('Bitte zuerst eine Datei auswählen.', 'error');
+            return;
+        }
+        const file = fileInput.files[0];
+        const form = new FormData();
+        form.append('file', file);
+        if (status) status.textContent = 'Upload läuft…';
+        try {
+            const res = await fetch('/api/settings/branding/upload', {
+                method: 'POST',
+                body: form,
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(data.detail || 'Upload fehlgeschlagen');
+            }
+            targetInput.value = data.url || '';
+            this.refreshBrandingPreviews();
+            if (status) status.textContent = 'Upload OK';
+            showNotification('Bild hochgeladen', 'success');
+        } catch (e) {
+            if (status) status.textContent = 'Upload-Fehler';
+            showNotification(e.message || 'Upload fehlgeschlagen', 'error');
+        }
+    },
+
+    async deleteBrandingAsset(kind) {
+        const isLogo = kind === 'logo';
+        const targetInput = document.getElementById(isLogo ? 'branding-logo-url' : 'branding-welcome-image-url');
+        const status = document.getElementById('branding-save-status');
+        if (!targetInput) return;
+        const url = targetInput.value.trim();
+        const filename = this._brandingAssetFilenameFromUrl(url);
+        if (!filename) {
+            showNotification('Kein hochgeladenes Branding-Asset hinterlegt.', 'info');
+            return;
+        }
+
+        if (status) status.textContent = 'Lösche Asset…';
+        try {
+            const res = await fetch(`/api/settings/branding/assets/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(data.detail || 'Löschen fehlgeschlagen');
+            }
+            targetInput.value = isLogo ? '/static/images/logo_icon.png' : '/static/images/logo_dashboard_new.png?v=3';
+            this.refreshBrandingPreviews();
+            if (status) status.textContent = 'Asset gelöscht';
+            showNotification('Branding-Asset gelöscht', 'success');
+        } catch (e) {
+            if (status) status.textContent = 'Fehler';
+            showNotification(e.message || 'Löschen fehlgeschlagen', 'error');
+        }
+    },
+
     toggleSettings() {
         this.switchTab('settings');
     },
@@ -1874,6 +2130,7 @@ const Ninko = {
         // Load content when switching tabs
         if (tabId === 'llm') { this.loadLlmSettings(); this.loadLlmProviders(); this.loadEmbedModel(); }
         if (tabId === 'modules') { this.loadModulesSettings(); this.loadMarketplaceConfig(); }
+        if (tabId === 'system') this.loadBrandingForm();
         if (tabId === 'k8s') this.loadK8sClusters();
         if (tabId === 'language') this.renderLanguageTab();
         if (tabId === 'tts') { this.loadSttSettings(); this.loadTtsSettings(); this.loadTtsVoices(); }
@@ -1982,8 +2239,9 @@ const Ninko = {
             if (urlEl) urlEl.value = d.STT_API_URL || '';
 
             const keyEl = document.getElementById('stt-api-key');
-            if (keyEl) keyEl.value = d.STT_API_KEY ? '••••••••' : '';
-            if (keyEl) keyEl.dataset.hasKey = d.STT_API_KEY ? '1' : '';
+            const sttHasKey = !!(d.STT_API_KEY_SET || d.STT_API_KEY);
+            if (keyEl) keyEl.value = sttHasKey ? '••••••••' : '';
+            if (keyEl) keyEl.dataset.hasKey = sttHasKey ? '1' : '';
 
             const modelEl = document.getElementById('stt-api-model');
             if (modelEl) modelEl.value = d.STT_MODEL || 'whisper-large-v3';
@@ -2363,6 +2621,8 @@ const Ninko = {
             { key: 'base_url', label: 'Base URL', placeholder: 'https://glpi.example.com' },
             { key: 'app_token', label: 'App-Token', placeholder: '••••••', type: 'password', isSecret: true },
             { key: 'user_token', label: 'User-Token', placeholder: '••••••', type: 'password', isSecret: true },
+            { key: 'verify_ssl', label: 'SSL verifizieren', type: 'checkbox' },
+            { key: 'ca_cert_pem', label: 'CA-Zertifikat (PEM, optional)', type: 'file', isSecret: true },
         ],
         kubernetes: [
             { key: 'context', label: 'Context (optional)', placeholder: 'kubernetes-admin@prod' },
@@ -2374,6 +2634,11 @@ const Ninko = {
         ],
         ionos: [
             { key: 'api_key', label: 'API-Key', placeholder: 'prefix.secret', type: 'password', isSecret: true },
+        ],
+        jira: [
+            { key: 'url', label: 'Jira URL', placeholder: 'https://company.atlassian.net' },
+            { key: 'email', label: 'E-Mail', placeholder: 'user@company.com' },
+            { key: 'JIRA_API_KEY', label: 'API-Token', placeholder: '••••••••••••••••', type: 'password', isSecret: true },
         ],
         fritzbox: [
             { key: 'host', label: 'FritzBox Host/IP', placeholder: '192.168.178.1' },
@@ -2404,9 +2669,18 @@ const Ninko = {
             { key: 'SYNOLOGY_PASSWORD', label: 'Passwort', placeholder: '••••••', type: 'password', isSecret: true },
             { key: 'SYNOLOGY_API_KEY', label: 'API Key (optional)', placeholder: '••••••', type: 'password', isSecret: true },
         ],
+        redmine: [
+            { key: 'url', label: 'Redmine URL', placeholder: 'https://redmine.example.com' },
+            { key: 'REDMINE_API_KEY', label: 'API-Key', placeholder: '••••••••••••••••', type: 'password', isSecret: true },
+        ],
         teams: [
             { key: 'MICROSOFT_APP_ID', label: 'Microsoft App ID', placeholder: 'e.g. 1234abcd-1234-abcd-1234-abcd1234abcd' },
             { key: 'MICROSOFT_APP_PASSWORD', label: 'Microsoft App Password / Client Secret', placeholder: '••••••', type: 'password', isSecret: true },
+        ],
+        confluence: [
+            { key: 'url', label: 'Confluence URL', placeholder: 'https://company.atlassian.net' },
+            { key: 'email', label: 'E-Mail', placeholder: 'user@company.com' },
+            { key: 'CONFLUENCE_API_KEY', label: 'API-Key', placeholder: '••••••••••••••••', type: 'password', isSecret: true },
         ],
         docker: [
             { key: 'host', label: 'Docker Host', placeholder: '192.168.1.100' },
@@ -2426,11 +2700,14 @@ const Ninko = {
             { key: 'username', label: 'Benutzername', placeholder: 'admin' },
             { key: 'WORDPRESS_APP_PASSWORD', label: 'Application Password', placeholder: 'xxxx xxxx xxxx xxxx', type: 'password', isSecret: true },
             { key: 'verify_ssl', label: 'SSL verifizieren (Nein bei selbst-signierten Zertifikaten)', type: 'checkbox' },
+            { key: 'ca_cert_pem', label: 'CA-Zertifikat (PEM, optional)', type: 'file', isSecret: true },
         ],
         opnsense: [
             { key: 'host', label: 'Host / IP (ohne https://)', placeholder: '192.168.1.1:4443' },
             { key: 'api_key', label: 'API Key', placeholder: '••••••', type: 'password', isSecret: true },
             { key: 'OPNSENSE_API_SECRET', label: 'API Secret', placeholder: '••••••', type: 'password', isSecret: true },
+            { key: 'verify_ssl', label: 'SSL verifizieren', type: 'checkbox' },
+            { key: 'ca_cert_pem', label: 'CA-Zertifikat (PEM, optional)', type: 'file', isSecret: true },
         ],
         qdrant: [
             { key: 'url', label: 'Qdrant URL', placeholder: 'http://qdrant:6333' },
@@ -2582,6 +2859,7 @@ const Ninko = {
                         <div class="form-row form-row-sm">
                             <label class="form-label" for="conn-new-${moduleName}-${f.key}">${f.label}</label>
                             <input type="file" id="conn-new-${moduleName}-${f.key}" class="form-input form-file">
+                            ${f.isSecret ? '<small class="text-muted">Leer lassen, um das vorhandene Zertifikat beizubehalten.</small>' : ''}
                         </div>`;
             }
             return `
@@ -5206,6 +5484,7 @@ const Ninko = {
         document.getElementById('provider-url').value = '';
         document.getElementById('provider-model').value = '';
         document.getElementById('provider-api-key').value = '';
+        document.getElementById('provider-api-key').dataset.hasKey = '0';
         document.getElementById('provider-context-window').value = 0;
         document.getElementById('provider-verify-ssl').checked = true;
         document.getElementById('provider-is-default').checked = false;
@@ -5220,6 +5499,8 @@ const Ninko = {
                     document.getElementById('provider-backend').value = p.backend;
                     document.getElementById('provider-url').value = p.base_url;
                     document.getElementById('provider-model').value = p.model;
+                    document.getElementById('provider-api-key').value = p.api_key_set ? '••••••••' : '';
+                    document.getElementById('provider-api-key').dataset.hasKey = p.api_key_set ? '1' : '0';
                     document.getElementById('provider-context-window').value = p.context_window || 0;
                     document.getElementById('provider-verify-ssl').checked = p.verify_ssl !== false;
                     document.getElementById('provider-is-default').checked = p.is_default;
@@ -5237,12 +5518,15 @@ const Ninko = {
     async saveLlmProvider() {
         const statusEl = document.getElementById('provider-save-status');
         statusEl.textContent = 'Speichere…';
+        const keyEl = document.getElementById('provider-api-key');
+        const keyVal = keyEl?.value || '';
+        const apiKey = keyVal && keyVal !== '••••••••' ? keyVal : '';
         const body = {
             name: document.getElementById('provider-name').value,
             backend: document.getElementById('provider-backend').value,
             base_url: document.getElementById('provider-url').value,
             model: document.getElementById('provider-model').value,
-            api_key: document.getElementById('provider-api-key').value,
+            api_key: apiKey,
             is_default: document.getElementById('provider-is-default').checked,
             context_window: parseInt(document.getElementById('provider-context-window').value || '0', 10),
             verify_ssl: document.getElementById('provider-verify-ssl').checked,
@@ -5254,6 +5538,10 @@ const Ninko = {
             const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
             if (res.ok) {
                 statusEl.textContent = 'Gespeichert';
+                if (keyEl && body.api_key) {
+                    keyEl.value = '••••••••';
+                    keyEl.dataset.hasKey = '1';
+                }
                 showNotification(`Provider "${body.name}" gespeichert`, 'success');
                 this.closeProviderEditor();
                 this.loadLlmProviders();

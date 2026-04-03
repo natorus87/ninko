@@ -29,7 +29,13 @@ async def check_glpi_health() -> dict:
         if not app_token or not user_token:
             return {"status": "error", "detail": "GLPI tokens not in vault"}
 
-        async with httpx.AsyncClient(verify=False, timeout=10.0) as client:
+        verify_ssl = os.environ.get("GLPI_VERIFY_SSL", "true").lower() == "true"
+        verify_arg: bool | str = verify_ssl
+        ca_path = os.environ.get("GLPI_CA_CERT_PATH", "").strip()
+        if verify_ssl and ca_path:
+            verify_arg = ca_path
+
+        async with httpx.AsyncClient(verify=verify_arg, timeout=10.0) as client:
             resp = await client.get(
                 f"{base_url}/apirest.php/initSession",
                 headers={

@@ -15,6 +15,7 @@ from langchain_core.tools import tool
 
 from agents.base_agent import _t
 from core.connections import ConnectionManager
+from core.tls import get_connection_verify_arg
 from core.vault import get_vault
 
 logger = logging.getLogger("ninko.modules.wordpress.tools")
@@ -89,10 +90,7 @@ async def _get_wp_client(connection_id: str = "") -> dict:
         "Content-Type": "application/json",
     }
 
-    # SSL verification (default: True, set to "false" for self-signed certificates)
-    verify_ssl = True
-    if conn:
-        verify_ssl = str(conn.config.get("verify_ssl", "true")).lower() == "true"
+    verify_ssl = await get_connection_verify_arg(conn, "wordpress", default_verify=True)
 
     return {
         "base_url": site_url,

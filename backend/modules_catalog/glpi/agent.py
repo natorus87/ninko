@@ -24,6 +24,9 @@ from .tools import (
     list_groups,
     list_categories,
     get_ticket_stats,
+    get_ticket_attachments,
+    get_ticket_followups,
+    get_ticket_solutions,
 )
 
 logger = logging.getLogger("ninko.modules.glpi.agent")
@@ -33,7 +36,7 @@ GLPI_SYSTEM_PROMPT_DE = """Du bist der GLPI Helpdesk-Spezialist von Ninko.
 Deine Fähigkeiten:
 - Ticket-Erstellung und -Verwaltung
 - Ticket-Suche nach Status, Priorität, Stichwort
-- Follow-ups und Lösungen hinzufügen
+- Follow-ups, Lösungen und Anhänge abrufen
 - Tickets schließen mit Lösungsbeschreibung
 - Benutzer- und Gruppensuche
 - Ticket-Statistiken
@@ -59,7 +62,7 @@ GLPI_SYSTEM_PROMPT_EN = """You are the GLPI Helpdesk specialist of Ninko.
 Your capabilities:
 - Ticket creation and management
 - Ticket search by status, priority, keyword
-- Adding follow-ups and solutions
+- Retrieve follow-ups, solutions, and attachments
 - Closing tickets with resolution descriptions
 - User and group search
 - Ticket statistics
@@ -100,11 +103,16 @@ class GlpiAgent(BaseAgent):
                 list_groups,
                 list_categories,
                 get_ticket_stats,
+                get_ticket_attachments,
+                get_ticket_followups,
+                get_ticket_solutions,
             ],
         )
 
         # Auto-incident ticket creation
-        auto_create = os.environ.get("GLPI_AUTO_CREATE_INCIDENTS", "false").lower() == "true"
+        auto_create = (
+            os.environ.get("GLPI_AUTO_CREATE_INCIDENTS", "false").lower() == "true"
+        )
         if auto_create:
             asyncio.get_event_loop().create_task(self._listen_for_incidents())
             logger.info("GLPI auto-incident creation enabled.")
@@ -158,12 +166,14 @@ class GlpiAgent(BaseAgent):
             priority = 5 if severity == "critical" else 4
 
             try:
-                result = await create_ticket.ainvoke({
-                    "title": title,
-                    "description": description,
-                    "priority": priority,
-                    "ticket_type": 1,  # Incident
-                })
+                result = await create_ticket.ainvoke(
+                    {
+                        "title": title,
+                        "description": description,
+                        "priority": priority,
+                        "ticket_type": 1,  # Incident
+                    }
+                )
                 logger.info(
                     "Auto-ticket created: %s → #%s",
                     title,

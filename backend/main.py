@@ -13,6 +13,8 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.responses import JSONResponse
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from core.config import get_settings
@@ -39,6 +41,7 @@ from api.routes_skills import router as skills_router
 from api.routes_safeguard import router as safeguard_router
 from api.routes_safeguard_profiles import router as safeguard_profiles_router
 from api.routes_safeguard_audit import router as safeguard_audit_router
+from api.routes_auth import router as auth_router
 
 # Logging konfigurieren
 settings = get_settings()
@@ -48,6 +51,15 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger("ninko.main")
+
+from core.auth import (
+    ROLE_ADMIN,
+    ROLE_READ,
+    ROLE_WRITE,
+    resolve_request_role,
+    role_allows,
+)
+from core.rate_limit import InMemoryRateLimiter
 
 # Redis-Log-Handler (nach Redis-Verfügbarkeit lazy)
 from core.log_handler import RedisLogHandler as _RedisLogHandler
@@ -190,7 +202,7 @@ async def lifespan(app: FastAPI):
         safeguard = SafeguardMiddleware(
             client=_sg_client,
             model=_sg_model,
-            timeout=8.0,
+            timeout=settings.SAFEGUARD_TIMEOUT_SECONDS,
             enabled=(_sg_profile_id != "disabled"),
             agent_store=AgentConfigStore(),
             profile_store=_sg_profile_store,
@@ -200,8 +212,8 @@ async def lifespan(app: FastAPI):
         from agents.base_agent import set_global_safeguard
         set_global_safeguard(safeguard)
         logger.info(
-            "Safeguard-Middleware initialisiert (Modell: %s, Profil: %s).",
-            _sg_model, _sg_profile_id,
+            "Safeguard-Middleware initialisiert (Modell: %s, Profil: %s, Timeout: %.1fs).",
+            _sg_model, _sg_profile_id, settings.SAFEGUARD_TIMEOUT_SECONDS,
         )
     except Exception as _sg_exc:
         logger.warning("Safeguard-Middleware konnte nicht initialisiert werden: %s", _sg_exc)
@@ -270,12 +282,22 @@ async def lifespan(app: FastAPI):
             _frontend_dir = _fdir
 
             @app.get("/", include_in_schema=False)
-            async def serve_index():
+            async def serve_index(request: Request):
+                if settings.API_AUTH_ENABLED and resolve_request_role(request) is None:
+                    return RedirectResponse(url="/login", status_code=302)
                 response = FileResponse(str(_frontend_dir / "index.html"))
                 response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
                 response.headers["Pragma"] = "no-cache"
                 response.headers["Expires"] = "0"
                 return response
+
+            @app.get("/login", include_in_schema=False)
+            async def serve_login(request: Request):
+                if not settings.API_AUTH_ENABLED:
+                    return RedirectResponse(url="/", status_code=302)
+                if resolve_request_role(request) is not None:
+                    return RedirectResponse(url="/", status_code=302)
+                return FileResponse(str(_frontend_dir / "login.html"))
 
             app.mount("/static", StaticFiles(directory=str(_fdir)), name="static")
             app.mount("/", StaticFiles(directory=str(_fdir), html=True), name="frontend")
@@ -318,13 +340,125 @@ app = FastAPI(
 )
 
 # ── CORS ──────────────────────────────────────────────
+_cors_origins = [
+    o.strip()
+    for o in (settings.CORS_ALLOW_ORIGINS or "").split(",")
+    if o.strip()
+]
+if not _cors_origins:
+    _cors_origins = ["http://localhost:8000", "http://127.0.0.1:8000"]
+
+_cors_methods = [
+    m.strip().upper()
+    for m in (settings.CORS_ALLOW_METHODS or "").split(",")
+    if m.strip()
+]
+if not _cors_methods:
+    _cors_methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+
+_cors_headers = [
+    h.strip()
+    for h in (settings.CORS_ALLOW_HEADERS or "").split(",")
+    if h.strip()
+]
+if not _cors_headers:
+    _cors_headers = ["Authorization", "Content-Type", "X-API-Key"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_cors_origins,
+    allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
+    allow_methods=_cors_methods,
+    allow_headers=_cors_headers,
 )
+
+if settings.API_RATE_LIMIT_ENABLED:
+    _rate_limiter = InMemoryRateLimiter(
+        per_minute=settings.API_RATE_LIMIT_PER_MINUTE,
+        burst=settings.API_RATE_LIMIT_BURST,
+    )
+else:
+    _rate_limiter = None
+
+
+def _required_role_for_request(path: str, method: str) -> str | None:
+    # Public/health endpoints
+    if path == "/health":
+        return None
+
+    if not path.startswith("/api/"):
+        return None
+
+    if path.startswith("/api/auth/"):
+        return None
+
+    method_u = method.upper()
+    is_mutating = method_u in {"POST", "PUT", "PATCH", "DELETE"}
+
+    # Sensitive read endpoints
+    if path.startswith("/api/secrets"):
+        return ROLE_ADMIN if is_mutating else ROLE_READ
+    if path.startswith("/api/logs"):
+        return ROLE_ADMIN if is_mutating else ROLE_READ
+    if path.startswith("/api/ws"):
+        return ROLE_READ
+    if path.startswith("/api/plugins"):
+        return ROLE_ADMIN
+    if path.startswith("/api/safeguard"):
+        return ROLE_ADMIN if is_mutating else ROLE_READ
+    if path.startswith("/api/settings"):
+        return ROLE_ADMIN if is_mutating else ROLE_READ
+    if path.startswith("/api/connections"):
+        return ROLE_WRITE if is_mutating else ROLE_READ
+    if path.startswith("/api/agents"):
+        return ROLE_WRITE if is_mutating else ROLE_READ
+    if path.startswith("/api/workflows"):
+        return ROLE_WRITE if is_mutating else ROLE_READ
+    if path.startswith("/api/memory"):
+        return ROLE_WRITE if is_mutating else ROLE_READ
+    if path.startswith("/api/modules"):
+        return ROLE_READ
+
+    # Default for remaining API endpoints:
+    # - writes require write role
+    # - reads are open unless covered above
+    if is_mutating:
+        return ROLE_WRITE
+    return None
+
+
+@app.middleware("http")
+async def api_security_middleware(request: Request, call_next):
+    path = request.url.path
+
+    # API-only security/rate limiting
+    if path.startswith("/api/"):
+        client_ip = request.client.host if request.client else "unknown"
+
+        if _rate_limiter is not None:
+            allowed, retry_after = await _rate_limiter.allow(client_ip)
+            if not allowed:
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "Rate limit exceeded. Please retry later."},
+                    headers={"Retry-After": str(retry_after)},
+                )
+
+        required_role = _required_role_for_request(path, request.method)
+        if required_role is not None:
+            actual_role = resolve_request_role(request)
+            if actual_role is None:
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Missing or invalid API key."},
+                )
+            if not role_allows(required_role, actual_role):
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "Insufficient role for this operation."},
+                )
+
+    return await call_next(request)
 
 # ── Cache Prevention Middleware ───────────────────────
 @app.middleware("http")
@@ -337,6 +471,7 @@ async def add_no_cache_header(request: Request, call_next):
 
 # ── Core-Routen ──────────────────────────────────────
 app.include_router(chat_router)
+app.include_router(auth_router)
 app.include_router(modules_router)
 app.include_router(memory_router)
 app.include_router(secrets_router)
@@ -366,4 +501,3 @@ async def health():
         "service": "ninko",
         "version": "0.9.2",
     }
-

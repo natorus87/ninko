@@ -11,6 +11,7 @@ import httpx
 from langchain_core.tools import tool
 
 from core.connections import ConnectionManager
+from core.tls import get_connection_verify_arg
 from core.vault import get_vault
 from agents.base_agent import _t
 
@@ -20,7 +21,7 @@ logger = logging.getLogger("ninko.modules.opnsense.tools")
 async def _get_opnsense_auth(connection_id: str = "") -> tuple:
     """
     Helper: loads auth data from ConnectionManager or environment variables.
-    Returns: (host, (api_key, api_secret))
+    Returns: (host, (api_key, api_secret), verify_arg)
     """
     if connection_id:
         conn = await ConnectionManager.get_connection("opnsense", connection_id)
@@ -42,7 +43,8 @@ async def _get_opnsense_auth(connection_id: str = "") -> tuple:
         if secret_vk:
             api_secret = await vault.get_secret(secret_vk) or api_secret
 
-        return host, (api_key, api_secret)
+        verify = await get_connection_verify_arg(conn, "opnsense", default_verify=True)
+        return host, (api_key, api_secret), verify
 
     host = os.environ.get("OPNSENSE_HOST", "")
     api_key = os.environ.get("OPNSENSE_API_KEY", "")
@@ -56,12 +58,17 @@ async def _get_opnsense_auth(connection_id: str = "") -> tuple:
             )
         )
 
-    return host, (api_key, api_secret)
+    verify_ssl = os.environ.get("OPNSENSE_VERIFY_SSL", "true").lower() == "true"
+    if verify_ssl:
+        ca_path = os.environ.get("OPNSENSE_CA_CERT_PATH", "").strip()
+        if ca_path:
+            return host, (api_key, api_secret), ca_path
+    return host, (api_key, api_secret), verify_ssl
 
 
 async def _opnsense_request(endpoint: str, connection_id: str = "", method: str = "GET", json_data: dict | None = None) -> Any:
     """Sends a request to the OPNsense API."""
-    host, auth = await _get_opnsense_auth(connection_id)
+    host, auth, verify = await _get_opnsense_auth(connection_id)
 
     if not host:
         raise ValueError("No OPNsense host address provided.")
@@ -69,7 +76,7 @@ async def _opnsense_request(endpoint: str, connection_id: str = "", method: str 
     url = f"https://{host}{endpoint}"
 
     try:
-        async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
+        async with httpx.AsyncClient(timeout=30.0, verify=verify) as client:
             if method == "GET":
                 resp = await client.get(url, auth=auth)
             elif method == "POST":
@@ -93,7 +100,7 @@ async def get_opnsense_system_status(connection_id: str = "") -> Dict:
     Use this tool to get general system information about the OPNsense firewall.
     """
     try:
-        host, _ = await _get_opnsense_auth(connection_id)
+        host, _, _ = await _get_opnsense_auth(connection_id)
 
         time_data, fw_data, mem_data, disk_data = await asyncio.gather(
             _opnsense_request("/api/diagnostics/system/systemTime", connection_id),

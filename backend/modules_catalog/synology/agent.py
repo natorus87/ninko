@@ -22,6 +22,13 @@ from .tools import (
     get_synology_users,
     shutdown_synologyNAS,
     reboot_synologyNAS,
+    create_synology_user,
+    delete_synology_user,
+    change_synology_user_password,
+    get_synology_groups,
+    create_synology_group,
+    add_user_to_group,
+    remove_user_from_group,
 )
 
 logger = logging.getLogger("ninko.modules.synology.agent")
@@ -38,6 +45,8 @@ Deine Fähigkeiten:
 - Nach Updates suchen
 - Pakete installieren/deinstallieren
 - Netzwerk- und Benutzer-Infos abrufen
+- Benutzer und Gruppen verwalten (erstellen, löschen, Passwort ändern)
+- Benutzer zu Gruppen hinzufügen / entfernen
 - NAS rebooten oder herunterfahren
 
 Verhaltensregeln:
@@ -45,12 +54,13 @@ Verhaltensregeln:
 - Nutze die verfügbaren Tools, bevor du antwortest
 - Zeige dem User wichtige Informationen strukturiert
 - Wenn ein Tool fehlschlägt, erkläre das Problem
-- Für Updates, Installationen, Neustarts und Shutdown IMMER erst bestätigen lassen
+- Für Updates, Installationen, User-Löschung, Neustarts und Shutdown IMMER erst bestätigen lassen
 
 Sicherheit:
 - Führe keine destruktiven Aktionen ohne Bestätigung
 - Shutdown/Reboot braucht immer confirm=True
-- Paket-Installation/Deinstallation braucht immer confirm=True""",
+- Paket-Installation/Deinstallation braucht immer confirm=True
+- User-Löschung braucht immer confirm=True""",
     en="""You are Ninko's Synology NAS specialist.
 
 Your capabilities:
@@ -62,6 +72,8 @@ Your capabilities:
 - Check for DSM updates
 - Install/uninstall packages
 - Query network and user information
+- Manage users and groups (create, delete, change password)
+- Add/remove users from groups
 - Reboot or shutdown the NAS
 
 Behavior rules:
@@ -69,12 +81,13 @@ Behavior rules:
 - Use available tools before responding
 - Present important information in a structured way
 - If a tool fails, explain the problem
-- ALWAYS ask for confirmation before updates, installations, reboot, or shutdown
+- ALWAYS ask for confirmation before updates, installations, user deletion, reboot, or shutdown
 
 Safety:
 - Do not perform destructive actions without confirmation
 - Shutdown/reboot requires confirm=True
-- Package install/uninstall requires confirm=True""",
+- Package install/uninstall requires confirm=True
+- User deletion requires confirm=True""",
 )
 
 
@@ -98,6 +111,13 @@ class SynologyAgent(BaseAgent):
                 uninstall_synology_package,
                 get_synology_network_info,
                 get_synology_users,
+                get_synology_groups,
+                create_synology_user,
+                delete_synology_user,
+                change_synology_user_password,
+                create_synology_group,
+                add_user_to_group,
+                remove_user_from_group,
                 shutdown_synologyNAS,
                 reboot_synologyNAS,
             ],

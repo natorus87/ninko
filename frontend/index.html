@@ -879,6 +879,73 @@
                         <!-- System Tab -->
                         <div class="settings-panel" id="settings-panel-system">
                             <div class="setting-group">
+                                <h4>Branding</h4>
+                                <p class="setting-desc">Passe Name, Logo und New-Chat-Welcome-Bereich vollständig an.</p>
+                                <div class="form-row">
+                                    <label class="form-label" for="branding-brand-name">Dashboard-Name</label>
+                                    <input id="branding-brand-name" type="text" class="form-input" placeholder="Ninko">
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="branding-page-title">Browser-Tab Titel</label>
+                                    <input id="branding-page-title" type="text" class="form-input" placeholder="Ninko">
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="branding-logo-url">Logo-URL (Sidebar)</label>
+                                    <input id="branding-logo-url" type="text" class="form-input" placeholder="/static/images/logo_icon.png">
+                                    <div class="text-muted" style="font-size:0.8rem; margin-top:0.35rem;">Logo Vorschau</div>
+                                    <img id="branding-logo-preview" src="/static/images/logo_icon.png" alt="Logo Vorschau" style="margin-top:0.4rem; max-height:52px; max-width:220px; object-fit:contain; border:1px solid var(--border-color); border-radius:8px; padding:6px; background:var(--bg-body);">
+                                    <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+                                        <input id="branding-logo-file" type="file" class="form-input" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" style="max-width:320px;">
+                                        <button class="btn btn-outline btn-sm" onclick="Ninko.uploadBrandingAsset('logo')">Logo hochladen</button>
+                                        <button class="btn btn-outline btn-sm" onclick="Ninko.deleteBrandingAsset('logo')">Logo löschen</button>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="branding-welcome-mode">New-Chat-Welcome-Modus</label>
+                                    <select id="branding-welcome-mode" class="form-select" onchange="Ninko.onBrandingModeChange()">
+                                        <option value="image">Bild</option>
+                                        <option value="text">Nur Text</option>
+                                        <option value="off">Aus (minimal)</option>
+                                    </select>
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="branding-welcome-title">Welcome Titel</label>
+                                    <input id="branding-welcome-title" type="text" class="form-input" placeholder="Ninko">
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="branding-welcome-text">Welcome Text</label>
+                                    <textarea id="branding-welcome-text" class="form-input" rows="3" placeholder="Willkommen..."></textarea>
+                                </div>
+                                <div class="form-row" id="branding-welcome-image-row">
+                                    <label class="form-label" for="branding-welcome-image-url">Welcome Bild-URL</label>
+                                    <input id="branding-welcome-image-url" type="text" class="form-input" placeholder="/static/images/logo_dashboard_new.png?v=3">
+                                    <div class="text-muted" style="font-size:0.8rem; margin-top:0.35rem;">Welcome Bild Vorschau</div>
+                                    <img id="branding-welcome-preview" src="/static/images/logo_dashboard_new.png?v=3" alt="Welcome Vorschau" style="margin-top:0.4rem; max-height:110px; max-width:280px; object-fit:contain; border:1px solid var(--border-color); border-radius:8px; padding:6px; background:var(--bg-body);">
+                                    <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+                                        <input id="branding-welcome-file" type="file" class="form-input" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" style="max-width:320px;">
+                                        <button class="btn btn-outline btn-sm" onclick="Ninko.uploadBrandingAsset('welcome')">Welcome Bild hochladen</button>
+                                        <button class="btn btn-outline btn-sm" onclick="Ninko.deleteBrandingAsset('welcome')">Welcome Bild löschen</button>
+                                    </div>
+                                </div>
+                                <div class="form-row" id="branding-welcome-eyes-row">
+                                    <label class="form-label">
+                                        <input id="branding-welcome-eyes" type="checkbox" checked>
+                                        Leuchtende Augen aktivieren
+                                    </label>
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label">
+                                        <input id="branding-quick-actions" type="checkbox" checked>
+                                        Quick-Action Buttons im Welcome anzeigen
+                                    </label>
+                                </div>
+                                <div class="form-actions">
+                                    <span id="branding-save-status" class="save-status"></span>
+                                    <button class="btn btn-primary btn-sm" onclick="Ninko.saveBrandingSettings()">Branding speichern</button>
+                                    <button class="btn btn-outline btn-sm" onclick="Ninko.resetBrandingSettings()">Defaults laden</button>
+                                </div>
+                            </div>
+                            <div class="setting-group">
                                 <h4>Memory</h4>
                                 <div id="settings-memory">
                                     <button class="btn btn-outline" onclick="Ninko.viewMemoryStats()">Memory-Stats</button>

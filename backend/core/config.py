@@ -65,6 +65,40 @@ class CoreSettings(BaseSettings):
     TIMEZONE: str = "Europe/Berlin"
     LLM_VERIFY_SSL: bool = True  # False = self-signed Zertifikate erlauben
 
+    # ── API Security ───────────────────────────────────
+    API_AUTH_ENABLED: bool = False
+    API_KEY_ADMIN: str = ""
+    API_KEY_WRITE: str = ""
+    API_KEY_READ: str = ""
+    ADMIN_USERNAME: str = "admin"
+    ADMIN_PASSWORD: str = ""
+    SESSION_SECRET: str = "change-me-in-production"
+    SESSION_TTL_HOURS: int = 24
+    SESSION_COOKIE_NAME: str = "ninko_session"
+    SESSION_COOKIE_SECURE: bool = False
+
+    # ── API Rate Limiting ──────────────────────────────
+    API_RATE_LIMIT_ENABLED: bool = True
+    API_RATE_LIMIT_PER_MINUTE: int = 120
+    API_RATE_LIMIT_BURST: int = 30
+
+    # ── Upload Security ────────────────────────────────
+    TRANSCRIPTION_MAX_UPLOAD_BYTES: int = 15 * 1024 * 1024
+    TRANSCRIPTION_ALLOWED_MIME: str = (
+        "audio/webm,audio/ogg,audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/mp4"
+    )
+    TRANSCRIPTION_ALLOWED_EXTENSIONS: str = ".webm,.ogg,.mp3,.wav,.m4a,.mp4"
+    BRANDING_MAX_UPLOAD_BYTES: int = 5 * 1024 * 1024
+
+    # ── CORS ───────────────────────────────────────────
+    CORS_ALLOW_ORIGINS: str = "http://localhost:8000,http://127.0.0.1:8000"
+    CORS_ALLOW_METHODS: str = "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+    CORS_ALLOW_HEADERS: str = "Authorization,Content-Type,X-API-Key"
+    CORS_ALLOW_CREDENTIALS: bool = True
+
+    # ── Safeguard ──────────────────────────────────────
+    SAFEGUARD_TIMEOUT_SECONDS: float = 8.0
+
     # ── Monitoring ─────────────────────────────────────
     MONITOR_INTERVAL_SECONDS: int = 300
     MONITOR_AUTO_REMEDIATE: bool = False

@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from core.redis_client import get_redis
+from core.auth import ROLE_READ, resolve_websocket_role, role_allows
 
 logger = logging.getLogger("ninko.api.ws")
 router = APIRouter(tags=["WebSocket"])
@@ -68,6 +69,11 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     - Log-Streaming
     - Echtzeit-Updates
     """
+    role = resolve_websocket_role(websocket)
+    if not role_allows(ROLE_READ, role):
+        await websocket.close(code=1008, reason="Missing or invalid API key")
+        return
+
     await ws_manager.connect(websocket)
 
     # Redis PubSub Listener starten

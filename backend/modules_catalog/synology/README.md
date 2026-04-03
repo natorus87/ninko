@@ -52,6 +52,13 @@ SYNOLOGY_API_KEY=optional_api_key
 | `uninstall_synology_package` | Uninstall a package (requires confirm=True) | Write |
 | `get_synology_network_info` | Query network configuration | Read |
 | `get_synology_users` | List user accounts | Read |
+| `get_synology_groups` | List user groups | Read |
+| `create_synology_user` | Create a new user | Write |
+| `delete_synology_user` | Delete a user (requires confirm=True) | Write |
+| `change_synology_user_password` | Change user password | Write |
+| `create_synology_group` | Create a new group | Write |
+| `add_user_to_group` | Add user to group | Write |
+| `remove_user_from_group` | Remove user from group | Write |
 | `shutdown_synologyNAS` | Shutdown the NAS (requires confirm=True) | Write |
 | `reboot_synologyNAS` | Reboot the NAS (requires confirm=True) | Write |
 

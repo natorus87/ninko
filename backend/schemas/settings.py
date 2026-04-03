@@ -22,6 +22,7 @@ class LlmSettings(BaseModel):
 class LlmSettingsResponse(LlmSettings):
     """Antwort mit Source-Info."""
     source: str = "default"  # "default" | "redis"
+    api_key_set: bool = False
 
 
 # ── LLM Multi-Provider ───────────────────────────────
@@ -101,3 +102,21 @@ class K8sClusterListResponse(BaseModel):
     """Liste aller konfigurierten Cluster."""
     clusters: list[K8sClusterInfo] = Field(default_factory=list)
     total: int = 0
+
+
+# ── Branding Settings ─────────────────────────────────
+
+class BrandingSettings(BaseModel):
+    brand_name: str = "Ninko"
+    page_title: str = "Ninko"
+    logo_url: str = "/static/images/logo_icon.png"
+    welcome_mode: Literal["image", "text", "off"] = "image"
+    welcome_title: str = "Ninko"
+    welcome_text: str = ""
+    welcome_image_url: str = "/static/images/logo_dashboard_new.png?v=3"
+    welcome_show_eyes: bool = True
+    show_quick_actions: bool = True
+
+
+class BrandingSettingsResponse(BrandingSettings):
+    source: str = "default"  # "default" | "redis"

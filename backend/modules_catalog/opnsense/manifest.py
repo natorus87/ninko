@@ -16,8 +16,8 @@ async def check_opnsense_health(connection_id: str = "") -> dict:
     from .tools import _get_opnsense_auth
 
     try:
-        host, auth = await _get_opnsense_auth(connection_id)
-        async with httpx.AsyncClient(timeout=5.0, verify=False) as client:
+        host, auth, verify = await _get_opnsense_auth(connection_id)
+        async with httpx.AsyncClient(timeout=5.0, verify=verify) as client:
             resp = await client.get(f"https://{host}/api/core/system/status", auth=auth)
             if resp.status_code == 200:
                 return {"status": "ok", "detail": f"OPNsense at {host} reachable"}

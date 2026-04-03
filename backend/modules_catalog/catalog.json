@@ -8,6 +8,13 @@
       "author": "Ninko Team"
     },
     {
+      "name": "confluence",
+      "display_name": "Confluence",
+      "description": "Atlassian Confluence Wiki – Spaces, Pages, Blog Posts und Suche.",
+      "version": "1.0.0",
+      "author": "Ninko Team"
+    },
+    {
       "name": "docker",
       "display_name": "Docker",
       "description": "Docker Host Management – Container, Images, Volumes, System-Info",
@@ -43,11 +50,25 @@
       "author": "Ninko"
     },
     {
+      "name": "hpe_ilo",
+      "display_name": "HPE iLO",
+      "description": "HPE Integrated Lights-Out (iLO4/iLO5) Server Management via REST API.",
+      "version": "1.0.0",
+      "author": "Ninko"
+    },
+    {
       "name": "ionos",
       "display_name": "IONOS DNS",
       "description": "IONOS DNS Zonen und Records Management.",
       "version": "1.0.0",
       "author": "Ninko"
+    },
+    {
+      "name": "jira",
+      "display_name": "Jira",
+      "description": "Atlassian Jira Issue Tracking – Issues, Projekte, Sprints und Boards.",
+      "version": "1.0.0",
+      "author": "Ninko Team"
     },
     {
       "name": "kubernetes",
@@ -88,6 +109,13 @@
       "name": "qdrant",
       "display_name": "Qdrant Knowledge Bank",
       "description": "",
+      "version": "1.0.0",
+      "author": "Ninko Team"
+    },
+    {
+      "name": "redmine",
+      "display_name": "Redmine",
+      "description": "Redmine Projektmanagement – Tickets, Projekte, Time Entries und Benutzer.",
       "version": "1.0.0",
       "author": "Ninko Team"
     },

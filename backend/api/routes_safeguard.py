@@ -39,6 +39,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from core.redis_client import get_redis
+from core.safeguard import ActionCategory
 
 logger = logging.getLogger("ninko.api.safeguard")
 router = APIRouter(prefix="/api/safeguard", tags=["Safeguard"])
@@ -68,6 +69,31 @@ def _get_profile_store(request: Request):
     return sg.profile_store
 
 
+async def _audit_admin_change(
+    request: Request,
+    text: str,
+    *,
+    outcome: str = "admin_change",
+    rationale: str = "",
+) -> None:
+    """Audit-Log für privilegierte Safeguard-Änderungen."""
+    try:
+        sg = _get_safeguard(request)
+        await sg._audit_log(
+            action="admin_change",
+            category=ActionCategory.STATE_CHANGING,
+            text=text,
+            session_id="api",
+            agent_id="safeguard_admin",
+            tool_name="api:safeguard",
+            outcome=outcome,
+            rationale=rationale[:300],
+            profile_id=sg.get_active_profile_id(),
+        )
+    except Exception:
+        pass
+
+
 # ─── Global Status / Toggle (backward-compat) ─────────────────────────────────
 
 @router.get("/status")
@@ -87,6 +113,11 @@ async def safeguard_enable(request: Request) -> dict:
     sg.enable()
     redis = get_redis()
     await redis.connection.set(REDIS_KEY_SAFEGUARD, sg.get_active_profile_id())
+    await _audit_admin_change(
+        request,
+        "Global safeguard enabled",
+        rationale=f"profile={sg.get_active_profile_id()}",
+    )
     logger.info("[Safeguard] Global via API aktiviert (Profil: %s).", sg.get_active_profile_id())
     return {"safeguard": "enabled", "profile_id": sg.get_active_profile_id()}
 
@@ -98,6 +129,11 @@ async def safeguard_disable(request: Request) -> dict:
     sg.disable()
     redis = get_redis()
     await redis.connection.set(REDIS_KEY_SAFEGUARD, "disabled")
+    await _audit_admin_change(
+        request,
+        "Global safeguard disabled",
+        rationale="profile=disabled",
+    )
     logger.warning("[Safeguard] Global via API DEAKTIVIERT.")
     return {"safeguard": "disabled", "profile_id": "disabled"}
 
@@ -124,6 +160,11 @@ async def set_active_profile(body: ProfileAssignRequest, request: Request) -> di
         await sg.set_active_profile(body.profile_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    await _audit_admin_change(
+        request,
+        "Global safeguard profile changed",
+        rationale=f"profile={body.profile_id}",
+    )
     return {"profile_id": body.profile_id}
 
 
@@ -157,6 +198,11 @@ async def set_chat_profile(
     if profile is None:
         raise HTTPException(status_code=404, detail=f"Profil '{body.profile_id}' nicht gefunden.")
     await profile_store.set_chat_profile(session_id, body.profile_id)
+    await _audit_admin_change(
+        request,
+        "Chat safeguard profile changed",
+        rationale=f"session={session_id},profile={body.profile_id}",
+    )
     return {"session_id": session_id, "profile_id": body.profile_id}
 
 
@@ -165,6 +211,11 @@ async def clear_chat_profile(session_id: str, request: Request) -> dict:
     """Chat-spezifisches Profil entfernen (Fallback auf globales Profil)."""
     profile_store = _get_profile_store(request)
     await profile_store.clear_chat_profile(session_id)
+    await _audit_admin_change(
+        request,
+        "Chat safeguard profile cleared",
+        rationale=f"session={session_id}",
+    )
     return {"session_id": session_id, "cleared": True}
 
 
@@ -199,6 +250,11 @@ async def set_agent_profile(
     if profile is None:
         raise HTTPException(status_code=404, detail=f"Profil '{body.profile_id}' nicht gefunden.")
     await sg.agent_store.set_profile(agent_id, body.profile_id)
+    await _audit_admin_change(
+        request,
+        "Agent safeguard profile changed",
+        rationale=f"agent={agent_id},profile={body.profile_id}",
+    )
     return {"agent_id": agent_id, "profile_id": body.profile_id}
 
 
@@ -209,6 +265,11 @@ async def clear_agent_profile(agent_id: str, request: Request) -> dict:
     if sg.agent_store is None:
         raise HTTPException(status_code=503, detail="AgentConfigStore nicht verfügbar.")
     await sg.agent_store.clear_profile(agent_id)
+    await _audit_admin_change(
+        request,
+        "Agent safeguard profile cleared",
+        rationale=f"agent={agent_id}",
+    )
     return {"agent_id": agent_id, "cleared": True}
 
 
@@ -235,6 +296,11 @@ async def agent_safeguard_enable(agent_id: str, request: Request) -> dict:
     """Safeguard für einen Agent aktivieren (backward-compat)."""
     sg = _get_safeguard(request)
     await sg.enable_for_agent(agent_id)
+    await _audit_admin_change(
+        request,
+        "Agent safeguard enabled",
+        rationale=f"agent={agent_id}",
+    )
     return {"agent_id": agent_id, "safeguard": "enabled"}
 
 
@@ -243,6 +309,11 @@ async def agent_safeguard_disable(agent_id: str, request: Request) -> dict:
     """Safeguard für einen Agent deaktivieren (backward-compat)."""
     sg = _get_safeguard(request)
     await sg.disable_for_agent(agent_id)
+    await _audit_admin_change(
+        request,
+        "Agent safeguard disabled",
+        rationale=f"agent={agent_id}",
+    )
     return {"agent_id": agent_id, "safeguard": "disabled"}
 
 
@@ -275,6 +346,11 @@ async def set_agent_classifier_policy(
     if not body.policy.strip():
         raise HTTPException(status_code=400, detail="Policy text must not be empty.")
     await sg.agent_store.set_classifier_policy(agent_id, body.policy)
+    await _audit_admin_change(
+        request,
+        "Agent safeguard policy set",
+        rationale=f"agent={agent_id},policy_len={len(body.policy)}",
+    )
     return {"agent_id": agent_id, "policy_set": True}
 
 
@@ -285,4 +361,9 @@ async def clear_agent_classifier_policy(agent_id: str, request: Request) -> dict
     if sg.agent_store is None:
         raise HTTPException(status_code=503, detail="AgentConfigStore nicht verfügbar.")
     await sg.agent_store.clear_classifier_policy(agent_id)
+    await _audit_admin_change(
+        request,
+        "Agent safeguard policy cleared",
+        rationale=f"agent={agent_id}",
+    )
     return {"agent_id": agent_id, "policy_cleared": True}

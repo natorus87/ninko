@@ -82,6 +82,18 @@ def _github_headers(token: str) -> dict[str, str]:
     return h
 
 
+def _is_repo_allowed(repo_url: str) -> bool:
+    """Optional allowlist via env `NINKO_PLUGIN_REPO_ALLOWLIST` (comma-separated)."""
+    raw = os.getenv("NINKO_PLUGIN_REPO_ALLOWLIST", "").strip()
+    if not raw:
+        return True
+    allowed = [entry.strip().lower() for entry in raw.split(",") if entry.strip()]
+    if not allowed:
+        return True
+    url = repo_url.strip().lower()
+    return any(url == entry or url.startswith(entry.rstrip("/") + "/") for entry in allowed)
+
+
 async def _load_repos() -> list[dict[str, Any]]:
     """Lädt die Repo-Liste aus Redis. Gibt Default zurück wenn leer."""
     redis = get_redis()
@@ -260,6 +272,8 @@ async def upload_plugin(request: Request, file: UploadFile = File(...)) -> JSONR
             
         plugin_source_dir = contents[0]
         plugin_name = plugin_source_dir.name
+        if not re.fullmatch(r"[a-zA-Z0-9_\-]+", plugin_name):
+            raise HTTPException(status_code=400, detail="Ungültiger Plugin-Name im ZIP-Root.")
         
         # Sicherheits-Check: Befindet sich __init__.py darin?
         if not (plugin_source_dir / "__init__.py").exists():
@@ -314,6 +328,8 @@ async def add_repo(request: Request) -> JSONResponse:
     repo_url = body.get("repo_url", "").strip()
     if not repo_url or not _parse_github_url(repo_url):
         raise HTTPException(status_code=400, detail="Ungültige oder fehlende GitHub-URL.")
+    if not _is_repo_allowed(repo_url):
+        raise HTTPException(status_code=403, detail="Repository ist nicht in der erlaubten Allowlist.")
 
     repos = await _load_repos()
     new_repo: dict[str, Any] = {
@@ -344,6 +360,8 @@ async def update_repo(request: Request, repo_id: str) -> JSONResponse:
         url = body["repo_url"].strip()
         if not _parse_github_url(url):
             raise HTTPException(status_code=400, detail="Ungültige GitHub-URL.")
+        if not _is_repo_allowed(url):
+            raise HTTPException(status_code=403, detail="Repository ist nicht in der erlaubten Allowlist.")
         repo["repo_url"] = url
     if "branch" in body:
         repo["branch"] = (body["branch"] or "main").strip()
@@ -487,6 +505,8 @@ async def install_from_repo(
     parsed = _parse_github_url(repo_cfg["repo_url"])
     if not parsed:
         raise HTTPException(status_code=400, detail="Ungültige GitHub-URL in der Repo-Konfiguration.")
+    if not _is_repo_allowed(repo_cfg["repo_url"]):
+        raise HTTPException(status_code=403, detail="Repository ist nicht in der erlaubten Allowlist.")
 
     owner, repo_name = parsed
     branch = repo_cfg.get("branch", "main")
@@ -522,9 +542,21 @@ async def install_from_repo(
 
         extract_dir = temp_dir / "extracted"
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            total_size = sum(m.file_size for m in zip_ref.infolist())
+            members = zip_ref.infolist()
+            total_size = sum(m.file_size for m in members)
             if total_size > _MAX_UNCOMPRESSED_SIZE:
                 raise HTTPException(status_code=400, detail="Modul zu groß (max. 100 MB).")
+            for member in members:
+                if member.is_symlink():
+                    raise HTTPException(
+                        status_code=400,
+                        detail="ZIP-Archiv enthält symbolische Links (nicht erlaubt).",
+                    )
+                if ".." in member.filename or member.filename.startswith("/"):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"ZIP-Archiv enthält ungültigen Pfad: {member.filename}",
+                    )
             zip_ref.extractall(extract_dir)
 
         contents = list(extract_dir.iterdir())

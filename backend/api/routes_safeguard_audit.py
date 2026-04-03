@@ -12,10 +12,10 @@ import json
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 
 from core.redis_client import get_redis
-from core.safeguard import SafeguardMiddleware
+from core.safeguard import ActionCategory, SafeguardMiddleware
 
 logger = logging.getLogger("ninko.api.safeguard_audit")
 router = APIRouter(prefix="/api/safeguard/audit", tags=["Safeguard Audit"])
@@ -76,8 +76,25 @@ async def get_audit_log(
 
 
 @router.delete("/")
-async def clear_audit_log() -> dict:
+async def clear_audit_log(request: Request) -> dict:
     """Clear the safeguard audit log."""
+    try:
+        sg: SafeguardMiddleware | None = getattr(request.app.state, "safeguard", None)
+        if sg is not None:
+            await sg._audit_log(
+                action="admin_change",
+                category=ActionCategory.STATE_CHANGING,
+                text="Safeguard audit log cleared",
+                session_id="api",
+                agent_id="safeguard_admin",
+                tool_name="api:safeguard/audit",
+                outcome="admin_change",
+                rationale="manual clear",
+                profile_id=sg.get_active_profile_id(),
+            )
+    except Exception:
+        pass
+
     redis = get_redis()
     await redis.connection.delete(AUDIT_LOG_KEY)
     logger.info("[Safeguard/Audit] Audit log cleared via API.")

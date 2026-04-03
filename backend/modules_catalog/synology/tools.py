@@ -894,3 +894,398 @@ async def reboot_synologyNAS(confirm: bool = False, connection_id: str = "") -> 
     except Exception as e:
         logger.error("reboot_synologyNAS failed: %s", e)
         return {"error": str(e)}
+
+
+@tool
+async def create_synology_user(
+    username: str,
+    password: str,
+    description: str = "",
+    connection_id: str = "",
+) -> dict:
+    """
+    Create a new Synology user.
+    Use this when the user asks to create a new user account.
+    """
+    try:
+        client = await _get_api_client(connection_id)
+
+        async with httpx.AsyncClient(timeout=30.0) as http:
+            login_resp = await http.get(
+                f"{client['base_url']}/webapi/entry.cgi",
+                params={
+                    "api": "SYNO.API.Auth",
+                    "method": "login",
+                    "version": "7",
+                    "account": client["username"],
+                    "passwd": client["password"],
+                    "session": "core",
+                    "format": "cookie",
+                },
+            )
+            login_resp.raise_for_status()
+            login_data = login_resp.json()
+
+            if not login_data.get("success"):
+                raise ValueError(f"Login failed: {login_data.get('error', {})}")
+
+            session = login_data["data"]["sid"]
+
+            try:
+                result = await _synology_request(
+                    client["base_url"], "entry.cgi", session,
+                    "SYNO.Core.User", "create",
+                    {"name": username, "password": password, "description": description},
+                )
+
+                return {
+                    "status": "success",
+                    "message": f"User '{username}' created successfully.",
+                    "detail": result,
+                }
+            finally:
+                await http.get(
+                    f"{client['base_url']}/webapi/entry.cgi",
+                    params={"api": "SYNO.API.Auth", "method": "logout", "version": "7", "_sid": session},
+                )
+
+    except Exception as e:
+        logger.error("create_synology_user failed: %s", e)
+        return {"error": str(e)}
+
+
+@tool
+async def delete_synology_user(username: str, confirm: bool = False, connection_id: str = "") -> dict:
+    """
+    Delete a Synology user.
+    Use this when the user asks to delete a user account.
+    Requires confirm=True to actually delete.
+    """
+    if not confirm:
+        return {
+            "status": "pending_confirmation",
+            "message": f"User '{username}' will be DELETED. Set confirm=True to proceed.",
+        }
+
+    try:
+        client = await _get_api_client(connection_id)
+
+        async with httpx.AsyncClient(timeout=30.0) as http:
+            login_resp = await http.get(
+                f"{client['base_url']}/webapi/entry.cgi",
+                params={
+                    "api": "SYNO.API.Auth",
+                    "method": "login",
+                    "version": "7",
+                    "account": client["username"],
+                    "passwd": client["password"],
+                    "session": "core",
+                    "format": "cookie",
+                },
+            )
+            login_resp.raise_for_status()
+            login_data = login_resp.json()
+
+            if not login_data.get("success"):
+                raise ValueError(f"Login failed: {login_data.get('error', {})}")
+
+            session = login_data["data"]["sid"]
+
+            try:
+                result = await _synology_request(
+                    client["base_url"], "entry.cgi", session,
+                    "SYNO.Core.User", "delete",
+                    {"name": username},
+                )
+
+                return {
+                    "status": "success",
+                    "message": f"User '{username}' deleted successfully.",
+                }
+            finally:
+                await http.get(
+                    f"{client['base_url']}/webapi/entry.cgi",
+                    params={"api": "SYNO.API.Auth", "method": "logout", "version": "7", "_sid": session},
+                )
+
+    except Exception as e:
+        logger.error("delete_synology_user failed: %s", e)
+        return {"error": str(e)}
+
+
+@tool
+async def change_synology_user_password(
+    username: str,
+    new_password: str,
+    connection_id: str = "",
+) -> dict:
+    """
+    Change password for a Synology user.
+    Use this when the user asks to change a password.
+    """
+    try:
+        client = await _get_api_client(connection_id)
+
+        async with httpx.AsyncClient(timeout=30.0) as http:
+            login_resp = await http.get(
+                f"{client['base_url']}/webapi/entry.cgi",
+                params={
+                    "api": "SYNO.API.Auth",
+                    "method": "login",
+                    "version": "7",
+                    "account": client["username"],
+                    "passwd": client["password"],
+                    "session": "core",
+                    "format": "cookie",
+                },
+            )
+            login_resp.raise_for_status()
+            login_data = login_resp.json()
+
+            if not login_data.get("success"):
+                raise ValueError(f"Login failed: {login_data.get('error', {})}")
+
+            session = login_data["data"]["sid"]
+
+            try:
+                result = await _synology_request(
+                    client["base_url"], "entry.cgi", session,
+                    "SYNO.Core.User", "set_password",
+                    {"name": username, "password": new_password},
+                )
+
+                return {
+                    "status": "success",
+                    "message": f"Password for user '{username}' changed successfully.",
+                }
+            finally:
+                await http.get(
+                    f"{client['base_url']}/webapi/entry.cgi",
+                    params={"api": "SYNO.API.Auth", "method": "logout", "version": "7", "_sid": session},
+                )
+
+    except Exception as e:
+        logger.error("change_synology_user_password failed: %s", e)
+        return {"error": str(e)}
+
+
+@tool
+async def get_synology_groups(connection_id: str = "") -> dict:
+    """
+    Retrieve group list.
+    Use this when the user asks for groups or to see existing user groups.
+    """
+    try:
+        client = await _get_api_client(connection_id)
+
+        async with httpx.AsyncClient(timeout=30.0) as http:
+            login_resp = await http.get(
+                f"{client['base_url']}/webapi/entry.cgi",
+                params={
+                    "api": "SYNO.API.Auth",
+                    "method": "login",
+                    "version": "7",
+                    "account": client["username"],
+                    "passwd": client["password"],
+                    "session": "core",
+                    "format": "cookie",
+                },
+            )
+            login_resp.raise_for_status()
+            login_data = login_resp.json()
+
+            if not login_data.get("success"):
+                raise ValueError(f"Login failed: {login_data.get('error', {})}")
+
+            session = login_data["data"]["sid"]
+
+            try:
+                groups = await _synology_request(
+                    client["base_url"], "entry.cgi", session,
+                    "SYNO.Core.Group", "list",
+                    {"limit": 100, "offset": 0},
+                )
+
+                return {
+                    "status": "success",
+                    "groups": groups.get("groups", []),
+                }
+            finally:
+                await http.get(
+                    f"{client['base_url']}/webapi/entry.cgi",
+                    params={"api": "SYNO.API.Auth", "method": "logout", "version": "7", "_sid": session},
+                )
+
+    except Exception as e:
+        logger.error("get_synology_groups failed: %s", e)
+        return {"error": str(e)}
+
+
+@tool
+async def create_synology_group(
+    group_name: str,
+    description: str = "",
+    connection_id: str = "",
+) -> dict:
+    """
+    Create a new Synology group.
+    Use this when the user asks to create a new user group.
+    """
+    try:
+        client = await _get_api_client(connection_id)
+
+        async with httpx.AsyncClient(timeout=30.0) as http:
+            login_resp = await http.get(
+                f"{client['base_url']}/webapi/entry.cgi",
+                params={
+                    "api": "SYNO.API.Auth",
+                    "method": "login",
+                    "version": "7",
+                    "account": client["username"],
+                    "passwd": client["password"],
+                    "session": "core",
+                    "format": "cookie",
+                },
+            )
+            login_resp.raise_for_status()
+            login_data = login_resp.json()
+
+            if not login_data.get("success"):
+                raise ValueError(f"Login failed: {login_data.get('error', {})}")
+
+            session = login_data["data"]["sid"]
+
+            try:
+                result = await _synology_request(
+                    client["base_url"], "entry.cgi", session,
+                    "SYNO.Core.Group", "create",
+                    {"name": group_name, "description": description},
+                )
+
+                return {
+                    "status": "success",
+                    "message": f"Group '{group_name}' created successfully.",
+                    "detail": result,
+                }
+            finally:
+                await http.get(
+                    f"{client['base_url']}/webapi/entry.cgi",
+                    params={"api": "SYNO.API.Auth", "method": "logout", "version": "7", "_sid": session},
+                )
+
+    except Exception as e:
+        logger.error("create_synology_group failed: %s", e)
+        return {"error": str(e)}
+
+
+@tool
+async def add_user_to_group(
+    username: str,
+    group_name: str,
+    connection_id: str = "",
+) -> dict:
+    """
+    Add a user to a group.
+    Use this when the user asks to add a user to a specific group.
+    """
+    try:
+        client = await _get_api_client(connection_id)
+
+        async with httpx.AsyncClient(timeout=30.0) as http:
+            login_resp = await http.get(
+                f"{client['base_url']}/webapi/entry.cgi",
+                params={
+                    "api": "SYNO.API.Auth",
+                    "method": "login",
+                    "version": "7",
+                    "account": client["username"],
+                    "passwd": client["password"],
+                    "session": "core",
+                    "format": "cookie",
+                },
+            )
+            login_resp.raise_for_status()
+            login_data = login_resp.json()
+
+            if not login_data.get("success"):
+                raise ValueError(f"Login failed: {login_data.get('error', {})}")
+
+            session = login_data["data"]["sid"]
+
+            try:
+                result = await _synology_request(
+                    client["base_url"], "entry.cgi", session,
+                    "SYNO.Core.Group", "set_users",
+                    {"name": group_name, "users": [username], "action": "add"},
+                )
+
+                return {
+                    "status": "success",
+                    "message": f"User '{username}' added to group '{group_name}'.",
+                    "detail": result,
+                }
+            finally:
+                await http.get(
+                    f"{client['base_url']}/webapi/entry.cgi",
+                    params={"api": "SYNO.API.Auth", "method": "logout", "version": "7", "_sid": session},
+                )
+
+    except Exception as e:
+        logger.error("add_user_to_group failed: %s", e)
+        return {"error": str(e)}
+
+
+@tool
+async def remove_user_from_group(
+    username: str,
+    group_name: str,
+    connection_id: str = "",
+) -> dict:
+    """
+    Remove a user from a group.
+    Use this when the user asks to remove a user from a specific group.
+    """
+    try:
+        client = await _get_api_client(connection_id)
+
+        async with httpx.AsyncClient(timeout=30.0) as http:
+            login_resp = await http.get(
+                f"{client['base_url']}/webapi/entry.cgi",
+                params={
+                    "api": "SYNO.API.Auth",
+                    "method": "login",
+                    "version": "7",
+                    "account": client["username"],
+                    "passwd": client["password"],
+                    "session": "core",
+                    "format": "cookie",
+                },
+            )
+            login_resp.raise_for_status()
+            login_data = login_resp.json()
+
+            if not login_data.get("success"):
+                raise ValueError(f"Login failed: {login_data.get('error', {})}")
+
+            session = login_data["data"]["sid"]
+
+            try:
+                result = await _synology_request(
+                    client["base_url"], "entry.cgi", session,
+                    "SYNO.Core.Group", "set_users",
+                    {"name": group_name, "users": [username], "action": "remove"},
+                )
+
+                return {
+                    "status": "success",
+                    "message": f"User '{username}' removed from group '{group_name}'.",
+                }
+            finally:
+                await http.get(
+                    f"{client['base_url']}/webapi/entry.cgi",
+                    params={"api": "SYNO.API.Auth", "method": "logout", "version": "7", "_sid": session},
+                )
+
+    except Exception as e:
+        logger.error("remove_user_from_group failed: %s", e)
+        return {"error": str(e)}

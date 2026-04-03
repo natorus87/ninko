@@ -9,8 +9,10 @@ import base64
 import json
 import logging
 import os
+import uuid
+from pathlib import Path
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, UploadFile, File
 
 from schemas.settings import (
     LlmSettings,
@@ -22,6 +24,8 @@ from schemas.settings import (
     K8sClusterInfo,
     K8sClusterCreate,
     K8sClusterListResponse,
+    BrandingSettings,
+    BrandingSettingsResponse,
 )
 from core.config import get_settings
 from core.redis_client import get_redis
@@ -33,6 +37,36 @@ REDIS_KEY_LLM = "ninko:settings:llm"
 REDIS_KEY_MODULES = "ninko:settings:modules"
 REDIS_KEY_K8S_CLUSTERS = "ninko:settings:k8s_clusters"
 REDIS_KEY_LLM_PROVIDERS = "ninko:settings:llm_providers"
+REDIS_KEY_BRANDING = "ninko:settings:branding"
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_BRANDING_DIR = Path("/app/data/branding") if Path("/app/data").exists() else (_REPO_ROOT / "data" / "branding")
+_BRANDING_DIR.mkdir(parents=True, exist_ok=True)
+_BRANDING_ALLOWED_MIME = {"image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml"}
+_BRANDING_ALLOWED_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"}
+
+
+def _sanitize_llm_payload(data: dict, source: str) -> LlmSettingsResponse:
+    """Entfernt Secrets aus LLM-Responses und liefert *_set Flag."""
+    clean = dict(data or {})
+    secret = (clean.get("api_key") or "").strip()
+    clean["api_key"] = ""
+    clean["api_key_set"] = bool(secret)
+    clean["source"] = source
+    return LlmSettingsResponse(**clean)
+
+
+def _sanitize_provider(provider: dict) -> dict:
+    """Entfernt Provider-Secrets aus Read-Responses."""
+    clean = dict(provider)
+    secret = (clean.get("api_key") or "").strip()
+    clean["api_key"] = ""
+    clean["api_key_set"] = bool(secret)
+    return clean
+
+
+def _branding_defaults() -> dict:
+    return BrandingSettings().model_dump()
 
 
 # ═══════════════════════════════════════════════════════
@@ -48,7 +82,7 @@ async def get_llm_settings() -> LlmSettingsResponse:
 
     if raw:
         data = json.loads(raw)
-        return LlmSettingsResponse(**data, source="redis")
+        return _sanitize_llm_payload(data, source="redis")
 
     # Fallback auf Env/Defaults
     cfg = get_settings()
@@ -64,10 +98,17 @@ async def get_llm_settings() -> LlmSettingsResponse:
     else:
         base_url = cfg.LMSTUDIO_BASE_URL
         model = cfg.LMSTUDIO_MODEL
-    return LlmSettingsResponse(
-        backend=cfg.LLM_BACKEND,
-        base_url=base_url,
-        model=model,
+    return _sanitize_llm_payload(
+        {
+            "backend": cfg.LLM_BACKEND,
+            "base_url": base_url,
+            "model": model,
+            "api_key": (
+                cfg.OPENAI_API_KEY
+                if cfg.LLM_BACKEND == "openai_compatible"
+                else (cfg.LITELLM_API_KEY if cfg.LLM_BACKEND == "litellm" else "")
+            ),
+        },
         source="default",
     )
 
@@ -76,15 +117,26 @@ async def get_llm_settings() -> LlmSettingsResponse:
 async def update_llm_settings(body: LlmSettings) -> LlmSettingsResponse:
     """LLM-Konfiguration aktualisieren und LLM-Factory neu initialisieren."""
     redis = get_redis()
-    await redis.connection.set(REDIS_KEY_LLM, body.model_dump_json())
+    payload = body.model_dump()
+    if not payload.get("api_key"):
+        existing_raw = await redis.connection.get(REDIS_KEY_LLM)
+        if existing_raw:
+            try:
+                existing = json.loads(existing_raw)
+                if existing.get("api_key"):
+                    payload["api_key"] = existing["api_key"]
+            except Exception:
+                pass
+
+    await redis.connection.set(REDIS_KEY_LLM, json.dumps(payload))
     logger.info(
         "LLM-Settings aktualisiert: backend=%s, model=%s", body.backend, body.model
     )
 
     # LLM-Factory neu initialisieren
-    _reconfigure_llm(body)
+    _reconfigure_llm(LlmSettings(**payload))
 
-    return LlmSettingsResponse(**body.model_dump(), source="redis")
+    return _sanitize_llm_payload(payload, source="redis")
 
 
 # ── Global Embedding Model (einheitlich für ChromaDB) ──
@@ -158,6 +210,134 @@ def _reconfigure_llm(settings: LlmSettings) -> None:
         "LLM-Factory wird beim nächsten Aufruf neu initialisiert: backend=%s",
         settings.backend,
     )
+
+
+# ═══════════════════════════════════════════════════════
+#  Branding Settings
+# ═══════════════════════════════════════════════════════
+
+
+@router.get("/branding", response_model=BrandingSettingsResponse)
+async def get_branding_settings() -> BrandingSettingsResponse:
+    """Dashboard-Branding abrufen (Redis → Default)."""
+    redis = get_redis()
+    raw = await redis.connection.get(REDIS_KEY_BRANDING)
+    defaults = _branding_defaults()
+    if raw:
+        try:
+            data = json.loads(raw)
+            merged = {**defaults, **(data or {})}
+            return BrandingSettingsResponse(**merged, source="redis")
+        except Exception:
+            pass
+    return BrandingSettingsResponse(**defaults, source="default")
+
+
+@router.put("/branding", response_model=BrandingSettingsResponse)
+async def update_branding_settings(body: BrandingSettings) -> BrandingSettingsResponse:
+    """Dashboard-Branding persistieren."""
+    redis = get_redis()
+    payload = body.model_dump()
+    await redis.connection.set(REDIS_KEY_BRANDING, json.dumps(payload))
+    logger.info("Branding-Settings aktualisiert: brand_name=%s", payload.get("brand_name", "Ninko"))
+    return BrandingSettingsResponse(**payload, source="redis")
+
+
+@router.post("/branding/reset", response_model=BrandingSettingsResponse)
+async def reset_branding_settings() -> BrandingSettingsResponse:
+    """Branding auf Defaults zurücksetzen."""
+    redis = get_redis()
+    payload = _branding_defaults()
+    await redis.connection.set(REDIS_KEY_BRANDING, json.dumps(payload))
+    logger.info("Branding-Settings auf Defaults zurückgesetzt.")
+    return BrandingSettingsResponse(**payload, source="redis")
+
+
+@router.post("/branding/upload")
+async def upload_branding_asset(file: UploadFile = File(...)) -> dict:
+    """Branding-Bild hochladen und persistieren."""
+    cfg = get_settings()
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Leere Datei.")
+    if len(raw) > int(cfg.BRANDING_MAX_UPLOAD_BYTES):
+        raise HTTPException(status_code=413, detail="Datei zu groß.")
+
+    filename = file.filename or "asset.bin"
+    ext = Path(filename).suffix.lower()
+    if ext not in _BRANDING_ALLOWED_EXT:
+        raise HTTPException(status_code=415, detail=f"Dateiendung '{ext or '<none>'}' nicht erlaubt.")
+
+    mime = (file.content_type or "").split(";")[0].strip().lower()
+    if mime and mime not in _BRANDING_ALLOWED_MIME:
+        raise HTTPException(status_code=415, detail=f"MIME-Type '{mime}' nicht erlaubt.")
+
+    safe_name = f"{uuid.uuid4().hex}{ext}"
+    target = _BRANDING_DIR / safe_name
+    target.write_bytes(raw)
+    return {
+        "filename": safe_name,
+        "url": f"/api/settings/branding/assets/{safe_name}",
+        "size": len(raw),
+    }
+
+
+@router.get("/branding/assets/{filename}")
+async def get_branding_asset(filename: str):
+    """Branding-Asset aus persistentem Storage ausliefern."""
+    from fastapi.responses import FileResponse
+
+    if ".." in filename or "/" in filename:
+        raise HTTPException(status_code=400, detail="Ungültiger Dateiname")
+    path = _BRANDING_DIR / filename
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Datei nicht gefunden")
+
+    media_type = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+        ".svg": "image/svg+xml",
+    }.get(path.suffix.lower(), "application/octet-stream")
+    return FileResponse(str(path), media_type=media_type, filename=filename)
+
+
+@router.delete("/branding/assets/{filename}")
+async def delete_branding_asset(filename: str) -> dict:
+    """Branding-Asset löschen und ggf. referenzierte URLs im Branding leeren."""
+    if ".." in filename or "/" in filename:
+        raise HTTPException(status_code=400, detail="Ungültiger Dateiname")
+    path = _BRANDING_DIR / filename
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Datei nicht gefunden")
+
+    try:
+        path.unlink()
+    except OSError:
+        raise HTTPException(status_code=500, detail="Datei konnte nicht gelöscht werden")
+
+    # Falls URL im Branding verwendet wurde, zurück auf Defaults/Fallback setzen
+    redis = get_redis()
+    raw = await redis.connection.get(REDIS_KEY_BRANDING)
+    if raw:
+        try:
+            data = json.loads(raw) or {}
+            asset_url = f"/api/settings/branding/assets/{filename}"
+            changed = False
+            if data.get("logo_url") == asset_url:
+                data["logo_url"] = _branding_defaults()["logo_url"]
+                changed = True
+            if data.get("welcome_image_url") == asset_url:
+                data["welcome_image_url"] = _branding_defaults()["welcome_image_url"]
+                changed = True
+            if changed:
+                await redis.connection.set(REDIS_KEY_BRANDING, json.dumps(data))
+        except Exception:
+            pass
+
+    return {"deleted": True, "filename": filename}
 
 
 # ═══════════════════════════════════════════════════════
@@ -337,6 +517,9 @@ def _get_env_connection(module_name: str, prefix: str) -> dict:
         "wordpress": ["WORDPRESS_URL", "WORDPRESS_USERNAME"],
         "checkmk": ["CHECKMK_URL", "CHECKMK_SITE", "CHECKMK_API_USERNAME"],
         "synology": ["SYNOLOGY_URL", "SYNOLOGY_USERNAME"],
+        "redmine": ["REDMINE_URL"],
+        "confluence": ["CONFLUENCE_URL", "CONFLUENCE_EMAIL"],
+        "jira": ["JIRA_URL", "JIRA_EMAIL"],
     }
     for key in mappings.get(module_name, []):
         val = os.environ.get(key, "")
@@ -360,6 +543,9 @@ def _get_secret_keys(module_name: str) -> list[str]:
         "wordpress": ["WORDPRESS_APP_PASSWORD"],
         "checkmk": ["CHECKMK_API_PASSWORD", "CHECKMK_API_TOKEN"],
         "synology": ["SYNOLOGY_PASSWORD", "SYNOLOGY_API_KEY"],
+        "redmine": ["REDMINE_API_KEY"],
+        "confluence": ["CONFLUENCE_API_KEY"],
+        "jira": ["JIRA_API_KEY"],
     }.get(module_name, [])
 
 
@@ -440,7 +626,7 @@ async def list_llm_providers() -> list:
     """Alle konfigurierten LLM-Provider auflisten."""
     redis = get_redis()
     providers = await _load_providers(redis)
-    return providers
+    return [_sanitize_provider(p) for p in providers]
 
 
 @router.post("/llm/providers", status_code=201)
@@ -491,7 +677,12 @@ async def update_llm_provider(provider_id: str, body: LLMProviderCreate) -> dict
         for p in providers:
             p["is_default"] = False
 
-    providers[idx] = {**providers[idx], **body.model_dump(), "id": provider_id}
+    incoming = body.model_dump()
+    if not incoming.get("api_key") and providers[idx].get("api_key"):
+        # Leeres Feld im UI bedeutet "bestehenden Key beibehalten"
+        incoming["api_key"] = providers[idx]["api_key"]
+
+    providers[idx] = {**providers[idx], **incoming, "id": provider_id}
     await _save_providers(redis, providers)
     # Falls dieser oder ein anderer Provider zum Standard wurde → LLM-Factory neu
     _apply_default_provider(providers)
@@ -845,7 +1036,11 @@ async def get_stt_settings() -> dict:
     redis = get_redis()
     raw = await redis.connection.get(REDIS_KEY_STT)
     if raw:
-        return {"source": "redis", **json.loads(raw)}
+        data = json.loads(raw)
+        key = (data.get("STT_API_KEY") or "").strip()
+        data["STT_API_KEY"] = ""
+        data["STT_API_KEY_SET"] = bool(key)
+        return {"source": "redis", **data}
 
     cfg = get_settings()
     return {
@@ -856,7 +1051,8 @@ async def get_stt_settings() -> dict:
         "WHISPER_COMPUTE_TYPE": cfg.WHISPER_COMPUTE_TYPE,
         "WHISPER_LANGUAGE": cfg.WHISPER_LANGUAGE,
         "STT_API_URL": cfg.STT_API_URL,
-        "STT_API_KEY": cfg.STT_API_KEY,
+        "STT_API_KEY": "",
+        "STT_API_KEY_SET": bool((cfg.STT_API_KEY or "").strip()),
         "STT_MODEL": cfg.STT_MODEL,
         "STT_SPELLCHECK": cfg.STT_SPELLCHECK,
         "STT_CONFIDENCE_THRESHOLD": cfg.STT_CONFIDENCE_THRESHOLD,
