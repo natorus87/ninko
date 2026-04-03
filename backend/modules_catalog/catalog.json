@@ -85,6 +85,13 @@
       "author": "Ninko Team"
     },
     {
+      "name": "lenovo_xclarity",
+      "display_name": "Lenovo XClarity",
+      "description": "Lenovo XClarity Administrator – ThinkSystem/ThinkBlade Server Management.",
+      "version": "1.0.0",
+      "author": "Ninko"
+    },
+    {
       "name": "microsoft_entra",
       "display_name": "Microsoft Entra",
       "description": "Microsoft Entra ID (formerly Azure AD) – Users, Groups, Applications, Devices.",

@@ -175,6 +175,18 @@ _TOOL_LABELS: dict[str, tuple[str, str]] = {
     "upload_slack_file": ("Lade Datei hoch", "Uploading file"),
     "create_slack_channel": ("Erstelle Channel", "Creating channel"),
     "invite_user_to_channel": ("Lade Benutzer ein", "Inviting user"),
+    # Lenovo XClarity
+    "list_xclarity_servers": ("Lade Server", "Loading servers"),
+    "get_xclarity_server_details": ("Lade Serverdetails", "Loading server details"),
+    "list_xclarity_chassis": ("Lade Chassis", "Loading chassis"),
+    "list_xclarity_storage": ("Lade Storage", "Loading storage"),
+    "get_xclarity_server_health": ("Prüfe Gesundheit", "Checking health"),
+    "list_xclarity_events": ("Lade Events", "Loading events"),
+    "get_xclarity_firmware": ("Lade Firmware", "Loading firmware"),
+    "power_on_xclarity_server": ("Schalte Server ein", "Powering on server"),
+    "power_off_xclarity_server": ("Schalte Server aus", "Powering off server"),
+    "restart_xclarity_server": ("Neustart Server", "Restarting server"),
+    "identify_xclarity_server": ("Identifiziere Server", "Identifying server"),
     # Redmine
     "get_redmine_projects": ("Lade Projekte", "Loading projects"),
     "get_redmine_project": ("Lade Projekt", "Loading project"),
