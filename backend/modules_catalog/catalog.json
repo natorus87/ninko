@@ -113,6 +113,13 @@
       "author": "Ninko Team"
     },
     {
+      "name": "slack",
+      "display_name": "Slack",
+      "description": "Slack Team Communication – Channels, Messages, Users, and Notifications.",
+      "version": "1.0.0",
+      "author": "Ninko"
+    },
+    {
       "name": "proxmox",
       "display_name": "Proxmox",
       "description": "Proxmox VE Management – VMs, Container, Nodes, Snapshots",
