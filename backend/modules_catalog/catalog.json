@@ -8,6 +8,13 @@
       "author": "Ninko Team"
     },
     {
+      "name": "cisco",
+      "display_name": "Cisco",
+      "description": "Cisco Network Devices – Switches, Routers, Nexus – Interface Status, VLANs, Routing.",
+      "version": "1.0.0",
+      "author": "Ninko"
+    },
+    {
       "name": "confluence",
       "display_name": "Confluence",
       "description": "Atlassian Confluence Wiki – Spaces, Pages, Blog Posts und Suche.",

@@ -210,6 +210,21 @@ _TOOL_LABELS: dict[str, tuple[str, str]] = {
     "delete_nextcloud_file": ("Lösche Datei", "Deleting file"),
     "create_nextcloud_share": ("Erstelle Share", "Creating share"),
     "create_nextcloud_user": ("Erstelle Benutzer", "Creating user"),
+    # Cisco
+    "get_cisco_device_info": ("Lade Geräteinfo", "Loading device info"),
+    "list_cisco_interfaces": ("Lade Interfaces", "Loading interfaces"),
+    "get_cisco_interface_details": (
+        "Lade Interface-Details",
+        "Loading interface details",
+    ),
+    "list_cisco_vlans": ("Lade VLANs", "Loading VLANs"),
+    "list_cisco_routes": ("Lade Routen", "Loading routes"),
+    "list_cisco_mac_addresses": ("Lade MAC-Table", "Loading MAC table"),
+    "get_cisco_poe_status": ("Lade PoE-Status", "Loading PoE status"),
+    "enable_cisco_interface": ("Aktiviere Interface", "Enabling interface"),
+    "disable_cisco_interface": ("Deaktiviere Interface", "Disabling interface"),
+    "create_cisco_vlan": ("Erstelle VLAN", "Creating VLAN"),
+    "set_cisco_interface_vlan": ("Setze VLAN", "Setting VLAN"),
     # Redmine
     "get_redmine_projects": ("Lade Projekte", "Loading projects"),
     "get_redmine_project": ("Lade Projekt", "Loading project"),
