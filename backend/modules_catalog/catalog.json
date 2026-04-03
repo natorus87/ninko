@@ -92,6 +92,13 @@
       "author": "Ninko"
     },
     {
+      "name": "microsoft_intune",
+      "display_name": "Microsoft Intune",
+      "description": "Microsoft Intune MDM – Mobile Device Management, Policies, Apps, Compliance.",
+      "version": "1.0.0",
+      "author": "Ninko"
+    },
+    {
       "name": "opnsense",
       "display_name": "OPNsense",
       "description": "Management und Monitoring einer OPNsense Firewall via REST API.",

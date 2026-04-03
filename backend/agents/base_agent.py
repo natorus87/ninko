@@ -154,6 +154,17 @@ _TOOL_LABELS: dict[str, tuple[str, str]] = {
     "reset_entra_user_password": ("Setze Passwort zurück", "Resetting password"),
     "create_entra_group": ("Erstelle Gruppe", "Creating group"),
     "add_user_to_group": ("Füge User zu Gruppe", "Adding user to group"),
+    # Microsoft Intune
+    "list_intune_devices": ("Lade Geräte", "Loading devices"),
+    "get_intune_device": ("Lade Gerätedetails", "Loading device details"),
+    "list_intune_policies": ("Lade Richtlinien", "Loading policies"),
+    "list_intune_compliance_policies": ("Lade Compliance", "Loading compliance"),
+    "list_intune_apps": ("Lade Apps", "Loading apps"),
+    "get_intune_device_compliance": ("Prüfe Compliance", "Checking compliance"),
+    "wipe_intune_device": ("Wipe Gerät", "Wiping device"),
+    "retire_intune_device": (" Retire Gerät", "Retiring device"),
+    "sync_intune_device": ("Sync Gerät", "Syncing device"),
+    "locate_intune_device": (" Lokalisiere Gerät", "Locating device"),
     # Redmine
     "get_redmine_projects": ("Lade Projekte", "Loading projects"),
     "get_redmine_project": ("Lade Projekt", "Loading project"),
