@@ -54,7 +54,7 @@ const ProxmoxTab = {
             if (!select) return;
 
             if (conns.length === 0) {
-                select.innerHTML = '<option value="">Keine Proxmox Verbindungen</option>';
+                select.innerHTML = '<option value="">' + I18n.t('modules.proxmox.noConnections') + '</option>';
                 this.currentConnectionId = '';
                 return;
             }

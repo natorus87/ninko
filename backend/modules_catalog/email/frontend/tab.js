@@ -28,9 +28,9 @@ const EmailTab = {
             if (!select) return;
 
             if (conns.length === 0) {
-                select.innerHTML = '<option value="">Keine Email Verbindungen</option>';
+                select.innerHTML = '<option value="">' + I18n.t('modules.email.noConnections') + '</option>';
                 this.currentConnectionId = '';
-                this.updateStatusUI('warning', 'Keine Verbindung konfiguriert', 'Bitte in den Zentraleinstellungen (Zahnrad) hinzufügen.');
+                this.updateStatusUI('warning', I18n.t('modules.email.noConnectionConfigured'), I18n.t('modules.email.addInSettings'));
                 return;
             }
 
@@ -48,7 +48,7 @@ const EmailTab = {
     async refresh() {
         if (!this.currentConnectionId) return;
 
-        this.updateStatusUI('loading', 'Prüfe Verbindung...', 'IMAP & SMTP Server werden kontaktiert');
+        this.updateStatusUI('loading', I18n.t('modules.email.checkingConnection'), I18n.t('modules.email.imapSmtpContact'));
 
         try {
             const res = await fetch(`${this.API_PREFIX}/status?connection_id=${this.currentConnectionId}`);
@@ -56,12 +56,12 @@ const EmailTab = {
             const data = await res.json();
 
             if (data.status === 'ok') {
-                this.updateStatusUI('ok', 'Verbunden', data.message);
+                this.updateStatusUI('ok', I18n.t('modules.email.connected'), data.message);
             } else {
-                this.updateStatusUI('error', 'Verbindungsfehler', data.message);
+                this.updateStatusUI('error', I18n.t('modules.email.connectionError'), data.message);
             }
         } catch (err) {
-            this.updateStatusUI('error', 'Fehler', err.message);
+            this.updateStatusUI('error', I18n.t('modules.email.error'), err.message);
         }
     },
 

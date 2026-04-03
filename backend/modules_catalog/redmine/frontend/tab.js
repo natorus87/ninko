@@ -6,11 +6,11 @@
         refresh: async function() {
             const container = document.getElementById('redmine-issues');
             if (!this.connId) {
-                container.innerHTML = '<p class="empty-state">Bitte Verbindung auswählen.</p>';
+                container.innerHTML = '<p class="empty-state">' + I18n.t('modules.redmine.selectConnection') + '</p>';
                 return;
             }
 
-            container.innerHTML = '<p class="empty-state">Lade…</p>';
+            container.innerHTML = '<p class="empty-state">' + I18n.t('modules.redmine.loading') + '</p>';
 
             try {
                 const [projResp, issuesResp] = await Promise.all([
@@ -33,7 +33,7 @@
                     document.getElementById('redmine-closed-count').textContent = closed;
 
                     if (issues.length === 0) {
-                        container.innerHTML = '<p class="empty-state">Keine offenen Tickets.</p>';
+                        container.innerHTML = '<p class="empty-state">' + I18n.t('modules.redmine.noTickets') + '</p>';
                     } else {
                         container.innerHTML = '<table class="data-table"><thead><tr><th>#</th><th>Subject</th><th>Status</th><th>Priority</th></tr></thead><tbody>' +
                             issues.slice(0, 10).map(i => {
@@ -47,10 +47,10 @@
                             }).join('') + '</tbody></table>';
                     }
                 } else {
-                    container.innerHTML = '<p class="empty-state text-error">Fehler beim Laden.</p>';
+                    container.innerHTML = '<p class="empty-state text-error">' + I18n.t('modules.redmine.loadError') + '</p>';
                 }
             } catch (e) {
-                container.innerHTML = '<p class="empty-state text-error">Fehler: ' + e.message + '</p>';
+                container.innerHTML = '<p class="empty-state text-error">' + I18n.t('modules.redmine.error') + e.message + '</p>';
             }
         },
 
@@ -82,8 +82,8 @@
                     this.connId = data.connections[0].id;
                     label.textContent = data.connections[0].name;
                 } else {
-                    dropdown.innerHTML = '<div class="cl-select-option">Keine Verbindungen</div>';
-                    label.textContent = 'Keine Verbindung';
+                    dropdown.innerHTML = '<div class="cl-select-option">' + I18n.t('modules.redmine.noConnections') + '</div>';
+                    label.textContent = I18n.t('modules.redmine.noConnection');
                 }
             } catch (e) {
                 console.error('Failed to load connections:', e);

@@ -55,7 +55,7 @@ const PiholeTab = {
             if (!select) return;
 
             if (conns.length === 0) {
-                select.innerHTML = '<option value="">Keine Pi-hole Verbindungen</option>';
+                select.innerHTML = '<option value="">' + I18n.t('modules.pihole.noConnections') + '</option>';
                 this.currentConnectionId = '';
                 return;
             }
@@ -102,7 +102,9 @@ const PiholeTab = {
             this.blockingEnabled = data.status === 'enabled';
             const badge = document.getElementById('pihole-blocking-status');
             if (badge) {
-                badge.textContent = this.blockingEnabled ? '🟢 Aktiv' : '🔴 Deaktiviert';
+                badge.textContent = this.blockingEnabled 
+                    ? I18n.t('modules.pihole.active') 
+                    : I18n.t('modules.pihole.disabled');
                 badge.className = `pihole-blocking-badge ${this.blockingEnabled ? 'blocking-on' : 'blocking-off'}`;
             }
         } catch (err) {
@@ -136,7 +138,7 @@ const PiholeTab = {
             if (permitted) {
                 const items = Object.entries(data.top_permitted || {});
                 permitted.innerHTML = items.length === 0
-                    ? '<p class="empty-state">Keine Daten</p>'
+                    ? '<p class="empty-state">' + I18n.t('modules.pihole.noData') + '</p>'
                     : items.map(([domain, count]) =>
                         `<div class="top-item">
                             <span class="top-domain">${domain}</span>
@@ -148,7 +150,7 @@ const PiholeTab = {
             if (blocked) {
                 const items = Object.entries(data.top_blocked || {});
                 blocked.innerHTML = items.length === 0
-                    ? '<p class="empty-state">Keine Daten</p>'
+                    ? '<p class="empty-state">' + I18n.t('modules.pihole.noData') + '</p>'
                     : items.map(([domain, count]) =>
                         `<div class="top-item">
                             <span class="top-domain">${domain}</span>
@@ -173,7 +175,7 @@ const PiholeTab = {
             const queries = await res.json();
 
             if (!queries || queries.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Keine Queries.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="empty-state">' + I18n.t('modules.pihole.noQueries') + '</td></tr>';
                 return;
             }
 
@@ -197,7 +199,7 @@ const PiholeTab = {
         const newState = !this.blockingEnabled;
         const label = newState ? 'aktivieren' : 'deaktivieren';
 
-        if (!newState && !confirm('DNS-Blocking wirklich deaktivieren?')) return;
+        if (!newState && !confirm(I18n.t('modules.pihole.disableConfirm'))) return;
 
         try {
             const res = await fetch(`${this.API_PREFIX}/blocking${this.getQueryParams({ enable: newState })}`, { method: 'POST' });

@@ -6,11 +6,11 @@
         refresh: async function() {
             const container = document.getElementById('confluence-pages');
             if (!this.connId) {
-                container.innerHTML = '<p class="empty-state">Bitte Verbindung auswählen.</p>';
+                container.innerHTML = '<p class="empty-state">' + I18n.t('modules.confluence.selectConnection') + '</p>';
                 return;
             }
 
-            container.innerHTML = '<p class="empty-state">Lade…</p>';
+            container.innerHTML = '<p class="empty-state">' + I18n.t('modules.confluence.loading') + '</p>';
 
             try {
                 const [spacesResp, pagesResp] = await Promise.all([
@@ -30,7 +30,7 @@
                     document.getElementById('confluence-pages-count').textContent = pagesData.data.total || 0;
 
                     if (pages.length === 0) {
-                        container.innerHTML = '<p class="empty-state">Keine Seiten gefunden.</p>';
+                        container.innerHTML = '<p class="empty-state">' + I18n.t('modules.confluence.noPages') + '</p>';
                     } else {
                         container.innerHTML = '<table class="data-table"><thead><tr><th>Title</th><th>Space</th><th>Status</th></tr></thead><tbody>' +
                             pages.slice(0, 10).map(p => {
@@ -43,10 +43,10 @@
                             }).join('') + '</tbody></table>';
                     }
                 } else {
-                    container.innerHTML = '<p class="empty-state text-error">Fehler beim Laden.</p>';
+                    container.innerHTML = '<p class="empty-state text-error">' + I18n.t('modules.confluence.loadError') + '</p>';
                 }
             } catch (e) {
-                container.innerHTML = '<p class="empty-state text-error">Fehler: ' + e.message + '</p>';
+                container.innerHTML = '<p class="empty-state text-error">' + I18n.t('modules.confluence.error') + e.message + '</p>';
             }
         },
 
@@ -78,8 +78,8 @@
                     this.connId = data.connections[0].id;
                     label.textContent = data.connections[0].name;
                 } else {
-                    dropdown.innerHTML = '<div class="cl-select-option">Keine Verbindungen</div>';
-                    label.textContent = 'Keine Verbindung';
+                    dropdown.innerHTML = '<div class="cl-select-option">' + I18n.t('modules.confluence.noConnections') + '</div>';
+                    label.textContent = I18n.t('modules.confluence.noConnection');
                 }
             } catch (e) {
                 console.error('Failed to load connections:', e);

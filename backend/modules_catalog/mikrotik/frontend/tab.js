@@ -16,7 +16,7 @@
 
             if (data.error) {
                 document.getElementById('mikrotik-info').innerHTML =
-                    '<p class="empty-state text-error">Verbindungsfehler: ' + data.error + '</p>';
+                    '<p class="empty-state text-error">' + I18n.t('modules.mikrotik.loadError') + '</p>';
                 return;
             }
 
@@ -27,16 +27,16 @@
 
             document.getElementById('mikrotik-info').innerHTML = `
                 <table class="data-table">
-                    <tr><td>Hostname</td><td>${data.hostname || '-'}</td></tr>
-                    <tr><td>Interfaces</td><td>${data.interfaces_count || 0}</td></tr>
-                    <tr><td>Routen</td><td>${data.routes_count || 0}</td></tr>
-                    <tr><td>DHCP Leases</td><td>${data.dhcp_leases_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.mikrotik.hostname')}</td><td>${data.hostname || '-'}</td></tr>
+                    <tr><td>${I18n.t('modules.mikrotik.interfaces')}</td><td>${data.interfaces_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.mikrotik.routes')}</td><td>${data.routes_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.mikrotik.dhcpLeases')}</td><td>${data.dhcp_leases_count || 0}</td></tr>
                 </table>
             `;
         } catch (e) {
             console.error("MikroTik Load Status failed", e);
             document.getElementById('mikrotik-info').innerHTML =
-                '<p class="empty-state text-error">Fehler beim Laden.</p>';
+                '<p class="empty-state text-error">' + I18n.t('modules.mikrotik.loadError') + '</p>';
         }
     }
 

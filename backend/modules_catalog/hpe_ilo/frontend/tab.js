@@ -68,13 +68,13 @@
                     </table>
                 `;
             } else {
-                detailsEl.innerHTML = '<p class="empty-state">Keine Daten verfügbar.</p>';
+                detailsEl.innerHTML = '<p class="empty-state">' + I18n.t('modules.hpe_ilo.noData') + '</p>';
             }
 
         } catch (e) {
             console.error("HPE iLO Load Status failed", e);
             document.getElementById('ilo-details').innerHTML =
-                '<p class="empty-state text-error">Fehler beim Laden. Verbindung prüfen.</p>';
+                '<p class="empty-state text-error">' + I18n.t('modules.hpe_ilo.loadError') + '</p>';
         }
     }
 

@@ -101,7 +101,7 @@ const K8sTab = {
             const conns = data.connections || [];
 
             if (conns.length === 0) {
-                this._setSelectLabel('k8s-conn-select', 'Keine K8s Verbindungen');
+                this._setSelectLabel('k8s-conn-select', I18n.t('modules.kubernetes.noConnections'));
                 this.currentConnectionId = '';
                 return;
             }

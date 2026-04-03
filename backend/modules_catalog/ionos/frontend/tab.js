@@ -36,7 +36,7 @@ async function loadIonosConnections() {
         if (!select) return;
 
         if (conns.length === 0) {
-            select.innerHTML = '<option value="">Keine IONOS Verbindungen</option>';
+            select.innerHTML = '<option value="">' + I18n.t('modules.ionos.noConnections') + '</option>';
             currentIonosConnectionId = '';
             return;
         }
@@ -58,7 +58,7 @@ async function fetchIonosStatus() {
     const statusVal = document.getElementById("ionos-status-val");
     if (!statusVal) return;
 
-    statusVal.textContent = "Prüfe...";
+    statusVal.textContent = I18n.t('modules.ionos.checking');
     statusVal.style.color = "var(--text-muted)";
     const card = statusVal.closest('.status-card');
 
@@ -67,22 +67,22 @@ async function fetchIonosStatus() {
         if (response.ok) {
             const data = await response.json();
             if (data.status === "ok") {
-                statusVal.textContent = data.message || "Verbunden";
+                statusVal.textContent = data.message || I18n.t('modules.ionos.connected');
                 statusVal.style.color = "var(--accent-green)";
                 if (card) card.className = "status-card running";
             } else {
-                statusVal.textContent = data.message || "Fehler";
+                statusVal.textContent = data.message || I18n.t('modules.ionos.error');
                 statusVal.style.color = "var(--accent-red)";
                 if (card) card.className = "status-card failing";
                 console.error("IONOS API Error:", data.message);
             }
         } else {
-            statusVal.textContent = "API Error " + response.status;
+            statusVal.textContent = I18n.t('modules.ionos.apiError') + response.status;
             statusVal.style.color = "var(--accent-red)";
             if (card) card.className = "status-card failing";
         }
     } catch (error) {
-        statusVal.textContent = "Offline";
+        statusVal.textContent = I18n.t('modules.ionos.offline');
         statusVal.style.color = "var(--accent-red)";
         if (card) card.className = "status-card failing";
         console.error("Fetch error:", error);

@@ -16,7 +16,7 @@
 
             if (data.error) {
                 document.getElementById('intune-devices-list').innerHTML =
-                    '<p class="empty-state text-error">Verbindungsfehler: ' + data.error + '</p>';
+                    '<p class="empty-state text-error">' + I18n.t('modules.microsoft_intune.loadError') + '</p>';
                 return;
             }
 
@@ -26,15 +26,15 @@
 
             document.getElementById('intune-devices-list').innerHTML = `
                 <table class="data-table">
-                    <tr><td>Verwaltete Geräte</td><td>${data.devices_count || 0}</td></tr>
-                    <tr><td>Richtlinien</td><td>${data.policies_count || 0}</td></tr>
-                    <tr><td>Apps</td><td>${data.apps_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.microsoft_intune.devices')}</td><td>${data.devices_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.microsoft_intune.policies')}</td><td>${data.policies_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.microsoft_intune.apps')}</td><td>${data.apps_count || 0}</td></tr>
                 </table>
             `;
         } catch (e) {
             console.error("Intune Load Status failed", e);
             document.getElementById('intune-devices-list').innerHTML =
-                '<p class="empty-state text-error">Fehler beim Laden.</p>';
+                '<p class="empty-state text-error">' + I18n.t('modules.microsoft_intune.loadError') + '</p>';
         }
     }
 

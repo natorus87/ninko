@@ -57,7 +57,7 @@ const GlpiTab = {
             if (!select) return;
 
             if (conns.length === 0) {
-                select.innerHTML = '<option value="">Keine GLPI Verbindungen</option>';
+                select.innerHTML = '<option value="">' + I18n.t('modules.glpi.noConnections') + '</option>';
                 this.currentConnectionId = '';
                 return;
             }
@@ -128,7 +128,7 @@ const GlpiTab = {
             const tickets = await res.json();
 
             if (!tickets || tickets.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Keine Tickets gefunden.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="empty-state">' + I18n.t('modules.glpi.noTickets') + '</td></tr>';
                 return;
             }
 
@@ -147,7 +147,7 @@ const GlpiTab = {
             }).join('');
         } catch (err) {
             console.error('GLPI Tickets Fehler:', err);
-            tbody.innerHTML = '<tr><td colspan="5" class="empty-state text-error">Fehler beim Laden der Tickets.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="empty-state text-error">' + I18n.t('modules.glpi.loadError') + '</td></tr>';
         }
     },
 

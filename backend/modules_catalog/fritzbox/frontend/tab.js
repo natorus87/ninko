@@ -13,21 +13,21 @@
 
             // System Info
             document.getElementById('fritzbox-model-info').textContent =
-                `Modell: ${data.system.model} | Firmware: ${data.system.firmware_version} | Uptime: ${Math.floor(data.system.uptime / 3600)}h`;
+                `${I18n.t('modules.fritzbox.model')} ${data.system.model} | ${I18n.t('modules.fritzbox.firmware')} ${data.system.firmware_version} | ${I18n.t('modules.fritzbox.uptime')} ${Math.floor(data.system.uptime / 3600)}h`;
 
             // WAN
             const stBadge = document.getElementById('fritzbox-wan-status');
             if (data.wan.connected) {
-                stBadge.textContent = "Online";
+                stBadge.textContent = I18n.t('modules.fritzbox.online');
                 stBadge.className = "status-badge status-ok";
             } else {
-                stBadge.textContent = "Offline";
+                stBadge.textContent = I18n.t('modules.fritzbox.offline');
                 stBadge.className = "status-badge status-error";
             }
             const wanCard = document.getElementById('fritzbox-wan-card');
             if (wanCard) wanCard.className = data.wan.connected ? 'status-card running' : 'status-card failing';
             const wanVal = document.getElementById('fritzbox-wan-status-val');
-            if (wanVal) wanVal.textContent = data.wan.connected ? 'Online' : 'Offline';
+            if (wanVal) wanVal.textContent = data.wan.connected ? I18n.t('modules.fritzbox.online') : I18n.t('modules.fritzbox.offline');
             document.getElementById('fritzbox-wan-ip').textContent = data.wan.ip_address || "N/A";
 
             // Bandwidth
@@ -40,22 +40,22 @@
             data.wlan.forEach((w, i) => {
                 wlanList.innerHTML += `
                     <tr>
-                        <td>${w.ssid || ("WLAN Service " + (i + 1))}</td>
+                        <td>${w.ssid || (I18n.t('modules.fritzbox.wlanService') + (i + 1))}</td>
                         <td>${w.channel || "-"}</td>
-                        <td>${w.enabled ? '<span class="status-badge status-ok">An</span>' : '<span class="status-badge status-unknown">Aus</span>'}</td>
+                        <td>${w.enabled ? '<span class="status-badge status-ok">' + I18n.t('modules.fritzbox.on') + '</span>' : '<span class="status-badge status-unknown">' + I18n.t('modules.fritzbox.off') + '</span>'}</td>
                     </tr>
                 `;
             });
 
         } catch (e) {
             console.error("FritzBox Load Status failed", e);
-            document.getElementById('fritzbox-model-info').textContent = "Fehler beim Laden der FritzBox Daten. Bitte überprüfen Sie die Verbindungseinstellungen.";
+            document.getElementById('fritzbox-model-info').textContent = I18n.t('modules.fritzbox.loadError');
         }
     }
 
     async function loadDevices() {
         const tbody = document.getElementById('fritzbox-devices-list');
-        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Lade Geräte...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">' + I18n.t('modules.fritzbox.loadingDevices') + '</td></tr>';
 
         try {
             const res = await fetch(`/api/fritzbox/devices?connection_id=${state.connectionId}`);
@@ -73,8 +73,8 @@
 
             devices.forEach(d => {
                 const statusBadge = (d.status === "Online") ?
-                    '<span class="status-badge status-ok">Online</span>' :
-                    '<span class="status-badge status-unknown">Offline</span>';
+                    '<span class="status-badge status-ok">' + I18n.t('modules.fritzbox.online') + '</span>' :
+                    '<span class="status-badge status-unknown">' + I18n.t('modules.fritzbox.offline') + '</span>';
 
                 tbody.innerHTML += `
                     <tr>
@@ -89,7 +89,7 @@
 
         } catch (e) {
             console.error("FritzBox Load Devices failed", e);
-            tbody.innerHTML = '<tr><td colspan="5" class="empty-state" style="color: var(--accent-red);">Geräte konnten nicht geladen werden. Bitte Verbindung prüfen.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="empty-state" style="color: var(--accent-red);">' + I18n.t('modules.fritzbox.devicesLoadError') + '</td></tr>';
         }
     }
 

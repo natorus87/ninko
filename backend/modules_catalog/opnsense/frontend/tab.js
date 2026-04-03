@@ -110,7 +110,7 @@ const OPNsenseTab = {
             const conns = data.connections || [];
 
             if (conns.length === 0) {
-                this._setSelectLabel('opnsense-conn-select', 'Keine Verbindungen');
+                this._setSelectLabel('opnsense-conn-select', I18n.t('modules.opnsense.noConnections'));
                 this.currentConnectionId = '';
                 return;
             }
@@ -228,7 +228,7 @@ const OPNsenseTab = {
         } catch (err) {
             console.error('OPNsense Refresh Fehler:', err);
             const container = document.getElementById('opnsense-content');
-            if (container) container.innerHTML = '<p class="empty-state text-error">Fehler beim Laden.</p>';
+            if (container) container.innerHTML = '<p class="empty-state text-error">' + I18n.t('modules.opnsense.loadError') + '</p>';
         }
     },
 

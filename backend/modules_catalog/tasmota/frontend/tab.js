@@ -109,7 +109,7 @@ const TasmotaTab = {
             const conns = data.connections || [];
 
             if (conns.length === 0) {
-                this._setSelectLabel('tasmota-conn-select', 'Keine Verbindungen');
+                this._setSelectLabel('tasmota-conn-select', I18n.t('modules.tasmota.noConnections'));
                 this.currentConnectionId = '';
                 return;
             }
@@ -241,7 +241,7 @@ const TasmotaTab = {
         } catch (err) {
             console.error('Tasmota Refresh Fehler:', err);
             const container = document.getElementById('tasmota-content');
-            if (container) container.innerHTML = '<p class="empty-state text-error">Fehler beim Laden.</p>';
+            if (container) container.innerHTML = '<p class="empty-state text-error">' + I18n.t('modules.tasmota.loadError') + '</p>';
         }
     },
 

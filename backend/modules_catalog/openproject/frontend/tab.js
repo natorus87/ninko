@@ -16,7 +16,7 @@
 
             if (data.error) {
                 document.getElementById('openproject-info').innerHTML =
-                    '<p class="empty-state text-error">Verbindungsfehler: ' + data.error + '</p>';
+                    '<p class="empty-state text-error">' + I18n.t('modules.openproject.loadError') + '</p>';
                 return;
             }
 
@@ -26,15 +26,15 @@
 
             document.getElementById('openproject-info').innerHTML = `
                 <table class="data-table">
-                    <tr><td>Projekte</td><td>${data.projects_count || 0}</td></tr>
-                    <tr><td>Work Packages</td><td>${data.work_packages_count || 0}</td></tr>
-                    <tr><td>Benutzer</td><td>${data.users_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.openproject.projects')}</td><td>${data.projects_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.openproject.workPackages')}</td><td>${data.work_packages_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.openproject.users')}</td><td>${data.users_count || 0}</td></tr>
                 </table>
             `;
         } catch (e) {
             console.error("OpenProject Load Status failed", e);
             document.getElementById('openproject-info').innerHTML =
-                '<p class="empty-state text-error">Fehler beim Laden.</p>';
+                '<p class="empty-state text-error">' + I18n.t('modules.openproject.loadError') + '</p>';
         }
     }
 

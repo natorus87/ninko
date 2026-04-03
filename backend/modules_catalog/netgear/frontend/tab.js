@@ -16,7 +16,7 @@
 
             if (data.error) {
                 document.getElementById('netgear-info').innerHTML =
-                    '<p class="empty-state text-error">Verbindungsfehler: ' + data.error + '</p>';
+                    '<p class="empty-state text-error">' + I18n.t('modules.netgear.loadError') + '</p>';
                 return;
             }
 
@@ -26,15 +26,15 @@
 
             document.getElementById('netgear-info').innerHTML = `
                 <table class="data-table">
-                    <tr><td>Model</td><td>${data.model || '-'}</td></tr>
-                    <tr><td>Firmware</td><td>${data.firmware || '-'}</td></tr>
-                    <tr><td>Ports</td><td>${data.ports_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.netgear.model')}</td><td>${data.model || '-'}</td></tr>
+                    <tr><td>${I18n.t('modules.netgear.firmware')}</td><td>${data.firmware || '-'}</td></tr>
+                    <tr><td>${I18n.t('modules.netgear.ports')}</td><td>${data.ports_count || 0}</td></tr>
                 </table>
             `;
         } catch (e) {
             console.error("Netgear Load Status failed", e);
             document.getElementById('netgear-info').innerHTML =
-                '<p class="empty-state text-error">Fehler beim Laden.</p>';
+                '<p class="empty-state text-error">' + I18n.t('modules.netgear.loadError') + '</p>';
         }
     }
 

@@ -24,11 +24,11 @@
                     if (data.configured) {
                         configCard.className = 'status-card running';
                         configIcon.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="var(--accent-green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="9 12 11 14 15 10"></polyline></svg>';
-                        configText.textContent = 'Konfiguriert';
+                        configText.textContent = I18n.t('modules.teams.configured');
                     } else {
                         configCard.className = 'status-card failing';
                         configIcon.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="var(--accent-yellow)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>';
-                        configText.textContent = 'Nicht konfiguriert';
+                        configText.textContent = I18n.t('modules.teams.notConfigured');
                     }
                 }
 
@@ -70,7 +70,7 @@
             if (!container) return;
 
             if (this._allowedIds.length === 0) {
-                container.innerHTML = '<span style="color:var(--text-muted);font-size:0.82rem;line-height:2rem;">Keine Einschränkung – alle Nutzer erlaubt</span>';
+                container.innerHTML = '<span style="color:var(--text-muted);font-size:0.82rem;line-height:2rem;">' + I18n.t('modules.teams.noRestriction') + '</span>';
                 return;
             }
 
@@ -93,7 +93,7 @@
 
             if (!val) return;
             if (this._allowedIds.includes(val)) {
-                if (statusEl) statusEl.innerHTML = '<span class="sf sf-warn">Diese ID ist bereits in der Liste.</span>';
+                if (statusEl) statusEl.innerHTML = '<span class="sf sf-warn">' + I18n.t('modules.teams.alreadyInList') + '</span>';
                 return;
             }
 
@@ -109,7 +109,7 @@
 
         async _saveAllowedIds(ids) {
             const statusEl = document.getElementById('teams-allowed-ids-status');
-            if (statusEl) statusEl.innerHTML = '<span class="sf sf-loading">Speichere…</span>';
+            if (statusEl) statusEl.innerHTML = '<span class="sf sf-loading">' + I18n.t('modules.teams.saving') + '</span>';
 
             try {
                 const res = await fetch('/api/teams/allowed-ids', {
@@ -121,14 +121,14 @@
                 if (res.ok && data.ok) {
                     this._allowedIds = data.allowed_ids;
                     this._renderAllowedIds();
-                    if (statusEl) statusEl.innerHTML = '<span class="sf sf-ok">Gespeichert.</span>';
+                    if (statusEl) statusEl.innerHTML = '<span class="sf sf-ok">' + I18n.t('modules.teams.saved') + '</span>';
                     setTimeout(() => { if (statusEl) statusEl.innerHTML = ''; }, 3000);
                     await this.checkStatus();
                 } else {
-                    if (statusEl) statusEl.innerHTML = `<span class="sf sf-error">${data.detail || 'Speichern fehlgeschlagen'}</span>`;
+                    if (statusEl) statusEl.innerHTML = `<span class="sf sf-error">${data.detail || I18n.t('modules.teams.saveFailed')}</span>`;
                 }
             } catch (e) {
-                if (statusEl) statusEl.innerHTML = '<span class="sf sf-error">Verbindungsfehler</span>';
+                if (statusEl) statusEl.innerHTML = '<span class="sf sf-error">' + I18n.t('modules.teams.connectionError') + '</span>';
             }
         },
 

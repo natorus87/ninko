@@ -50,7 +50,7 @@
                 if (!select) return;
 
                 if (conns.length === 0) {
-                    select.innerHTML = '<option value="">Keine Qdrant-Verbindungen</option>';
+                    select.innerHTML = '<option value="">' + I18n.t('modules.qdrant.noConnections') + '</option>';
                     this.currentConnectionId = '';
                     return;
                 }
@@ -109,7 +109,7 @@
                 }
 
                 if (!cols.length || (cols.length === 1 && cols[0].info)) {
-                    grid.innerHTML = '<p class="empty-state">Keine Collections vorhanden. Erstelle eine mit "+ Neue Collection".</p>';
+                    grid.innerHTML = '<p class="empty-state">' + I18n.t('modules.qdrant.noCollections') + '</p>';
                     return;
                 }
 
@@ -172,7 +172,7 @@
 
                 if (!resultsDiv) return;
                 if (!results.length || results[0]?.info || results[0]?.error) {
-                    resultsDiv.innerHTML = `<p class="empty-state">${results[0]?.info || results[0]?.error || 'Keine Treffer.'}</p>`;
+                    resultsDiv.innerHTML = '<p class="empty-state">' + (results[0]?.info || results[0]?.error || I18n.t('modules.qdrant.noHits')) + '</p>';
                     return;
                 }
 
@@ -181,7 +181,7 @@
                         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;">
                             <div style="flex:1;">
                                 <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;">
-                                    <strong style="color:var(--text-color);">${i + 1}. ${r.title || '(kein Titel)'}</strong>
+                                    <strong style="color:var(--text-color);">${i + 1}. ${r.title || I18n.t('modules.qdrant.noTitle')}</strong>
                                     <span class="status-badge status-ok" style="font-size:0.7rem;">
                                         Score: ${(r.score * 100).toFixed(1)}%
                                     </span>
@@ -233,7 +233,7 @@
                 const entries = data.entries || [];
 
                 if (!entries.length) {
-                    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Keine Einträge gefunden.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">' + I18n.t('modules.qdrant.noEntries') + '</td></tr>';
                     if (pager) pager.innerHTML = '';
                     return;
                 }
@@ -258,9 +258,9 @@
                     const prevDisabled = offset === 0 ? 'disabled' : '';
                     const nextDisabled = entries.length < this.entryLimit ? 'disabled' : '';
                     pager.innerHTML = `
-                        <button class="btn btn-sm" onclick="QdrantTab.loadEntries(${Math.max(0, offset - this.entryLimit)})" ${prevDisabled}>← Zurück</button>
-                        <span style="color:var(--text-muted);font-size:0.85rem;">Einträge ${offset + 1}–${offset + entries.length}</span>
-                        <button class="btn btn-sm" onclick="QdrantTab.loadEntries(${offset + this.entryLimit})" ${nextDisabled}>Weiter →</button>
+                        <button class="btn btn-sm" onclick="QdrantTab.loadEntries(${Math.max(0, offset - this.entryLimit)})" ${prevDisabled}>← ${I18n.t('modules.qdrant.back')}</button>
+                        <span style="color:var(--text-muted);font-size:0.85rem;">${I18n.t('modules.qdrant.entries')} ${offset + 1}–${offset + entries.length}</span>
+                        <button class="btn btn-sm" onclick="QdrantTab.loadEntries(${offset + this.entryLimit})" ${nextDisabled}>${I18n.t('modules.qdrant.next')} →</button>
                     `;
                 }
 

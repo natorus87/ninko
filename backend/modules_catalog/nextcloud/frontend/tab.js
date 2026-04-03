@@ -16,7 +16,7 @@
 
             if (data.error) {
                 document.getElementById('nextcloud-info').innerHTML =
-                    '<p class="empty-state text-error">Verbindungsfehler: ' + data.error + '</p>';
+                    '<p class="empty-state text-error">' + I18n.t('modules.nextcloud.loadError') + '</p>';
                 return;
             }
 
@@ -27,19 +27,19 @@
 
             document.getElementById('nextcloud-users-count').textContent = users;
             document.getElementById('nextcloud-shares-count').textContent = shares;
-            document.getElementById('nextcloud-storage-used').textContent = storageGB + " GB";
+            document.getElementById('nextcloud-storage-used').textContent = storageGB + I18n.t('modules.nextcloud.gb');
 
             document.getElementById('nextcloud-info').innerHTML = `
                 <table class="data-table">
-                    <tr><td>Benutzer</td><td>${users}</td></tr>
-                    <tr><td>Shares</td><td>${shares}</td></tr>
-                    <tr><td>Speicher</td><td>${storageGB} GB</td></tr>
+                    <tr><td>${I18n.t('modules.nextcloud.users')}</td><td>${users}</td></tr>
+                    <tr><td>${I18n.t('modules.nextcloud.shares')}</td><td>${shares}</td></tr>
+                    <tr><td>${I18n.t('modules.nextcloud.storage')}</td><td>${storageGB}${I18n.t('modules.nextcloud.gb')}</td></tr>
                 </table>
             `;
         } catch (e) {
             console.error("Nextcloud Load Status failed", e);
             document.getElementById('nextcloud-info').innerHTML =
-                '<p class="empty-state text-error">Fehler beim Laden.</p>';
+                '<p class="empty-state text-error">' + I18n.t('modules.nextcloud.loadError') + '</p>';
         }
     }
 

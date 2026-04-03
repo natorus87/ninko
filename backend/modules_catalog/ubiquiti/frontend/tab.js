@@ -16,7 +16,7 @@
 
             if (data.error) {
                 document.getElementById('ubiquiti-info').innerHTML =
-                    '<p class="empty-state text-error">Verbindungsfehler: ' + data.error + '</p>';
+                    '<p class="empty-state text-error">' + I18n.t('modules.ubiquiti.loadError') + '</p>';
                 return;
             }
 
@@ -26,15 +26,15 @@
 
             document.getElementById('ubiquiti-info').innerHTML = `
                 <table class="data-table">
-                    <tr><td>Geräte</td><td>${data.devices_count || 0}</td></tr>
-                    <tr><td>Clients</td><td>${data.clients_count || 0}</td></tr>
-                    <tr><td>WLANs</td><td>${data.wlans_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.ubiquiti.devices')}</td><td>${data.devices_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.ubiquiti.clients')}</td><td>${data.clients_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.ubiquiti.wlans')}</td><td>${data.wlans_count || 0}</td></tr>
                 </table>
             `;
         } catch (e) {
             console.error("Ubiquiti Load Status failed", e);
             document.getElementById('ubiquiti-info').innerHTML =
-                '<p class="empty-state text-error">Fehler beim Laden.</p>';
+                '<p class="empty-state text-error">' + I18n.t('modules.ubiquiti.loadError') + '</p>';
         }
     }
 

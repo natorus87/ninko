@@ -25,7 +25,7 @@
 
             if (data.error) {
                 document.getElementById('xclarity-info').innerHTML =
-                    '<p class="empty-state text-error">Verbindungsfehler: ' + escapeHtml(data.error) + '</p>';
+                    '<p class="empty-state text-error">' + I18n.t('modules.lenovo_xclarity.loadError') + '</p>';
                 return;
             }
 
@@ -35,15 +35,15 @@
 
             document.getElementById('xclarity-info').innerHTML = `
                 <table class="data-table">
-                    <tr><td>Server</td><td>${data.servers_count || 0}</td></tr>
-                    <tr><td>Chassis</td><td>${data.chassis_count || 0}</td></tr>
-                    <tr><td>Storage</td><td>${data.storage_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.lenovo_xclarity.servers')}</td><td>${data.servers_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.lenovo_xclarity.chassis')}</td><td>${data.chassis_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.lenovo_xclarity.storage')}</td><td>${data.storage_count || 0}</td></tr>
                 </table>
             `;
         } catch (e) {
             console.error("XClarity Load Status failed", e);
             document.getElementById('xclarity-info').innerHTML =
-                '<p class="empty-state text-error">Fehler beim Laden.</p>';
+                '<p class="empty-state text-error">' + I18n.t('modules.lenovo_xclarity.loadError') + '</p>';
         }
     }
 

@@ -16,7 +16,7 @@
 
             if (data.error) {
                 document.getElementById('slack-info').innerHTML =
-                    '<p class="empty-state text-error">Verbindungsfehler: ' + data.error + '</p>';
+                    '<p class="empty-state text-error">' + I18n.t('modules.slack.loadError') + '</p>';
                 return;
             }
 
@@ -26,15 +26,15 @@
 
             document.getElementById('slack-info').innerHTML = `
                 <table class="data-table">
-                    <tr><td>Workspace</td><td>${data.workspace || '-'}</td></tr>
-                    <tr><td>Channels</td><td>${data.channels_count || 0}</td></tr>
-                    <tr><td>Users</td><td>${data.users_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.slack.workspace')}</td><td>${data.workspace || '-'}</td></tr>
+                    <tr><td>${I18n.t('modules.slack.channels')}</td><td>${data.channels_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.slack.users')}</td><td>${data.users_count || 0}</td></tr>
                 </table>
             `;
         } catch (e) {
             console.error("Slack Load Status failed", e);
             document.getElementById('slack-info').innerHTML =
-                '<p class="empty-state text-error">Fehler beim Laden.</p>';
+                '<p class="empty-state text-error">' + I18n.t('modules.slack.loadError') + '</p>';
         }
     }
 

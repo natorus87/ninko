@@ -9,12 +9,12 @@
             const statusCard = document.getElementById('synology-status-card');
 
             if (!this.connId) {
-                container.innerHTML = '<p class="empty-state">Bitte Verbindung auswählen.</p>';
+                container.innerHTML = '<p class="empty-state">' + I18n.t('modules.synology.selectConnection') + '</p>';
                 return;
             }
 
-            container.innerHTML = '<p class="empty-state">Lade…</p>';
-            pkgContainer.innerHTML = '<p class="empty-state">Lade…</p>';
+            container.innerHTML = '<p class="empty-state">' + I18n.t('modules.synology.loading') + '</p>';
+            pkgContainer.innerHTML = '<p class="empty-state">' + I18n.t('modules.synology.loading') + '</p>';
 
             try {
                 const [sysResp, storageResp, pkgResp] = await Promise.all([
@@ -31,20 +31,20 @@
                     const info = sysData.data;
                     document.getElementById('synology-model').textContent = info.model || '-';
                     document.getElementById('synology-version').textContent = info.version_string || '-';
-                    document.getElementById('synology-status').textContent = 'Online';
+                    document.getElementById('synology-status').textContent = I18n.t('modules.synology.online');
                     statusCard.classList.remove('failing');
                     statusCard.classList.add('running');
                 } else {
-                    document.getElementById('synology-status').textContent = 'Error';
+                    document.getElementById('synology-status').textContent = I18n.t('modules.synology.error');
                     statusCard.classList.remove('running');
                     statusCard.classList.add('failing');
-                    container.innerHTML = '<p class="empty-state text-error">Fehler: ' + (sysData.data?.error || 'Verbindung fehlgeschlagen') + '</p>';
+                    container.innerHTML = '<p class="empty-state text-error">' + I18n.t('modules.synology.connectionError') + '</p>';
                 }
 
                 if (storageData.status === 'ok' && storageData.data && storageData.data.disks) {
                     const disks = storageData.data.disks;
                     if (disks.length === 0) {
-                        container.innerHTML = '<p class="empty-state">Keine Laufwerke gefunden.</p>';
+                        container.innerHTML = '<p class="empty-state">' + I18n.t('modules.synology.noDrives') + '</p>';
                     } else {
                         container.innerHTML = disks.map(d => {
                             const statusClass = d.status === 'normal' ? 'running' : 'failing';
@@ -59,7 +59,7 @@
                 if (pkgData.status === 'ok' && pkgData.data && pkgData.data.packages) {
                     const pkgs = pkgData.data.packages;
                     if (pkgs.length === 0) {
-                        pkgContainer.innerHTML = '<p class="empty-state">Keine Pakete gefunden.</p>';
+                        pkgContainer.innerHTML = '<p class="empty-state">' + I18n.t('modules.synology.noPackages') + '</p>';
                     } else {
                         const rows = pkgs.slice(0, 10).map(p => {
                             const statusClass = p.status === 'installed' ? 'status-ok' : 'status-warning';
@@ -73,7 +73,7 @@
                     }
                 }
             } catch (e) {
-                container.innerHTML = '<p class="empty-state text-error">Fehler beim Laden: ' + e.message + '</p>';
+                container.innerHTML = '<p class="empty-state text-error">' + I18n.t('modules.synology.loadError') + e.message + '</p>';
             }
         },
 
@@ -105,8 +105,8 @@
                     this.connId = data.connections[0].id;
                     label.textContent = data.connections[0].name;
                 } else {
-                    dropdown.innerHTML = '<div class="cl-select-option">Keine Verbindungen</div>';
-                    label.textContent = 'Keine Verbindung';
+                    dropdown.innerHTML = '<div class="cl-select-option">' + I18n.t('modules.synology.noConnections') + '</div>';
+                    label.textContent = I18n.t('modules.synology.noConnection');
                 }
             } catch (e) {
                 console.error('Failed to load connections:', e);

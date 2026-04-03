@@ -103,7 +103,7 @@ const CheckmkTab = {
             const conns = data.connections || [];
 
             if (conns.length === 0) {
-                this._setSelectLabel('checkmk-conn-select', 'Keine Verbindungen');
+                this._setSelectLabel('checkmk-conn-select', I18n.t('modules.checkmk.noConnections'));
                 this.currentConnectionId = '';
                 return;
             }
@@ -140,7 +140,7 @@ const CheckmkTab = {
         } catch (err) {
             console.error('Checkmk Refresh Fehler:', err);
             const alertsDiv = document.getElementById('checkmk-alerts');
-            if (alertsDiv) alertsDiv.innerHTML = '<p class="empty-state text-error">Fehler beim Laden.</p>';
+            if (alertsDiv) alertsDiv.innerHTML = '<p class="empty-state text-error">' + I18n.t('modules.checkmk.loadError') + '</p>';
         }
     },
 
@@ -181,7 +181,7 @@ const CheckmkTab = {
         if (alertsEl) {
             const alertsText = data.alerts || "";
             if (alertsText.includes("Keine aktuellen Probleme")) {
-                alertsEl.innerHTML = '<p class="empty-state" style="color:var(--accent-green)">✓ Keine aktuellen Probleme</p>';
+                alertsEl.innerHTML = '<p class="empty-state" style="color:var(--accent-green)">✓ ' + I18n.t('modules.checkmk.noIssues') + '</p>';
             } else if (alertsText) {
                 const lines = alertsText.split('\n').slice(1);
                 alertsEl.innerHTML = lines.map(line => {
@@ -191,7 +191,7 @@ const CheckmkTab = {
                     return `<div class="alert-item ${cls}">${line}</div>`;
                 }).join('');
             } else {
-                alertsEl.innerHTML = '<p class="empty-state">Keine Daten verfügbar</p>';
+                alertsEl.innerHTML = '<p class="empty-state">' + I18n.t('modules.checkmk.noData') + '</p>';
             }
         }
     },

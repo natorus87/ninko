@@ -40,7 +40,7 @@ const WordPressTab = {
             if (!select) return;
 
             if (conns.length === 0) {
-                select.innerHTML = '<option value="">Keine WordPress Verbindungen</option>';
+                select.innerHTML = '<option value="">' + I18n.t('modules.wordpress.noConnections') + '</option>';
                 this.currentConnectionId = '';
                 return;
             }
@@ -113,7 +113,7 @@ const WordPressTab = {
         } catch (err) {
             console.error('WP Info Fehler:', err);
             const container = document.getElementById('wordpress-info');
-            if (container) container.innerHTML = '<p class="empty-state text-error">Fehler beim Laden.</p>';
+            if (container) container.innerHTML = '<p class="empty-state text-error">' + I18n.t('modules.wordpress.loadError') + '</p>';
         }
     },
 
@@ -126,7 +126,7 @@ const WordPressTab = {
             if (!tbody) return;
 
             if (!pages.length || pages[0]?.error) {
-                tbody.innerHTML = `<tr><td colspan="5" class="empty-state">${pages[0]?.error ? this.escapeHtml(pages[0].error) : 'Keine Seiten gefunden.'}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="5" class="empty-state">${pages[0]?.error ? this.escapeHtml(pages[0].error) : I18n.t('modules.wordpress.noPages')}</td></tr>`;
                 return;
             }
 
@@ -134,7 +134,7 @@ const WordPressTab = {
                 const statusClass = p.status === 'publish' ? 'status-ok' : p.status === 'draft' ? 'status-warning' : p.status === 'trash' ? 'status-error' : '';
                 return `<tr>
                     <td>${p.id}</td>
-                    <td><strong>${this.escapeHtml(p.title || '(Ohne Titel)')}</strong></td>
+                    <td><strong>${this.escapeHtml(p.title || I18n.t('modules.wordpress.noTitle'))}</strong></td>
                     <td><span class="status-badge ${statusClass}">${p.status}</span></td>
                     <td style="font-size:0.85em">${this.escapeHtml(p.modified?.split('T')[0] || '')}</td>
                     <td>${p.link ? `<a href="${this.escapeHtml(p.link)}" target="_blank" style="color: var(--primary-color);">↗</a>` : '-'}</td>
@@ -156,7 +156,7 @@ const WordPressTab = {
             if (!tbody) return;
 
             if (!posts.length || posts[0]?.error) {
-                tbody.innerHTML = `<tr><td colspan="5" class="empty-state">${posts[0]?.error ? this.escapeHtml(posts[0].error) : 'Keine Beiträge gefunden.'}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="5" class="empty-state">${posts[0]?.error ? this.escapeHtml(posts[0].error) : I18n.t('modules.wordpress.noPosts')}</td></tr>`;
                 return;
             }
 
@@ -164,7 +164,7 @@ const WordPressTab = {
                 const statusClass = p.status === 'publish' ? 'status-ok' : p.status === 'draft' ? 'status-warning' : '';
                 return `<tr>
                     <td>${p.id}</td>
-                    <td><strong>${this.escapeHtml(p.title || '(Ohne Titel)')}</strong></td>
+                    <td><strong>${this.escapeHtml(p.title || I18n.t('modules.wordpress.noTitle'))}</strong></td>
                     <td><span class="status-badge ${statusClass}">${p.status}</span></td>
                     <td style="font-size:0.85em">${this.escapeHtml(p.modified?.split('T')[0] || '')}</td>
                     <td>${p.link ? `<a href="${this.escapeHtml(p.link)}" target="_blank" style="color: var(--primary-color);">↗</a>` : '-'}</td>
@@ -186,17 +186,17 @@ const WordPressTab = {
             if (!tbody) return;
 
             if (!plugins.length || plugins[0]?.error) {
-                tbody.innerHTML = `<tr><td colspan="4" class="empty-state">${plugins[0]?.error ? this.escapeHtml(plugins[0].error) : 'Keine Plugins gefunden.'}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="4" class="empty-state">${plugins[0]?.error ? this.escapeHtml(plugins[0].error) : I18n.t('modules.wordpress.noPlugins')}</td></tr>`;
                 return;
             }
 
             tbody.innerHTML = plugins.map(p => {
                 const statusClass = p.status === 'active' ? 'status-ok' : 'status-warning';
-                const updateBadge = p.update_available ? '<span class="status-badge status-warning">Update</span>' : '<span class="status-badge status-ok">Aktuell</span>';
+                const updateBadge = p.update_available ? '<span class="status-badge status-warning">' + I18n.t('modules.wordpress.update') + '</span>' : '<span class="status-badge status-ok">' + I18n.t('modules.wordpress.upToDate') + '</span>';
                 return `<tr>
                     <td><strong>${this.escapeHtml(p.name)}</strong><br><code style="font-size:0.8em">${this.escapeHtml(p.slug)}</code></td>
                     <td>${this.escapeHtml(p.version)}</td>
-                    <td><span class="status-badge ${statusClass}">${p.status === 'active' ? 'Aktiv' : 'Inaktiv'}</span></td>
+                    <td><span class="status-badge ${statusClass}">${p.status === 'active' ? I18n.t('modules.wordpress.active') : I18n.t('modules.wordpress.inactive')}</span></td>
                     <td>${updateBadge}</td>
                 </tr>`;
             }).join('');
@@ -216,7 +216,7 @@ const WordPressTab = {
             if (!tbody) return;
 
             if (!users.length || users[0]?.error) {
-                tbody.innerHTML = `<tr><td colspan="4" class="empty-state">${users[0]?.error ? this.escapeHtml(users[0].error) : 'Keine Benutzer.'}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="4" class="empty-state">${users[0]?.error ? this.escapeHtml(users[0].error) : I18n.t('modules.wordpress.noUsers')}</td></tr>`;
                 return;
             }
 

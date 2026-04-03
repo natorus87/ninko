@@ -55,7 +55,7 @@ const DockerTab = {
             if (!select) return;
 
             if (conns.length === 0) {
-                select.innerHTML = '<option value="">Keine Docker Verbindungen</option>';
+                select.innerHTML = '<option value="">' + I18n.t('modules.docker.noConnections') + '</option>';
                 this.currentConnectionId = '';
                 return;
             }
@@ -104,7 +104,7 @@ const DockerTab = {
                 </div>
                 <div class="info-card">
                     <div class="info-label">Container</div>
-                    <div class="info-value">${info.containers_running || 0} laufend / ${(info.containers_running || 0) + (info.containers_stopped || 0)} gesamt</div>
+                    <div class="info-value">${info.containers_running || 0} ${I18n.t('modules.docker.runningOf')}</div>
                 </div>
                 <div class="info-card">
                     <div class="info-label">Images</div>
@@ -126,7 +126,7 @@ const DockerTab = {
         } catch (err) {
             console.error('Docker Info Fehler:', err);
             const container = document.getElementById('docker-system-info');
-            if (container) container.innerHTML = '<p class="empty-state text-error">Fehler beim Laden der System-Info.</p>';
+            if (container) container.innerHTML = '<p class="empty-state text-error">' + I18n.t('modules.docker.sysInfoError') + '</p>';
         }
     },
 
@@ -139,7 +139,7 @@ const DockerTab = {
             if (!tbody) return;
 
             if (containers.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Keine Container gefunden.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="empty-state">' + I18n.t('modules.docker.noContainers') + '</td></tr>';
                 return;
             }
 
@@ -169,7 +169,7 @@ const DockerTab = {
         } catch (err) {
             console.error('Docker Containers Fehler:', err);
             const tbody = document.getElementById('docker-containers-tbody');
-            if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="empty-state text-error">Fehler beim Laden der Container.</td></tr>';
+            if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="empty-state text-error">' + I18n.t('modules.docker.loadContainersError') + '</td></tr>';
         }
     },
 
@@ -182,7 +182,7 @@ const DockerTab = {
             if (!tbody) return;
 
             if (images.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="3" class="empty-state">Keine Images gefunden.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="3" class="empty-state">' + I18n.t('modules.docker.noImages') + '</td></tr>';
                 return;
             }
 
@@ -196,7 +196,7 @@ const DockerTab = {
         } catch (err) {
             console.error('Docker Images Fehler:', err);
             const tbody = document.getElementById('docker-images-tbody');
-            if (tbody) tbody.innerHTML = '<tr><td colspan="3" class="empty-state text-error">Fehler beim Laden der Images.</td></tr>';
+            if (tbody) tbody.innerHTML = '<tr><td colspan="3" class="empty-state text-error">' + I18n.t('modules.docker.loadImagesError') + '</td></tr>';
         }
     },
 
@@ -209,7 +209,7 @@ const DockerTab = {
             if (!tbody) return;
 
             if (volumes.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="3" class="empty-state">Keine Volumes gefunden.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="3" class="empty-state">' + I18n.t('modules.docker.noVolumes') + '</td></tr>';
                 return;
             }
 
@@ -223,7 +223,7 @@ const DockerTab = {
         } catch (err) {
             console.error('Docker Volumes Fehler:', err);
             const tbody = document.getElementById('docker-volumes-tbody');
-            if (tbody) tbody.innerHTML = '<tr><td colspan="3" class="empty-state text-error">Fehler beim Laden der Volumes.</td></tr>';
+            if (tbody) tbody.innerHTML = '<tr><td colspan="3" class="empty-state text-error">' + I18n.t('modules.docker.loadVolumesError') + '</td></tr>';
         }
     },
 
@@ -234,31 +234,31 @@ const DockerTab = {
             showNotification(data.detail, data.status === 'success' ? 'success' : 'error');
             setTimeout(() => this.refresh(), 3000);
         } catch (err) {
-            showNotification('Verbindungsfehler', 'error');
+            showNotification(I18n.t('modules.docker.connectionError'), 'error');
         }
     },
 
     async stopContainer(id) {
-        if (!confirm(`Container "${id}" wirklich stoppen?`)) return;
+        if (!confirm(I18n.t('modules.docker.confirmStop').replace('...', this.escapeHtml(id)))) return;
         try {
             const res = await fetch(`${this.API_PREFIX}/containers/${id}/stop${this.getQueryParams()}`, { method: 'POST' });
             const data = await res.json();
             showNotification(data.detail, data.status === 'success' ? 'success' : 'warning');
             setTimeout(() => this.refresh(), 3000);
         } catch (err) {
-            showNotification('Verbindungsfehler', 'error');
+            showNotification(I18n.t('modules.docker.connectionError'), 'error');
         }
     },
 
     async restartContainer(id) {
-        if (!confirm(`Container "${id}" neu starten?`)) return;
+        if (!confirm(I18n.t('modules.docker.confirmRestart').replace('...', this.escapeHtml(id)))) return;
         try {
             const res = await fetch(`${this.API_PREFIX}/containers/${id}/restart${this.getQueryParams()}`, { method: 'POST' });
             const data = await res.json();
             showNotification(data.detail, data.status === 'success' ? 'success' : 'error');
             setTimeout(() => this.refresh(), 5000);
         } catch (err) {
-            showNotification('Verbindungsfehler', 'error');
+            showNotification(I18n.t('modules.docker.connectionError'), 'error');
         }
     },
 
@@ -277,7 +277,7 @@ const DockerTab = {
                 `);
             }
         } catch (err) {
-            showNotification('Fehler beim Laden der Logs', 'error');
+            showNotification(I18n.t('modules.docker.loadLogsError'), 'error');
         }
     },
 

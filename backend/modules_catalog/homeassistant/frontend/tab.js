@@ -45,7 +45,7 @@ const HomeAssistantTab = {
             if (!select) return;
 
             if (conns.length === 0) {
-                select.innerHTML = '<option value="">Keine HA Verbindungen</option>';
+                select.innerHTML = '<option value="">' + I18n.t('modules.homeassistant.noConnections') + '</option>';
                 this.currentConnectionId = '';
                 return;
             }
@@ -73,7 +73,7 @@ const HomeAssistantTab = {
             if (statusAlert) {
                 statusAlert.style.display = "block";
                 statusAlert.style.borderColor = 'var(--accent-yellow)';
-                statusAlert.innerHTML = '<span class="sf sf-warn">Bitte erst eine Home Assistant Verbindung in den Einstellungen konfigurieren.</span>';
+                statusAlert.innerHTML = '<span class="sf sf-warn">' + I18n.t('modules.homeassistant.configureFirst') + '</span>';
             }
             return;
         }
@@ -83,7 +83,7 @@ const HomeAssistantTab = {
             if (statusAlert) {
                 statusAlert.style.display = "block";
                 statusAlert.style.borderColor = 'var(--accent-blue)';
-                statusAlert.innerHTML = '<span class="sf sf-loading">Lade Status…</span>';
+                statusAlert.innerHTML = '<span class="sf sf-loading">' + I18n.t('modules.homeassistant.loadingStatus') + '</span>';
             }
 
             const res = await fetch(`${this.API_PREFIX}/status?connection_id=${this.currentConnectionId}`);
@@ -93,11 +93,11 @@ const HomeAssistantTab = {
 
             if (statusAlert) {
                 statusAlert.style.borderColor = 'var(--accent-green)';
-                statusAlert.innerHTML = `<span class="sf sf-ok">Verbunden mit <strong>${data.location_name || 'Home Assistant'}</strong> (v${data.version || '?'}) unter <a href="${data.url}" target="_blank" style="color: var(--accent-blue);">${data.url}</a></span>`;
+                statusAlert.innerHTML = `<span class="sf sf-ok">${I18n.t('modules.homeassistant.connectedTo')}<strong>${data.location_name || 'Home Assistant'}</strong>${I18n.t('modules.homeassistant.reached')} <a href="${data.url}" target="_blank" style="color: var(--accent-blue);">${data.url}</a></span>`;
             }
 
             if (contentArea) {
-                contentArea.innerHTML = `<p style="color: var(--text-muted); font-size: 0.9rem;">Home Assistant erfolgreich erreicht. Der Ninko AI Agent kann nun Smart Home Entitäten abfragen und steuern.</p>`;
+                contentArea.innerHTML = `<p style="color: var(--text-muted); font-size: 0.9rem;">${I18n.t('modules.homeassistant.lights')}: ${data.lights_count || 0} ${I18n.t('modules.homeassistant.shown')}</p>`;
             }
         } catch (err) {
             console.error(err);
@@ -127,16 +127,16 @@ const HomeAssistantTab = {
             const data = await res.json();
 
             if (data.lights && contentArea) {
-                let html = `<h3>Gefundene Lichter (${data.lights.length} Beispiel${data.lights.length === 1 ? '' : 'e'} angezeigt)</h3>`;
+                let html = `<h3>${I18n.t('modules.homeassistant.lights')} (${data.lights.length} ${I18n.t('modules.homeassistant.shown')})</h3>`;
                 html += `<div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 1rem; margin-top: 1rem;">`;
                 html += `<ul style="list-style: none; padding: 0; margin: 0;">`;
 
                 if (data.lights.length === 0) {
-                    html += `<li>Keine Lichter gefunden.</li>`;
+                    html += `<li>${I18n.t('modules.homeassistant.noLights')}</li>`;
                 } else {
                     data.lights.forEach(l => {
                         const name = l.attributes.friendly_name || l.entity_id;
-                        const state = l.state === "on" ? '<span style="color:var(--success, #10b981)">An</span>' : '<span style="color:var(--text-secondary, #9ca3af)">Aus</span>';
+                        const state = l.state === "on" ? '<span style="color:var(--success, #10b981)">' + I18n.t('modules.homeassistant.on') + '</span>' : '<span style="color:var(--text-secondary, #9ca3af)">' + I18n.t('modules.homeassistant.off') + '</span>';
                         html += `<li style="padding: 0.5rem 0; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between;">
                             <span>${name} <small style="color: var(--text-secondary); margin-left:8px;">(${l.entity_id})</small></span>
                             <span>${state}</span>
@@ -150,7 +150,7 @@ const HomeAssistantTab = {
                 this.showNotification(data.message, "success");
             }
         } catch (err) {
-            this.showNotification(`Aktion fehlgeschlagen: ${err.message}`, "error");
+            this.showNotification(I18n.t('modules.homeassistant.actionFailed') + err.message, "error");
         } finally {
             if (fetchLightsBtn) fetchLightsBtn.disabled = false;
         }

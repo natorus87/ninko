@@ -209,7 +209,7 @@ const TemplateTab = {
             const conns = data.connections || [];
 
             if (conns.length === 0) {
-                this._setSelectLabel('template-conn-select', 'Keine Verbindungen');
+                this._setSelectLabel('template-conn-select', I18n.t('modules._template.noConnections'));
                 this.currentConnectionId = '';
                 return;
             }
@@ -249,7 +249,7 @@ const TemplateTab = {
         if (!container) return;
 
         // Show loading state
-        container.innerHTML = '<p class="empty-state">Lade…</p>';
+        container.innerHTML = '<p class="empty-state">' + I18n.t('modules._template.loading') + '</p>';
 
         try {
             const res = await fetch(`${this.API_PREFIX}/status${this.getQueryParams()}`);
@@ -270,13 +270,13 @@ const TemplateTab = {
                             ${_tmplEsc(item.status)}
                         </span>
                     </div>`).join('')
-                : '<p class="empty-state">Keine Einträge gefunden.</p>';
+                : '<p class="empty-state">' + I18n.t('modules._template.noEntries') + '</p>';
 
         } catch (err) {
             console.error('Template: refresh error', err);
             // ✓ Always show an error state — never leave container blank
             if (container) {
-                container.innerHTML = '<p class="empty-state text-error">Fehler beim Laden der Daten.</p>';
+                container.innerHTML = '<p class="empty-state text-error">' + I18n.t('modules._template.loadDataError') + '</p>';
             }
         }
     },

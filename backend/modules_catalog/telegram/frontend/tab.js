@@ -38,11 +38,11 @@
                 if (data.running) {
                     card.className = 'status-card running';
                     icon.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="var(--accent-green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="9 12 11 14 15 10"></polyline></svg>';
-                    text.textContent = 'Aktiv';
+                    text.textContent = I18n.t('modules.telegram.active');
                 } else {
                     card.className = 'status-card failing';
                     icon.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2" ry="2"></rect></svg>';
-                    text.textContent = 'Gestoppt';
+                    text.textContent = I18n.t('modules.telegram.stopped');
                 }
             }
 
@@ -67,15 +67,15 @@
             const val = input?.value?.trim();
 
             if (!val) {
-                if (statusEl) statusEl.innerHTML = '<span class="sf sf-warn">Bitte Chat-ID eingeben.</span>';
+                if (statusEl) statusEl.innerHTML = '<span class="sf sf-warn">' + I18n.t('modules.telegram.enterChatId') + '</span>';
                 return;
             }
             if (!/^-?\d+$/.test(val)) {
-                if (statusEl) statusEl.innerHTML = '<span class="sf sf-warn">Nur numerische Chat-IDs erlaubt.</span>';
+                if (statusEl) statusEl.innerHTML = '<span class="sf sf-warn">' + I18n.t('modules.telegram.chatIdNumeric') + '</span>';
                 return;
             }
 
-            if (statusEl) statusEl.innerHTML = '<span class="sf sf-loading">Speichere…</span>';
+            if (statusEl) statusEl.innerHTML = '<span class="sf sf-loading">' + I18n.t('modules.telegram.saving') + '</span>';
 
             try {
                 const res = await fetch('/api/telegram/default-chat-id', {
@@ -85,14 +85,14 @@
                 });
                 const data = await res.json();
                 if (res.ok && data.ok) {
-                    if (statusEl) statusEl.innerHTML = '<span class="sf sf-ok">Standard Chat-ID gespeichert.</span>';
+                    if (statusEl) statusEl.innerHTML = '<span class="sf sf-ok">' + I18n.t('modules.telegram.chatIdSaved') + '</span>';
                     await this.checkStatus();
                     setTimeout(() => { if (statusEl) statusEl.innerHTML = ''; }, 3000);
                 } else {
-                    if (statusEl) statusEl.innerHTML = `<span class="sf sf-error">${data.detail || 'Speichern fehlgeschlagen'}</span>`;
+                    if (statusEl) statusEl.innerHTML = `<span class="sf sf-error">${data.detail || I18n.t('modules.telegram.saveFailed')}</span>`;
                 }
             } catch (e) {
-                if (statusEl) statusEl.innerHTML = '<span class="sf sf-error">Verbindungsfehler</span>';
+                if (statusEl) statusEl.innerHTML = '<span class="sf sf-error">' + I18n.t('modules.telegram.connectionError') + '</span>';
             }
         },
 
@@ -100,14 +100,14 @@
             try {
                 const res = await fetch('/api/telegram/start', { method: 'POST' });
                 if (res.ok) {
-                    showNotification('Telegram Bot gestartet.', 'success');
+                    showNotification(I18n.t('modules.telegram.botStarted'), 'success');
                     await this.checkStatus();
                 } else {
                     const data = await res.json();
-                    showNotification(`Fehler: ${data.detail || 'Unbekannt'}`, 'error');
+                    showNotification(I18n.t('modules.telegram.error') + (data.detail || I18n.t('modules.telegram.unknown')), 'error');
                 }
             } catch (e) {
-                showNotification('Fehler beim Starten des Bots.', 'error');
+                showNotification(I18n.t('modules.telegram.startError'), 'error');
             }
         },
 
@@ -115,13 +115,14 @@
             try {
                 const res = await fetch('/api/telegram/stop', { method: 'POST' });
                 if (res.ok) {
-                    showNotification('Telegram Bot gestoppt.', 'info');
+                    showNotification(I18n.t('modules.telegram.botStopped'), 'info');
                     await this.checkStatus();
                 } else {
-                    showNotification('Fehler beim Stoppen.', 'error');
+                    const data = await res.json();
+                    showNotification(I18n.t('modules.telegram.error') + (data.detail || I18n.t('modules.telegram.stopError')), 'error');
                 }
             } catch (e) {
-                showNotification('Fehler beim Stoppen des Bots.', 'error');
+                showNotification(I18n.t('modules.telegram.stopBotError'), 'error');
             }
         },
 
@@ -131,11 +132,11 @@
             const msg = textarea?.value?.trim();
 
             if (!msg) {
-                if (statusEl) statusEl.innerHTML = '<span class="sf sf-warn">Bitte Nachricht eingeben.</span>';
+                if (statusEl) statusEl.innerHTML = '<span class="sf sf-warn">' + I18n.t('modules.telegram.enterMessage') + '</span>';
                 return;
             }
 
-            if (statusEl) statusEl.textContent = '⏳ Sende…';
+            if (statusEl) statusEl.textContent = I18n.t('modules.telegram.sending');
 
             try {
                 const res = await fetch('/api/telegram/send', {
@@ -145,14 +146,14 @@
                 });
                 const data = await res.json();
                 if (res.ok && data.ok) {
-                    if (statusEl) statusEl.innerHTML = '<span class="sf sf-ok">Gesendet!</span>';
+                    if (statusEl) statusEl.innerHTML = '<span class="sf sf-ok">' + I18n.t('modules.telegram.sent') + '</span>';
                     if (textarea) textarea.value = '';
                     setTimeout(() => { if (statusEl) statusEl.innerHTML = ''; }, 3000);
                 } else {
-                    if (statusEl) statusEl.innerHTML = `<span class="sf sf-error">${data.detail || 'Fehler beim Senden'}</span>`;
+                    if (statusEl) statusEl.innerHTML = `<span class="sf sf-error">${data.detail || I18n.t('modules.telegram.sendError')}</span>`;
                 }
             } catch (e) {
-                if (statusEl) statusEl.innerHTML = '<span class="sf sf-error">Verbindungsfehler</span>';
+                if (statusEl) statusEl.innerHTML = '<span class="sf sf-error">' + I18n.t('modules.telegram.connectionError') + '</span>';
             }
         },
 
@@ -176,7 +177,7 @@
             if (!container) return;
 
             if (this._allowedIds.length === 0) {
-                container.innerHTML = '<span style="color:var(--text-muted);font-size:0.82rem;line-height:2rem;">Keine Einschränkung – alle Chat-IDs erlaubt</span>';
+                container.innerHTML = '<span style="color:var(--text-muted);font-size:0.82rem;line-height:2rem;">' + I18n.t('modules.telegram.noRestriction') + '</span>';
                 return;
             }
 
@@ -199,11 +200,11 @@
 
             if (!val) return;
             if (!/^\d+$/.test(val)) {
-                if (statusEl) statusEl.innerHTML = '<span class="sf sf-warn">Nur numerische Chat-IDs erlaubt.</span>';
+                if (statusEl) statusEl.innerHTML = '<span class="sf sf-warn">' + I18n.t('modules.telegram.chatIdNumeric') + '</span>';
                 return;
             }
             if (this._allowedIds.includes(val)) {
-                if (statusEl) statusEl.innerHTML = '<span class="sf sf-warn">Diese ID ist bereits in der Liste.</span>';
+                if (statusEl) statusEl.innerHTML = '<span class="sf sf-warn">' + I18n.t('modules.telegram.alreadyInList') + '</span>';
                 return;
             }
 
@@ -219,7 +220,7 @@
 
         async _saveAllowedIds(ids) {
             const statusEl = document.getElementById('tg-allowed-ids-status');
-            if (statusEl) statusEl.innerHTML = '<span class="sf sf-loading">Speichere…</span>';
+            if (statusEl) statusEl.innerHTML = '<span class="sf sf-loading">' + I18n.t('modules.telegram.saving') + '</span>';
 
             try {
                 const res = await fetch('/api/telegram/allowed-ids', {
@@ -231,13 +232,13 @@
                 if (res.ok && data.ok) {
                     this._allowedIds = data.allowed_ids;
                     this._renderAllowedIds();
-                    if (statusEl) statusEl.innerHTML = '<span class="sf sf-ok">Gespeichert.</span>';
+                    if (statusEl) statusEl.innerHTML = '<span class="sf sf-ok">' + I18n.t('modules.telegram.saved') + '</span>';
                     setTimeout(() => { if (statusEl) statusEl.innerHTML = ''; }, 3000);
                 } else {
-                    if (statusEl) statusEl.innerHTML = `<span class="sf sf-error">${data.detail || 'Speichern fehlgeschlagen'}</span>`;
+                    if (statusEl) statusEl.innerHTML = `<span class="sf sf-error">${data.detail || I18n.t('modules.telegram.saveFailed')}</span>`;
                 }
             } catch (e) {
-                if (statusEl) statusEl.innerHTML = '<span class="sf sf-error">Verbindungsfehler</span>';
+                if (statusEl) statusEl.innerHTML = '<span class="sf sf-error">' + I18n.t('modules.telegram.connectionError') + '</span>';
             }
         },
 

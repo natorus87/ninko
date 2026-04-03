@@ -16,7 +16,7 @@
 
             if (data.error) {
                 document.getElementById('cisco-info').innerHTML =
-                    '<p class="empty-state text-error">Verbindungsfehler: ' + data.error + '</p>';
+                    '<p class="empty-state text-error">' + I18n.t('modules.cisco.loadError') + '</p>';
                 return;
             }
 
@@ -27,16 +27,16 @@
 
             document.getElementById('cisco-info').innerHTML = `
                 <table class="data-table">
-                    <tr><td>Hostname</td><td>${data.hostname || '-'}</td></tr>
-                    <tr><td>Model</td><td>${data.model || '-'}</td></tr>
-                    <tr><td>Interfaces</td><td>${data.interfaces_count || 0}</td></tr>
-                    <tr><td>VLANs</td><td>${data.vlans_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.cisco.hostname')}</td><td>${data.hostname || '-'}</td></tr>
+                    <tr><td>${I18n.t('modules.cisco.model')}</td><td>${data.model || '-'}</td></tr>
+                    <tr><td>${I18n.t('modules.cisco.interfaces')}</td><td>${data.interfaces_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.cisco.vlans')}</td><td>${data.vlans_count || 0}</td></tr>
                 </table>
             `;
         } catch (e) {
             console.error("Cisco Load Status failed", e);
             document.getElementById('cisco-info').innerHTML =
-                '<p class="empty-state text-error">Fehler beim Laden.</p>';
+                '<p class="empty-state text-error">' + I18n.t('modules.cisco.loadError') + '</p>';
         }
     }
 

@@ -55,7 +55,7 @@ const LinuxServerTab = {
             if (!select) return;
 
             if (conns.length === 0) {
-                select.innerHTML = '<option value="">Keine Linux Server Verbindungen</option>';
+                select.innerHTML = '<option value="">' + I18n.t('modules.linux_server.noConnections') + '</option>';
                 this.currentConnectionId = '';
                 return;
             }
@@ -130,7 +130,7 @@ const LinuxServerTab = {
         } catch (err) {
             console.error('Linux Server Info Fehler:', err);
             const container = document.getElementById('linux-server-info');
-            if (container) container.innerHTML = '<p class="empty-state text-error">Fehler beim Laden der System-Info.</p>';
+            if (container) container.innerHTML = '<p class="empty-state text-error">' + I18n.t('modules.linux_server.sysInfoError') + '</p>';
         }
     },
 
@@ -144,7 +144,7 @@ const LinuxServerTab = {
         } catch (err) {
             console.error('Linux Server Services Fehler:', err);
             const container = document.getElementById('linux-server-services');
-            if (container) container.textContent = 'Fehler beim Laden der Services.';
+            if (container) container.textContent = I18n.t('modules.linux_server.servicesError');
         }
     },
 
