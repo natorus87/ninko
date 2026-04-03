@@ -29,6 +29,14 @@ async def _get_api_client(connection_id: str = "") -> dict:
                 _t(
                     de=f"OpenProject-Verbindung mit ID '{connection_id}' nicht gefunden.",
                     en=f"OpenProject connection with ID '{connection_id}' not found.",
+                    fr=f"Connexion OpenProject avec l'ID '{connection_id}' non trouvée.",
+                    es=f"Conexión de OpenProject con ID '{connection_id}' no encontrada.",
+                    it=f"Connessione OpenProject con ID '{connection_id}' non trovata.",
+                    nl=f"OpenProject-verbinding met ID '{connection_id}' niet gevonden.",
+                    pl=f"Połączenie OpenProject z ID '{connection_id}' nie znalezione.",
+                    pt=f"Conexão OpenProject com ID '{connection_id}' não encontrada.",
+                    ja=f"ID '{connection_id}' のOpenProject接続が見つかりません。",
+                    zh=f"未找到ID为 '{connection_id}' 的OpenProject连接。",
                 )
             )
     else:
@@ -55,6 +63,14 @@ async def _get_api_client(connection_id: str = "") -> dict:
             _t(
                 de="Keine OpenProject-Verbindung konfiguriert.",
                 en="No OpenProject connection configured.",
+                fr="Aucune connexion OpenProject configurée.",
+                es="No hay conexión OpenProject configurada.",
+                it="Nessuna connessione OpenProject configurata.",
+                nl="Geen OpenProject-verbinding geconfigureerd.",
+                pl="Nie skonfigurowano połączenia OpenProject.",
+                pt="Nenhuma conexão OpenProject configurada.",
+                ja="OpenProject接続が設定されていません。",
+                zh="未配置OpenProject连接。",
             )
         )
 
@@ -97,9 +113,34 @@ async def list_openproject_projects(connection_id: str = "") -> str:
         data = await _op_request("GET", "/projects", client)
         projects = data.get("_embedded", {}).get("elements", [])
         if not projects:
-            return _t(de="Keine Projekte gefunden", en="No projects found")
+            return _t(
+                de="Keine Projekte gefunden",
+                en="No projects found",
+                fr="Aucun projet trouvé",
+                es="No se encontraron proyectos",
+                it="Nessun progetto trovato",
+                nl="Geen projecten gevonden",
+                pl="Nie znaleziono projektów",
+                pt="Nenhum projeto encontrado",
+                ja="プロジェクトが見つかりません",
+                zh="未找到项目",
+            )
 
-        lines = ["📁 " + _t(de="Projekte", en="Projects")]
+        lines = [
+            "📁 "
+            + _t(
+                de="Projekte",
+                en="Projects",
+                fr="Projets",
+                es="Proyectos",
+                it="Progetti",
+                nl="Projecten",
+                pl="Projekty",
+                pt="Projetos",
+                ja="プロジェクト",
+                zh="项目",
+            )
+        ]
         for p in projects[:15]:
             status_icon = "✅" if p.get("status") == "active" else "📦"
             lines.append(f"  {status_icon} {p.get('name', '-')}")
@@ -112,7 +153,18 @@ async def list_openproject_projects(connection_id: str = "") -> str:
         return "\n".join(lines)
     except Exception as e:
         logger.error("list_openproject_projects failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 @tool
@@ -137,12 +189,34 @@ async def get_openproject_project(project_name: str, connection_id: str = "") ->
             return _t(
                 de=f"Projekt nicht gefunden: {project_name}",
                 en=f"Project not found: {project_name}",
+                fr=f"Projet non trouvé: {project_name}",
+                es=f"Proyecto no encontrado: {project_name}",
+                it=f"Progetto non trovato: {project_name}",
+                nl=f"Project niet gevonden: {project_name}",
+                pl=f"Nie znaleziono projektu: {project_name}",
+                pt=f"Projeto não encontrado: {project_name}",
+                ja=f"プロジェクトが見つかりません: {project_name}",
+                zh=f"未找到项目: {project_name}",
             )
 
         project_id = project.get("id")
         details = await _op_request("GET", f"/projects/{project_id}", client)
 
-        lines = ["📁 " + _t(de="Projektdetails", en="Project details")]
+        lines = [
+            "📁 "
+            + _t(
+                de="Projektdetails",
+                en="Project details",
+                fr="Détails du projet",
+                es="Detalles del proyecto",
+                it="Dettagli progetto",
+                nl="Projectdetails",
+                pl="Szczegóły projektu",
+                pt="Detalhes do projeto",
+                ja="プロジェクト詳細",
+                zh="项目详情",
+            )
+        ]
         lines.append(f"  {details.get('name', '-')}")
         if details.get("description"):
             desc = details.get("description", "")[:150]
@@ -154,7 +228,18 @@ async def get_openproject_project(project_name: str, connection_id: str = "") ->
         return "\n".join(lines)
     except Exception as e:
         logger.error("get_openproject_project failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 @tool
@@ -189,15 +274,48 @@ async def list_openproject_work_packages(
                 return _t(
                     de=f"Projekt nicht gefunden: {project_name}",
                     en=f"Project not found: {project_name}",
+                    fr=f"Projet non trouvé: {project_name}",
+                    es=f"Proyecto no encontrado: {project_name}",
+                    it=f"Progetto non trovato: {project_name}",
+                    nl=f"Project niet gevonden: {project_name}",
+                    pl=f"Nie znaleziono projektu: {project_name}",
+                    pt=f"Projeto não encontrado: {project_name}",
+                    ja=f"プロジェクトが見つかりません: {project_name}",
+                    zh=f"未找到项目: {project_name}",
                 )
         else:
             data = await _op_request("GET", "/work_packages", client)
 
         wps = data.get("_embedded", {}).get("elements", [])
         if not wps:
-            return _t(de="Keine Work Packages gefunden", en="No work packages found")
+            return _t(
+                de="Keine Work Packages gefunden",
+                en="No work packages found",
+                fr="Aucun package de travail trouvé",
+                es="No se encontraron paquetes de trabajo",
+                it="Nessun pacchetto di lavoro trovato",
+                nl="Geen work packages gevonden",
+                pl="Nie znaleziono pakietów pracy",
+                pt="Nenhum pacote de trabalho encontrado",
+                ja="Work Packageが見つかりません",
+                zh="未找到工作包",
+            )
 
-        lines = ["📋 " + _t(de="Work Packages", en="Work packages")]
+        lines = [
+            "📋 "
+            + _t(
+                de="Work Packages",
+                en="Work packages",
+                fr="Packages de travail",
+                es="Paquetes de trabajo",
+                it="Pacchetti di lavoro",
+                nl="Work packages",
+                pl="Pakiety pracy",
+                pt="Pacotes de trabalho",
+                ja="Work Package",
+                zh="工作包",
+            )
+        ]
         for wp in wps[:15]:
             type_icon = (
                 "🐛"
@@ -220,7 +338,18 @@ async def list_openproject_work_packages(
         return "\n".join(lines)
     except Exception as e:
         logger.error("list_openproject_work_packages failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 @tool
@@ -235,7 +364,21 @@ async def get_openproject_work_package(
         client = await _get_api_client(connection_id)
         wp = await _op_request("GET", f"/work_packages/{work_package_id}", client)
 
-        lines = ["📋 " + _t(de="Work Package Details", en="Work package details")]
+        lines = [
+            "📋 "
+            + _t(
+                de="Work Package Details",
+                en="Work package details",
+                fr="Détails du package de travail",
+                es="Detalles del paquete de trabajo",
+                it="Dettagli pacchetto di lavoro",
+                nl="Work package details",
+                pl="Szczegóły pakietu pracy",
+                pt="Detalhes do pacote de trabalho",
+                ja="Work Package詳細",
+                zh="工作包详情",
+            )
+        ]
         lines.append(f"  #{wp.get('id')}: {wp.get('subject', '-')}")
         lines.append(f"  Type: {wp.get('type', '-')}")
 
@@ -256,7 +399,18 @@ async def get_openproject_work_package(
         return "\n".join(lines)
     except Exception as e:
         logger.error("get_openproject_work_package failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 @tool
@@ -270,9 +424,34 @@ async def list_openproject_users(connection_id: str = "") -> str:
         data = await _op_request("GET", "/users", client)
         users = data.get("_embedded", {}).get("elements", [])
         if not users:
-            return _t(de="Keine Benutzer gefunden", en="No users found")
+            return _t(
+                de="Keine Benutzer gefunden",
+                en="No users found",
+                fr="Aucun utilisateur trouvé",
+                es="No se encontraron usuarios",
+                it="Nessun utente trovato",
+                nl="Geen gebruikers gevonden",
+                pl="Nie znaleziono użytkowników",
+                pt="Nenhum usuário encontrado",
+                ja="ユーザーが見つかりません",
+                zh="未找到用户",
+            )
 
-        lines = ["👥 " + _t(de="Benutzer", en="Users")]
+        lines = [
+            "👥 "
+            + _t(
+                de="Benutzer",
+                en="Users",
+                fr="Utilisateurs",
+                es="Usuarios",
+                it="Utenti",
+                nl="Gebruikers",
+                pl="Użytkownicy",
+                pt="Usuários",
+                ja="ユーザー",
+                zh="用户",
+            )
+        ]
         for u in users[:15]:
             name = f"{u.get('firstname', '')} {u.get('lastname', '')}".strip() or u.get(
                 "login", "-"
@@ -287,7 +466,18 @@ async def list_openproject_users(connection_id: str = "") -> str:
         return "\n".join(lines)
     except Exception as e:
         logger.error("list_openproject_users failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 @tool
@@ -322,15 +512,48 @@ async def list_openproject_time_entries(
                 return _t(
                     de=f"Projekt nicht gefunden: {project_name}",
                     en=f"Project not found: {project_name}",
+                    fr=f"Projet non trouvé: {project_name}",
+                    es=f"Proyecto no encontrado: {project_name}",
+                    it=f"Progetto non trovato: {project_name}",
+                    nl=f"Project niet gevonden: {project_name}",
+                    pl=f"Nie znaleziono projektu: {project_name}",
+                    pt=f"Projeto não encontrado: {project_name}",
+                    ja=f"プロジェクトが見つかりません: {project_name}",
+                    zh=f"未找到项目: {project_name}",
                 )
         else:
             data = await _op_request("GET", "/time_entries", client)
 
         entries = data.get("_embedded", {}).get("elements", [])
         if not entries:
-            return _t(de="Keine Time Entries", en="No time entries")
+            return _t(
+                de="Keine Time Entries",
+                en="No time entries",
+                fr="Aucune entrée de temps",
+                es="No hay entradas de tiempo",
+                it="Nessuna entrada di tempo",
+                nl="Geen tijdentries",
+                pl="Brak wpisów czasu",
+                pt="Nenhuma entrada de tempo",
+                ja="時間エントリがありません",
+                zh="没有时间条目",
+            )
 
-        lines = ["⏱️ " + _t(de="Time Entries", en="Time entries")]
+        lines = [
+            "⏱️ "
+            + _t(
+                de="Time Entries",
+                en="Time entries",
+                fr="Entrées de temps",
+                es="Entradas de tiempo",
+                it="Entry di tempo",
+                nl="Tijdentries",
+                pl="Wpisy czasu",
+                pt="Entradas de tempo",
+                ja="時間エントリ",
+                zh="时间条目",
+            )
+        ]
         for e in entries[:15]:
             hours = e.get("hours", 0)
             date = e.get("spentOn", "-")
@@ -340,7 +563,18 @@ async def list_openproject_time_entries(
         return "\n".join(lines)
     except Exception as e:
         logger.error("list_openproject_time_entries failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 # ═══════════════════════════════════════════════════════
@@ -376,6 +610,14 @@ async def create_openproject_work_package(
             return _t(
                 de=f"Projekt nicht gefunden: {project_name}",
                 en=f"Project not found: {project_name}",
+                fr=f"Projet non trouvé: {project_name}",
+                es=f"Proyecto no encontrado: {project_name}",
+                it=f"Progetto non trovato: {project_name}",
+                nl=f"Project niet gevonden: {project_name}",
+                pl=f"Nie znaleziono projektu: {project_name}",
+                pt=f"Projeto não encontrado: {project_name}",
+                ja=f"プロジェクトが見つかりません: {project_name}",
+                zh=f"未找到项目: {project_name}",
             )
 
         project_id = project.get("id")
@@ -390,10 +632,29 @@ async def create_openproject_work_package(
         return _t(
             de=f"✅ Work Package erstellt: #{result.get('id')} - {subject}",
             en=f"✅ Work package created: #{result.get('id')} - {subject}",
+            fr=f"✅ Package de travail créé: #{result.get('id')} - {subject}",
+            es=f"✅ Paquete de trabajo creado: #{result.get('id')} - {subject}",
+            it=f"✅ Pacchetto di lavoro creato: #{result.get('id')} - {subject}",
+            nl=f"✅ Work package aangemaakt: #{result.get('id')} - {subject}",
+            pl=f"✅ Utworzono pakiet pracy: #{result.get('id')} - {subject}",
+            pt=f"✅ Pacote de trabalho criado: #{result.get('id')} - {subject}",
+            ja=f"✅ Work Packageを作成しました: #{result.get('id')} - {subject}",
+            zh=f"✅ 已创建工作包: #{result.get('id')} - {subject}",
         )
     except Exception as e:
         logger.error("create_openproject_work_package failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 @tool
@@ -425,10 +686,29 @@ async def update_openproject_work_package(
         return _t(
             de=f"✅ Work Package aktualisiert: #{work_package_id}",
             en=f"✅ Work package updated: #{work_package_id}",
+            fr=f"✅ Package de travail mis à jour: #{work_package_id}",
+            es=f"✅ Paquete de trabajo actualizado: #{work_package_id}",
+            it=f"✅ Pacchetto di lavoro aggiornato: #{work_package_id}",
+            nl=f"✅ Work package bijgewerkt: #{work_package_id}",
+            pl=f"✅ Zaktualizowano pakiet pracy: #{work_package_id}",
+            pt=f"✅ Pacote de trabalho atualizado: #{work_package_id}",
+            ja=f"✅ Work Packageを更新しました: #{work_package_id}",
+            zh=f"✅ 已更新工作包: #{work_package_id}",
         )
     except Exception as e:
         logger.error("update_openproject_work_package failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 @tool
@@ -460,6 +740,14 @@ async def log_openproject_time(
             return _t(
                 de=f"Projekt nicht gefunden: {project_name}",
                 en=f"Project not found: {project_name}",
+                fr=f"Projet non trouvé: {project_name}",
+                es=f"Proyecto no encontrado: {project_name}",
+                it=f"Progetto non trovato: {project_name}",
+                nl=f"Project niet gevonden: {project_name}",
+                pl=f"Nie znaleziono projektu: {project_name}",
+                pt=f"Projeto não encontrado: {project_name}",
+                ja=f"プロジェクトが見つかりません: {project_name}",
+                zh=f"未找到项目: {project_name}",
             )
 
         project_id = project.get("id")
@@ -482,7 +770,26 @@ async def log_openproject_time(
         return _t(
             de=f"✅ {hours}h gebucht für {project_name}",
             en=f"✅ {hours}h logged for {project_name}",
+            fr=f"✅ {hours}h enregistré pour {project_name}",
+            es=f"✅ {hours}h registrado para {project_name}",
+            it=f"✅ {hours}h registrato per {project_name}",
+            nl=f"✅ {hours}h geboekt voor {project_name}",
+            pl=f"✅ {hours}zarejestrowane dla {project_name}",
+            pt=f"✅ {hours}h registrado para {project_name}",
+            ja=f"✅ {hours}hを{project_name}に記録しました",
+            zh=f"✅ 已记录 {hours}h 用于 {project_name}",
         )
     except Exception as e:
         logger.error("log_openproject_time failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )

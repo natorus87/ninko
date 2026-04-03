@@ -28,6 +28,14 @@ async def _get_api_client(connection_id: str = "") -> dict:
                 _t(
                     de=f"Ubiquiti-Verbindung mit ID '{connection_id}' nicht gefunden.",
                     en=f"Ubiquiti connection with ID '{connection_id}' not found.",
+                    fr=f"Connexion Ubiquiti avec l'ID '{connection_id}' non trouvée.",
+                    es=f"Conexión Ubiquiti con ID '{connection_id}' no encontrada.",
+                    it=f"Connessione Ubiquiti con ID '{connection_id}' non trovata.",
+                    nl=f"Ubiquiti-verbinding met ID '{connection_id}' niet gevonden.",
+                    pl=f"Połączenie Ubiquiti z ID '{connection_id}' nie znalezione.",
+                    pt=f"Conexão Ubiquiti com ID '{connection_id}' não encontrada.",
+                    ja=f"ID '{connection_id}' のUbiquiti接続が見つかりません。",
+                    zh=f"未找到ID为'{connection_id}'的Ubiquiti连接。",
                 )
             )
     else:
@@ -55,6 +63,14 @@ async def _get_api_client(connection_id: str = "") -> dict:
             _t(
                 de="Keine Ubiquiti-Verbindung konfiguriert.",
                 en="No Ubiquiti connection configured.",
+                fr="Aucune connexion Ubiquiti configurée.",
+                es="No hay conexión Ubiquiti configurada.",
+                it="Nessuna connessione Ubiquiti configurata.",
+                nl="Geen Ubiquiti-verbinding geconfigureerd.",
+                pl="Brak skonfigurowanego połączenia Ubiquiti.",
+                pt="Nenhuma conexão Ubiquiti configurada.",
+                ja="Ubiquiti接続が設定されていません。",
+                zh="未配置Ubiquiti连接。",
             )
         )
 
@@ -111,9 +127,34 @@ async def list_ubiquiti_devices(connection_id: str = "") -> str:
             devices = await unifi.request("/stat/device")
 
         if not devices:
-            return _t(de="Keine Geräte gefunden", en="No devices found")
+            return _t(
+                de="Keine Geräte gefunden",
+                en="No devices found",
+                fr="Aucun appareil trouvé",
+                es="No se encontraron dispositivos",
+                it="Nessun dispositivo trovato",
+                nl="Geen apparaten gevonden",
+                pl="Nie znaleziono urządzeń",
+                pt="Nenhum dispositivo encontrado",
+                ja="デバイスが見つかりません",
+                zh="未找到设备",
+            )
 
-        lines = ["📡 " + _t(de="Geräte", en="Devices")]
+        lines = [
+            "📡 "
+            + _t(
+                de="Geräte",
+                en="Devices",
+                fr="Appareils",
+                es="Dispositivos",
+                it="Dispositivi",
+                nl="Apparaten",
+                pl="Urządzenia",
+                pt="Dispositivos",
+                ja="デバイス",
+                zh="设备",
+            )
+        ]
         for d in devices[:20]:
             state = d.get("state", 0)
             state_icon = "🟢" if state == 1 else "🔴"
@@ -127,7 +168,18 @@ async def list_ubiquiti_devices(connection_id: str = "") -> str:
         return "\n".join(lines)
     except Exception as e:
         logger.error("list_ubiquiti_devices failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 @tool
@@ -142,9 +194,34 @@ async def list_ubiquiti_clients(connection_id: str = "") -> str:
             clients = await unifi.request("/stat/sta")
 
         if not clients:
-            return _t(de="Keine Clients gefunden", en="No clients found")
+            return _t(
+                de="Keine Clients gefunden",
+                en="No clients found",
+                fr="Aucun client trouvé",
+                es="No se encontraron clientes",
+                it="Nessun cliente trovato",
+                nl="Geen clients gevonden",
+                pl="Nie znaleziono klientów",
+                pt="Nenhum cliente encontrado",
+                ja="クライアントが見つかりません",
+                zh="未找到客户端",
+            )
 
-        lines = ["👥 " + _t(de="Clients", en="Clients")]
+        lines = [
+            "👥 "
+            + _t(
+                de="Clients",
+                en="Clients",
+                fr="Clients",
+                es="Clientes",
+                it="Clienti",
+                nl="Clients",
+                pl="Klienci",
+                pt="Clientes",
+                ja="クライアント",
+                zh="客户端",
+            )
+        ]
         for c in clients[:15]:
             wired = c.get("is_wired", False)
             icon = "💻" if wired else "📱"
@@ -159,7 +236,18 @@ async def list_ubiquiti_clients(connection_id: str = "") -> str:
         return "\n".join(lines)
     except Exception as e:
         logger.error("list_ubiquiti_clients failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 @tool
@@ -185,9 +273,31 @@ async def get_ubiquiti_device(device_name: str, connection_id: str = "") -> str:
             return _t(
                 de=f"Gerät nicht gefunden: {device_name}",
                 en=f"Device not found: {device_name}",
+                fr=f"Appareil non trouvé: {device_name}",
+                es=f"Dispositivo no encontrado: {device_name}",
+                it=f"Dispositivo non trovato: {device_name}",
+                nl=f"Apparaat niet gevonden: {device_name}",
+                pl=f"Urządzenie nie znalezione: {device_name}",
+                pt=f"Dispositivo não encontrado: {device_name}",
+                ja=f"デバイスが見つかりません: {device_name}",
+                zh=f"未找到设备: {device_name}",
             )
 
-        lines = ["📡 " + _t(de="Gerätedetails", en="Device details")]
+        lines = [
+            "📡 "
+            + _t(
+                de="Gerätedetails",
+                en="Device details",
+                fr="Détails de l'appareil",
+                es="Detalles del dispositivo",
+                it="Dettagli dispositivo",
+                nl="Apparaatdetails",
+                pl="Szczegóły urządzenia",
+                pt="Detalhes do dispositivo",
+                ja="デバイス詳細",
+                zh="设备详情",
+            )
+        ]
         lines.append(f"  Name: {device.get('name', '-')}")
         lines.append(f"  Model: {device.get('model', '-')}")
         lines.append(f"  Version: {device.get('version', '-')}")
@@ -198,7 +308,18 @@ async def get_ubiquiti_device(device_name: str, connection_id: str = "") -> str:
         return "\n".join(lines)
     except Exception as e:
         logger.error("get_ubiquiti_device failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 @tool
@@ -213,9 +334,34 @@ async def list_ubiquiti_wlans(connection_id: str = "") -> str:
             wlans = await unifi.request("/rest/wlanconf")
 
         if not wlans:
-            return _t(de="Keine WLANs gefunden", en="No WLANs found")
+            return _t(
+                de="Keine WLANs gefunden",
+                en="No WLANs found",
+                fr="Aucun WLAN trouvé",
+                es="No se encontraron WLANs",
+                it="Nessun WLAN trovato",
+                nl="Geen WLANs gevonden",
+                pl="Nie znaleziono WLAN",
+                pt="Nenhum WLAN encontrado",
+                ja="WLANが見つかりません",
+                zh="未找到WLAN",
+            )
 
-        lines = ["📶 " + _t(de="WLANs", en="WLANs")]
+        lines = [
+            "📶 "
+            + _t(
+                de="WLANs",
+                en="WLANs",
+                fr="WLANs",
+                es="WLANs",
+                it="WLAN",
+                nl="WLANs",
+                pl="WLAN-y",
+                pt="WLANs",
+                ja="WLAN",
+                zh="WLAN",
+            )
+        ]
         for w in wlans[:15]:
             enabled = "✅" if w.get("enabled") else "❌"
             ssid = w.get("name", "-")
@@ -228,7 +374,18 @@ async def list_ubiquiti_wlans(connection_id: str = "") -> str:
         return "\n".join(lines)
     except Exception as e:
         logger.error("list_ubiquiti_wlans failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 @tool
@@ -242,7 +399,21 @@ async def list_ubiquiti_switch_ports(connection_id: str = "") -> str:
         async with UnifiSession(client) as unifi:
             devices = await unifi.request("/stat/device")
 
-        lines = ["🔀 " + _t(de="Switch-Ports", en="Switch ports")]
+        lines = [
+            "🔀 "
+            + _t(
+                de="Switch-Ports",
+                en="Switch ports",
+                fr="Ports du commutateur",
+                es="Puertos del switch",
+                it="Porte switch",
+                nl="Switch-poorten",
+                pl="Porty przełącznika",
+                pt="Portas do switch",
+                ja="スイッチポート",
+                zh="交换机端口",
+            )
+        ]
         switches = [d for d in devices if "sw" in d.get("type", "")]
         for s in switches[:5]:
             name = s.get("name", "-")
@@ -256,7 +427,18 @@ async def list_ubiquiti_switch_ports(connection_id: str = "") -> str:
         return "\n".join(lines)
     except Exception as e:
         logger.error("list_ubiquiti_switch_ports failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 @tool
@@ -273,14 +455,39 @@ async def get_ubiquiti_network_stats(connection_id: str = "") -> str:
         total_rx = sum(int(d.get("rx_bytes", 0)) for d in devices)
         total_tx = sum(int(d.get("tx_bytes", 0)) for d in devices)
 
-        lines = ["📊 " + _t(de="Netzwerk-Stats", en="Network stats")]
+        lines = [
+            "📊 "
+            + _t(
+                de="Netzwerk-Stats",
+                en="Network stats",
+                fr="Stats réseau",
+                es="Estadísticas de red",
+                it="Statistiche rete",
+                nl="Netwerkstats",
+                pl="Statystyki sieci",
+                pt="Estatísticas de rede",
+                ja="ネットワーク統計",
+                zh="网络统计",
+            )
+        ]
         lines.append(f"  RX: {total_rx / 1024 / 1024 / 1024:.2f} GB")
         lines.append(f"  TX: {total_tx / 1024 / 1024 / 1024:.2f} GB")
 
         return "\n".join(lines)
     except Exception as e:
         logger.error("get_ubiquiti_network_stats failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 @tool
@@ -295,9 +502,34 @@ async def list_ubiquiti_firewall_rules(connection_id: str = "") -> str:
             rules = await unifi.request("/rest/firewallrule")
 
         if not rules:
-            return _t(de="Keine Firewall-Regeln", en="No firewall rules")
+            return _t(
+                de="Keine Firewall-Regeln",
+                en="No firewall rules",
+                fr="Aucune règle de pare-feu",
+                es="Sin reglas de firewall",
+                it="Nessuna regola firewall",
+                nl="Geen firewall-regels",
+                pl="Brak reguł firewall",
+                pt="Nenhuma regra de firewall",
+                ja="ファイアウォールルールがありません",
+                zh="无防火墙规则",
+            )
 
-        lines = ["🛡️ " + _t(de="Firewall-Regeln", en="Firewall rules")]
+        lines = [
+            "🛡️ "
+            + _t(
+                de="Firewall-Regeln",
+                en="Firewall rules",
+                fr="Règles de pare-feu",
+                es="Reglas de firewall",
+                it="Regole firewall",
+                nl="Firewall-regels",
+                pl="Reguły firewall",
+                pt="Regras de firewall",
+                ja="ファイアウォールルール",
+                zh="防火墙规则",
+            )
+        ]
         for r in rules[:15]:
             action = r.get("action", "-")
             src = r.get("src_address", "any")
@@ -310,7 +542,18 @@ async def list_ubiquiti_firewall_rules(connection_id: str = "") -> str:
         return "\n".join(lines)
     except Exception as e:
         logger.error("list_ubiquiti_firewall_rules failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 # ═══════════════════════════════════════════════════════
@@ -341,6 +584,14 @@ async def restart_ubiquiti_device(device_name: str, connection_id: str = "") -> 
             return _t(
                 de=f"Gerät nicht gefunden: {device_name}",
                 en=f"Device not found: {device_name}",
+                fr=f"Appareil non trouvé: {device_name}",
+                es=f"Dispositivo no encontrado: {device_name}",
+                it=f"Dispositivo non trovato: {device_name}",
+                nl=f"Apparaat niet gevonden: {device_name}",
+                pl=f"Urządzenie nie znalezione: {device_name}",
+                pt=f"Dispositivo não encontrado: {device_name}",
+                ja=f"デバイスが見つかりません: {device_name}",
+                zh=f"未找到设备: {device_name}",
             )
 
         mac = device["mac"]
@@ -349,10 +600,29 @@ async def restart_ubiquiti_device(device_name: str, connection_id: str = "") -> 
         return _t(
             de=f"✅ Gerät wird neu gestartet: {device_name}",
             en=f"✅ Device restarting: {device_name}",
+            fr=f"✅ Appareil en cours de redémarrage: {device_name}",
+            es=f"✅ Dispositivo reiniciando: {device_name}",
+            it=f"✅ Dispositivo in riavvio: {device_name}",
+            nl=f"✅ Apparaat wordt herstart: {device_name}",
+            pl=f"✅ Urządzenie restartowane: {device_name}",
+            pt=f"✅ Dispositivo reiniciando: {device_name}",
+            ja=f"✅ デバイスを再起動中: {device_name}",
+            zh=f"✅ 设备正在重启: {device_name}",
         )
     except Exception as e:
         logger.error("restart_ubiquiti_device failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 @tool
@@ -378,6 +648,14 @@ async def enable_ubiquiti_wlan(wlan_name: str, connection_id: str = "") -> str:
             return _t(
                 de=f"WLAN nicht gefunden: {wlan_name}",
                 en=f"WLAN not found: {wlan_name}",
+                fr=f"WLAN non trouvé: {wlan_name}",
+                es=f"WLAN no encontrado: {wlan_name}",
+                it=f"WLAN non trovato: {wlan_name}",
+                nl=f"WLAN niet gevonden: {wlan_name}",
+                pl=f"WLAN nie znaleziony: {wlan_name}",
+                pt=f"WLAN não encontrado: {wlan_name}",
+                ja=f"WLANが見つかりません: {wlan_name}",
+                zh=f"未找到WLAN: {wlan_name}",
             )
 
         _id = wlan["_id"]
@@ -386,10 +664,29 @@ async def enable_ubiquiti_wlan(wlan_name: str, connection_id: str = "") -> str:
         return _t(
             de=f"✅ WLAN aktiviert: {wlan_name}",
             en=f"✅ WLAN enabled: {wlan_name}",
+            fr=f"✅ WLAN activé: {wlan_name}",
+            es=f"✅ WLAN activado: {wlan_name}",
+            it=f"✅ WLAN attivato: {wlan_name}",
+            nl=f"✅ WLAN ingeschakeld: {wlan_name}",
+            pl=f"✅ WLAN włączony: {wlan_name}",
+            pt=f"✅ WLAN ativado: {wlan_name}",
+            ja=f"✅ WLANを有効にしました: {wlan_name}",
+            zh=f"✅ WLAN已启用: {wlan_name}",
         )
     except Exception as e:
         logger.error("enable_ubiquiti_wlan failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 @tool
@@ -415,6 +712,14 @@ async def disable_ubiquiti_wlan(wlan_name: str, connection_id: str = "") -> str:
             return _t(
                 de=f"WLAN nicht gefunden: {wlan_name}",
                 en=f"WLAN not found: {wlan_name}",
+                fr=f"WLAN non trouvé: {wlan_name}",
+                es=f"WLAN no encontrado: {wlan_name}",
+                it=f"WLAN non trovato: {wlan_name}",
+                nl=f"WLAN niet gevonden: {wlan_name}",
+                pl=f"WLAN nie znaleziony: {wlan_name}",
+                pt=f"WLAN não encontrado: {wlan_name}",
+                ja=f"WLANが見つかりません: {wlan_name}",
+                zh=f"未找到WLAN: {wlan_name}",
             )
 
         _id = wlan["_id"]
@@ -423,10 +728,29 @@ async def disable_ubiquiti_wlan(wlan_name: str, connection_id: str = "") -> str:
         return _t(
             de=f"✅ WLAN deaktiviert: {wlan_name}",
             en=f"✅ WLAN disabled: {wlan_name}",
+            fr=f"✅ WLAN désactivé: {wlan_name}",
+            es=f"✅ WLAN desactivado: {wlan_name}",
+            it=f"✅ WLAN disattivato: {wlan_name}",
+            nl=f"✅ WLAN uitgeschakeld: {wlan_name}",
+            pl=f"✅ WLAN wyłączony: {wlan_name}",
+            pt=f"✅ WLAN desativado: {wlan_name}",
+            ja=f"✅ WLANを無効にしました: {wlan_name}",
+            zh=f"✅ WLAN已禁用: {wlan_name}",
         )
     except Exception as e:
         logger.error("disable_ubiquiti_wlan failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 @tool
@@ -444,7 +768,26 @@ async def kick_ubiquiti_client(mac_address: str, connection_id: str = "") -> str
         return _t(
             de=f"✅ Client getrennt: {mac_address}",
             en=f"✅ Client disconnected: {mac_address}",
+            fr=f"✅ Client déconnecté: {mac_address}",
+            es=f"✅ Cliente desconectado: {mac_address}",
+            it=f"✅ Client disconnesso: {mac_address}",
+            nl=f"✅ Client ontkoppeld: {mac_address}",
+            pl=f"✅ Klient rozłączony: {mac_address}",
+            pt=f"✅ Cliente desconectado: {mac_address}",
+            ja=f"✅ クライアントを切断: {mac_address}",
+            zh=f"✅ 客户端已断开: {mac_address}",
         )
     except Exception as e:
         logger.error("kick_ubiquiti_client failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )

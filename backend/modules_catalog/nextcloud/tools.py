@@ -28,6 +28,14 @@ async def _get_api_client(connection_id: str = "") -> dict:
                 _t(
                     de=f"Nextcloud-Verbindung mit ID '{connection_id}' nicht gefunden.",
                     en=f"Nextcloud connection with ID '{connection_id}' not found.",
+                    fr=f"Connexion Nextcloud avec l'ID '{connection_id}' introuvable.",
+                    es=f"Conexión Nextcloud con ID '{connection_id}' no encontrada.",
+                    it=f"Connessione Nextcloud con ID '{connection_id}' non trovata.",
+                    nl=f"Nextcloud-verbinding met ID '{connection_id}' niet gevonden.",
+                    pl=f"Połączenie Nextcloud o ID '{connection_id}' nie znaleziono.",
+                    pt=f"Conexão Nextcloud com ID '{connection_id}' não encontrada.",
+                    ja=f"ID '{connection_id}' のNextcloud接続が見つかりません。",
+                    zh=f"未找到ID为'{connection_id}'的Nextcloud连接。",
                 )
             )
     else:
@@ -55,6 +63,14 @@ async def _get_api_client(connection_id: str = "") -> dict:
             _t(
                 de="Keine Nextcloud-Verbindung konfiguriert.",
                 en="No Nextcloud connection configured.",
+                fr="Aucune connexion Nextcloud configurée.",
+                es="No hay conexión Nextcloud configurada.",
+                it="Nessuna connessione Nextcloud configurata.",
+                nl="Geen Nextcloud-verbinding geconfigureerd.",
+                pl="Brak skonfigurowanego połączenia Nextcloud.",
+                pt="Nenhuma conexão Nextcloud configurada.",
+                ja="Nextcloud接続が設定されていません。",
+                zh="未配置Nextcloud连接。",
             )
         )
 
@@ -164,13 +180,50 @@ async def list_nextcloud_files(path: str = "/", connection_id: str = "") -> str:
         content = data.get("content", "")
 
         if not content:
-            return _t(de="Keine Dateien gefunden", en="No files found")
+            return _t(
+                de="Keine Dateien gefunden",
+                en="No files found",
+                fr="Aucun fichier trouvé",
+                es="No se encontraron archivos",
+                it="Nessun file trovato",
+                nl="Geen bestanden gevonden",
+                pl="Nie znaleziono plików",
+                pt="Nenhum arquivo encontrado",
+                ja="ファイルが見つかりません",
+                zh="未找到文件",
+            )
 
         files = _parse_webdav_list(content)
         if not files:
-            return _t(de="Keine Dateien gefunden", en="No files found")
+            return _t(
+                de="Keine Dateien gefunden",
+                en="No files found",
+                fr="Aucun fichier trouvé",
+                es="No se encontraron archivos",
+                it="Nessun file trovato",
+                nl="Geen bestanden gevonden",
+                pl="Nie znaleziono plików",
+                pt="Nenhum arquivo encontrado",
+                ja="ファイルが見つかりません",
+                zh="未找到文件",
+            )
 
-        lines = ["📁 " + _t(de="Dateien", en="Files") + f" {path}"]
+        lines = [
+            "📁 "
+            + _t(
+                de="Dateien",
+                en="Files",
+                fr="Fichiers",
+                es="Archivos",
+                it="File",
+                nl="Bestanden",
+                pl="Pliki",
+                pt="Arquivos",
+                ja="ファイル",
+                zh="文件",
+            )
+            + f" {path}"
+        ]
         for f in files[:20]:
             icon = "📁" if f["type"] == "folder" else "📄"
             size = f.get("size", 0)
@@ -183,7 +236,18 @@ async def list_nextcloud_files(path: str = "/", connection_id: str = "") -> str:
         return "\n".join(lines)
     except Exception as e:
         logger.error("list_nextcloud_files failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 @tool
@@ -209,9 +273,32 @@ async def search_nextcloud_files(query: str, connection_id: str = "") -> str:
             return _t(
                 de=f"Keine Dateien gefunden für '{query}'",
                 en=f"No files found for '{query}'",
+                fr=f"Aucun fichier trouvé pour '{query}'",
+                es=f"No se encontraron archivos para '{query}'",
+                it=f"Nessun file trovato per '{query}'",
+                nl=f"Geen bestanden gevonden voor '{query}'",
+                pl=f"Nie znaleziono plików dla '{query}'",
+                pt=f"Nenhum arquivo encontrado para '{query}'",
+                ja=f"'{query}' のファイルが見つかりません",
+                zh=f"未找到'{query}'的文件",
             )
 
-        lines = ["🔍 " + _t(de="Suchergebnisse", en="Search results") + f" '{query}'"]
+        lines = [
+            "🔍 "
+            + _t(
+                de="Suchergebnisse",
+                en="Search results",
+                fr="Résultats de recherche",
+                es="Resultados de búsqueda",
+                it="Risultati della ricerca",
+                nl="Zoekresultaten",
+                pl="Wyniki wyszukiwania",
+                pt="Resultados da pesquisa",
+                ja="検索結果",
+                zh="搜索结果",
+            )
+            + f" '{query}'"
+        ]
         for s in shares[:15]:
             name = s.get("name", s.get("path", "-"))
             lines.append(f"  📄 {name}")
@@ -219,7 +306,18 @@ async def search_nextcloud_files(query: str, connection_id: str = "") -> str:
         return "\n".join(lines)
     except Exception as e:
         logger.error("search_nextcloud_files failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 @tool
@@ -234,9 +332,34 @@ async def list_nextcloud_users(connection_id: str = "") -> str:
 
         users = data.get("users", []) if isinstance(data, dict) else data
         if not users:
-            return _t(de="Keine Benutzer gefunden", en="No users found")
+            return _t(
+                de="Keine Benutzer gefunden",
+                en="No users found",
+                fr="Aucun utilisateur trouvé",
+                es="No se encontraron usuarios",
+                it="Nessun utente trovato",
+                nl="Geen gebruikers gevonden",
+                pl="Nie znaleziono użytkowników",
+                pt="Nenhum usuário encontrado",
+                ja="ユーザーが見つかりません",
+                zh="未找到用户",
+            )
 
-        lines = ["👥 " + _t(de="Benutzer", en="Users")]
+        lines = [
+            "👥 "
+            + _t(
+                de="Benutzer",
+                en="Users",
+                fr="Utilisateurs",
+                es="Usuarios",
+                it="Utenti",
+                nl="Gebruikers",
+                pl="Użytkownicy",
+                pt="Usuários",
+                ja="ユーザー",
+                zh="用户",
+            )
+        ]
         for u in users[:20]:
             lines.append(f"  👤 {u}")
 
@@ -246,7 +369,18 @@ async def list_nextcloud_users(connection_id: str = "") -> str:
         return "\n".join(lines)
     except Exception as e:
         logger.error("list_nextcloud_users failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 @tool
@@ -259,7 +393,21 @@ async def get_nextcloud_user(user_id: str, connection_id: str = "") -> str:
         client = await _get_api_client(connection_id)
         data = await _ocs_request("GET", f"/cloud/users/{user_id}", client)
 
-        lines = ["👤 " + _t(de="Benutzerdetails", en="User details")]
+        lines = [
+            "👤 "
+            + _t(
+                de="Benutzerdetails",
+                en="User details",
+                fr="Détails utilisateur",
+                es="Detalles del usuario",
+                it="Dettagli utente",
+                nl="Gebruikersdetails",
+                pl="Szczegóły użytkownika",
+                pt="Detalhes do usuário",
+                ja="ユーザー詳細",
+                zh="用户详情",
+            )
+        ]
         lines.append(f"  {user_id}")
         if data.get("display-name"):
             lines.append(f"  Display Name: {data.get('display-name')}")
@@ -277,7 +425,18 @@ async def get_nextcloud_user(user_id: str, connection_id: str = "") -> str:
         return "\n".join(lines)
     except Exception as e:
         logger.error("get_nextcloud_user failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 @tool
@@ -292,9 +451,34 @@ async def list_nextcloud_shares(connection_id: str = "") -> str:
 
         shares = data if isinstance(data, list) else data.get("data", [])
         if not shares:
-            return _t(de="Keine Shares gefunden", en="No shares found")
+            return _t(
+                de="Keine Shares gefunden",
+                en="No shares found",
+                fr="Aucun partage trouvé",
+                es="No se encontraron compartidos",
+                it="Nessuna condivisione trovata",
+                nl="Geen shares gevonden",
+                pl="Nie znaleziono udostępnień",
+                pt="Nenhum compartilhamento encontrado",
+                ja="Sharesが見つかりません",
+                zh="未找到分享",
+            )
 
-        lines = ["🔗 " + _t(de="Shares", en="Shares")]
+        lines = [
+            "🔗 "
+            + _t(
+                de="Shares",
+                en="Shares",
+                fr="Partages",
+                es="Compartidos",
+                it="Condivisioni",
+                nl="Shares",
+                pl="Udostępnienia",
+                pt="Compartilhamentos",
+                ja="シェア",
+                zh="分享",
+            )
+        ]
         for s in shares[:15]:
             name = s.get("name", s.get("path", "-"))
             share_type = s.get("share_type", "link")
@@ -307,7 +491,18 @@ async def list_nextcloud_shares(connection_id: str = "") -> str:
         return "\n".join(lines)
     except Exception as e:
         logger.error("list_nextcloud_shares failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 @tool
@@ -320,7 +515,21 @@ async def get_nextcloud_storage(connection_id: str = "") -> str:
         client = await _get_api_client(connection_id)
         data = await _ocs_request("GET", f"/cloud/users/{client['user']}", client)
 
-        lines = ["💾 " + _t(de="Speicher", en="Storage")]
+        lines = [
+            "💾 "
+            + _t(
+                de="Speicher",
+                en="Storage",
+                fr="Stockage",
+                es="Almacenamiento",
+                it="Archiviazione",
+                nl="Opslag",
+                pl="Magazyn",
+                pt="Armazenamento",
+                ja="ストレージ",
+                zh="存储",
+            )
+        ]
         if data.get("quota"):
             quota = data.get("quota", {})
             used = quota.get("used", 0)
@@ -339,7 +548,18 @@ async def get_nextcloud_storage(connection_id: str = "") -> str:
         return "\n".join(lines)
     except Exception as e:
         logger.error("get_nextcloud_storage failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 # ═══════════════════════════════════════════════════════
@@ -367,10 +587,29 @@ async def create_nextcloud_folder(
         return _t(
             de=f"✅ Ordner erstellt: {folder_path}",
             en=f"✅ Folder created: {folder_path}",
+            fr=f"✅ Dossier créé: {folder_path}",
+            es=f"✅ Carpeta creada: {folder_path}",
+            it=f"✅ Cartella creata: {folder_path}",
+            nl=f"✅ Map gemaakt: {folder_path}",
+            pl=f"✅ Utworzono folder: {folder_path}",
+            pt=f"✅ Pasta criada: {folder_path}",
+            ja=f"✅ フォルダを作成: {folder_path}",
+            zh=f"✅ 已创建文件夹: {folder_path}",
         )
     except Exception as e:
         logger.error("create_nextcloud_folder failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 @tool
@@ -405,10 +644,29 @@ async def upload_nextcloud_file(
         return _t(
             de=f"✅ Datei hochgeladen: {path}",
             en=f"✅ File uploaded: {path}",
+            fr=f"✅ Fichier téléversé: {path}",
+            es=f"✅ Archivo subido: {path}",
+            it=f"✅ File caricato: {path}",
+            nl=f"✅ Bestand geüpload: {path}",
+            pl=f"✅ Przesłano plik: {path}",
+            pt=f"✅ Arquivo enviado: {path}",
+            ja=f"✅ ファイルをアップロード: {path}",
+            zh=f"✅ 已上传文件: {path}",
         )
     except Exception as e:
         logger.error("upload_nextcloud_file failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 @tool
@@ -428,10 +686,29 @@ async def delete_nextcloud_file(path: str, connection_id: str = "") -> str:
         return _t(
             de=f"✅ Datei gelöscht: {path}",
             en=f"✅ File deleted: {path}",
+            fr=f"✅ Fichier supprimé: {path}",
+            es=f"✅ Archivo eliminado: {path}",
+            it=f"✅ File eliminato: {path}",
+            nl=f"✅ Bestand verwijderd: {path}",
+            pl=f"✅ Plik usunięty: {path}",
+            pt=f"✅ Arquivo excluído: {path}",
+            ja=f"✅ ファイルを削除: {path}",
+            zh=f"✅ 已删除文件: {path}",
         )
     except Exception as e:
         logger.error("delete_nextcloud_file failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 @tool
@@ -468,10 +745,29 @@ async def create_nextcloud_share(
         return _t(
             de=f"✅ Share erstellt: {share_link or path}",
             en=f"✅ Share created: {share_link or path}",
+            fr=f"✅ Partage créé: {share_link or path}",
+            es=f"✅ Compartido creado: {share_link or path}",
+            it=f"✅ Condivisione creata: {share_link or path}",
+            nl=f"✅ Share gemaakt: {share_link or path}",
+            pl=f"✅ Utworzono udostępnienie: {share_link or path}",
+            pt=f"✅ Compartilhamento criado: {share_link or path}",
+            ja=f"✅ シェアを作成: {share_link or path}",
+            zh=f"✅ 已创建分享: {share_link or path}",
         )
     except Exception as e:
         logger.error("create_nextcloud_share failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
 
 
 @tool
@@ -495,7 +791,26 @@ async def create_nextcloud_user(
         return _t(
             de=f"✅ Benutzer erstellt: {user_id}",
             en=f"✅ User created: {user_id}",
+            fr=f"✅ Utilisateur créé: {user_id}",
+            es=f"✅ Usuario creado: {user_id}",
+            it=f"✅ Utente creato: {user_id}",
+            nl=f"✅ Gebruiker gemaakt: {user_id}",
+            pl=f"✅ Utworzono użytkownika: {user_id}",
+            pt=f"✅ Usuário criado: {user_id}",
+            ja=f"✅ ユーザーを作成: {user_id}",
+            zh=f"✅ 已创建用户: {user_id}",
         )
     except Exception as e:
         logger.error("create_nextcloud_user failed: %s", e)
-        return _t(de=f"Fehler: {e}", en=f"Error: {e}")
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )

@@ -44,9 +44,37 @@ def _get_language() -> str:
         return "de"
 
 
-def _t(de: str, en: str) -> str:
-    """Gibt den deutschen oder englischen Text zurück, je nach LANGUAGE-Setting."""
-    return de if _get_language() == "de" else en
+def _t(
+    de: str,
+    en: str,
+    fr: str = "",
+    es: str = "",
+    it: str = "",
+    nl: str = "",
+    pl: str = "",
+    pt: str = "",
+    ja: str = "",
+    zh: str = "",
+) -> str:
+    """
+    Returns text in the correct language based on LANGUAGE setting.
+    Supports: de, en, fr, es, it, nl, pl, pt, ja, zh
+    If a language is not provided, falls back to English.
+    """
+    lang = _get_language()
+    translations = {
+        "de": de,
+        "en": en,
+        "fr": fr or en,
+        "es": es or en,
+        "it": it or en,
+        "nl": nl or en,
+        "pl": pl or en,
+        "pt": pt or en,
+        "ja": ja or en,
+        "zh": zh or en,
+    }
+    return translations.get(lang, en)
 
 
 # ── Tool-Name → Status-Label (DE / EN) ──────────────────────────────────────
