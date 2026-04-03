@@ -187,6 +187,16 @@ _TOOL_LABELS: dict[str, tuple[str, str]] = {
     "power_off_xclarity_server": ("Schalte Server aus", "Powering off server"),
     "restart_xclarity_server": ("Neustart Server", "Restarting server"),
     "identify_xclarity_server": ("Identifiziere Server", "Identifying server"),
+    # OpenProject
+    "list_openproject_projects": ("Lade Projekte", "Loading projects"),
+    "get_openproject_project": ("Lade Projekt", "Loading project"),
+    "list_openproject_work_packages": ("Lade Tasks", "Loading work packages"),
+    "get_openproject_work_package": ("Lade Task-Details", "Loading task details"),
+    "list_openproject_users": ("Lade Benutzer", "Loading users"),
+    "list_openproject_time_entries": ("Lade Zeitbuchungen", "Loading time entries"),
+    "create_openproject_work_package": ("Erstelle Task", "Creating task"),
+    "update_openproject_work_package": ("Aktualisiere Task", "Updating task"),
+    "log_openproject_time": ("Buche Zeit", "Logging time"),
     # Redmine
     "get_redmine_projects": ("Lade Projekte", "Loading projects"),
     "get_redmine_project": ("Lade Projekt", "Loading project"),

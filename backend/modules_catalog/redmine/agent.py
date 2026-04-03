@@ -21,6 +21,16 @@ from .tools import (
     get_redmine_priorities,
     search_redmine_issues,
     get_redmine_issue_counts,
+    call_redmine_hrm_api,
+    call_redmine_reporting_api,
+    get_redmine_hrm_attendances,
+    create_redmine_hrm_attendance,
+    get_redmine_hrm_attendance,
+    get_redmine_hrm_user_capacity,
+    get_redmine_hrm_holidays,
+    get_redmine_reporting_budgets,
+    get_redmine_project_budgets,
+    get_redmine_reporting_time_logs,
 )
 
 logger = logging.getLogger("ninko.modules.redmine.agent")
@@ -36,6 +46,10 @@ Deine Fähigkeiten:
 - Issue-Status und Prioritäten abrufen
 - Nach Tickets suchen
 - Issue-Zusammenfassungen (offen/geschlossen)
+- AlphaNodes HRM API-Endpunkte lesen und schreiben
+- AlphaNodes Reporting API-Endpunkte lesen und schreiben
+- HRM Attendances, Kapazitäten und Feiertage abrufen/anlegen
+- Reporting Budgets und Time Logs abrufen
 
 Verhaltensregeln:
 - Sei präzise und hilfreich
@@ -55,6 +69,10 @@ Your capabilities:
 - Get issue statuses and priorities
 - Search for tickets
 - Get issue summaries (open/closed)
+- Read and write AlphaNodes HRM API endpoints
+- Read and write AlphaNodes Reporting API endpoints
+- Retrieve/create HRM attendances, capacities, and holidays
+- Retrieve reporting budgets and time logs
 
 Behavior rules:
 - Be precise and helpful
@@ -88,5 +106,15 @@ class RedmineAgent(BaseAgent):
                 get_redmine_priorities,
                 search_redmine_issues,
                 get_redmine_issue_counts,
+                call_redmine_hrm_api,
+                call_redmine_reporting_api,
+                get_redmine_hrm_attendances,
+                create_redmine_hrm_attendance,
+                get_redmine_hrm_attendance,
+                get_redmine_hrm_user_capacity,
+                get_redmine_hrm_holidays,
+                get_redmine_reporting_budgets,
+                get_redmine_project_budgets,
+                get_redmine_reporting_time_logs,
             ],
         )

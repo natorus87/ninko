@@ -113,6 +113,13 @@
       "author": "Ninko"
     },
     {
+      "name": "openproject",
+      "display_name": "OpenProject",
+      "description": "OpenProject Enterprise – Project Management, Tasks, Time Tracking.",
+      "version": "1.0.0",
+      "author": "Ninko"
+    },
+    {
       "name": "pihole",
       "display_name": "Pi-hole",
       "description": "Pi-hole DNS-Server Management – Blocking, Queries, Domains, Statistiken",

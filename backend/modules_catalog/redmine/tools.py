@@ -4,6 +4,7 @@ Redmine Module — LangGraph @tool functions.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from typing import Any
@@ -16,6 +17,45 @@ from core.connections import ConnectionManager
 from core.vault import get_vault
 
 logger = logging.getLogger("ninko.modules.redmine.tools")
+
+
+def _public_error() -> dict:
+    return {"error": "Request failed. Check server logs."}
+
+
+def _coerce_dict(value: Any, field_name: str) -> dict:
+    """Accept dict, empty value, or JSON string and return dict."""
+    if value is None or value == "":
+        return {}
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"{field_name} must be valid JSON") from exc
+        if not isinstance(parsed, dict):
+            raise ValueError(f"{field_name} must be a JSON object")
+        return parsed
+    raise ValueError(f"{field_name} must be a dict or JSON string")
+
+
+def _build_plugin_endpoint(prefix: str, endpoint: str) -> str:
+    normalized = endpoint.strip().strip("/")
+    if not normalized:
+        raise ValueError("endpoint is required")
+    if normalized.startswith(("http://", "https://")):
+        raise ValueError("endpoint must be relative, not absolute URL")
+    plugin_prefix = prefix.strip().strip("/")
+    return f"{plugin_prefix}/{normalized}" if plugin_prefix else normalized
+
+
+def _add_if_set(params: dict, key: str, value: Any) -> None:
+    if value is None:
+        return
+    if isinstance(value, str) and not value.strip():
+        return
+    params[key] = value
 
 
 async def _get_api_client(connection_id: str = "") -> dict:
@@ -34,15 +74,29 @@ async def _get_api_client(connection_id: str = "") -> dict:
 
     if conn:
         base_url = conn.config.get("url", "")
+        hrm_prefix = conn.config.get(
+            "hrm_api_prefix", os.environ.get("REDMINE_HRM_API_PREFIX", "hrm")
+        )
+        reporting_prefix = conn.config.get(
+            "reporting_api_prefix",
+            os.environ.get("REDMINE_REPORTING_API_PREFIX", "reporting"),
+        )
         vault = get_vault()
         api_key = None
         api_key_path = conn.vault_keys.get("REDMINE_API_KEY")
         if api_key_path:
             api_key = await vault.get_secret(api_key_path)
-        return {"base_url": base_url.rstrip("/"), "api_key": api_key}
+        return {
+            "base_url": base_url.rstrip("/"),
+            "api_key": api_key,
+            "hrm_api_prefix": str(hrm_prefix or "hrm"),
+            "reporting_api_prefix": str(reporting_prefix or "reporting"),
+        }
 
     base_url = os.environ.get("REDMINE_URL", "")
     api_key = os.environ.get("REDMINE_API_KEY", "")
+    hrm_prefix = os.environ.get("REDMINE_HRM_API_PREFIX", "hrm")
+    reporting_prefix = os.environ.get("REDMINE_REPORTING_API_PREFIX", "reporting")
 
     if not base_url:
         raise ValueError(
@@ -60,7 +114,12 @@ async def _get_api_client(connection_id: str = "") -> dict:
             )
         )
 
-    return {"base_url": base_url.rstrip("/"), "api_key": api_key}
+    return {
+        "base_url": base_url.rstrip("/"),
+        "api_key": api_key,
+        "hrm_api_prefix": hrm_prefix,
+        "reporting_api_prefix": reporting_prefix,
+    }
 
 
 async def _redmine_request(
@@ -77,7 +136,7 @@ async def _redmine_request(
         "Content-Type": "application/json",
     }
 
-    url = f"{base_url}/{endpoint}"
+    url = f"{base_url}/{endpoint.lstrip('/')}"
     async with httpx.AsyncClient(timeout=30.0) as client:
         if method.upper() == "GET":
             resp = await client.get(url, params=params, headers=headers)
@@ -91,7 +150,15 @@ async def _redmine_request(
             raise ValueError(f"Unsupported method: {method}")
 
         resp.raise_for_status()
-        return resp.json()
+        if resp.status_code == 204 or not resp.content:
+            return {}
+        content_type = resp.headers.get("content-type", "").lower()
+        if "application/json" in content_type:
+            return resp.json()
+        try:
+            return resp.json()
+        except ValueError:
+            return {"raw": resp.text}
 
 
 @tool
@@ -116,7 +183,7 @@ async def get_redmine_projects(connection_id: str = "") -> dict:
         }
     except Exception as e:
         logger.error("get_redmine_projects failed: %s", e)
-        return {"error": "Request failed. Check server logs."}
+        return _public_error()
 
 
 @tool
@@ -139,7 +206,7 @@ async def get_redmine_project(project_id: str, connection_id: str = "") -> dict:
         }
     except Exception as e:
         logger.error("get_redmine_project failed: %s", e)
-        return {"error": "Request failed. Check server logs."}
+        return _public_error()
 
 
 @tool
@@ -176,7 +243,7 @@ async def get_redmine_issues(
         }
     except Exception as e:
         logger.error("get_redmine_issues failed: %s", e)
-        return {"error": "Request failed. Check server logs."}
+        return _public_error()
 
 
 @tool
@@ -200,7 +267,7 @@ async def get_redmine_issue(issue_id: str, connection_id: str = "") -> dict:
         }
     except Exception as e:
         logger.error("get_redmine_issue failed: %s", e)
-        return {"error": "Request failed. Check server logs."}
+        return _public_error()
 
 
 @tool
@@ -243,7 +310,7 @@ async def create_redmine_issue(
         }
     except Exception as e:
         logger.error("create_redmine_issue failed: %s", e)
-        return {"error": "Request failed. Check server logs."}
+        return _public_error()
 
 
 @tool
@@ -283,7 +350,7 @@ async def update_redmine_issue(
         }
     except Exception as e:
         logger.error("update_redmine_issue failed: %s", e)
-        return {"error": "Request failed. Check server logs."}
+        return _public_error()
 
 
 @tool
@@ -308,7 +375,7 @@ async def get_redmine_users(connection_id: str = "") -> dict:
         }
     except Exception as e:
         logger.error("get_redmine_users failed: %s", e)
-        return {"error": "Request failed. Check server logs."}
+        return _public_error()
 
 
 @tool
@@ -346,7 +413,7 @@ async def get_redmine_time_entries(
         }
     except Exception as e:
         logger.error("get_redamine_time_entries failed: %s", e)
-        return {"error": "Request failed. Check server logs."}
+        return _public_error()
 
 
 @tool
@@ -386,7 +453,7 @@ async def log_redmine_time(
         }
     except Exception as e:
         logger.error("log_redmine_time failed: %s", e)
-        return {"error": "Request failed. Check server logs."}
+        return _public_error()
 
 
 @tool
@@ -409,7 +476,7 @@ async def get_redmine_issue_statuses(connection_id: str = "") -> dict:
         }
     except Exception as e:
         logger.error("get_redmine_issue_statuses failed: %s", e)
-        return {"error": "Request failed. Check server logs."}
+        return _public_error()
 
 
 @tool
@@ -432,7 +499,7 @@ async def get_redmine_priorities(connection_id: str = "") -> dict:
         }
     except Exception as e:
         logger.error("get_redmine_priorities failed: %s", e)
-        return {"error": "Request failed. Check server logs."}
+        return _public_error()
 
 
 @tool
@@ -460,7 +527,7 @@ async def search_redmine_issues(
         }
     except Exception as e:
         logger.error("search_redmine_issues failed: %s", e)
-        return {"error": "Request failed. Check server logs."}
+        return _public_error()
 
 
 @tool
@@ -502,4 +569,347 @@ async def get_redmine_issue_counts(
         }
     except Exception as e:
         logger.error("get_redmine_issue_counts failed: %s", e)
-        return {"error": "Request failed. Check server logs."}
+        return _public_error()
+
+
+@tool
+async def call_redmine_hrm_api(
+    method: str,
+    endpoint: str,
+    params: Any = None,
+    payload: Any = None,
+    connection_id: str = "",
+) -> dict:
+    """
+    Call AlphaNodes HRM plugin API endpoints in Redmine (read and write).
+    Use this for HRM data such as capacities, attendance, leave, or HRM reports.
+    method supports GET/POST/PUT/DELETE.
+    endpoint is relative to the configured HRM API prefix.
+    """
+    try:
+        method_normalized = method.upper().strip()
+        if method_normalized not in {"GET", "POST", "PUT", "DELETE"}:
+            raise ValueError("method must be one of GET, POST, PUT, DELETE")
+
+        client = await _get_api_client(connection_id)
+        full_endpoint = _build_plugin_endpoint(client["hrm_api_prefix"], endpoint)
+        query_params = _coerce_dict(params, "params")
+        body = _coerce_dict(payload, "payload")
+
+        result = await _redmine_request(
+            client["base_url"],
+            client["api_key"],
+            method_normalized,
+            full_endpoint,
+            params=query_params if query_params else None,
+            data=body if body else None,
+        )
+        return {
+            "status": "success",
+            "plugin": "hrm",
+            "method": method_normalized,
+            "endpoint": full_endpoint,
+            "data": result,
+        }
+    except Exception as e:
+        logger.error("call_redmine_hrm_api failed: %s", e)
+        return _public_error()
+
+
+@tool
+async def call_redmine_reporting_api(
+    method: str,
+    endpoint: str,
+    params: Any = None,
+    payload: Any = None,
+    connection_id: str = "",
+) -> dict:
+    """
+    Call AlphaNodes Reporting plugin API endpoints in Redmine (read and write).
+    Use this for KPI/report data retrieval and report-related write operations.
+    method supports GET/POST/PUT/DELETE.
+    endpoint is relative to the configured Reporting API prefix.
+    """
+    try:
+        method_normalized = method.upper().strip()
+        if method_normalized not in {"GET", "POST", "PUT", "DELETE"}:
+            raise ValueError("method must be one of GET, POST, PUT, DELETE")
+
+        client = await _get_api_client(connection_id)
+        full_endpoint = _build_plugin_endpoint(
+            client["reporting_api_prefix"], endpoint
+        )
+        query_params = _coerce_dict(params, "params")
+        body = _coerce_dict(payload, "payload")
+
+        result = await _redmine_request(
+            client["base_url"],
+            client["api_key"],
+            method_normalized,
+            full_endpoint,
+            params=query_params if query_params else None,
+            data=body if body else None,
+        )
+        return {
+            "status": "success",
+            "plugin": "reporting",
+            "method": method_normalized,
+            "endpoint": full_endpoint,
+            "data": result,
+        }
+    except Exception as e:
+        logger.error("call_redmine_reporting_api failed: %s", e)
+        return _public_error()
+
+
+@tool
+async def get_redmine_hrm_attendances(
+    from_date: str = "",
+    to_date: str = "",
+    user_id: str = "",
+    limit: int = 100,
+    offset: int = 0,
+    connection_id: str = "",
+) -> dict:
+    """
+    Get HRM attendance entries from AlphaNodes HRM plugin.
+    Endpoint: GET /hrm/attendances.json
+    Supports filters: from, to, user_id, limit, offset.
+    """
+    try:
+        params: dict[str, Any] = {}
+        _add_if_set(params, "from", from_date)
+        _add_if_set(params, "to", to_date)
+        _add_if_set(params, "user_id", user_id)
+        _add_if_set(params, "limit", max(1, min(limit, 500)))
+        _add_if_set(params, "offset", max(0, offset))
+        return await call_redmine_hrm_api.ainvoke(
+            {
+                "method": "GET",
+                "endpoint": "attendances.json",
+                "params": params,
+                "connection_id": connection_id,
+            }
+        )
+    except Exception as e:
+        logger.error("get_redmine_hrm_attendances failed: %s", e)
+        return _public_error()
+
+
+@tool
+async def create_redmine_hrm_attendance(
+    attendance_payload: Any,
+    connection_id: str = "",
+) -> dict:
+    """
+    Create an HRM attendance entry in AlphaNodes HRM plugin.
+    Endpoint: POST /hrm/attendances.json
+    attendance_payload must be a JSON object (dict or JSON string), e.g.
+    {"attendance": {"user_id": 5, "date": "2026-04-03", "status": "vacation"}}.
+    """
+    try:
+        payload = _coerce_dict(attendance_payload, "attendance_payload")
+        return await call_redmine_hrm_api.ainvoke(
+            {
+                "method": "POST",
+                "endpoint": "attendances.json",
+                "payload": payload,
+                "connection_id": connection_id,
+            }
+        )
+    except Exception as e:
+        logger.error("create_redmine_hrm_attendance failed: %s", e)
+        return _public_error()
+
+
+@tool
+async def get_redmine_hrm_attendance(
+    attendance_id: str,
+    connection_id: str = "",
+) -> dict:
+    """
+    Get one HRM attendance entry by ID.
+    Endpoint: GET /hrm/attendances/{id}.json
+    """
+    try:
+        return await call_redmine_hrm_api.ainvoke(
+            {
+                "method": "GET",
+                "endpoint": f"attendances/{attendance_id}.json",
+                "connection_id": connection_id,
+            }
+        )
+    except Exception as e:
+        logger.error("get_redmine_hrm_attendance failed: %s", e)
+        return _public_error()
+
+
+@tool
+async def get_redmine_hrm_user_capacity(
+    user_id: str,
+    from_date: str = "",
+    to_date: str = "",
+    connection_id: str = "",
+) -> dict:
+    """
+    Get HRM capacity/utilization for one user.
+    Endpoint: GET /hrm/users/{user_id}/capacity.json
+    Supports filters: from, to.
+    """
+    try:
+        params: dict[str, Any] = {}
+        _add_if_set(params, "from", from_date)
+        _add_if_set(params, "to", to_date)
+        return await call_redmine_hrm_api.ainvoke(
+            {
+                "method": "GET",
+                "endpoint": f"users/{user_id}/capacity.json",
+                "params": params,
+                "connection_id": connection_id,
+            }
+        )
+    except Exception as e:
+        logger.error("get_redmine_hrm_user_capacity failed: %s", e)
+        return _public_error()
+
+
+@tool
+async def get_redmine_hrm_holidays(
+    from_date: str = "",
+    to_date: str = "",
+    limit: int = 100,
+    offset: int = 0,
+    connection_id: str = "",
+) -> dict:
+    """
+    Get configured HRM holidays.
+    Endpoint: GET /hrm/holidays.json
+    Supports optional filters: from, to, limit, offset.
+    """
+    try:
+        params: dict[str, Any] = {}
+        _add_if_set(params, "from", from_date)
+        _add_if_set(params, "to", to_date)
+        _add_if_set(params, "limit", max(1, min(limit, 500)))
+        _add_if_set(params, "offset", max(0, offset))
+        return await call_redmine_hrm_api.ainvoke(
+            {
+                "method": "GET",
+                "endpoint": "holidays.json",
+                "params": params,
+                "connection_id": connection_id,
+            }
+        )
+    except Exception as e:
+        logger.error("get_redmine_hrm_holidays failed: %s", e)
+        return _public_error()
+
+
+@tool
+async def get_redmine_reporting_budgets(
+    from_date: str = "",
+    to_date: str = "",
+    user_id: str = "",
+    limit: int = 100,
+    offset: int = 0,
+    connection_id: str = "",
+) -> dict:
+    """
+    Get reporting budgets.
+    Endpoint: GET /reporting/budgets.json
+    Supports filters: from, to, user_id, limit, offset.
+    """
+    try:
+        params: dict[str, Any] = {}
+        _add_if_set(params, "from", from_date)
+        _add_if_set(params, "to", to_date)
+        _add_if_set(params, "user_id", user_id)
+        _add_if_set(params, "limit", max(1, min(limit, 500)))
+        _add_if_set(params, "offset", max(0, offset))
+        return await call_redmine_reporting_api.ainvoke(
+            {
+                "method": "GET",
+                "endpoint": "budgets.json",
+                "params": params,
+                "connection_id": connection_id,
+            }
+        )
+    except Exception as e:
+        logger.error("get_redmine_reporting_budgets failed: %s", e)
+        return _public_error()
+
+
+@tool
+async def get_redmine_project_budgets(
+    project_id: str,
+    from_date: str = "",
+    to_date: str = "",
+    limit: int = 100,
+    offset: int = 0,
+    connection_id: str = "",
+) -> dict:
+    """
+    Get budgets for a specific project.
+    Endpoint: GET /projects/{project_id}/budgets.json
+    Supports optional filters: from, to, limit, offset.
+    """
+    try:
+        client = await _get_api_client(connection_id)
+        params: dict[str, Any] = {}
+        _add_if_set(params, "from", from_date)
+        _add_if_set(params, "to", to_date)
+        _add_if_set(params, "limit", max(1, min(limit, 500)))
+        _add_if_set(params, "offset", max(0, offset))
+        data = await _redmine_request(
+            client["base_url"],
+            client["api_key"],
+            "GET",
+            f"projects/{project_id}/budgets.json",
+            params=params if params else None,
+        )
+        return {
+            "status": "success",
+            "plugin": "reporting",
+            "method": "GET",
+            "endpoint": f"projects/{project_id}/budgets.json",
+            "data": data,
+        }
+    except Exception as e:
+        logger.error("get_redmine_project_budgets failed: %s", e)
+        return _public_error()
+
+
+@tool
+async def get_redmine_reporting_time_logs(
+    from_date: str = "",
+    to_date: str = "",
+    user_id: str = "",
+    project_id: str = "",
+    limit: int = 100,
+    offset: int = 0,
+    connection_id: str = "",
+) -> dict:
+    """
+    Get advanced reporting time logs.
+    Endpoint: GET /reporting/time_logs.json
+    Supports filters: from, to, user_id, project_id, limit, offset.
+    """
+    try:
+        params: dict[str, Any] = {}
+        _add_if_set(params, "from", from_date)
+        _add_if_set(params, "to", to_date)
+        _add_if_set(params, "user_id", user_id)
+        _add_if_set(params, "project_id", project_id)
+        _add_if_set(params, "limit", max(1, min(limit, 500)))
+        _add_if_set(params, "offset", max(0, offset))
+        return await call_redmine_reporting_api.ainvoke(
+            {
+                "method": "GET",
+                "endpoint": "time_logs.json",
+                "params": params,
+                "connection_id": connection_id,
+            }
+        )
+    except Exception as e:
+        logger.error("get_redmine_reporting_time_logs failed: %s", e)
+        return _public_error()

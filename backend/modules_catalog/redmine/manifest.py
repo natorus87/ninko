@@ -18,8 +18,9 @@ async def check_redmine_health() -> dict:
 
         client = await _get_api_client("")
         return {"status": "ok", "detail": "Redmine API reachable"}
-    except Exception as e:
-        return {"status": "error", "detail": str(e)}
+    except Exception:
+        logger.exception("Redmine health check failed")
+        return {"status": "error", "detail": "Health check failed"}
 
 
 module_manifest = ModuleManifest(
@@ -45,6 +46,13 @@ module_manifest = ModuleManifest(
         "time entry",
         "zeit",
         "zeiterfassung",
+        "hrm",
+        "resource planning",
+        "attendance",
+        "leave management",
+        "reporting",
+        "report",
+        "alphanodes",
     ],
     api_prefix="/api/redmine",
     dashboard_tab={
