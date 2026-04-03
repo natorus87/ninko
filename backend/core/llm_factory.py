@@ -245,7 +245,7 @@ async def get_model_context_window() -> int:
                         ctx, model.get("id", "unbekannt"),
                     )
                     return ctx
-    except Exception as exc:
+    except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
         logger.debug("Context-Window-Abfrage fehlgeschlagen (Fallback %d): %s", _DEFAULT_CONTEXT_WINDOW, exc)
 
     _cached_context_window = _DEFAULT_CONTEXT_WINDOW

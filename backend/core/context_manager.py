@@ -41,7 +41,7 @@ class ContextManager:
         # Fallback-Tokenizer (tiktoken cl100k_base für Approximation)
         try:
             self._encoder = tiktoken.get_encoding("cl100k_base")
-        except Exception:
+        except (ValueError, KeyError):
             self._encoder = None
             logger.warning(
                 "tiktoken konnte nicht geladen werden – "
@@ -264,7 +264,7 @@ class ContextManager:
             )
             return compacted, True
 
-        except Exception as exc:
+        except (AttributeError, TypeError, ValueError, RuntimeError) as exc:
             logger.warning(
                 "Kontext-Komprimierung fehlgeschlagen, trimme stattdessen: %s", exc
             )

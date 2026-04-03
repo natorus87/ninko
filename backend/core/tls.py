@@ -9,6 +9,7 @@ Supports:
 from __future__ import annotations
 
 import base64
+import binascii
 import logging
 from pathlib import Path
 
@@ -36,7 +37,7 @@ def _decode_pem(secret_value: str) -> str:
             decoded = base64.b64decode(raw).decode("utf-8", errors="replace").strip()
             if "BEGIN CERTIFICATE" in decoded:
                 return decoded
-        except Exception:
+        except (ValueError, UnicodeDecodeError, binascii.Error):
             pass
     return raw
 

@@ -23,6 +23,14 @@ import httpx
 
 logger = logging.getLogger("ninko.core.tts.voices")
 
+_VOICE_DOWNLOAD_EXCEPTIONS = (
+    httpx.HTTPError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
+
 _HUGGINGFACE_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
 
 
@@ -159,6 +167,6 @@ class VoiceManager:
 
             return True
 
-        except Exception as exc:
+        except _VOICE_DOWNLOAD_EXCEPTIONS as exc:
             logger.error("Download fehlgeschlagen für '%s/%s': %s", lang, voice, exc)
             return False

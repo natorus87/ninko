@@ -20,6 +20,16 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("ninko.agents.monitor")
 
+_MONITOR_EXCEPTIONS = (
+    RuntimeError,
+    ValueError,
+    TypeError,
+    KeyError,
+    OSError,
+    json.JSONDecodeError,
+    asyncio.TimeoutError,
+)
+
 
 class MonitorAgent:
     """
@@ -47,7 +57,7 @@ class MonitorAgent:
         while self._running:
             try:
                 await self.run_cycle()
-            except Exception as exc:
+            except _MONITOR_EXCEPTIONS as exc:
                 logger.error("Monitor-Cycle Fehler: %s", exc, exc_info=True)
 
             await asyncio.sleep(self._settings.MONITOR_INTERVAL_SECONDS)

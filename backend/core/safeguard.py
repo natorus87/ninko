@@ -24,6 +24,7 @@ import json
 import re
 import logging
 import time
+import asyncio
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING
@@ -35,6 +36,18 @@ if TYPE_CHECKING:
     from core.safeguard_profiles import SafeguardProfileStore
 
 logger = logging.getLogger("ninko.core.safeguard")
+
+_SAFEGUARD_EXCEPTIONS = (
+    ImportError,
+    AttributeError,
+    TypeError,
+    ValueError,
+    KeyError,
+    RuntimeError,
+    OSError,
+    asyncio.TimeoutError,
+    json.JSONDecodeError,
+)
 
 
 # ─── Compiled regex constants ─────────────────────────────────────────────────
@@ -1012,12 +1025,11 @@ _TOOL_READONLY: frozenset[str] = frozenset(
         "get_synology_network_info",
         "get_synology_users",
         "get_synology_groups",
-    }
-    # Redmine read-only
-    "get_redmine_projects", "get_redmine_project", "get_redmine_issues",
-    "get_redmine_issue", "get_redmine_users", "get_redmine_time_entries",
-    "get_redmine_issue_statuses", "get_redmine_priorities", "search_redmine_issues",
-    "get_redmine_issue_counts",
+        # Redmine read-only
+        "get_redmine_projects", "get_redmine_project", "get_redmine_issues",
+        "get_redmine_issue", "get_redmine_users", "get_redmine_time_entries",
+        "get_redmine_issue_statuses", "get_redmine_priorities", "search_redmine_issues",
+        "get_redmine_issue_counts",
     # GLPI read-only
     "get_ticket", "search_tickets", "search_users", "list_groups",
     "list_categories", "get_ticket_stats", "get_ticket_attachments",
@@ -1207,7 +1219,7 @@ class SafeguardMiddleware:
             pipe.lpush(self.AUDIT_LOG_KEY, json.dumps(entry))
             pipe.ltrim(self.AUDIT_LOG_KEY, 0, self.MAX_AUDIT_ENTRIES - 1)
             await pipe.execute()
-        except Exception as exc:
+        except _SAFEGUARD_EXCEPTIONS as exc:
             logger.warning("[Safeguard/Audit] Failed to write audit entry: %s", exc)
 
     # ── LLM generation re-init ────────────────────────────────────────────────
@@ -1233,7 +1245,7 @@ class SafeguardMiddleware:
                 self.model = model
                 self._llm_generation = current
                 logger.info("[Safeguard] Client re-initialized (model: %s).", model)
-            except Exception as exc:
+            except _SAFEGUARD_EXCEPTIONS as exc:
                 logger.error("[Safeguard] Client re-init failed: %s", exc)
 
     # ── Paused-agent cleanup ──────────────────────────────────────────────────
@@ -1481,7 +1493,7 @@ class SafeguardMiddleware:
                 )
             return result
 
-        except Exception as exc:
+        except _SAFEGUARD_EXCEPTIONS as exc:
             logger.warning(
                 "[Safeguard] Classifier call failed: %s — fail-%s.",
                 exc,
@@ -1611,7 +1623,7 @@ class SafeguardMiddleware:
                 reason,
             )
             return allowed, reason
-        except Exception as exc:
+        except _SAFEGUARD_EXCEPTIONS as exc:
             fallback_allow = profile.fail_open
             logger.warning(
                 "[Safeguard/Auto] Decision call failed: %s — fail-%s.",

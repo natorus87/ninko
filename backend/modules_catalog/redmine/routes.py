@@ -25,6 +25,7 @@ from .tools import (
 
 logger = logging.getLogger("ninko.modules.redmine.routes")
 router = APIRouter()
+_REDMINE_ROUTE_EXCEPTIONS = (ValueError, TypeError, KeyError, RuntimeError)
 
 
 @router.get("/projects")
@@ -33,7 +34,7 @@ async def get_projects(connection_id: str = "") -> dict[str, Any]:
     try:
         result = await get_redmine_projects.ainvoke({"connection_id": connection_id})
         return {"status": "ok", "data": result}
-    except Exception:
+    except _REDMINE_ROUTE_EXCEPTIONS:
         logger.exception("redmine projects route failed")
         return {"status": "error", "detail": "Request failed. Check server logs."}
 
@@ -52,7 +53,7 @@ async def get_issues(
             }
         )
         return {"status": "ok", "data": result}
-    except Exception:
+    except _REDMINE_ROUTE_EXCEPTIONS:
         logger.exception("redmine issues route failed")
         return {"status": "error", "detail": "Request failed. Check server logs."}
 
@@ -81,7 +82,7 @@ async def hrm_proxy(
             }
         )
         return {"status": "ok", "data": result}
-    except Exception:
+    except _REDMINE_ROUTE_EXCEPTIONS:
         logger.exception("redmine hrm proxy route failed")
         return {"status": "error", "detail": "Request failed. Check server logs."}
 
@@ -110,7 +111,7 @@ async def reporting_proxy(
             }
         )
         return {"status": "ok", "data": result}
-    except Exception:
+    except _REDMINE_ROUTE_EXCEPTIONS:
         logger.exception("redmine reporting proxy route failed")
         return {"status": "error", "detail": "Request failed. Check server logs."}
 
@@ -136,7 +137,7 @@ async def hrm_attendances(
             }
         )
         return {"status": "ok", "data": result}
-    except Exception:
+    except _REDMINE_ROUTE_EXCEPTIONS:
         logger.exception("redmine hrm_attendances route failed")
         return {"status": "error", "detail": "Request failed. Check server logs."}
 
@@ -151,7 +152,7 @@ async def hrm_create_attendance(
             {"attendance_payload": attendance_payload, "connection_id": connection_id}
         )
         return {"status": "ok", "data": result}
-    except Exception:
+    except _REDMINE_ROUTE_EXCEPTIONS:
         logger.exception("redmine hrm_create_attendance route failed")
         return {"status": "error", "detail": "Request failed. Check server logs."}
 
@@ -165,7 +166,7 @@ async def hrm_attendance_by_id(
             {"attendance_id": attendance_id, "connection_id": connection_id}
         )
         return {"status": "ok", "data": result}
-    except Exception:
+    except _REDMINE_ROUTE_EXCEPTIONS:
         logger.exception("redmine hrm_attendance_by_id route failed")
         return {"status": "error", "detail": "Request failed. Check server logs."}
 
@@ -187,7 +188,7 @@ async def hrm_user_capacity(
             }
         )
         return {"status": "ok", "data": result}
-    except Exception:
+    except _REDMINE_ROUTE_EXCEPTIONS:
         logger.exception("redmine hrm_user_capacity route failed")
         return {"status": "error", "detail": "Request failed. Check server logs."}
 
@@ -211,7 +212,7 @@ async def hrm_holidays(
             }
         )
         return {"status": "ok", "data": result}
-    except Exception:
+    except _REDMINE_ROUTE_EXCEPTIONS:
         logger.exception("redmine hrm_holidays route failed")
         return {"status": "error", "detail": "Request failed. Check server logs."}
 
@@ -237,7 +238,7 @@ async def reporting_budgets(
             }
         )
         return {"status": "ok", "data": result}
-    except Exception:
+    except _REDMINE_ROUTE_EXCEPTIONS:
         logger.exception("redmine reporting_budgets route failed")
         return {"status": "error", "detail": "Request failed. Check server logs."}
 
@@ -263,7 +264,7 @@ async def project_budgets(
             }
         )
         return {"status": "ok", "data": result}
-    except Exception:
+    except _REDMINE_ROUTE_EXCEPTIONS:
         logger.exception("redmine project_budgets route failed")
         return {"status": "error", "detail": "Request failed. Check server logs."}
 
@@ -291,6 +292,6 @@ async def reporting_time_logs(
             }
         )
         return {"status": "ok", "data": result}
-    except Exception:
+    except _REDMINE_ROUTE_EXCEPTIONS:
         logger.exception("redmine reporting_time_logs route failed")
         return {"status": "error", "detail": "Request failed. Check server logs."}

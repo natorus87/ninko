@@ -31,6 +31,17 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("ninko.agents.orchestrator")
 
+_ORCH_RECOVERABLE_EXCEPTIONS = (
+    ImportError,
+    AttributeError,
+    TypeError,
+    ValueError,
+    KeyError,
+    RuntimeError,
+    asyncio.TimeoutError,
+    _json.JSONDecodeError,
+)
+
 # ── Tier-4 Konstanten ─────────────────────────────────────────────────────────
 
 # Utility-Module zählen für Compound-Scoring nur wenn explizit erwähnt
@@ -255,7 +266,7 @@ class OrchestratorAgent(BaseAgent):
                     + "\n\nVergewissere dich bei Aktionen immer, in welcher Umgebung/welchem Cluster "
                     "der User eingreifen will, falls die Frage ungenau ist (z.B. 'prod' vs 'staging')."
                 )
-        except Exception as e:
+        except _ORCH_RECOVERABLE_EXCEPTIONS as e:
             logger.warning("Konnte globale Connections für Orchestrator nicht laden: %s", e)
 
         # 3. Registrierte dynamische Agenten aus dem Pool
@@ -281,7 +292,7 @@ class OrchestratorAgent(BaseAgent):
                     "REGISTRIERTE CUSTOM-AGENTEN: Noch keine Custom-Agenten vorhanden. "
                     "Verwende `create_custom_agent`, um einen neuen Agenten anzulegen."
                 )
-        except Exception as e:
+        except _ORCH_RECOVERABLE_EXCEPTIONS as e:
             logger.warning("Konnte Agent-Pool für Orchestrator nicht laden: %s", e)
 
         return "\n\n".join(parts)
@@ -452,7 +463,7 @@ JSON-SCHEMA:
             if not m:
                 raise ValueError("Kein JSON-Objekt in der LLM-Antwort gefunden.")
             spec = _json.loads(m.group(0))
-        except Exception as exc:
+        except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
             logger.warning("Auto-Create-Agent: Spec-Generierung fehlgeschlagen: %s", exc)
             return _t(
                 "Fehler: Die Agent-Spezifikation konnte nicht erzeugt werden. "
@@ -533,7 +544,7 @@ JSON-SCHEMA:
             if not m:
                 raise ValueError("Kein JSON-Objekt in der LLM-Antwort gefunden.")
             spec = _json.loads(m.group(0))
-        except Exception as exc:
+        except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
             logger.warning("Auto-Create-Workflow: Spec-Generierung fehlgeschlagen: %s", exc)
             return _t(
                 "Fehler: Die Workflow-Spezifikation konnte nicht erzeugt werden. "
@@ -566,7 +577,7 @@ JSON-SCHEMA:
                 "description": description,
                 "steps": steps,
             })
-        except Exception as exc:
+        except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
             logger.error("Auto-Create-Workflow: create_linear_workflow fehlgeschlagen: %s", exc, exc_info=True)
             return _t(
                 "Fehler: Workflow konnte nicht erstellt werden.",
@@ -820,7 +831,7 @@ JSON-SCHEMA:
             if not json_match:
                 raise ValueError("Kein JSON-Array im Planner-Output gefunden")
             steps: list[dict] = _json.loads(json_match.group(0))
-        except Exception as exc:
+        except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
             logger.warning(
                 "Tier-4-Planner fehlgeschlagen (%s) → Fallback Tier 1", exc,
             )
@@ -891,7 +902,7 @@ JSON-SCHEMA:
 
         try:
             pending = _json.loads(pending_raw)
-        except Exception:
+        except _ORCH_RECOVERABLE_EXCEPTIONS:
             pending = {}
 
         agent_name = pending.get("agent", "orchestrator")
@@ -906,7 +917,7 @@ JSON-SCHEMA:
                     from core.agent_pool import get_agent_pool
                     pool = get_agent_pool()
                     agent = pool.get_agent_by_id(agent_name)
-                except Exception:
+                except _ORCH_RECOVERABLE_EXCEPTIONS:
                     agent = None
 
         if agent is None:
@@ -963,7 +974,7 @@ JSON-SCHEMA:
                                 confirmed=confirmed,
                             )
                             return response, force_module, did_compact
-                        except Exception as exc:
+                        except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
                             logger.error("Direktes Routing Custom-Agent '%s' Fehler: %s", force_module, exc, exc_info=True)
                             return (
                                 _t(
@@ -973,7 +984,7 @@ JSON-SCHEMA:
                                 force_module,
                                 False,
                             )
-                except Exception:
+                except _ORCH_RECOVERABLE_EXCEPTIONS:
                     pass
             if agent is None:
                 return (
@@ -998,7 +1009,7 @@ JSON-SCHEMA:
                     confirmed=confirmed,
                 )
                 return response, force_module, did_compact
-            except Exception as exc:
+            except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
                 logger.error("Direktes Routing: Modul '%s' Fehler: %s", force_module, exc, exc_info=True)
                 return (
                     _t(
@@ -1056,7 +1067,7 @@ JSON-SCHEMA:
                         confirmed=confirmed,
                     )
                     return response, target_module, did_compact
-                except Exception as exc:
+                except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
                     logger.error("Tier 2: Modul '%s' Fehler: %s", target_module, exc, exc_info=True)
                     return (
                         _t(

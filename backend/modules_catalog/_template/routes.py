@@ -23,5 +23,6 @@ async def get_status(connection_id: str = "") -> dict:
     try:
         result = await beispiel_tool.ainvoke({"parameter": "status-check", "connection_id": connection_id})
         return {"status": "ok", "data": result}
-    except Exception as e:
-        return {"status": "error", "detail": str(e)}
+    except (ValueError, TypeError, KeyError) as exc:
+        logger.error("template status route failed: %s", exc)
+        return {"status": "error", "detail": "Request failed. Check server logs."}

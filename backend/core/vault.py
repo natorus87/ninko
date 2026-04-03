@@ -18,6 +18,23 @@ from core.config import get_settings
 
 logger = logging.getLogger("ninko.vault")
 
+_VAULT_EXCEPTIONS = (
+    ImportError,
+    AttributeError,
+    TypeError,
+    ValueError,
+    RuntimeError,
+    OSError,
+)
+
+_VAULT_IO_EXCEPTIONS = (
+    aiosqlite.Error,
+    OSError,
+    TypeError,
+    ValueError,
+    RuntimeError,
+)
+
 
 class VaultClient:
     """
@@ -61,7 +78,7 @@ class VaultClient:
             else:
                 logger.warning("Vault-Authentifizierung fehlgeschlagen – Fallback auf SQLite.")
                 self._init_sqlite()
-        except Exception as exc:
+        except _VAULT_EXCEPTIONS as exc:
             logger.warning("Vault nicht erreichbar (%s) – Fallback auf SQLite.", exc)
             self._init_sqlite()
 
@@ -131,7 +148,7 @@ class VaultClient:
             )
             data = result.get("data", {}).get("data", {})
             return data.get("value")
-        except Exception as exc:
+        except _VAULT_EXCEPTIONS as exc:
             logger.debug("Vault-Secret '%s' nicht gefunden: %s", key, exc)
             return None
 
@@ -198,7 +215,7 @@ class VaultClient:
             )
             logger.info("Vault-Secret gelöscht: %s", key)
             return True
-        except Exception as exc:
+        except _VAULT_EXCEPTIONS as exc:
             logger.warning("Vault-Secret '%s' konnte nicht gelöscht werden: %s", key, exc)
             return False
 
@@ -227,7 +244,7 @@ class VaultClient:
                 path=self.VAULT_PATH_PREFIX, mount_point=self.VAULT_MOUNT
             )
             return result.get("data", {}).get("keys", [])
-        except Exception:
+        except _VAULT_EXCEPTIONS:
             return []
 
     async def _list_sqlite_secrets(self) -> list[str]:
@@ -246,14 +263,14 @@ class VaultClient:
                 if self._hvac_client and self._hvac_client.is_authenticated():
                     return {"status": "ok", "backend": "vault"}
                 return {"status": "error", "backend": "vault", "detail": "Nicht authentifiziert"}
-            except Exception as exc:
+            except _VAULT_EXCEPTIONS as exc:
                 return {"status": "error", "backend": "vault", "detail": str(exc)}
         else:
             try:
                 async with aiosqlite.connect(self.SQLITE_DB_PATH) as db:
                     await db.execute("SELECT 1")
                 return {"status": "ok", "backend": "sqlite"}
-            except Exception as exc:
+            except _VAULT_IO_EXCEPTIONS as exc:
                 return {"status": "error", "backend": "sqlite", "detail": str(exc)}
 
     @property

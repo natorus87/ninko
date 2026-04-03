@@ -47,7 +47,7 @@ def is_tts_available() -> bool:
             return False
         _get_service()
         return True
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError, OSError):
         return False
 
 

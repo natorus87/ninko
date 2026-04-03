@@ -6,6 +6,7 @@ Lenovo XClarity Administrator for ThinkSystem/ThinkBlade server management.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 
@@ -72,7 +73,7 @@ async def check_lenovo_xclarity_health() -> dict:
 
     except aiohttp.ClientResponseError as e:
         return {"status": "error", "detail": f"HTTP {e.status}"}
-    except Exception:
+    except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, OSError):
         logger.exception("Lenovo XClarity health check failed")
         return {"status": "error", "detail": "Health check failed"}
 

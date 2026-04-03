@@ -29,6 +29,7 @@ from schemas.settings import (
 )
 from core.config import get_settings
 from core.redis_client import get_redis
+from agents.base_agent import _t
 
 logger = logging.getLogger("ninko.api.settings")
 router = APIRouter(prefix="/api/settings", tags=["Settings"])
@@ -40,9 +41,19 @@ REDIS_KEY_LLM_PROVIDERS = "ninko:settings:llm_providers"
 REDIS_KEY_BRANDING = "ninko:settings:branding"
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_BRANDING_DIR = Path("/app/data/branding") if Path("/app/data").exists() else (_REPO_ROOT / "data" / "branding")
+_BRANDING_DIR = (
+    Path("/app/data/branding")
+    if Path("/app/data").exists()
+    else (_REPO_ROOT / "data" / "branding")
+)
 _BRANDING_DIR.mkdir(parents=True, exist_ok=True)
-_BRANDING_ALLOWED_MIME = {"image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml"}
+_BRANDING_ALLOWED_MIME = {
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/gif",
+    "image/svg+xml",
+}
 _BRANDING_ALLOWED_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"}
 
 
@@ -239,7 +250,10 @@ async def update_branding_settings(body: BrandingSettings) -> BrandingSettingsRe
     redis = get_redis()
     payload = body.model_dump()
     await redis.connection.set(REDIS_KEY_BRANDING, json.dumps(payload))
-    logger.info("Branding-Settings aktualisiert: brand_name=%s", payload.get("brand_name", "Ninko"))
+    logger.info(
+        "Branding-Settings aktualisiert: brand_name=%s",
+        payload.get("brand_name", "Ninko"),
+    )
     return BrandingSettingsResponse(**payload, source="redis")
 
 
@@ -259,18 +273,74 @@ async def upload_branding_asset(file: UploadFile = File(...)) -> dict:
     cfg = get_settings()
     raw = await file.read()
     if not raw:
-        raise HTTPException(status_code=400, detail="Leere Datei.")
+        raise HTTPException(
+            status_code=400,
+            detail=_t(
+                de="Leere Datei.",
+                en="Empty file.",
+                fr="Fichier vide.",
+                es="Archivo vacío.",
+                it="File vuoto.",
+                nl="Leeg bestand.",
+                pl="Pusty plik.",
+                pt="Arquivo vazio.",
+                ja="空のファイル。",
+                zh="空文件。",
+            ),
+        )
     if len(raw) > int(cfg.BRANDING_MAX_UPLOAD_BYTES):
-        raise HTTPException(status_code=413, detail="Datei zu groß.")
+        raise HTTPException(
+            status_code=413,
+            detail=_t(
+                de="Datei zu groß.",
+                en="File too large.",
+                fr="Fichier trop volumineux.",
+                es="Archivo demasiado grande.",
+                it="File troppo grande.",
+                nl="Bestand te groot.",
+                pl="Plik zbyt duży.",
+                pt="Arquivo muito grande.",
+                ja="ファイルが大きすぎます。",
+                zh="文件太大。",
+            ),
+        )
 
     filename = file.filename or "asset.bin"
     ext = Path(filename).suffix.lower()
     if ext not in _BRANDING_ALLOWED_EXT:
-        raise HTTPException(status_code=415, detail=f"Dateiendung '{ext or '<none>'}' nicht erlaubt.")
+        raise HTTPException(
+            status_code=415,
+            detail=_t(
+                de=f"Dateiendung '{ext or '<none>'}' nicht erlaubt.",
+                en=f"File extension '{ext or '<none>'}' not allowed.",
+                fr=f"Extension de fichier '{ext or '<none>'}' non autorisée.",
+                es=f"Extensión de archivo '{ext or '<none>'}' no permitida.",
+                it=f"Estensione file '{ext or '<none>'}' non consentita.",
+                nl=f"Bestandsextensie '{ext or '<none>'}' niet toegestaan.",
+                pl=f"Rozszerzenie pliku '{ext or '<none>'}' niedozwolone.",
+                pt=f"Extensão de arquivo '{ext or '<none>'}' não permitida.",
+                ja=f"ファイル拡張子 '{ext or '<none>'}' は許可されていません。",
+                zh=f"不允许的文件扩展名 '{ext or '<none>'}'。",
+            ),
+        )
 
     mime = (file.content_type or "").split(";")[0].strip().lower()
     if mime and mime not in _BRANDING_ALLOWED_MIME:
-        raise HTTPException(status_code=415, detail=f"MIME-Type '{mime}' nicht erlaubt.")
+        raise HTTPException(
+            status_code=415,
+            detail=_t(
+                de=f"MIME-Type '{mime}' nicht erlaubt.",
+                en=f"MIME type '{mime}' not allowed.",
+                fr=f"Type MIME '{mime}' non autorisé.",
+                es=f"Tipo MIME '{mime}' no permitido.",
+                it=f"Tipo MIME '{mime}' non consentito.",
+                nl=f"MIME-type '{mime}' niet toegestaan.",
+                pl=f"Typ MIME '{mime}' niedozwolony.",
+                pt=f"Tipo MIME '{mime}' não permitido.",
+                ja=f"MIMEタイプ '{mime}' は許可されていません。",
+                zh=f"不允许的MIME类型 '{mime}'。",
+            ),
+        )
 
     safe_name = f"{uuid.uuid4().hex}{ext}"
     target = _BRANDING_DIR / safe_name
@@ -316,7 +386,9 @@ async def delete_branding_asset(filename: str) -> dict:
     try:
         path.unlink()
     except OSError:
-        raise HTTPException(status_code=500, detail="Datei konnte nicht gelöscht werden")
+        raise HTTPException(
+            status_code=500, detail="Datei konnte nicht gelöscht werden"
+        )
 
     # Falls URL im Branding verwendet wurde, zurück auf Defaults/Fallback setzen
     redis = get_redis()

@@ -12,6 +12,7 @@ Konfiguration in Redis: ninko:settings:image_provider
 from __future__ import annotations
 
 import base64
+import json
 import logging
 import os
 import uuid
@@ -48,10 +49,9 @@ async def get_image_provider_config() -> dict[str, Any]:
     redis = get_redis()
     raw = await redis.connection.get(REDIS_KEY)
     if raw:
-        import json
         try:
             return json.loads(raw)
-        except Exception:
+        except (json.JSONDecodeError, TypeError, ValueError):
             pass
     # Fallback: Env-Vars
     return {

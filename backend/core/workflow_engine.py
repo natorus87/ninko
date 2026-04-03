@@ -17,6 +17,16 @@ _run_update_locks: dict[str, asyncio.Lock] = {}
 
 logger = logging.getLogger("ninko.workflow_engine")
 
+_WORKFLOW_EXCEPTIONS = (
+    TypeError,
+    ValueError,
+    KeyError,
+    RuntimeError,
+    asyncio.TimeoutError,
+    json.JSONDecodeError,
+    re.error,
+)
+
 REDIS_KEY_RUNS_PREFIX = "ninko:workflow:runs:"
 REDIS_KEY_RUN_INDEX = "ninko:workflow:run_index"
 
@@ -122,7 +132,7 @@ class WorkflowEngine:
                     step["duration_ms"] = duration
                     step["output"] = str(output)[:500] if output else None
 
-                except Exception as exc:
+                except _WORKFLOW_EXCEPTIONS as exc:
                     t_end = datetime.now(timezone.utc)
                     step["status"] = "failed"
                     step["finished_at"] = t_end.isoformat()
@@ -146,7 +156,7 @@ class WorkflowEngine:
                         if edge["target_id"] not in visited:
                             queue.append(edge["target_id"])
 
-        except Exception as exc:
+        except _WORKFLOW_EXCEPTIONS as exc:
             logger.error("Workflow-Ausführung fehlgeschlagen: %s", exc)
             final_status = "failed"
 
@@ -210,7 +220,7 @@ class WorkflowEngine:
                     items = json.loads(str(raw))
                     if not isinstance(items, list):
                         items = [str(items)]
-                except Exception:
+                except (json.JSONDecodeError, TypeError, ValueError):
                     items = [i.strip() for i in str(raw).split(",") if i.strip()]
 
             iter_results: list[str] = []

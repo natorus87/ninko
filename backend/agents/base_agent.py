@@ -33,6 +33,18 @@ from core import status_bus
 
 logger = logging.getLogger("ninko.agents.base")
 
+_BASE_AGENT_RECOVERABLE_EXCEPTIONS = (
+    ImportError,
+    AttributeError,
+    TypeError,
+    ValueError,
+    KeyError,
+    RuntimeError,
+    OSError,
+    _json.JSONDecodeError,
+    asyncio.TimeoutError,
+)
+
 
 def _get_language() -> str:
     """Gibt den konfigurierten Sprach-Code zurück (gecacht, Fallback: 'de')."""
@@ -77,280 +89,309 @@ def _t(
     return translations.get(lang, en)
 
 
-# ── Tool-Name → Status-Label (DE / EN) ──────────────────────────────────────
-_TOOL_LABELS: dict[str, tuple[str, str]] = {
-    "execute_code": ("Führe Code aus", "Executing code"),
-    "get_available_languages": (
-        "Prüfe verfügbare Sprachen",
-        "Checking available languages",
+# ── Tool-Name → Status-Label (10 Sprachen via _t()) ──────────────────────────
+_TOOL_LABELS: dict[str, str] = {
+    "execute_code": _t(de="Führe Code aus", en="Executing code"),
+    "get_available_languages": _t(
+        de="Prüfe verfügbare Sprachen", en="Checking available languages"
     ),
-    "get_cluster_status": ("Lade Cluster-Status", "Loading cluster status"),
-    "get_all_pods": ("Lade Pods", "Loading pods"),
-    "get_failing_pods": ("Prüfe fehlerhafte Pods", "Checking failing pods"),
-    "list_namespaces": ("Lade Namespaces", "Loading namespaces"),
-    "list_services": ("Lade Services", "Loading services"),
-    "restart_pod": ("Starte Pod neu", "Restarting pod"),
-    "rollout_restart": ("Führe Rollout-Restart durch", "Performing rollout restart"),
-    "scale_deployment": ("Skaliere Deployment", "Scaling deployment"),
-    "get_recent_events": ("Lade Cluster-Events", "Loading cluster events"),
-    "get_pihole_summary": ("Lade Pi-hole Statistiken", "Loading Pi-hole statistics"),
-    "get_query_log": ("Lade DNS-Query-Log", "Loading DNS query log"),
-    "toggle_blocking": ("Konfiguriere Blocking", "Configuring blocking"),
-    "add_domain_to_list": ("Aktualisiere Domain-Liste", "Updating domain list"),
-    "remove_domain_from_list": ("Aktualisiere Domain-Liste", "Updating domain list"),
-    "update_gravity": ("Aktualisiere Gravity", "Updating gravity"),
-    "flush_dns_cache": ("Leere DNS-Cache", "Flushing DNS cache"),
-    "perform_web_search": ("Durchsuche das Web", "Searching the web"),
-    "web_search": ("Durchsuche das Web", "Searching the web"),
-    "execute_cli_command": ("Führe CLI-Befehl aus", "Executing CLI command"),
-    "call_module_agent": ("Rufe Modul-Agent auf", "Calling module agent"),
-    "run_pipeline": ("Führe Pipeline aus", "Running pipeline"),
-    "create_linear_workflow": ("Erstelle Workflow", "Creating workflow"),
-    "execute_workflow": ("Führe Workflow aus", "Executing workflow"),
-    "remember_fact": ("Speichere im Gedächtnis", "Saving to memory"),
-    "recall_memory": ("Durchsuche Gedächtnis", "Searching memory"),
-    "forget_fact": ("Suche zu löschende Fakten", "Searching facts to forget"),
-    "confirm_forget": ("Lösche Fakten", "Deleting facts"),
-    "create_custom_agent": ("Erstelle Agenten", "Creating agent"),
-    "install_skill": ("Installiere Skill", "Installing skill"),
-    "get_fritzbox_status": ("Lade FritzBox-Status", "Loading FritzBox status"),
-    "get_connected_devices": ("Lade verbundene Geräte", "Loading connected devices"),
-    "get_call_list": ("Lade Anrufliste", "Loading call list"),
-    "get_ha_entities": (
-        "Lade Home Assistant Entitäten",
-        "Loading Home Assistant entities",
+    "get_cluster_status": _t(de="Lade Cluster-Status", en="Loading cluster status"),
+    "get_all_pods": _t(de="Lade Pods", en="Loading pods"),
+    "get_failing_pods": _t(de="Prüfe fehlerhafte Pods", en="Checking failing pods"),
+    "list_namespaces": _t(de="Lade Namespaces", en="Loading namespaces"),
+    "list_services": _t(de="Lade Services", en="Loading services"),
+    "restart_pod": _t(de="Starte Pod neu", en="Restarting pod"),
+    "rollout_restart": _t(
+        de="Führe Rollout-Restart durch", en="Performing rollout restart"
     ),
-    "call_ha_service": ("Steuere Gerät", "Controlling device"),
-    "get_dns_zones": ("Lade DNS-Zonen", "Loading DNS zones"),
-    "get_zone_records": ("Lade DNS-Einträge", "Loading DNS records"),
-    "create_dns_record": ("Erstelle DNS-Eintrag", "Creating DNS record"),
-    "send_email": ("Sende E-Mail", "Sending email"),
-    "fetch_emails": ("Lade E-Mails", "Fetching emails"),
-    "send_telegram_message": ("Sende Telegram-Nachricht", "Sending Telegram message"),
-    "generate_image": ("Generiere Bild", "Generating image"),
-    "checkmk_get_hosts": ("Lade Hosts", "Loading hosts"),
-    "checkmk_get_services": ("Lade Services", "Loading services"),
-    "checkmk_get_host_status": ("Prüfe Host-Status", "Checking host status"),
-    "checkmk_get_service_status": ("Prüfe Service-Status", "Checking service status"),
-    "checkmk_get_alerts": ("Lade Alarme", "Loading alerts"),
-    "checkmk_get_host_details": ("Lade Host-Details", "Loading host details"),
-    "checkmk_get_service_details": ("Lade Service-Details", "Loading service details"),
-    "checkmk_search_hosts": ("Suche Hosts", "Searching hosts"),
-    "checkmk_search_services": ("Suche Services", "Searching services"),
+    "scale_deployment": _t(de="Skaliere Deployment", en="Scaling deployment"),
+    "get_recent_events": _t(de="Lade Cluster-Events", en="Loading cluster events"),
+    "get_pihole_summary": _t(
+        de="Lade Pi-hole Statistiken", en="Loading Pi-hole statistics"
+    ),
+    "get_query_log": _t(de="Lade DNS-Query-Log", en="Loading DNS query log"),
+    "toggle_blocking": _t(de="Konfiguriere Blocking", en="Configuring blocking"),
+    "add_domain_to_list": _t(de="Aktualisiere Domain-Liste", en="Updating domain list"),
+    "remove_domain_from_list": _t(
+        de="Aktualisiere Domain-Liste", en="Updating domain list"
+    ),
+    "update_gravity": _t(de="Aktualisiere Gravity", en="Updating gravity"),
+    "flush_dns_cache": _t(de="Leere DNS-Cache", en="Flushing DNS cache"),
+    "perform_web_search": _t(de="Durchsuche das Web", en="Searching the web"),
+    "web_search": _t(de="Durchsuche das Web", en="Searching the web"),
+    "execute_cli_command": _t(de="Führe CLI-Befehl aus", en="Executing CLI command"),
+    "call_module_agent": _t(de="Rufe Modul-Agent auf", en="Calling module agent"),
+    "run_pipeline": _t(de="Führe Pipeline aus", en="Running pipeline"),
+    "create_linear_workflow": _t(de="Erstelle Workflow", en="Creating workflow"),
+    "execute_workflow": _t(de="Führe Workflow aus", en="Executing workflow"),
+    "remember_fact": _t(de="Speichere im Gedächtnis", en="Saving to memory"),
+    "recall_memory": _t(de="Durchsuche Gedächtnis", en="Searching memory"),
+    "forget_fact": _t(de="Suche zu löschende Fakten", en="Searching facts to forget"),
+    "confirm_forget": _t(de="Lösche Fakten", en="Deleting facts"),
+    "create_custom_agent": _t(de="Erstelle Agenten", en="Creating agent"),
+    "install_skill": _t(de="Installiere Skill", en="Installing skill"),
+    "get_fritzbox_status": _t(de="Lade FritzBox-Status", en="Loading FritzBox status"),
+    "get_connected_devices": _t(
+        de="Lade verbundene Geräte", en="Loading connected devices"
+    ),
+    "get_call_list": _t(de="Lade Anrufliste", en="Loading call list"),
+    "get_ha_entities": _t(
+        de="Lade Home Assistant Entitäten", en="Loading Home Assistant entities"
+    ),
+    "call_ha_service": _t(de="Steuere Gerät", en="Controlling device"),
+    "get_dns_zones": _t(de="Lade DNS-Zonen", en="Loading DNS zones"),
+    "get_zone_records": _t(de="Lade DNS-Einträge", en="Loading DNS records"),
+    "create_dns_record": _t(de="Erstelle DNS-Eintrag", en="Creating DNS record"),
+    "send_email": _t(de="Sende E-Mail", en="Sending email"),
+    "fetch_emails": _t(de="Lade E-Mails", en="Fetching emails"),
+    "send_telegram_message": _t(
+        de="Sende Telegram-Nachricht", en="Sending Telegram message"
+    ),
+    "generate_image": _t(de="Generiere Bild", en="Generating image"),
+    "checkmk_get_hosts": _t(de="Lade Hosts", en="Loading hosts"),
+    "checkmk_get_services": _t(de="Lade Services", en="Loading services"),
+    "checkmk_get_host_status": _t(de="Prüfe Host-Status", en="Checking host status"),
+    "checkmk_get_service_status": _t(
+        de="Prüfe Service-Status", en="Checking service status"
+    ),
+    "checkmk_get_alerts": _t(de="Lade Alarme", en="Loading alerts"),
+    "checkmk_get_host_details": _t(de="Lade Host-Details", en="Loading host details"),
+    "checkmk_get_service_details": _t(
+        de="Lade Service-Details", en="Loading service details"
+    ),
+    "checkmk_search_hosts": _t(de="Suche Hosts", en="Searching hosts"),
+    "checkmk_search_services": _t(de="Suche Services", en="Searching services"),
     # Synology
-    "get_synology_system_info": ("Lade System-Info", "Loading system info"),
-    "get_synology_storage": ("Lade Storage", "Loading storage"),
-    "get_synology_packages": ("Lade Pakete", "Loading packages"),
-    "get_synology_services": ("Lade Services", "Loading services"),
-    "get_synology_tasks": ("Lade Tasks", "Loading tasks"),
-    "restart_synology_service": ("Starte Service neu", "Restarting service"),
-    "check_synology_updates": ("Prüfe Updates", "Checking updates"),
-    "install_synology_update": ("Installiere Update", "Installing update"),
-    "install_synology_package": ("Installiere Paket", "Installing package"),
-    "uninstall_synology_package": ("Deinstalliere Paket", "Uninstalling package"),
-    "get_synology_network_info": ("Lade Netzwerk-Info", "Loading network info"),
-    "get_synology_users": ("Lade Benutzer", "Loading users"),
-    "get_synology_groups": ("Lade Gruppen", "Loading groups"),
-    "create_synology_user": ("Erstelle Benutzer", "Creating user"),
-    "delete_synology_user": ("Lösche Benutzer", "Deleting user"),
-    "change_synology_user_password": ("Ändere Passwort", "Changing password"),
-    "create_synology_group": ("Erstelle Gruppe", "Creating group"),
-    "add_user_to_group": ("Füge User zu Gruppe hinzu", "Adding user to group"),
-    "remove_user_from_group": ("Entferne User von Gruppe", "Removing user from group"),
-    "shutdown_synologyNAS": ("Fahre NAS herunter", "Shutting down NAS"),
-    "reboot_synologyNAS": ("Boote NAS neu", "Rebooting NAS"),
+    "get_synology_system_info": _t(de="Lade System-Info", en="Loading system info"),
+    "get_synology_storage": _t(de="Lade Storage", en="Loading storage"),
+    "get_synology_packages": _t(de="Lade Pakete", en="Loading packages"),
+    "get_synology_services": _t(de="Lade Services", en="Loading services"),
+    "get_synology_tasks": _t(de="Lade Tasks", en="Loading tasks"),
+    "restart_synology_service": _t(de="Starte Service neu", en="Restarting service"),
+    "check_synology_updates": _t(de="Prüfe Updates", en="Checking updates"),
+    "install_synology_update": _t(de="Installiere Update", en="Installing update"),
+    "install_synology_package": _t(de="Installiere Paket", en="Installing package"),
+    "uninstall_synology_package": _t(
+        de="Deinstalliere Paket", en="Uninstalling package"
+    ),
+    "get_synology_network_info": _t(de="Lade Netzwerk-Info", en="Loading network info"),
+    "get_synology_users": _t(de="Lade Benutzer", en="Loading users"),
+    "get_synology_groups": _t(de="Lade Gruppen", en="Loading groups"),
+    "create_synology_user": _t(de="Erstelle Benutzer", en="Creating user"),
+    "delete_synology_user": _t(de="Lösche Benutzer", en="Deleting user"),
+    "change_synology_user_password": _t(de="Ändere Passwort", en="Changing password"),
+    "create_synology_group": _t(de="Erstelle Gruppe", en="Creating group"),
+    "add_user_to_group": _t(de="Füge User zu Gruppe hinzu", en="Adding user to group"),
+    "remove_user_from_group": _t(
+        de="Entferne User von Gruppe", en="Removing user from group"
+    ),
+    "shutdown_synologyNAS": _t(de="Fahre NAS herunter", en="Shutting down NAS"),
+    "reboot_synologyNAS": _t(de="Boote NAS neu", en="Rebooting NAS"),
     # HPE iLO
-    "get_ilo_info": ("Lade iLO-Info", "Loading iLO info"),
-    "get_server_info": ("Lade Server-Info", "Loading server info"),
-    "get_server_thermal": ("Lade Thermal", "Loading thermal"),
-    "get_server_power": ("Lade Power", "Loading power"),
-    "get_ilo_nics": ("Lade Netzwerk", "Loading network"),
-    "get_ilo_eventlog": ("Lade Events", "Loading events"),
-    "server_power_on": ("Schalte Server ein", "Powering on server"),
-    "server_power_off": ("Schalte Server aus", "Powering off server"),
-    "server_reset_ilo": ("Reset iLO", "Resetting iLO"),
-    "server_press_boot_button": ("Boot-Button", "Pressing boot button"),
+    "get_ilo_info": _t(de="Lade iLO-Info", en="Loading iLO info"),
+    "get_server_info": _t(de="Lade Server-Info", en="Loading server info"),
+    "get_server_thermal": _t(de="Lade Thermal", en="Loading thermal"),
+    "get_server_power": _t(de="Lade Power", en="Loading power"),
+    "get_ilo_nics": _t(de="Lade Netzwerk", en="Loading network"),
+    "get_ilo_eventlog": _t(de="Lade Events", en="Loading events"),
+    "server_power_on": _t(de="Schalte Server ein", en="Powering on server"),
+    "server_power_off": _t(de="Schalte Server aus", en="Powering off server"),
+    "server_reset_ilo": _t(de="Reset iLO", en="Resetting iLO"),
+    "server_press_boot_button": _t(de="Boot-Button", en="Pressing boot button"),
     # Microsoft Entra
-    "list_entra_users": ("Lade Benutzer", "Loading users"),
-    "search_entra_user": ("Suche Benutzer", "Searching user"),
-    "get_user_details": ("Lade Benutzerdetails", "Loading user details"),
-    "list_entra_groups": ("Lade Gruppen", "Loading groups"),
-    "get_group_members": ("Lade Gruppenmitglieder", "Loading group members"),
-    "list_entra_applications": ("Lade Anwendungen", "Loading applications"),
-    "list_entra_devices": ("Lade Geräte", "Loading devices"),
-    "create_entra_user": ("Erstelle Benutzer", "Creating user"),
-    "disable_entra_user": ("Deaktiviere Benutzer", "Disabling user"),
-    "reset_entra_user_password": ("Setze Passwort zurück", "Resetting password"),
-    "create_entra_group": ("Erstelle Gruppe", "Creating group"),
-    "add_user_to_group": ("Füge User zu Gruppe", "Adding user to group"),
+    "list_entra_users": _t(de="Lade Benutzer", en="Loading users"),
+    "search_entra_user": _t(de="Suche Benutzer", en="Searching user"),
+    "get_user_details": _t(de="Lade Benutzerdetails", en="Loading user details"),
+    "list_entra_groups": _t(de="Lade Gruppen", en="Loading groups"),
+    "get_group_members": _t(de="Lade Gruppenmitglieder", en="Loading group members"),
+    "list_entra_applications": _t(de="Lade Anwendungen", en="Loading applications"),
+    "list_entra_devices": _t(de="Lade Geräte", en="Loading devices"),
+    "create_entra_user": _t(de="Erstelle Benutzer", en="Creating user"),
+    "disable_entra_user": _t(de="Deaktiviere Benutzer", en="Disabling user"),
+    "reset_entra_user_password": _t(
+        de="Setze Passwort zurück", en="Resetting password"
+    ),
+    "create_entra_group": _t(de="Erstelle Gruppe", en="Creating group"),
+    "add_user_to_group": _t(de="Füge User zu Gruppe", en="Adding user to group"),
     # Microsoft Intune
-    "list_intune_devices": ("Lade Geräte", "Loading devices"),
-    "get_intune_device": ("Lade Gerätedetails", "Loading device details"),
-    "list_intune_policies": ("Lade Richtlinien", "Loading policies"),
-    "list_intune_compliance_policies": ("Lade Compliance", "Loading compliance"),
-    "list_intune_apps": ("Lade Apps", "Loading apps"),
-    "get_intune_device_compliance": ("Prüfe Compliance", "Checking compliance"),
-    "wipe_intune_device": ("Wipe Gerät", "Wiping device"),
-    "retire_intune_device": ("Retire Gerät", "Retiring device"),
-    "sync_intune_device": ("Sync Gerät", "Syncing device"),
-    "locate_intune_device": ("Lokalisiere Gerät", "Locating device"),
+    "list_intune_devices": _t(de="Lade Geräte", en="Loading devices"),
+    "get_intune_device": _t(de="Lade Gerätedetails", en="Loading device details"),
+    "list_intune_policies": _t(de="Lade Richtlinien", en="Loading policies"),
+    "list_intune_compliance_policies": _t(
+        de="Lade Compliance", en="Loading compliance"
+    ),
+    "list_intune_apps": _t(de="Lade Apps", en="Loading apps"),
+    "get_intune_device_compliance": _t(de="Prüfe Compliance", en="Checking compliance"),
+    "wipe_intune_device": _t(de="Wipe Gerät", en="Wiping device"),
+    "retire_intune_device": _t(de="Retire Gerät", en="Retiring device"),
+    "sync_intune_device": _t(de="Sync Gerät", en="Syncing device"),
+    "locate_intune_device": _t(de="Lokalisiere Gerät", en="Locating device"),
     # Slack
-    "list_slack_channels": ("Lade Channels", "Loading channels"),
-    "list_slack_users": ("Lade Benutzer", "Loading users"),
-    "get_slack_channel_history": ("Lade Historie", "Loading history"),
-    "search_slack_messages": ("Suche Nachrichten", "Searching messages"),
-    "send_slack_message": ("Sende Nachricht", "Sending message"),
-    "send_slack_dm": ("Sende DM", "Sending DM"),
-    "upload_slack_file": ("Lade Datei hoch", "Uploading file"),
-    "create_slack_channel": ("Erstelle Channel", "Creating channel"),
-    "invite_user_to_channel": ("Lade Benutzer ein", "Inviting user"),
+    "list_slack_channels": _t(de="Lade Channels", en="Loading channels"),
+    "list_slack_users": _t(de="Lade Benutzer", en="Loading users"),
+    "get_slack_channel_history": _t(de="Lade Historie", en="Loading history"),
+    "search_slack_messages": _t(de="Suche Nachrichten", en="Searching messages"),
+    "send_slack_message": _t(de="Sende Nachricht", en="Sending message"),
+    "send_slack_dm": _t(de="Sende DM", en="Sending DM"),
+    "upload_slack_file": _t(de="Lade Datei hoch", en="Uploading file"),
+    "create_slack_channel": _t(de="Erstelle Channel", en="Creating channel"),
+    "invite_user_to_channel": _t(de="Lade Benutzer ein", en="Inviting user"),
     # Lenovo XClarity
-    "list_xclarity_servers": ("Lade Server", "Loading servers"),
-    "get_xclarity_server_details": ("Lade Serverdetails", "Loading server details"),
-    "list_xclarity_chassis": ("Lade Chassis", "Loading chassis"),
-    "list_xclarity_storage": ("Lade Storage", "Loading storage"),
-    "get_xclarity_server_health": ("Prüfe Gesundheit", "Checking health"),
-    "list_xclarity_events": ("Lade Events", "Loading events"),
-    "get_xclarity_firmware": ("Lade Firmware", "Loading firmware"),
-    "power_on_xclarity_server": ("Schalte Server ein", "Powering on server"),
-    "power_off_xclarity_server": ("Schalte Server aus", "Powering off server"),
-    "restart_xclarity_server": ("Neustart Server", "Restarting server"),
-    "identify_xclarity_server": ("Identifiziere Server", "Identifying server"),
+    "list_xclarity_servers": _t(de="Lade Server", en="Loading servers"),
+    "get_xclarity_server_details": _t(
+        de="Lade Serverdetails", en="Loading server details"
+    ),
+    "list_xclarity_chassis": _t(de="Lade Chassis", en="Loading chassis"),
+    "list_xclarity_storage": _t(de="Lade Storage", en="Loading storage"),
+    "get_xclarity_server_health": _t(de="Prüfe Gesundheit", en="Checking health"),
+    "list_xclarity_events": _t(de="Lade Events", en="Loading events"),
+    "get_xclarity_firmware": _t(de="Lade Firmware", en="Loading firmware"),
+    "power_on_xclarity_server": _t(de="Schalte Server ein", en="Powering on server"),
+    "power_off_xclarity_server": _t(de="Schalte Server aus", en="Powering off server"),
+    "restart_xclarity_server": _t(de="Neustart Server", en="Restarting server"),
+    "identify_xclarity_server": _t(de="Identifiziere Server", en="Identifying server"),
     # OpenProject
-    "list_openproject_projects": ("Lade Projekte", "Loading projects"),
-    "get_openproject_project": ("Lade Projekt", "Loading project"),
-    "list_openproject_work_packages": ("Lade Tasks", "Loading work packages"),
-    "get_openproject_work_package": ("Lade Task-Details", "Loading task details"),
-    "list_openproject_users": ("Lade Benutzer", "Loading users"),
-    "list_openproject_time_entries": ("Lade Zeitbuchungen", "Loading time entries"),
-    "create_openproject_work_package": ("Erstelle Task", "Creating task"),
-    "update_openproject_work_package": ("Aktualisiere Task", "Updating task"),
-    "log_openproject_time": ("Buche Zeit", "Logging time"),
+    "list_openproject_projects": _t(de="Lade Projekte", en="Loading projects"),
+    "get_openproject_project": _t(de="Lade Projekt", en="Loading project"),
+    "list_openproject_work_packages": _t(de="Lade Tasks", en="Loading work packages"),
+    "get_openproject_work_package": _t(
+        de="Lade Task-Details", en="Loading task details"
+    ),
+    "list_openproject_users": _t(de="Lade Benutzer", en="Loading users"),
+    "list_openproject_time_entries": _t(
+        de="Lade Zeitbuchungen", en="Loading time entries"
+    ),
+    "create_openproject_work_package": _t(de="Erstelle Task", en="Creating task"),
+    "update_openproject_work_package": _t(de="Aktualisiere Task", en="Updating task"),
+    "log_openproject_time": _t(de="Buche Zeit", en="Logging time"),
     # Nextcloud
-    "list_nextcloud_files": ("Lade Dateien", "Loading files"),
-    "search_nextcloud_files": ("Suche Dateien", "Searching files"),
-    "list_nextcloud_users": ("Lade Benutzer", "Loading users"),
-    "get_nextcloud_user": ("Lade Benutzerdetails", "Loading user details"),
-    "list_nextcloud_shares": ("Lade Shares", "Loading shares"),
-    "get_nextcloud_storage": ("Lade Speicher", "Loading storage"),
-    "create_nextcloud_folder": ("Erstelle Ordner", "Creating folder"),
-    "upload_nextcloud_file": ("Lade Datei hoch", "Uploading file"),
-    "delete_nextcloud_file": ("Lösche Datei", "Deleting file"),
-    "create_nextcloud_share": ("Erstelle Share", "Creating share"),
-    "create_nextcloud_user": ("Erstelle Benutzer", "Creating user"),
+    "list_nextcloud_files": _t(de="Lade Dateien", en="Loading files"),
+    "search_nextcloud_files": _t(de="Suche Dateien", en="Searching files"),
+    "list_nextcloud_users": _t(de="Lade Benutzer", en="Loading users"),
+    "get_nextcloud_user": _t(de="Lade Benutzerdetails", en="Loading user details"),
+    "list_nextcloud_shares": _t(de="Lade Shares", en="Loading shares"),
+    "get_nextcloud_storage": _t(de="Lade Speicher", en="Loading storage"),
+    "create_nextcloud_folder": _t(de="Erstelle Ordner", en="Creating folder"),
+    "upload_nextcloud_file": _t(de="Lade Datei hoch", en="Uploading file"),
+    "delete_nextcloud_file": _t(de="Lösche Datei", en="Deleting file"),
+    "create_nextcloud_share": _t(de="Erstelle Share", en="Creating share"),
+    "create_nextcloud_user": _t(de="Erstelle Benutzer", en="Creating user"),
     # Cisco
-    "get_cisco_device_info": ("Lade Geräteinfo", "Loading device info"),
-    "list_cisco_interfaces": ("Lade Interfaces", "Loading interfaces"),
-    "get_cisco_interface_details": (
-        "Lade Interface-Details",
-        "Loading interface details",
+    "get_cisco_device_info": _t(de="Lade Geräteinfo", en="Loading device info"),
+    "list_cisco_interfaces": _t(de="Lade Interfaces", en="Loading interfaces"),
+    "get_cisco_interface_details": _t(
+        de="Lade Interface-Details", en="Loading interface details"
     ),
-    "list_cisco_vlans": ("Lade VLANs", "Loading VLANs"),
-    "list_cisco_routes": ("Lade Routen", "Loading routes"),
-    "list_cisco_mac_addresses": ("Lade MAC-Table", "Loading MAC table"),
-    "get_cisco_poe_status": ("Lade PoE-Status", "Loading PoE status"),
-    "enable_cisco_interface": ("Aktiviere Interface", "Enabling interface"),
-    "disable_cisco_interface": ("Deaktiviere Interface", "Disabling interface"),
-    "create_cisco_vlan": ("Erstelle VLAN", "Creating VLAN"),
-    "set_cisco_interface_vlan": ("Setze VLAN", "Setting VLAN"),
+    "list_cisco_vlans": _t(de="Lade VLANs", en="Loading VLANs"),
+    "list_cisco_routes": _t(de="Lade Routen", en="Loading routes"),
+    "list_cisco_mac_addresses": _t(de="Lade MAC-Table", en="Loading MAC table"),
+    "get_cisco_poe_status": _t(de="Lade PoE-Status", en="Loading PoE status"),
+    "enable_cisco_interface": _t(de="Aktiviere Interface", en="Enabling interface"),
+    "disable_cisco_interface": _t(de="Deaktiviere Interface", en="Disabling interface"),
+    "create_cisco_vlan": _t(de="Erstelle VLAN", en="Creating VLAN"),
+    "set_cisco_interface_vlan": _t(de="Setze VLAN", en="Setting VLAN"),
     # MikroTik
-    "get_mikrotik_identity": ("Lade Geräteinfo", "Loading device info"),
-    "list_mikrotik_interfaces": ("Lade Interfaces", "Loading interfaces"),
-    "get_mikrotik_interface_stats": ("Lade Interface-Stats", "Loading interface stats"),
-    "list_mikrotik_routes": ("Lade Routen", "Loading routes"),
-    "list_mikrotik_dhcp_leases": ("Lade DHCP-Leases", "Loading DHCP leases"),
-    "list_mikrotik_firewall_rules": ("Lade Firewall", "Loading firewall rules"),
-    "list_mikrotik_queues": ("Lade Queues", "Loading queues"),
-    "list_mikrotik_wireless_clients": (
-        "Lade Wireless-Clients",
-        "Loading wireless clients",
+    "get_mikrotik_identity": _t(de="Lade Geräteinfo", en="Loading device info"),
+    "list_mikrotik_interfaces": _t(de="Lade Interfaces", en="Loading interfaces"),
+    "get_mikrotik_interface_stats": _t(
+        de="Lade Interface-Stats", en="Loading interface stats"
     ),
-    "enable_mikrotik_interface": ("Aktiviere Interface", "Enabling interface"),
-    "disable_mikrotik_interface": ("Deaktiviere Interface", "Disabling interface"),
-    "reboot_mikrotik": ("Neustart Router", "Rebooting router"),
-    "create_mikrotik_firewall_rule": (
-        "Erstelle Firewall-Regel",
-        "Creating firewall rule",
+    "list_mikrotik_routes": _t(de="Lade Routen", en="Loading routes"),
+    "list_mikrotik_dhcp_leases": _t(de="Lade DHCP-Leases", en="Loading DHCP leases"),
+    "list_mikrotik_firewall_rules": _t(de="Lade Firewall", en="Loading firewall rules"),
+    "list_mikrotik_queues": _t(de="Lade Queues", en="Loading queues"),
+    "list_mikrotik_wireless_clients": _t(
+        de="Lade Wireless-Clients", en="Loading wireless clients"
     ),
-    "add_mikrotik_ip_address": ("Füge IP hinzu", "Adding IP address"),
+    "enable_mikrotik_interface": _t(de="Aktiviere Interface", en="Enabling interface"),
+    "disable_mikrotik_interface": _t(
+        de="Deaktiviere Interface", en="Disabling interface"
+    ),
+    "reboot_mikrotik": _t(de="Neustart Router", en="Rebooting router"),
+    "create_mikrotik_firewall_rule": _t(
+        de="Erstelle Firewall-Regel", en="Creating firewall rule"
+    ),
+    "add_mikrotik_ip_address": _t(de="Füge IP hinzu", en="Adding IP address"),
     # Netgear
-    "get_netgear_sysinfo": ("Lade Geräteinfo", "Loading device info"),
-    "list_netgear_ports": ("Lade Ports", "Loading ports"),
-    "list_netgear_vlans": ("Lade VLANs", "Loading VLANs"),
-    "get_netgear_port_stats": ("Lade Port-Stats", "Loading port stats"),
-    "list_netgear_arp": ("Lade ARP", "Loading ARP"),
-    "list_netgear_lldp": ("Lade LLDP", "Loading LLDP"),
-    "enable_netgear_port": ("Aktiviere Port", "Enabling port"),
-    "disable_netgear_port": ("Deaktiviere Port", "Disabling port"),
-    "reboot_netgear": ("Neustart Gerät", "Rebooting device"),
+    "get_netgear_sysinfo": _t(de="Lade Geräteinfo", en="Loading device info"),
+    "list_netgear_ports": _t(de="Lade Ports", en="Loading ports"),
+    "list_netgear_vlans": _t(de="Lade VLANs", en="Loading VLANs"),
+    "get_netgear_port_stats": _t(de="Lade Port-Stats", en="Loading port stats"),
+    "list_netgear_arp": _t(de="Lade ARP", en="Loading ARP"),
+    "list_netgear_lldp": _t(de="Lade LLDP", en="Loading LLDP"),
+    "enable_netgear_port": _t(de="Aktiviere Port", en="Enabling port"),
+    "disable_netgear_port": _t(de="Deaktiviere Port", en="Disabling port"),
+    "reboot_netgear": _t(de="Neustart Gerät", en="Rebooting device"),
     # Ubiquiti
-    "list_ubiquiti_devices": ("Lade Geräte", "Loading devices"),
-    "list_ubiquiti_clients": ("Lade Clients", "Loading clients"),
-    "get_ubiquiti_device": ("Lade Gerätedetails", "Loading device details"),
-    "list_ubiquiti_wlans": ("Lade WLANs", "Loading WLANs"),
-    "list_ubiquiti_switch_ports": ("Lade Ports", "Loading ports"),
-    "get_ubiquiti_network_stats": ("Lade Netzwerk-Stats", "Loading network stats"),
-    "list_ubiquiti_firewall_rules": ("Lade Firewall", "Loading firewall rules"),
-    "restart_ubiquiti_device": ("Neustart Gerät", "Restarting device"),
-    "enable_ubiquiti_wlan": ("Aktiviere WLAN", "Enabling WLAN"),
-    "disable_ubiquiti_wlan": ("Deaktiviere WLAN", "Disabling WLAN"),
-    "kick_ubiquiti_client": ("Trenne Client", "Kicking client"),
+    "list_ubiquiti_devices": _t(de="Lade Geräte", en="Loading devices"),
+    "list_ubiquiti_clients": _t(de="Lade Clients", en="Loading clients"),
+    "get_ubiquiti_device": _t(de="Lade Gerätedetails", en="Loading device details"),
+    "list_ubiquiti_wlans": _t(de="Lade WLANs", en="Loading WLANs"),
+    "list_ubiquiti_switch_ports": _t(de="Lade Ports", en="Loading ports"),
+    "get_ubiquiti_network_stats": _t(
+        de="Lade Netzwerk-Stats", en="Loading network stats"
+    ),
+    "list_ubiquiti_firewall_rules": _t(de="Lade Firewall", en="Loading firewall rules"),
+    "restart_ubiquiti_device": _t(de="Neustart Gerät", en="Restarting device"),
+    "enable_ubiquiti_wlan": _t(de="Aktiviere WLAN", en="Enabling WLAN"),
+    "disable_ubiquiti_wlan": _t(de="Deaktiviere WLAN", en="Disabling WLAN"),
+    "kick_ubiquiti_client": _t(de="Trenne Client", en="Kicking client"),
     # Redmine
-    "get_redmine_projects": ("Lade Projekte", "Loading projects"),
-    "get_redmine_project": ("Lade Projekt", "Loading project"),
-    "get_redmine_issues": ("Lade Tickets", "Loading issues"),
-    "get_redmine_issue": ("Lade Ticket", "Loading issue"),
-    "create_redmine_issue": ("Erstelle Ticket", "Creating issue"),
-    "update_redmine_issue": ("Aktualisiere Ticket", "Updating issue"),
-    "get_redmine_users": ("Lade Benutzer", "Loading users"),
-    "get_redmine_time_entries": ("Lade Zeiten", "Loading time entries"),
-    "log_redmine_time": ("Logge Zeit", "Logging time"),
-    "get_redmine_issue_statuses": ("Lade Status", "Loading statuses"),
-    "get_redmine_priorities": ("Lade Prioritäten", "Loading priorities"),
-    "search_redmine_issues": ("Suche Tickets", "Searching issues"),
-    "get_redmine_issue_counts": ("Zähle Tickets", "Counting issues"),
+    "get_redmine_projects": _t(de="Lade Projekte", en="Loading projects"),
+    "get_redmine_project": _t(de="Lade Projekt", en="Loading project"),
+    "get_redmine_issues": _t(de="Lade Tickets", en="Loading issues"),
+    "get_redmine_issue": _t(de="Lade Ticket", en="Loading issue"),
+    "create_redmine_issue": _t(de="Erstelle Ticket", en="Creating issue"),
+    "update_redmine_issue": _t(de="Aktualisiere Ticket", en="Updating issue"),
+    "get_redmine_users": _t(de="Lade Benutzer", en="Loading users"),
+    "get_redmine_time_entries": _t(de="Lade Zeiten", en="Loading time entries"),
+    "log_redmine_time": _t(de="Logge Zeit", en="Logging time"),
+    "get_redmine_issue_statuses": _t(de="Lade Status", en="Loading statuses"),
+    "get_redmine_priorities": _t(de="Lade Prioritäten", en="Loading priorities"),
+    "search_redmine_issues": _t(de="Suche Tickets", en="Searching issues"),
+    "get_redmine_issue_counts": _t(de="Zähle Tickets", en="Counting issues"),
     # GLPI
-    "create_ticket": ("Erstelle Ticket", "Creating ticket"),
-    "get_ticket": ("Lade Ticket", "Loading ticket"),
-    "search_tickets": ("Suche Tickets", "Searching tickets"),
-    "update_ticket": ("Aktualisiere Ticket", "Updating ticket"),
-    "close_ticket": ("Schließe Ticket", "Closing ticket"),
-    "add_followup": ("Füge Follow-up hinzu", "Adding follow-up"),
-    "add_solution": ("Füge Lösung hinzu", "Adding solution"),
-    "search_users": ("Suche Benutzer", "Searching users"),
-    "list_groups": ("Lade Gruppen", "Loading groups"),
-    "list_categories": ("Lade Kategorien", "Loading categories"),
-    "get_ticket_stats": ("Lade Statistik", "Loading stats"),
-    "get_ticket_attachments": ("Lade Anhänge", "Loading attachments"),
-    "get_ticket_followups": ("Lade Antworten", "Loading replies"),
-    "get_ticket_solutions": ("Lade Lösungen", "Loading solutions"),
+    "create_ticket": _t(de="Erstelle Ticket", en="Creating ticket"),
+    "get_ticket": _t(de="Lade Ticket", en="Loading ticket"),
+    "search_tickets": _t(de="Suche Tickets", en="Searching tickets"),
+    "update_ticket": _t(de="Aktualisiere Ticket", en="Updating ticket"),
+    "close_ticket": _t(de="Schließe Ticket", en="Closing ticket"),
+    "add_followup": _t(de="Füge Follow-up hinzu", en="Adding follow-up"),
+    "add_solution": _t(de="Füge Lösung hinzu", en="Adding solution"),
+    "search_users": _t(de="Suche Benutzer", en="Searching users"),
+    "list_groups": _t(de="Lade Gruppen", en="Loading groups"),
+    "list_categories": _t(de="Lade Kategorien", en="Loading categories"),
+    "get_ticket_stats": _t(de="Lade Statistik", en="Loading stats"),
+    "get_ticket_attachments": _t(de="Lade Anhänge", en="Loading attachments"),
+    "get_ticket_followups": _t(de="Lade Antworten", en="Loading replies"),
+    "get_ticket_solutions": _t(de="Lade Lösungen", en="Loading solutions"),
     # Confluence
-    "get_confluence_spaces": ("Lade Spaces", "Loading spaces"),
-    "get_confluence_space": ("Lade Space", "Loading space"),
-    "get_confluence_pages": ("Lade Seiten", "Loading pages"),
-    "get_confluence_page": ("Lade Seite", "Loading page"),
-    "create_confluence_page": ("Erstelle Seite", "Creating page"),
-    "update_confluence_page": ("Aktualisiere Seite", "Updating page"),
-    "get_confluence_blog_posts": ("Lade Blog-Posts", "Loading blog posts"),
-    "create_confluence_blog_post": ("Erstelle Blog-Post", "Creating blog post"),
-    "search_confluence": ("Suche Confluence", "Searching Confluence"),
-    "get_confluence_labels": ("Lade Labels", "Loading labels"),
-    "get_confluence_page_history": ("Lade Historie", "Loading history"),
+    "get_confluence_spaces": _t(de="Lade Spaces", en="Loading spaces"),
+    "get_confluence_space": _t(de="Lade Space", en="Loading space"),
+    "get_confluence_pages": _t(de="Lade Seiten", en="Loading pages"),
+    "get_confluence_page": _t(de="Lade Seite", en="Loading page"),
+    "create_confluence_page": _t(de="Erstelle Seite", en="Creating page"),
+    "update_confluence_page": _t(de="Aktualisiere Seite", en="Updating page"),
+    "get_confluence_blog_posts": _t(de="Lade Blog-Posts", en="Loading blog posts"),
+    "create_confluence_blog_post": _t(de="Erstelle Blog-Post", en="Creating blog post"),
+    "search_confluence": _t(de="Suche Confluence", en="Searching Confluence"),
+    "get_confluence_labels": _t(de="Lade Labels", en="Loading labels"),
+    "get_confluence_page_history": _t(de="Lade Historie", en="Loading history"),
     # Jira
-    "get_jira_projects": ("Lade Projekte", "Loading projects"),
-    "get_jira_project": ("Lade Projekt", "Loading project"),
-    "get_jira_issues": ("Lade Issues", "Loading issues"),
-    "get_jira_issue": ("Lade Issue", "Loading issue"),
-    "create_jira_issue": ("Erstelle Issue", "Creating issue"),
-    "update_jira_issue": ("Aktualisiere Issue", "Updating issue"),
-    "get_jira_boards": ("Lade Boards", "Loading boards"),
-    "get_jira_sprints": ("Lade Sprints", "Loading sprints"),
-    "get_jira_sprint": ("Lade Sprint", "Loading sprint"),
-    "search_jira": ("Suche Jira", "Searching Jira"),
-    "get_jira_issue_transitions": ("Lade Transitions", "Loading transitions"),
-    "transition_jira_issue": ("Transitioniere Issue", "Transitioning issue"),
-    "get_jira_priorities": ("Lade Prioritäten", "Loading priorities"),
-    "get_jira_issue_counts": ("Zähle Issues", "Counting issues"),
+    "get_jira_projects": _t(de="Lade Projekte", en="Loading projects"),
+    "get_jira_project": _t(de="Lade Projekt", en="Loading project"),
+    "get_jira_issues": _t(de="Lade Issues", en="Loading issues"),
+    "get_jira_issue": _t(de="Lade Issue", en="Loading issue"),
+    "create_jira_issue": _t(de="Erstelle Issue", en="Creating issue"),
+    "update_jira_issue": _t(de="Aktualisiere Issue", en="Updating issue"),
+    "get_jira_boards": _t(de="Lade Boards", en="Loading boards"),
+    "get_jira_sprints": _t(de="Lade Sprints", en="Loading sprints"),
+    "get_jira_sprint": _t(de="Lade Sprint", en="Loading sprint"),
+    "search_jira": _t(de="Suche Jira", en="Searching Jira"),
+    "get_jira_issue_transitions": _t(de="Lade Transitions", en="Loading transitions"),
+    "transition_jira_issue": _t(de="Transitioniere Issue", en="Transitioning issue"),
+    "get_jira_priorities": _t(de="Lade Prioritäten", en="Loading priorities"),
+    "get_jira_issue_counts": _t(de="Zähle Issues", en="Counting issues"),
 }
 
 
@@ -362,15 +403,27 @@ class _StatusEmitter(AsyncCallbackHandler):
 
     async def on_tool_start(self, serialized: dict, input_str: str, **kwargs) -> None:  # type: ignore[override]
         tool_name = serialized.get("name", "")
-        pair = _TOOL_LABELS.get(tool_name)
-        if pair:
-            label = pair[0] if _get_language() == "de" else pair[1]
-        else:
+        label = _TOOL_LABELS.get(tool_name)
+        if not label:
             label = tool_name.replace("_", " ").title()
         await status_bus.emit(self.session_id, f"{label}…")
 
     async def on_llm_start(self, serialized: dict, messages: list, **kwargs) -> None:  # type: ignore[override]
-        await status_bus.emit(self.session_id, _t("Denke nach…", "Thinking…"))
+        await status_bus.emit(
+            self.session_id,
+            _t(
+                de="Denke nach…",
+                en="Thinking…",
+                fr="Réfléchis…",
+                es="Pensando…",
+                it="Pensando…",
+                nl="Denken…",
+                pl="Myślę…",
+                pt="Pensando…",
+                ja="考え中…",
+                zh="思考中…",
+            ),
+        )
 
 
 _DEFAULT_AGENT_TIMEOUT_SECONDS = 1800
@@ -620,7 +673,7 @@ class BaseAgent:
                 "If the user does not specify an environment, use the default connection.",
             )
             return info
-        except Exception as e:
+        except _BASE_AGENT_RECOVERABLE_EXCEPTIONS as e:
             logger.warning("Fehler beim Laden der Connections für Prompt: %s", e)
             return ""
 
@@ -694,7 +747,7 @@ class BaseAgent:
             if soul:
                 final_system_prompt = soul + "\n\n---\n\n" + final_system_prompt
                 logger.debug("Soul MD für Agent '%s' injiziert.", self.name)
-        except Exception as exc:
+        except _BASE_AGENT_RECOVERABLE_EXCEPTIONS as exc:
             logger.debug("Soul-Injection fehlgeschlagen (ignoriert): %s", exc)
 
         # Sprachanweisung injizieren
@@ -705,7 +758,7 @@ class BaseAgent:
             lang_instruction = _LANG_INSTRUCTIONS.get(lang)
             if lang_instruction:
                 final_system_prompt += f"\n\n{lang_instruction}"
-        except Exception:
+        except (ImportError, AttributeError, TypeError, ValueError):
             pass  # Fallback: keine Sprachanweisung
 
         # Aktuelles Datum + Uhrzeit injizieren (Timezone aus Config)
@@ -749,7 +802,7 @@ class BaseAgent:
                     f"Time: {now.strftime('%H:%M')} ({tz_name})"
                 )
             final_system_prompt += f"\n\n{dt_str}"
-        except Exception as exc:
+        except (ImportError, AttributeError, ValueError, RuntimeError) as exc:
             logger.debug("Datetime-Injection fehlgeschlagen (ignoriert): %s", exc)
 
         # Komprimierungs-Zusammenfassungen aus der History einsammeln (role="system")
@@ -779,7 +832,7 @@ class BaseAgent:
                     )
                     + rag_context
                 )
-        except Exception as exc:
+        except _BASE_AGENT_RECOVERABLE_EXCEPTIONS as exc:
             logger.debug("Memory-Suche fehlgeschlagen: %s", exc)
 
         # Skills-Injection in den System-Prompt integrieren
@@ -797,7 +850,7 @@ class BaseAgent:
                     len(matching_skills),
                     [s.name for s in matching_skills],
                 )
-        except Exception as exc:
+        except _BASE_AGENT_RECOVERABLE_EXCEPTIONS as exc:
             logger.debug("Skills-Injection fehlgeschlagen (ignoriert): %s", exc)
 
         # Nachrichten aufbauen — genau EIN SystemMessage-Block am Anfang
@@ -932,7 +985,7 @@ class BaseAgent:
                 "The request took too long and was aborted. "
                 "Please try again with a more specific question.",
             ), False
-        except Exception as exc:
+        except _BASE_AGENT_RECOVERABLE_EXCEPTIONS as exc:
             exc_str = str(exc)
             # Spezifische LM Studio / LLM Fehler benutzerfreundlich machen
             if "Model unloaded" in exc_str:
@@ -1144,7 +1197,7 @@ class BaseAgent:
                     "Die Ausführung hat zu lange gedauert und wurde abgebrochen.",
                     "Execution timed out and was aborted.",
                 ), False
-            except Exception as exc:
+            except _BASE_AGENT_RECOVERABLE_EXCEPTIONS as exc:
                 logger.error(
                     "Agent '%s' Fehler beim Resume: %s", self.name, exc, exc_info=True
                 )
@@ -1166,7 +1219,7 @@ class BaseAgent:
                 await redis.connection.delete(
                     f"ninko:safeguard_tool_pending:{session_id}"
                 )
-            except Exception as exc:
+            except _BASE_AGENT_RECOVERABLE_EXCEPTIONS as exc:
                 logger.debug(
                     "[Safeguard] Pending-Key Cleanup fehlgeschlagen (Session: %s): %s",
                     session_id,
@@ -1222,5 +1275,5 @@ class BaseAgent:
                 logger.debug(
                     "Auto-Memory gespeichert für Agent '%s': %s…", self.name, fact[:80]
                 )
-        except Exception as exc:
+        except _BASE_AGENT_RECOVERABLE_EXCEPTIONS as exc:
             logger.debug("Auto-Memorize fehlgeschlagen (ignoriert): %s", exc)

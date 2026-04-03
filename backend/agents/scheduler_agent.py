@@ -26,6 +26,16 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("ninko.agents.scheduler")
 
+_SCHEDULER_EXCEPTIONS = (
+    RuntimeError,
+    ValueError,
+    TypeError,
+    KeyError,
+    OSError,
+    json.JSONDecodeError,
+    asyncio.TimeoutError,
+)
+
 REDIS_KEY_TASKS = "ninko:scheduler:tasks"
 REDIS_KEY_LOG_PREFIX = "ninko:scheduler:log:"
 MAX_LOG_ENTRIES = 50
@@ -63,7 +73,7 @@ class SchedulerAgent:
         while self._running:
             try:
                 await self._check_and_run()
-            except Exception as exc:
+            except _SCHEDULER_EXCEPTIONS as exc:
                 logger.error("Scheduler-Cycle Fehler: %s", exc, exc_info=True)
 
             await asyncio.sleep(CHECK_INTERVAL_SECONDS)
@@ -203,7 +213,7 @@ class SchedulerAgent:
             )
             return log_entry
 
-        except Exception as exc:
+        except _SCHEDULER_EXCEPTIONS as exc:
             duration_ms = int((time.monotonic() - start_time) * 1000)
 
             log_entry = {

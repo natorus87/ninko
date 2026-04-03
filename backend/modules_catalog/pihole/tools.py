@@ -77,7 +77,7 @@ async def _get_pihole_config(connection_id: str = "") -> dict:
         pl="Nie skonfigurowano domyślnego połączenia Pi-hole (poproś użytkownika o utworzenie połączenia Pi-hole w panelu w sekcji 'Ustawienia -> Połączenia').",
         pt="Nenhuma conexão Pi-hole padrão configurada (peça ao usuário para criar uma conexão Pi-hole no painel em 'Configurações -> Conexões').",
         ja="デフォルトのPi-hole接続が設定されていません（ダッシュボードの「設定→接続」でPi-hole接続を作成するようユーザーに依頼してください）。",
-        zh="未配置默认Pi-hole连接（请用户在仪表板中的"设置→连接"下创建Pi-hole连接）。",
+        zh='未配置默认Pi-hole连接（请用户在仪表板中的"设置→连接"下创建Pi-hole连接）。',
     ))
 
 
@@ -862,4 +862,3 @@ async def dismiss_system_message(message_id: str, connection_id: str = "") -> st
         ja=f"ID {message_id} のシステムメッセージを削除しました。",
         zh=f"已删除ID为 {message_id} 的系统消息。",
     )
-

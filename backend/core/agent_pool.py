@@ -18,6 +18,16 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("ninko.core.agent_pool")
 
+_AGENT_POOL_EXCEPTIONS = (
+    ImportError,
+    AttributeError,
+    TypeError,
+    ValueError,
+    KeyError,
+    RuntimeError,
+    json.JSONDecodeError,
+)
+
 REDIS_KEY = "ninko:agents"
 # Minimale Keyword-Übereinstimmung (0–1) damit ein Agent als passend gilt
 _MATCH_THRESHOLD = 0.18
@@ -67,13 +77,13 @@ class DynamicAgentPool:
                     try:
                         self._instantiate(agent_def)
                         loaded += 1
-                    except Exception as exc:
+                    except _AGENT_POOL_EXCEPTIONS as exc:
                         logger.warning(
                             "Agent '%s' konnte nicht instanziiert werden: %s",
                             agent_def.get("name"), exc,
                         )
             logger.info("DynamicAgentPool: %d Agenten geladen.", loaded)
-        except Exception as exc:
+        except _AGENT_POOL_EXCEPTIONS as exc:
             logger.warning("DynamicAgentPool.load_from_redis fehlgeschlagen: %s", exc)
 
     @staticmethod
@@ -218,7 +228,7 @@ class DynamicAgentPool:
             )
             await sm.save_soul(name, soul_md)
             logger.debug("Soul MD für dynamischen Agent '%s' generiert und gespeichert.", name)
-        except Exception as exc:
+        except _AGENT_POOL_EXCEPTIONS as exc:
             logger.warning("Soul-Generierung für Agent '%s' fehlgeschlagen: %s", name, exc)
 
         agent = self._instantiate(agent_def)
@@ -288,7 +298,7 @@ class DynamicAgentPool:
                     capabilities=caps or None,
                 )
                 await sm.save_soul(meta["name"], soul_md)
-            except Exception as exc:
+            except _AGENT_POOL_EXCEPTIONS as exc:
                 logger.warning("Soul-Update für Agent '%s' fehlgeschlagen: %s", agent_id, exc)
 
         logger.info("DynamicAgentPool: Agent '%s' aktualisiert.", agent_id)

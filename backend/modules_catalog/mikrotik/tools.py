@@ -24,20 +24,20 @@ async def _get_api_client(connection_id: str = "") -> dict:
     if connection_id:
         conn = await ConnectionManager.get_connection("mikrotik", connection_id)
         if not conn:
-        raise ValueError(
-            _t(
-                de=f"MikroTik-Verbindung mit ID '{connection_id}' nicht gefunden.",
-                en=f"MikroTik connection with ID '{connection_id}' not found.",
-                fr=f"Connexion MikroTik avec l'ID '{connection_id}' introuvable.",
-                es=f"Conexión MikroTik con ID '{connection_id}' no encontrada.",
-                it=f"Connessione MikroTik con ID '{connection_id}' non trovata.",
-                nl=f"MikroTik-verbinding met ID '{connection_id}' niet gevonden.",
-                pl=f"Połączenie MikroTik z ID '{connection_id}' nie znaleziono.",
-                pt=f"Conexão MikroTik com ID '{connection_id}' não encontrada.",
-                ja=f"ID '{connection_id}' のMikroTik接続が見つかりません。",
-                zh=f"未找到ID为'{connection_id}'的MikroTik连接。",
+            raise ValueError(
+                _t(
+                    de=f"MikroTik-Verbindung mit ID '{connection_id}' nicht gefunden.",
+                    en=f"MikroTik connection with ID '{connection_id}' not found.",
+                    fr=f"Connexion MikroTik avec l'ID '{connection_id}' introuvable.",
+                    es=f"Conexión MikroTik con ID '{connection_id}' no encontrada.",
+                    it=f"Connessione MikroTik con ID '{connection_id}' non trovata.",
+                    nl=f"MikroTik-verbinding met ID '{connection_id}' niet gevonden.",
+                    pl=f"Połączenie MikroTik z ID '{connection_id}' nie znaleziono.",
+                    pt=f"Conexão MikroTik com ID '{connection_id}' não encontrada.",
+                    ja=f"ID '{connection_id}' のMikroTik接続が見つかりません。",
+                    zh=f"未找到ID为'{connection_id}'的MikroTik连接。",
+                )
             )
-        )
     else:
         conn = await ConnectionManager.get_default_connection("mikrotik")
 

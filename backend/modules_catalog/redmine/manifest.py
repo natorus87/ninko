@@ -18,7 +18,7 @@ async def check_redmine_health() -> dict:
 
         client = await _get_api_client("")
         return {"status": "ok", "detail": "Redmine API reachable"}
-    except Exception:
+    except (ValueError, TypeError, KeyError, RuntimeError):
         logger.exception("Redmine health check failed")
         return {"status": "error", "detail": "Health check failed"}
 

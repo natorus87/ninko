@@ -31,6 +31,14 @@ from pathlib import Path
 
 logger = logging.getLogger("ninko.core.skills_manager")
 
+_SKILLS_EXCEPTIONS = (
+    OSError,
+    UnicodeError,
+    TypeError,
+    ValueError,
+    RuntimeError,
+)
+
 # Maximale Anzahl Skills die pro Request injiziert werden (Token-Budget)
 _MAX_INJECTED_SKILLS = 2
 # Mindest-Score für Injection (0–1)
@@ -104,7 +112,7 @@ class SkillsManager:
         """Parst eine SKILL.md-Datei und gibt ein Skill-Objekt zurück."""
         try:
             raw = path.read_text(encoding="utf-8")
-        except Exception as exc:
+        except _SKILLS_EXCEPTIONS as exc:
             logger.warning("SKILL.md konnte nicht gelesen werden (%s): %s", path, exc)
             return None
 
@@ -340,7 +348,7 @@ class SkillsManager:
             import shutil
             shutil.rmtree(skill_dir)
             logger.info("Skill gelöscht: '%s' (%s)", name, skill_dir)
-        except Exception as exc:
+        except _SKILLS_EXCEPTIONS as exc:
             logger.error("Skill-Löschung fehlgeschlagen (%s): %s", skill_dir, exc)
             return False
 

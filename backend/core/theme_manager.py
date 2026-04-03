@@ -9,6 +9,8 @@ import logging
 import re
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from core.redis_client import get_redis
 from schemas.theme import ThemeDefinition, ThemeSummary
 
@@ -58,7 +60,7 @@ def _load_theme_file(path: Path) -> ThemeDefinition | None:
         if not validate_theme_id(theme.id):
             return None
         return theme
-    except Exception:
+    except (OSError, json.JSONDecodeError, TypeError, ValueError, ValidationError):
         return None
 
 

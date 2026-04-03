@@ -9,6 +9,7 @@ import logging
 from typing import Any
 
 import redis.asyncio as aioredis
+from redis.exceptions import RedisError
 
 from core.config import get_settings
 
@@ -118,7 +119,7 @@ class RedisClient:
         try:
             pong = await self._redis.ping()
             return {"status": "ok", "detail": f"PONG={pong}"}
-        except Exception as exc:
+        except (RedisError, OSError, RuntimeError, ValueError, TypeError) as exc:
             return {"status": "error", "detail": str(exc)}
 
     # ── Cleanup ────────────────────────────────────────

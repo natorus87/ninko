@@ -6,6 +6,8 @@ import asyncio
 import datetime
 from typing import Optional, List
 
+from redis.exceptions import RedisError
+
 
 REDIS_LOG_KEY = "ninko:logs"
 MAX_LOG_ENTRIES = 10000
@@ -19,6 +21,15 @@ _CATEGORY_MAP = {
     "ninko.llm": "llm",
     "ninko": "system",
 }
+
+_LOG_HANDLER_EXCEPTIONS = (
+    RuntimeError,
+    ValueError,
+    TypeError,
+    AttributeError,
+    OSError,
+    RedisError,
+)
 
 def _guess_category(logger_name: str) -> str:
     for prefix, cat in _CATEGORY_MAP.items():
@@ -57,7 +68,7 @@ class RedisLogHandler(logging.Handler):
             # Basis-Daten extrahieren
             try:
                 msg = record.getMessage()
-            except:
+            except (ValueError, TypeError, AttributeError):
                 msg = str(record.msg)
             
             entry = {
@@ -74,7 +85,7 @@ class RedisLogHandler(logging.Handler):
                 try:
                     import traceback
                     entry["traceback"] = "".join(traceback.format_exception(*record.exc_info))
-                except:
+                except (ValueError, TypeError, RuntimeError):
                     pass
 
             serialized = json.dumps(entry, ensure_ascii=False)
@@ -84,12 +95,12 @@ class RedisLogHandler(logging.Handler):
             except queue.Full:
                 pass # Queue voll -> logs verwerfen
             
-        except Exception as e:
+        except _LOG_HANDLER_EXCEPTIONS as e:
             try:
                 import os
                 err = f"!!! RedisLogHandler CRASH: {type(e).__name__}: {e} !!!\n"
                 os.write(1, err.encode())
-            except:
+            except (OSError, RuntimeError, ValueError, TypeError):
                 pass
             self.handleError(record)
 
@@ -129,7 +140,7 @@ class RedisLogHandler(logging.Handler):
                                 decode_responses=True,
                                 encoding="utf-8",
                             )
-                        except Exception as e:
+                        except _LOG_HANDLER_EXCEPTIONS as e:
                             logging.getLogger("ninko.log_handler").error("RedisLogWorker redis init error: %s", e)
                             await asyncio.sleep(2)
                             continue
@@ -141,7 +152,7 @@ class RedisLogHandler(logging.Handler):
                                 pipe.lpush(REDIS_LOG_KEY, item)
                             pipe.ltrim(REDIS_LOG_KEY, 0, MAX_LOG_ENTRIES - 1)
                             await pipe.execute()
-                    except Exception as e:
+                    except _LOG_HANDLER_EXCEPTIONS as e:
                         logging.getLogger("ninko.log_handler").error("RedisLogWorker push error: %s", e)
                         redis_conn = None  # Reconnect beim nächsten Mal
                         await asyncio.sleep(2)
@@ -150,7 +161,7 @@ class RedisLogHandler(logging.Handler):
                     for _ in range(len(batch)):
                         self._queue.task_done()
 
-                except Exception as e:
+                except _LOG_HANDLER_EXCEPTIONS as e:
                     logging.getLogger("ninko.log_handler").error("RedisLogWorker loop error: %s", e)
                     await asyncio.sleep(5)
 

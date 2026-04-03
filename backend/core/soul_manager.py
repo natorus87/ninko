@@ -16,6 +16,15 @@ from pathlib import Path
 
 logger = logging.getLogger("ninko.core.soul_manager")
 
+_SOUL_EXCEPTIONS = (
+    OSError,
+    UnicodeError,
+    TypeError,
+    ValueError,
+    RuntimeError,
+    json.JSONDecodeError,
+)
+
 REDIS_KEY = "ninko:souls"
 
 # Pfad zu den eingebauten Soul-Dateien (im Docker-Image)
@@ -61,7 +70,7 @@ class SoulManager:
                     self._souls[agent_name] = content
                     loaded += 1
                     logger.debug("Soul MD geladen: '%s' aus %s", agent_name, soul_file.name)
-            except Exception as exc:
+            except _SOUL_EXCEPTIONS as exc:
                 logger.warning("Soul-Datei '%s' konnte nicht geladen werden: %s", soul_file, exc)
 
         logger.info("SoulManager: %d built-in Soul(s) geladen.", loaded)
@@ -88,7 +97,7 @@ class SoulManager:
 
             if loaded:
                 logger.info("SoulManager: %d Agent-Soul(s) aus Redis geladen.", loaded)
-        except Exception as exc:
+        except _SOUL_EXCEPTIONS as exc:
             logger.warning("SoulManager.load_from_redis fehlgeschlagen: %s", exc)
 
     # ──────────────────────────────────────────────────────────────────────
@@ -127,7 +136,7 @@ class SoulManager:
             souls_data[agent_name] = content
             await redis.connection.set(REDIS_KEY, json.dumps(souls_data, ensure_ascii=False))
             logger.info("Soul MD für Agent '%s' in Redis gespeichert.", agent_name)
-        except Exception as exc:
+        except _SOUL_EXCEPTIONS as exc:
             logger.warning("Soul MD konnte nicht in Redis gespeichert werden: %s", exc)
 
     async def delete_soul(self, agent_name: str) -> bool:
@@ -155,7 +164,7 @@ class SoulManager:
                 souls_data: dict[str, str] = json.loads(raw)
                 souls_data.pop(agent_name, None)
                 await redis.connection.set(REDIS_KEY, json.dumps(souls_data, ensure_ascii=False))
-        except Exception as exc:
+        except _SOUL_EXCEPTIONS as exc:
             logger.warning("Soul-Löschung in Redis fehlgeschlagen: %s", exc)
 
         logger.info("Soul MD für Agent '%s' gelöscht.", agent_name)

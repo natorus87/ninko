@@ -33,13 +33,23 @@ __all__ = [
     "wait",
 ]
 
+_CORE_TOOL_EXCEPTIONS = (
+    ValueError,
+    TypeError,
+    KeyError,
+    RuntimeError,
+    OSError,
+    asyncio.TimeoutError,
+)
+_CORE_IMPORT_EXCEPTIONS = (ImportError, AttributeError, RuntimeError)
+
 
 def _t(de: str, en: str) -> str:
     """Gibt DE oder EN zurück abhängig von der LANGUAGE-Einstellung."""
     try:
         from core.config import get_settings
         return de if get_settings().LANGUAGE == "de" else en
-    except Exception:
+    except _CORE_IMPORT_EXCEPTIONS:
         return de
 
 # Whitelist of allowed executables for execute_cli_command
@@ -163,7 +173,7 @@ async def execute_cli_command(command: str) -> str:
         raw_output = "\n".join(result)
         return _truncate_output(raw_output)
 
-    except Exception as exc:
+    except _CORE_TOOL_EXCEPTIONS as exc:
         logger.error("Fehler bei CLI-Kommando '%s': %s", command, exc)
         return _t(
             f"Fehler bei der Ausführung von '{command}': {exc}",
@@ -491,7 +501,7 @@ async def execute_workflow(workflow_name_or_id: str) -> str:
         _task = asyncio.create_task(engine.execute(wf, run_id))
         _background_tasks.add(_task)
         _task.add_done_callback(_background_tasks.discard)
-    except Exception as exc:
+    except _CORE_IMPORT_EXCEPTIONS as exc:
         return f"Kritischer Fehler beim Starten des Workflows: {exc}"
         
     # Poll variables
@@ -578,7 +588,7 @@ async def call_module_agent(module_name: str, task: str) -> str:
     try:
         result, _ = await agent.invoke(message=task, chat_history=None, session_id=session_id)
         return result
-    except Exception as exc:
+    except _CORE_TOOL_EXCEPTIONS as exc:
         logger.error("call_module_agent Fehler bei '%s': %s", module_name, exc)
         return _t(
             f"Fehler im Modul '{module_name}': {exc}",
@@ -668,7 +678,7 @@ async def run_pipeline(steps: list[dict]) -> str:
             )
             try:
                 result, _ = await agent.invoke(message=full_task, chat_history=None, session_id=session_id)
-            except Exception as exc:
+            except _CORE_TOOL_EXCEPTIONS as exc:
                 logger.error("Pipeline Schritt %d ('%s') Fehler: %s", i + 1, module, exc)
                 result = _t(
                     f"Fehler in Modul '{module}': {exc}",
@@ -750,7 +760,7 @@ async def install_skill(
             f"It will be automatically injected whenever a request matches the description:\n"
             f"→ \"{description}\"",
         )
-    except Exception as exc:
+    except _CORE_TOOL_EXCEPTIONS as exc:
         logger.error("Fehler beim Installieren von Skill '%s': %s", name, exc)
         return _t(
             f"Fehler beim Installieren des Skills: {exc}",
@@ -777,7 +787,7 @@ async def remember_fact(fact: str) -> str:
         )
         logger.info("Fakt im Langzeitgedächtnis gespeichert: id=%s", doc_id)
         return _t(f"✅ Gespeichert: '{fact}'", f"✅ Saved: '{fact}'")
-    except Exception as exc:
+    except _CORE_TOOL_EXCEPTIONS as exc:
         logger.error("Fehler beim Speichern im Memory: %s", exc)
         return _t(f"Fehler beim Speichern: {exc}", f"Error saving: {exc}")
 
@@ -801,7 +811,7 @@ async def recall_memory(query: str) -> str:
             )
         lines = [f"- {h['content']}" for h in hits]
         return _t("Gefundene Erinnerungen:\n", "Found memories:\n") + "\n".join(lines)
-    except Exception as exc:
+    except _CORE_TOOL_EXCEPTIONS as exc:
         logger.error("Fehler beim Abrufen aus Memory: %s", exc)
         return _t(f"Fehler beim Abrufen: {exc}", f"Error retrieving: {exc}")
 
@@ -840,7 +850,7 @@ async def forget_fact(fact: str) -> str:
             "Should I delete one or more of them? Provide the ID(s) to confirm "
             "or say 'delete all' for all listed entries.",
         )
-    except Exception as exc:
+    except _CORE_TOOL_EXCEPTIONS as exc:
         logger.error("Fehler bei Memory-Suche für forget_fact: %s", exc)
         return _t(f"Fehler bei der Suche: {exc}", f"Error searching: {exc}")
 
@@ -861,7 +871,7 @@ async def confirm_forget(doc_ids: list[str]) -> str:
             f"🗑️ {len(doc_ids)} Erinnerung(en) dauerhaft gelöscht: {', '.join(doc_ids)}",
             f"🗑️ {len(doc_ids)} memory entry/entries permanently deleted: {', '.join(doc_ids)}",
         )
-    except Exception as exc:
+    except _CORE_TOOL_EXCEPTIONS as exc:
         logger.error("Fehler beim Löschen aus Memory: %s", exc)
         return _t(f"Fehler beim Löschen: {exc}", f"Error deleting: {exc}")
 
@@ -910,7 +920,7 @@ async def speak(text: str, lang: str = "", voice: str = "") -> str:
             f"Audio successfully synthesized ({kb} KB, {len(text)} characters).\n"
             f"[Play audio]({audio_url})",
         )
-    except Exception as exc:
+    except _CORE_TOOL_EXCEPTIONS as exc:
         logger.error("speak-Tool Fehler: %s", exc)
         return _t(f"TTS-Fehler: {exc}", f"TTS error: {exc}")
 
@@ -1059,7 +1069,7 @@ async def wait(seconds: int, reason: str = "") -> str:
             "⚠️ Warte-Operation wurde abgebrochen.",
             "⚠️ Wait operation was cancelled.",
         )
-    except Exception as exc:
+    except _CORE_TOOL_EXCEPTIONS as exc:
         logger.error("Fehler während der Wartezeit: %s", exc)
         return _t(
             f"Fehler während der Wartezeit: {exc}",

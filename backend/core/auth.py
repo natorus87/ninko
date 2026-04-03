@@ -10,6 +10,7 @@ Role model:
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -68,7 +69,13 @@ def _parse_session_token(token: str) -> dict | None:
     try:
         payload_raw = _b64url_decode(payload_b64)
         payload = json.loads(payload_raw.decode("utf-8"))
-    except Exception:
+    except (
+        ValueError,
+        TypeError,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        binascii.Error,
+    ):
         return None
 
     exp = int(payload.get("exp", 0))

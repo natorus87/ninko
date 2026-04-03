@@ -21,6 +21,16 @@ from fastapi import FastAPI
 
 logger = logging.getLogger("ninko.registry")
 
+_REGISTRY_EXCEPTIONS = (
+    ImportError,
+    AttributeError,
+    TypeError,
+    ValueError,
+    KeyError,
+    RuntimeError,
+    OSError,
+)
+
 
 # ── Modul-Manifest-Datenklasse ──────────────────────────────
 @dataclass
@@ -86,7 +96,7 @@ class ModuleRegistry:
 
             try:
                 self._load_module(modname, modules_dir)
-            except Exception as exc:
+            except _REGISTRY_EXCEPTIONS as exc:
                 logger.error(
                     "Fehler beim Laden von Modul '%s': %s", modname, exc, exc_info=True
                 )
@@ -105,7 +115,7 @@ class ModuleRegistry:
                     continue
                 try:
                     self._load_module(modname, plugins_dir, is_plugin=True)
-                except Exception as exc:
+                except _REGISTRY_EXCEPTIONS as exc:
                     logger.error("Fehler beim Laden von Plugin '%s': %s", modname, exc, exc_info=True)
 
         loaded = [m.manifest.display_name for m in self._modules.values()]
@@ -196,7 +206,7 @@ class ModuleRegistry:
 
         try:
             self._load_module(modname, plugins_dir, is_plugin=True)
-        except Exception as exc:
+        except _REGISTRY_EXCEPTIONS as exc:
             logger.error("Hot-Load gescheitert für '%s': %s", modname, exc)
             return False
 
@@ -244,7 +254,7 @@ class ModuleRegistry:
                     )
                     await soul_manager.save_soul(mod.manifest.name, soul_md)
                     logger.info("Soul für Plugin '%s' generiert.", modname)
-            except Exception as exc:
+            except _REGISTRY_EXCEPTIONS as exc:
                 logger.warning("Soul-Generierung für Plugin '%s' fehlgeschlagen: %s", modname, exc)
 
         return True
@@ -324,7 +334,7 @@ class ModuleRegistry:
             if mod.manifest.health_check is not None:
                 try:
                     results[name] = await mod.manifest.health_check()
-                except Exception as exc:
+                except _REGISTRY_EXCEPTIONS as exc:
                     results[name] = {"status": "error", "detail": str(exc)}
             else:
                 results[name] = {"status": "ok", "detail": "Kein Health-Check definiert"}
