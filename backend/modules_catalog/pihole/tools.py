@@ -68,8 +68,16 @@ async def _get_pihole_config(connection_id: str = "") -> dict:
         return {"url": fallback_url, "password": fallback_password}
 
     raise ValueError(_t(
-        "Keine Standard-Pi-hole-Verbindung konfiguriert (Verbitte den Nutzer im Dashboard unter 'Einstellungen -> Verbindungen' eine Pi-hole Verbindung anzulegen).",
-        "No default Pi-hole connection configured (ask the user to create a Pi-hole connection in the dashboard under 'Settings -> Connections').",
+        de="Keine Standard-Pi-hole-Verbindung konfiguriert (Verbitte den Nutzer im Dashboard unter 'Einstellungen -> Verbindungen' eine Pi-hole Verbindung anzulegen).",
+        en="No default Pi-hole connection configured (ask the user to create a Pi-hole connection in the dashboard under 'Settings -> Connections').",
+        fr="Aucune connexion Pi-hole par défaut configurée (demandez à l'utilisateur de créer une connexion Pi-hole dans le tableau de bord sous 'Paramètres -> Connexions').",
+        es="No hay conexión Pi-hole predeterminada configurada (pida al usuario crear una conexión Pi-hole en el panel bajo 'Configuración -> Conexiones').",
+        it="Nessuna connessione Pi-hole predefinita configurata (chiedi all'utente di creare una connessione Pi-hole nel cruscotto sotto 'Impostazioni -> Connessioni').",
+        nl="Geen standaard Pi-hole-verbinding geconfigureerd (vraag de gebruiker om een Pi-hole-verbinding aan te maken in het dashboard onder 'Instellingen -> Verbindingen').",
+        pl="Nie skonfigurowano domyślnego połączenia Pi-hole (poproś użytkownika o utworzenie połączenia Pi-hole w panelu w sekcji 'Ustawienia -> Połączenia').",
+        pt="Nenhuma conexão Pi-hole padrão configurada (peça ao usuário para criar uma conexão Pi-hole no painel em 'Configurações -> Conexões').",
+        ja="デフォルトのPi-hole接続が設定されていません（ダッシュボードの「設定→接続」でPi-hole接続を作成するようユーザーに依頼してください）。",
+        zh="未配置默认Pi-hole连接（请用户在仪表板中的"设置→连接"下创建Pi-hole连接）。",
     ))
 
 
@@ -118,8 +126,16 @@ async def _authenticate(base_url: str, password: str) -> str:
 
             if resp.status_code == 401:
                 raise ValueError(_t(
-                    "Pi-hole Auth fehlgeschlagen: falsches Passwort",
-                    "Pi-hole auth failed: wrong password",
+                    de="Pi-hole Auth fehlgeschlagen: falsches Passwort",
+                    en="Pi-hole auth failed: wrong password",
+                    fr="Échec de l'authentification Pi-hole: mot de passe incorrect",
+                    es="Autenticación de Pi-hole fallida: contraseña incorrecta",
+                    it="Autenticazione Pi-hole non riuscita: password errata",
+                    nl="Pi-hole-authenticatie mislukt: wachtwoord onjuist",
+                    pl="Uwierzytelnianie Pi-hole nie powiodło się: nieprawidłowe hasło",
+                    pt="Autenticação Pi-hole falhou: senha incorreta",
+                    ja="Pi-hole認証に失敗しました：パスワードが正しくありません",
+                    zh="Pi-hole认证失败：密码错误",
                 ))
 
             resp.raise_for_status()
@@ -128,8 +144,16 @@ async def _authenticate(base_url: str, password: str) -> str:
             sid = data.get("session", {}).get("sid", "")
             if not sid:
                 raise ValueError(_t(
-                    "Pi-hole Auth fehlgeschlagen: kein SID erhalten",
-                    "Pi-hole auth failed: no SID received",
+                    de="Pi-hole Auth fehlgeschlagen: kein SID erhalten",
+                    en="Pi-hole auth failed: no SID received",
+                    fr="Échec de l'authentification Pi-hole: aucun SID reçu",
+                    es="Autenticación de Pi-hole fallida: no se recibió SID",
+                    it="Autenticazione Pi-hole non riuscita: nessun SID ricevuto",
+                    nl="Pi-hole-authenticatie mislukt: geen SID ontvangen",
+                    pl="Uwierzytelnianie Pi-hole nie powiodło się: nie otrzymano SID",
+                    pt="Autenticação Pi-hole falhou: nenhum SID recebido",
+                    ja="Pi-hole認証に失敗しました：SIDを受信しませんでした",
+                    zh="Pi-hole认证失败：未收到SID",
                 ))
 
             _session_cache[cache_key] = {
@@ -140,8 +164,16 @@ async def _authenticate(base_url: str, password: str) -> str:
             return sid
 
     raise ValueError(_t(
-        "Pi-hole Auth fehlgeschlagen: zu viele Versuche (429)",
-        "Pi-hole auth failed: too many attempts (429)",
+        de="Pi-hole Auth fehlgeschlagen: zu viele Versuche (429)",
+        en="Pi-hole auth failed: too many attempts (429)",
+        fr="Échec de l'authentification Pi-hole: trop de tentatives (429)",
+        es="Autenticación de Pi-hole fallida: demasiados intentos (429)",
+        it="Autenticazione Pi-hole non riuscita: troppi tentativi (429)",
+        nl="Pi-hole-authenticatie mislukt: te veel pogingen (429)",
+        pl="Uwierzytelnianie Pi-hole nie powiodło się: zbyt wiele prób (429)",
+        pt="Autenticação Pi-hole falhou: muitas tentativas (429)",
+        ja="Pi-hole認証に失敗しました：試行回数が多すぎます（429）",
+        zh="Pi-hole认证失败：尝试次数过多（429）",
     ))
 
 
@@ -159,8 +191,16 @@ async def _pihole_request(
     config = await _get_pihole_config(connection_id)
     if not config["url"]:
         raise ValueError(_t(
-            "Pi-hole nicht konfiguriert. Bitte URL und Passwort in den Modul-Einstellungen setzen.",
-            "Pi-hole not configured. Please set URL and password in the module settings.",
+            de="Pi-hole nicht konfiguriert. Bitte URL und Passwort in den Modul-Einstellungen setzen.",
+            en="Pi-hole not configured. Please set URL and password in the module settings.",
+            fr="Pi-hole non configuré. Veuillez définir l'URL et le mot de passe dans les paramètres du module.",
+            es="Pi-hole no configurado. Por favor establezca la URL y la contraseña en la configuración del módulo.",
+            it="Pi-hole non configurato. Per favore imposta URL e password nelle impostazioni del modulo.",
+            nl="Pi-hole niet geconfigureerd. Stel alstublieft URL en wachtwoord in de module-instellingen in.",
+            pl="Pi-hole nie skonfigurowany. Proszę ustawić URL i hasło w ustawieniach modułu.",
+            pt="Pi-hole não configurado. Por favor defina a URL e a senha nas configurações do módulo.",
+            ja="Pi-holeが設定されていません。モジュール設定でURLとパスワードを設定してください。",
+            zh="未配置Pi-hole。请在模块设置中设置URL和密码。",
         ))
 
     base_url = config["url"]
@@ -304,11 +344,44 @@ async def toggle_blocking(enable: bool = True, duration: int = 0, connection_id:
     await _pihole_request("POST", "/dns/blocking", body=body, connection_id=connection_id)
 
     if enable:
-        return _t("DNS-Blocking aktiviert.", "DNS blocking enabled.")
+        return _t(
+            de="DNS-Blocking aktiviert.",
+            en="DNS blocking enabled.",
+            fr="Blocage DNS activé.",
+            es="Bloqueo DNS habilitado.",
+            it="Blocco DNS attivato.",
+            nl="DNS-blokkering geactiveerd.",
+            pl="Blokowanie DNS włączone.",
+            pt="Bloqueio DNS ativado.",
+            ja="DNSブロッキングが有効になりました。",
+            zh="DNS阻止已启用。",
+        )
     elif duration > 0:
-        return _t(f"DNS-Blocking für {duration} Sekunden deaktiviert.", f"DNS blocking disabled for {duration} seconds.")
+        return _t(
+            de=f"DNS-Blocking für {duration} Sekunden deaktiviert.",
+            en=f"DNS blocking disabled for {duration} seconds.",
+            fr=f"Blocage DNS désactivé pendant {duration} secondes.",
+            es=f"Bloqueo DNS deshabilitado durante {duration} segundos.",
+            it=f"Blocco DNS disattivato per {duration} secondi.",
+            nl=f"DNS-blokkering gedeactiveerd voor {duration} seconden.",
+            pl=f"Blokowanie DNS wyłączone na {duration} sekund.",
+            pt=f"Bloqueio DNS desativado por {duration} segundos.",
+            ja=f"DNSブロッキングを{duration}秒間無効にしました。",
+            zh=f"DNS阻止已禁用 {duration} 秒。",
+        )
     else:
-        return _t("DNS-Blocking dauerhaft deaktiviert.", "DNS blocking permanently disabled.")
+        return _t(
+            de="DNS-Blocking dauerhaft deaktiviert.",
+            en="DNS blocking permanently disabled.",
+            fr="Blocage DNS désactivé définitivement.",
+            es="Bloqueo DNS deshabilitado permanentemente.",
+            it="Blocco DNS disattivato permanentemente.",
+            nl="DNS-blokkering permanent gedeactiveerd.",
+            pl="Blokowanie DNS trwale wyłączone.",
+            pt="Bloqueio DNS desativado permanentemente.",
+            ja="DNSブロッキングを完全に無効にしました。",
+            zh="DNS阻止已永久禁用。",
+        )
 
 
 @tool
@@ -348,9 +421,31 @@ async def add_domain_to_list(
         comment: Optional comment
     """
     if list_type not in ("allow", "deny"):
-        return _t("Fehler: list_type muss 'allow' oder 'deny' sein.", "Error: list_type must be 'allow' or 'deny'.")
+        return _t(
+            de="Fehler: list_type muss 'allow' oder 'deny' sein.",
+            en="Error: list_type must be 'allow' or 'deny'.",
+            fr="Erreur: list_type doit être 'allow' ou 'deny'.",
+            es="Error: list_type debe ser 'allow' o 'deny'.",
+            it="Errore: list_type deve essere 'allow' o 'deny'.",
+            nl="Fout: list_type moet 'allow' of 'deny' zijn.",
+            pl="Błąd: list_type musi być 'allow' lub 'deny'.",
+            pt="Erro: list_type deve ser 'allow' ou 'deny'.",
+            ja="エラー: list_typeは'allow'または'deny'である必要があります。",
+            zh="错误：list_type必须是'allow'或'deny'。",
+        )
     if kind not in ("exact", "regex"):
-        return _t("Fehler: kind muss 'exact' oder 'regex' sein.", "Error: kind must be 'exact' or 'regex'.")
+        return _t(
+            de="Fehler: kind muss 'exact' oder 'regex' sein.",
+            en="Error: kind must be 'exact' or 'regex'.",
+            fr="Erreur: kind doit être 'exact' ou 'regex'.",
+            es="Error: kind debe ser 'exact' o 'regex'.",
+            it="Errore: kind deve essere 'exact' o 'regex'.",
+            nl="Fout: kind moet 'exact' of 'regex' zijn.",
+            pl="Błąd: kind musi być 'exact' lub 'regex'.",
+            pt="Erro: kind deve ser 'exact' ou 'regex'.",
+            ja="エラー: kindは'exact'または'regex'である必要があります。",
+            zh="错误：kind必须是'exact'或'regex'。",
+        )
 
     body = {
         "domain": domain,
@@ -360,7 +455,18 @@ async def add_domain_to_list(
     await _pihole_request("POST", f"/domains/{list_type}/{kind}", body=body, connection_id=connection_id)
 
     label = "Whitelist" if list_type == "allow" else "Blacklist"
-    return _t(f"Domain '{domain}' zur {label} ({kind}) hinzugefügt.", f"Domain '{domain}' added to {label} ({kind}).")
+    return _t(
+        de=f"Domain '{domain}' zur {label} ({kind}) hinzugefügt.",
+        en=f"Domain '{domain}' added to {label} ({kind}).",
+        fr=f"Domaine '{domain}' ajouté à {label} ({kind}).",
+        es=f"Dominio '{domain}' agregado a {label} ({kind}).",
+        it=f"Dominio '{domain}' aggiunto a {label} ({kind}).",
+        nl=f"Domein '{domain}' toegevoegd aan {label} ({kind}).",
+        pl=f"Domena '{domain}' dodana do {label} ({kind}).",
+        pt=f"Domínio '{domain}' adicionado a {label} ({kind}).",
+        ja=f"ドメイン '{domain}' を {label}（{kind}）に追加しました。",
+        zh=f"域名 '{domain}' 已添加到 {label}（{kind}）。",
+    )
 
 
 @tool
@@ -379,16 +485,48 @@ async def remove_domain_from_list(
         kind: 'exact' or 'regex'
     """
     if list_type not in ("allow", "deny"):
-        return _t("Fehler: list_type muss 'allow' oder 'deny' sein.", "Error: list_type must be 'allow' or 'deny'.")
+        return _t(
+            de="Fehler: list_type muss 'allow' oder 'deny' sein.",
+            en="Error: list_type must be 'allow' or 'deny'.",
+            fr="Erreur: list_type doit être 'allow' ou 'deny'.",
+            es="Error: list_type debe ser 'allow' o 'deny'.",
+            it="Errore: list_type deve essere 'allow' o 'deny'.",
+            nl="Fout: list_type moet 'allow' of 'deny' zijn.",
+            pl="Błąd: list_type musi być 'allow' lub 'deny'.",
+            pt="Erro: list_type deve ser 'allow' ou 'deny'.",
+            ja="エラー: list_typeは'allow'または'deny'である必要があります。",
+            zh="错误：list_type必须是'allow'或'deny'。",
+        )
     if kind not in ("exact", "regex"):
-        return _t("Fehler: kind muss 'exact' oder 'regex' sein.", "Error: kind must be 'exact' or 'regex'.")
+        return _t(
+            de="Fehler: kind muss 'exact' oder 'regex' sein.",
+            en="Error: kind must be 'exact' or 'regex'.",
+            fr="Erreur: kind doit être 'exact' ou 'regex'.",
+            es="Error: kind debe ser 'exact' o 'regex'.",
+            it="Errore: kind deve essere 'exact' o 'regex'.",
+            nl="Fout: kind moet 'exact' of 'regex' zijn.",
+            pl="Błąd: kind musi być 'exact' lub 'regex'.",
+            pt="Erro: kind deve ser 'exact' ou 'regex'.",
+            ja="エラー: kindは'exact'または'regex'である必要があります。",
+            zh="错误：kind必须是'exact'或'regex'。",
+        )
 
     # Pi-hole v6: DELETE with domain in body or as path
-    body = {"domain": domain}
-    await _pihole_request("DELETE", f"/domains/{list_type}/{kind}", body=body, connection_id=connection_id)
+    await _pihole_request("DELETE", f"/domains/{list_type}/{kind}", body={"domain": domain}, connection_id=connection_id)
 
     label = "Whitelist" if list_type == "allow" else "Blacklist"
-    return _t(f"Domain '{domain}' von der {label} ({kind}) entfernt.", f"Domain '{domain}' removed from {label} ({kind}).")
+    return _t(
+        de=f"Domain '{domain}' von der {label} ({kind}) entfernt.",
+        en=f"Domain '{domain}' removed from {label} ({kind}).",
+        fr=f"Domaine '{domain}' supprimé de {label} ({kind}).",
+        es=f"Dominio '{domain}' eliminado de {label} ({kind}).",
+        it=f"Dominio '{domain}' rimosso da {label} ({kind}).",
+        nl=f"Domein '{domain}' verwijderd van {label} ({kind}).",
+        pl=f"Domena '{domain}' usunięta z {label} ({kind}).",
+        pt=f"Domínio '{domain}' removido de {label} ({kind}).",
+        ja=f"ドメイン '{domain}' を {label}（{kind}）から削除しました。",
+        zh=f"域名 '{domain}' 已从 {label}（{kind}）中移除。",
+    )
 
 
 @tool
@@ -462,7 +600,18 @@ async def add_custom_dns_record(domain: str, ip: str, connection_id: str = "") -
     
     await _pihole_request("PUT", f"/config/dns/hosts/{encoded_entry}", connection_id=connection_id)
     
-    return _t(f"Local DNS Eintrag hinzugefügt: {domain} -> {ip}", f"Local DNS entry added: {domain} -> {ip}")
+    return _t(
+        de=f"Local DNS Eintrag hinzugefügt: {domain} -> {ip}",
+        en=f"Local DNS entry added: {domain} -> {ip}",
+        fr=f"Entrée DNS locale ajoutée: {domain} -> {ip}",
+        es=f"Entrada DNS local agregada: {domain} -> {ip}",
+        it=f"Voce DNS locale aggiunta: {domain} -> {ip}",
+        nl=f"Lokale DNS-invoer toegevoegd: {domain} -> {ip}",
+        pl=f"Lokalny wpis DNS dodany: {domain} -> {ip}",
+        pt=f"Entrada DNS local adicionada: {domain} -> {ip}",
+        ja=f"ローカルDNSエントリを追加しました: {domain} -> {ip}",
+        zh=f"已添加本地DNS条目: {domain} -> {ip}",
+    )
 
 
 @tool
@@ -480,7 +629,18 @@ async def remove_custom_dns_record(domain: str, ip: str, connection_id: str = ""
     
     await _pihole_request("DELETE", f"/config/dns/hosts/{encoded_entry}", connection_id=connection_id)
     
-    return _t(f"Local DNS Eintrag gelöscht: {domain} -> {ip}", f"Local DNS entry deleted: {domain} -> {ip}")
+    return _t(
+        de=f"Local DNS Eintrag gelöscht: {domain} -> {ip}",
+        en=f"Local DNS entry deleted: {domain} -> {ip}",
+        fr=f"Entrée DNS locale supprimée: {domain} -> {ip}",
+        es=f"Entrada DNS local eliminada: {domain} -> {ip}",
+        it=f"Voce DNS locale eliminata: {domain} -> {ip}",
+        nl=f"Lokale DNS-invoer verwijderd: {domain} -> {ip}",
+        pl=f"Lokalny wpis DNS usunięty: {domain} -> {ip}",
+        pt=f"Entrada DNS local removida: {domain} -> {ip}",
+        ja=f"ローカルDNSエントリを削除しました: {domain} -> {ip}",
+        zh=f"已删除本地DNS条目: {domain} -> {ip}",
+    )
 
 
 @tool
@@ -517,7 +677,18 @@ async def add_cname_record(domain: str, target: str, connection_id: str = "") ->
     import urllib.parse
     encoded_entry = urllib.parse.quote(f"{domain},{target}")
     await _pihole_request("PUT", f"/config/dns/cnameRecords/{encoded_entry}", connection_id=connection_id)
-    return _t(f"CNAME Record hinzugefügt: {domain} -> {target}", f"CNAME record added: {domain} -> {target}")
+    return _t(
+        de=f"CNAME Record hinzugefügt: {domain} -> {target}",
+        en=f"CNAME record added: {domain} -> {target}",
+        fr=f"Record CNAME ajouté: {domain} -> {target}",
+        es=f"Registro CNAME agregado: {domain} -> {target}",
+        it=f"Record CNAME aggiunto: {domain} -> {target}",
+        nl=f"CNAME-record toegevoegd: {domain} -> {target}",
+        pl=f"Rekord CNAME dodany: {domain} -> {target}",
+        pt=f"Registro CNAME adicionado: {domain} -> {target}",
+        ja=f"CNAMEレコードを追加しました: {domain} -> {target}",
+        zh=f"已添加CNAME记录: {domain} -> {target}",
+    )
 
 
 @tool
@@ -532,7 +703,18 @@ async def remove_cname_record(domain: str, target: str, connection_id: str = "")
     import urllib.parse
     encoded_entry = urllib.parse.quote(f"{domain},{target}")
     await _pihole_request("DELETE", f"/config/dns/cnameRecords/{encoded_entry}", connection_id=connection_id)
-    return _t(f"CNAME Record gelöscht: {domain} -> {target}", f"CNAME record deleted: {domain} -> {target}")
+    return _t(
+        de=f"CNAME Record gelöscht: {domain} -> {target}",
+        en=f"CNAME record deleted: {domain} -> {target}",
+        fr=f"Record CNAME supprimé: {domain} -> {target}",
+        es=f"Registro CNAME eliminado: {domain} -> {target}",
+        it=f"Record CNAME eliminato: {domain} -> {target}",
+        nl=f"CNAME-record verwijderd: {domain} -> {target}",
+        pl=f"Rekord CNAME usunięty: {domain} -> {target}",
+        pt=f"Registro CNAME removido: {domain} -> {target}",
+        ja=f"CNAMEレコードを削除しました: {domain} -> {target}",
+        zh=f"已删除CNAME记录: {domain} -> {target}",
+    )
 
 
 @tool
@@ -554,7 +736,18 @@ async def delete_dhcp_lease(ip: str, connection_id: str = "") -> str:
         ip: IP address whose lease should be deleted (e.g. '192.168.1.50')
     """
     await _pihole_request("DELETE", f"/dhcp/leases/{ip}", connection_id=connection_id)
-    return _t(f"DHCP Lease für IP {ip} wurde gelöscht.", f"DHCP lease for IP {ip} has been deleted.")
+    return _t(
+        de=f"DHCP Lease für IP {ip} wurde gelöscht.",
+        en=f"DHCP lease for IP {ip} has been deleted.",
+        fr=f"Lease DHCP pour l'IP {ip} supprimé.",
+        es=f"Concesión DHCP para IP {ip} eliminada.",
+        it=f"Locazione DHCP per IP {ip} eliminata.",
+        nl=f"DHCP-lease voor IP {ip} verwijderd.",
+        pl=f"Lease DHCP dla IP {ip} usunięty.",
+        pt=f"Concessão DHCP para IP {ip} excluída.",
+        ja=f"IP {ip} のDHCPリースを削除しました。",
+        zh=f"已删除IP {ip}的DHCP租约。",
+    )
 
 
 @tool
@@ -564,7 +757,18 @@ async def update_gravity(connection_id: str = "") -> str:
     This process may take a moment.
     """
     await _pihole_request("POST", "/action/gravity", connection_id=connection_id)
-    return _t("Gravity-Update wurde erfolgreich gestartet.", "Gravity update started successfully.")
+    return _t(
+        de="Gravity-Update wurde erfolgreich gestartet.",
+        en="Gravity update started successfully.",
+        fr="Mise à jour Gravity démarrée avec succès.",
+        es="Actualización de Gravity iniciada con éxito.",
+        it="Aggiornamento Gravity avviato con successo.",
+        nl="Gravity-update succesvol gestart.",
+        pl="Aktualizacja Gravity rozpoczęta pomyślnie.",
+        pt="Atualização da Gravity iniciada com sucesso.",
+        ja="Gravityアップデートが正常に開始されました。",
+        zh="Gravity更新已成功启动。",
+    )
 
 
 @tool
@@ -573,7 +777,18 @@ async def flush_dns_cache(connection_id: str = "") -> str:
     Restart the DNS service on Pi-hole and flush the DNS cache.
     """
     await _pihole_request("POST", "/action/restartdns", connection_id=connection_id)
-    return _t("DNS Server neu gestartet und Cache geleert.", "DNS server restarted and cache cleared.")
+    return _t(
+        de="DNS Server neu gestartet und Cache geleert.",
+        en="DNS server restarted and cache cleared.",
+        fr="Serveur DNS redémarré et cache vidé.",
+        es="Servidor DNS reiniciado y caché borrado.",
+        it="Server DNS riavviato e cache svuotata.",
+        nl="DNS-server herstart en cache geleegd.",
+        pl="Serwer DNS ponownie uruchomiony i cache wyczyszczony.",
+        pt="Servidor DNS reiniciado e cache limpo.",
+        ja="DNSサーバーを再起動してキャッシュをクリアしました。",
+        zh="DNS服务器已重启，缓存已清除。",
+    )
 
 
 @tool
@@ -582,7 +797,18 @@ async def flush_logs(connection_id: str = "") -> str:
     Delete/flush all query logs (FTL/DNS logs) in Pi-hole.
     """
     await _pihole_request("POST", "/action/flush/logs", connection_id=connection_id)
-    return _t("Logs wurden erfolgreich gelöscht.", "Logs deleted successfully.")
+    return _t(
+        de="Logs wurden erfolgreich gelöscht.",
+        en="Logs deleted successfully.",
+        fr="Journaux supprimés avec succès.",
+        es="Registros eliminados con éxito.",
+        it="Log eliminati con successo.",
+        nl="Logboeken succesvol verwijderd.",
+        pl="Logi pomyślnie usunięte.",
+        pt="Logs excluídos com sucesso.",
+        ja="ログが正常に削除されました。",
+        zh="日志已成功删除。",
+    )
 
 
 @tool
@@ -591,7 +817,18 @@ async def flush_network_table(connection_id: str = "") -> str:
     Flush the network table (ARP cache / known devices) in the Pi-hole database.
     """
     await _pihole_request("POST", "/action/flush/network", connection_id=connection_id)
-    return _t("Netzwerktabelle wurde erfolgreich geleert.", "Network table flushed successfully.")
+    return _t(
+        de="Netzwerktabelle wurde erfolgreich geleert.",
+        en="Network table flushed successfully.",
+        fr="Table réseau vidée avec succès.",
+        es="Tabla de red vaciada con éxito.",
+        it="Tabella di rete svuotata con successo.",
+        nl="Netwerktabel succesvol geleegd.",
+        pl="Tabela sieci pomyślnie wyczyszczona.",
+        pt="Tabela de rede limpa com sucesso.",
+        ja="ネットワークテーブルが正常にクリアされました。",
+        zh="网络表已成功刷新。",
+    )
 
 
 @tool
@@ -613,5 +850,16 @@ async def dismiss_system_message(message_id: str, connection_id: str = "") -> st
         message_id: ID of the message to delete.
     """
     await _pihole_request("DELETE", f"/info/messages/{message_id}", connection_id=connection_id)
-    return _t(f"Systemmeldung mit ID {message_id} wurde gelöscht.", f"System message with ID {message_id} deleted.")
+    return _t(
+        de=f"Systemmeldung mit ID {message_id} wurde gelöscht.",
+        en=f"System message with ID {message_id} deleted.",
+        fr=f"Message système avec l'ID {message_id} supprimé.",
+        es=f"Mensaje del sistema con ID {message_id} eliminado.",
+        it=f"Messaggio di sistema con ID {message_id} eliminato.",
+        nl=f"Systeembericht met ID {message_id} verwijderd.",
+        pl=f"Komunikat systemowy z ID {message_id} usunięty.",
+        pt=f"Mensagem do sistema com ID {message_id} excluída.",
+        ja=f"ID {message_id} のシステムメッセージを削除しました。",
+        zh=f"已删除ID为 {message_id} 的系统消息。",
+    )
 

@@ -28,6 +28,14 @@ async def _get_api_client(connection_id: str = "") -> dict:
                 _t(
                     de=f"Jira-Verbindung mit ID '{connection_id}' nicht gefunden.",
                     en=f"Jira connection with ID '{connection_id}' not found.",
+                    fr=f"Connexion Jira avec l'ID '{connection_id}' non trouvée.",
+                    es=f"Conexión de Jira con ID '{connection_id}' no encontrada.",
+                    it=f"Connessione Jira con ID '{connection_id}' non trovata.",
+                    nl=f"Jira-verbinding met ID '{connection_id}' niet gevonden.",
+                    pl=f"Połączenie Jira z ID '{connection_id}' nie znaleziono.",
+                    pt=f"Conexão Jira com ID '{connection_id}' não encontrada.",
+                    ja=f"ID '{connection_id}' のJira接続が見つかりません。",
+                    zh=f"未找到ID为'{connection_id}'的Jira连接。",
                 )
             )
     else:
@@ -59,6 +67,46 @@ async def _get_api_client(connection_id: str = "") -> dict:
                     "No Jira connection configured. "
                     "Please create a connection in Settings → Module → Gear, "
                     "or set the env vars JIRA_URL / JIRA_EMAIL / JIRA_API_KEY."
+                ),
+                fr=(
+                    "Aucune connexion Jira configurée. "
+                    "Veuillez créer une connexion dans Paramètres → Module → Engrenage, "
+                    "ou définir les variables d'environnement JIRA_URL / JIRA_EMAIL / JIRA_API_KEY."
+                ),
+                es=(
+                    "No hay conexión de Jira configurada. "
+                    "Por favor cree una conexión en Configuración → Módulo → Engranaje, "
+                    "o establezca las variables de entorno JIRA_URL / JIRA_EMAIL / JIRA_API_KEY."
+                ),
+                it=(
+                    "Nessuna connessione Jira configurata. "
+                    "Per favore crea una connessione in Impostazioni → Modulo → Ingranaggio, "
+                    "o imposta le variabili di ambiente JIRA_URL / JIRA_EMAIL / JIRA_API_KEY."
+                ),
+                nl=(
+                    "Geen Jira-verbinding geconfigureerd. "
+                    "Maak een verbinding aan in Instellingen → Module → Tandwiel, "
+                    "of stel de omgevingsvariabelen JIRA_URL / JIRA_EMAIL / JIRA_API_KEY in."
+                ),
+                pl=(
+                    "Nie skonfigurowano połączenia Jira. "
+                    "Utwórz połączenie w panelu w sekcji Ustawienia → Moduł → Ikona koła zębatego "
+                    "lub ustaw zmienne środowiskowe JIRA_URL / JIRA_EMAIL / JIRA_API_KEY."
+                ),
+                pt=(
+                    "Nenhuma conexão Jira configurada. "
+                    "Por favor crie uma conexão em Configurações → Módulo → Engrenagem, "
+                    "ou defina as variáveis de ambiente JIRA_URL / JIRA_EMAIL / JIRA_API_KEY."
+                ),
+                ja=(
+                    "Jira接続が設定されていません。 "
+                    "ダッシュボードで設定→モジュール→歯車から接続を作成するか、"
+                    "環境変数JIRA_URL / JIRA_EMAIL / JIRA_API_KEYを設定してください。"
+                ),
+                zh=(
+                    "未配置Jira连接。 "
+                    "请在设置→模块→齿轮下创建连接，"
+                    "或设置环境变量JIRA_URL / JIRA_EMAIL / JIRA_API_KEY。"
                 ),
             )
         )
@@ -114,7 +162,7 @@ async def get_jira_projects(connection_id: str = "") -> dict:
     try:
         client = await _get_api_client(connection_id)
         auth = _build_auth_header(client["email"], client["api_key"])
-        
+
         result = await _jira_request(
             client["base_url"],
             auth,
@@ -140,7 +188,7 @@ async def get_jira_project(project_key: str, connection_id: str = "") -> dict:
     try:
         client = await _get_api_client(connection_id)
         auth = _build_auth_header(client["email"], client["api_key"])
-        
+
         result = await _jira_request(
             client["base_url"],
             auth,
@@ -172,7 +220,7 @@ async def get_jira_issues(
     try:
         client = await _get_api_client(connection_id)
         auth = _build_auth_header(client["email"], client["api_key"])
-        
+
         if jql:
             query = jql
         elif project_key:
@@ -182,7 +230,7 @@ async def get_jira_issues(
                 query = f"project = {project_key}"
         else:
             query = " ORDER BY updated DESC"
-        
+
         result = await _jira_request(
             client["base_url"],
             auth,
@@ -209,13 +257,15 @@ async def get_jira_issue(issue_key: str, connection_id: str = "") -> dict:
     try:
         client = await _get_api_client(connection_id)
         auth = _build_auth_header(client["email"], client["api_key"])
-        
+
         result = await _jira_request(
             client["base_url"],
             auth,
             "GET",
             f"/issue/{issue_key}",
-            {"fields": "summary,description,status,priority,assignee,reporter,created,updated,labels,components"},
+            {
+                "fields": "summary,description,status,priority,assignee,reporter,created,updated,labels,components"
+            },
         )
         return {
             "status": "success",
@@ -243,7 +293,7 @@ async def create_jira_issue(
     try:
         client = await _get_api_client(connection_id)
         auth = _build_auth_header(client["email"], client["api_key"])
-        
+
         issue_data = {
             "fields": {
                 "project": {"key": project_key},
@@ -255,7 +305,12 @@ async def create_jira_issue(
             issue_data["fields"]["description"] = {
                 "type": "doc",
                 "version": 1,
-                "content": [{"type": "paragraph", "content": [{"type": "text", "text": description}]}]
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [{"type": "text", "text": description}],
+                    }
+                ],
             }
         if priority:
             issue_data["fields"]["priority"] = {"name": priority}
@@ -295,27 +350,32 @@ async def update_jira_issue(
     try:
         client = await _get_api_client(connection_id)
         auth = _build_auth_header(client["email"], client["api_key"])
-        
+
         fields = {}
         update = {}
-        
+
         if summary:
             fields["summary"] = summary
         if description:
             fields["description"] = {
                 "type": "doc",
                 "version": 1,
-                "content": [{"type": "paragraph", "content": [{"type": "text", "text": description}]}]
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [{"type": "text", "text": description}],
+                    }
+                ],
             }
         if priority:
             fields["priority"] = {"name": priority}
-        
+
         issue_data = {}
         if fields:
             issue_data["fields"] = fields
         if status:
             issue_data["transition"] = {"id": status}
-        
+
         result = await _jira_request(
             client["base_url"],
             auth,
@@ -341,11 +401,11 @@ async def get_jira_boards(project_key: str = "", connection_id: str = "") -> dic
     try:
         client = await _get_api_client(connection_id)
         auth = _build_auth_header(client["email"], client["api_key"])
-        
+
         params = {"maxResults": 50}
         if project_key:
             params["projectKeyOrId"] = project_key
-        
+
         result = await _jira_request(
             client["base_url"],
             auth,
@@ -371,7 +431,7 @@ async def get_jira_sprints(board_id: str, connection_id: str = "") -> dict:
     try:
         client = await _get_api_client(connection_id)
         auth = _build_auth_header(client["email"], client["api_key"])
-        
+
         result = await _jira_request(
             client["base_url"],
             auth,
@@ -397,7 +457,7 @@ async def get_jira_sprint(sprint_id: str, connection_id: str = "") -> dict:
     try:
         client = await _get_api_client(connection_id)
         auth = _build_auth_header(client["email"], client["api_key"])
-        
+
         result = await _jira_request(
             client["base_url"],
             auth,
@@ -422,7 +482,7 @@ async def search_jira(jql: str, max_results: int = 25, connection_id: str = "") 
     try:
         client = await _get_api_client(connection_id)
         auth = _build_auth_header(client["email"], client["api_key"])
-        
+
         result = await _jira_request(
             client["base_url"],
             auth,
@@ -449,7 +509,7 @@ async def get_jira_issue_transitions(issue_key: str, connection_id: str = "") ->
     try:
         client = await _get_api_client(connection_id)
         auth = _build_auth_header(client["email"], client["api_key"])
-        
+
         result = await _jira_request(
             client["base_url"],
             auth,
@@ -478,7 +538,7 @@ async def transition_jira_issue(
     try:
         client = await _get_api_client(connection_id)
         auth = _build_auth_header(client["email"], client["api_key"])
-        
+
         result = await _jira_request(
             client["base_url"],
             auth,
@@ -504,7 +564,7 @@ async def get_jira_priorities(connection_id: str = "") -> dict:
     try:
         client = await _get_api_client(connection_id)
         auth = _build_auth_header(client["email"], client["api_key"])
-        
+
         result = await _jira_request(
             client["base_url"],
             auth,
@@ -532,12 +592,12 @@ async def get_jira_issue_counts(
     try:
         client = await _get_api_client(connection_id)
         auth = _build_auth_header(client["email"], client["api_key"])
-        
+
         if project_key:
             jql = f"project = {project_key}"
         else:
             jql = "ORDER BY created DESC"
-        
+
         result = await _jira_request(
             client["base_url"],
             auth,
@@ -545,9 +605,9 @@ async def get_jira_issue_counts(
             "/search",
             {"jql": jql, "maxResults": 0},
         )
-        
+
         total = result.get("total", 0)
-        
+
         return {
             "status": "success",
             "total": total,

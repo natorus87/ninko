@@ -33,6 +33,14 @@ async def _get_wp_client(connection_id: str = "") -> dict:
                 _t(
                     de=f"WordPress-Verbindung mit ID '{connection_id}' nicht gefunden.",
                     en=f"WordPress connection with ID '{connection_id}' not found.",
+                    fr=f"Connexion WordPress avec l'ID '{connection_id}' non trouvée.",
+                    es=f"Conexión de WordPress con ID '{connection_id}' no encontrada.",
+                    it=f"Connessione WordPress con ID '{connection_id}' non trovata.",
+                    nl=f"WordPress-verbinding met ID '{connection_id}' niet gevonden.",
+                    pl=f"Połączenie WordPress z ID '{connection_id}' nie znaleziono.",
+                    pt=f"Conexão WordPress com ID '{connection_id}' não encontrada.",
+                    ja=f"ID '{connection_id}' のWordPress接続が見つかりません。",
+                    zh=f"未找到ID为'{connection_id}'的WordPress连接。",
                 )
             )
     else:
@@ -66,6 +74,46 @@ async def _get_wp_client(connection_id: str = "") -> dict:
                     "Please create a connection in the dashboard under Settings → Module → Gear icon "
                     "(URL, username, Application Password)."
                 ),
+                fr=(
+                    "Aucune connexion WordPress configurée. "
+                    "Veuillez créer une connexion dans le tableau de bord sous Paramètres → Module → Icône d'engrenage "
+                    "(URL, nom d'utilisateur, Application Password)."
+                ),
+                es=(
+                    "No hay conexión de WordPress configurada. "
+                    "Por favor cree una conexión en el panel bajo Configuración → Módulo → Icono de engranaje "
+                    "(URL, nombre de usuario, Application Password)."
+                ),
+                it=(
+                    "Nessuna connessione WordPress configurata. "
+                    "Per favore crea una connessione nel cruscotto sotto Impostazioni → Modulo → Icona ingranaggio "
+                    "(URL, nome utente, Application Password)."
+                ),
+                nl=(
+                    "Geen WordPress-verbinding geconfigureerd. "
+                    "Maak een verbinding aan in het dashboard onder Instellingen → Module → Tandwielpictogram "
+                    "(URL, gebruikersnaam, Application Password)."
+                ),
+                pl=(
+                    "Nie skonfigurowano połączenia WordPress. "
+                    "Utwórz połączenie w panelu w sekcji Ustawienia → Moduł → Ikona koła zębatego "
+                    "(URL, nazwa użytkownika, Application Password)."
+                ),
+                pt=(
+                    "Nenhuma conexão WordPress configurada. "
+                    "Por favor crie uma conexão no painel em Configurações → Módulo → Ícone de engrenagem "
+                    "(URL, nome de usuário, Application Password)."
+                ),
+                ja=(
+                    "WordPress接続が設定されていません。 "
+                    "ダッシュボードで設定→モジュール→歯車アイコンから接続を作成 "
+                    "（URL、ユーザー名、Application Password）。"
+                ),
+                zh=(
+                    "未配置WordPress连接。 "
+                    "请在仪表板中的设置→模块→齿轮图标下创建连接 "
+                    "（URL、用户名、Application Password）。"
+                ),
             )
         )
 
@@ -79,6 +127,38 @@ async def _get_wp_client(connection_id: str = "") -> dict:
                 en=(
                     "WordPress username or Application Password missing. "
                     "Create an Application Password in WP under Users → Profile → Application Passwords."
+                ),
+                fr=(
+                    "Nom d'utilisateur WordPress ou Application Password manquant. "
+                    "Créez un Application Password dans WP sous Utilisateurs → Profil → Application Passwords."
+                ),
+                es=(
+                    "Falta el nombre de usuario o Application Password de WordPress. "
+                    "Crea un Application Password en WP bajo Usuarios → Perfil → Application Passwords."
+                ),
+                it=(
+                    "Nome utente WordPress o Application Password mancante. "
+                    "Crea un Application Password in WP sotto Utenti → Profilo → Application Passwords."
+                ),
+                nl=(
+                    "WordPress-gebruikersnaam of Application Password ontbreekt. "
+                    "Maak een Application Password aan in WP onder Gebruikers → Profiel → Application Passwords."
+                ),
+                pl=(
+                    "Brak nazwy użytkownika WordPress lub Application Password. "
+                    "Utwórz Application Password w WP pod Użytkownicy → Profil → Application Passwords."
+                ),
+                pt=(
+                    "Nome de usuário ou Application Password do WordPress ausente. "
+                    "Crie um Application Password no WP em Usuários → Perfil → Application Passwords."
+                ),
+                ja=(
+                    "WordPressのユーザー名またはApplication Passwordが設定されていません。 "
+                    "WPでユーザー→プロファイル→Application Passwordsに Application Password を作成してください。"
+                ),
+                zh=(
+                    "缺少WordPress用户名或Application Password。 "
+                    "在WP中创建Application Password：用户→个人资料→应用程序密码。"
                 ),
             )
         )
@@ -118,7 +198,9 @@ async def _wp_api(
         if method == "GET":
             resp = await client.get(url, headers=headers, params=params)
         elif method == "POST":
-            resp = await client.post(url, headers=headers, json=json_body, params=params)
+            resp = await client.post(
+                url, headers=headers, json=json_body, params=params
+            )
         elif method == "PUT":
             resp = await client.put(url, headers=headers, json=json_body, params=params)
         elif method == "DELETE":
@@ -161,6 +243,7 @@ def _truncate(text: str, max_lines: int = 50, max_chars: int = 4000) -> str:
 # Site-Info Tools
 # ═══════════════════════════════════════════════════════
 
+
 @tool
 async def get_site_info(connection_id: str = "") -> dict:
     """
@@ -193,9 +276,15 @@ async def get_updates_info(connection_id: str = "") -> dict:
         settings = await _wp_api("GET", "/settings", connection_id)
         # WP REST API Settings does not include update info directly.
         # We check the plugin list for available updates.
-        plugins = await _wp_api("GET", "/plugins", connection_id, params={"per_page": 100})
+        plugins = await _wp_api(
+            "GET", "/plugins", connection_id, params={"per_page": 100}
+        )
         plugins_with_updates = [
-            {"name": p.get("name", ""), "slug": p.get("plugin", ""), "version": p.get("version", "")}
+            {
+                "name": p.get("name", ""),
+                "slug": p.get("plugin", ""),
+                "version": p.get("version", ""),
+            }
             for p in plugins
             if p.get("update_available", False)
         ]
@@ -211,6 +300,7 @@ async def get_updates_info(connection_id: str = "") -> dict:
 # Plugin-Management Tools
 # ═══════════════════════════════════════════════════════
 
+
 @tool
 async def list_plugins(status: str = "all", connection_id: str = "") -> list[dict]:
     """
@@ -218,7 +308,9 @@ async def list_plugins(status: str = "all", connection_id: str = "") -> list[dic
     status: 'all', 'active', 'inactive'
     """
     try:
-        plugins = await _wp_api("GET", "/plugins", connection_id, params={"per_page": 100})
+        plugins = await _wp_api(
+            "GET", "/plugins", connection_id, params={"per_page": 100}
+        )
         result = []
         for p in plugins:
             is_active = p.get("status") == "active"
@@ -226,14 +318,18 @@ async def list_plugins(status: str = "all", connection_id: str = "") -> list[dic
                 continue
             if status == "inactive" and is_active:
                 continue
-            result.append({
-                "slug": p.get("plugin", ""),
-                "name": p.get("name", ""),
-                "version": p.get("version", ""),
-                "status": p.get("status", ""),
-                "description": (p.get("description", {}).get("raw", "") or "")[:120],
-                "update_available": p.get("update_available", False),
-            })
+            result.append(
+                {
+                    "slug": p.get("plugin", ""),
+                    "name": p.get("name", ""),
+                    "version": p.get("version", ""),
+                    "status": p.get("status", ""),
+                    "description": (p.get("description", {}).get("raw", "") or "")[
+                        :120
+                    ],
+                    "update_available": p.get("update_available", False),
+                }
+            )
         return result
     except Exception as e:
         return [{"error": str(e)}]
@@ -288,7 +384,9 @@ async def install_plugin(slug: str, connection_id: str = "") -> dict:
     Example: slug='akismet' or slug='yoast-seo'
     """
     try:
-        result = await _wp_api("POST", "/plugins", connection_id, json_body={"slug": slug})
+        result = await _wp_api(
+            "POST", "/plugins", connection_id, json_body={"slug": slug}
+        )
         return {
             "slug": result.get("plugin", slug),
             "name": result.get("name", ""),
@@ -296,6 +394,14 @@ async def install_plugin(slug: str, connection_id: str = "") -> dict:
             "detail": _t(
                 de=f"Plugin '{result.get('name', slug)}' erfolgreich installiert.",
                 en=f"Plugin '{result.get('name', slug)}' installed successfully.",
+                fr=f"Plugin '{result.get('name', slug)}' installé avec succès.",
+                es=f"Plugin '{result.get('name', slug)}' instalado con éxito.",
+                it=f"Plugin '{result.get('name', slug)}' installato con successo.",
+                nl=f"Plugin '{result.get('name', slug)}' succesvol geïnstalleerd.",
+                pl=f"Plugin '{result.get('name', slug)}' pomyślnie zainstalowany.",
+                pt=f"Plugin '{result.get('name', slug)}' instalado com sucesso.",
+                ja=f"プラグイン '{result.get('name', slug)}' をインストールしました。",
+                zh=f"插件 '{result.get('name', slug)}' 安装成功。",
             ),
         }
     except Exception as e:
@@ -309,7 +415,12 @@ async def activate_plugin(plugin_slug: str, connection_id: str = "") -> dict:
     plugin_slug format: 'akismet/akismet' (folder/file without .php)
     """
     try:
-        result = await _wp_api("POST", f"/plugins/{plugin_slug}", connection_id, json_body={"status": "active"})
+        result = await _wp_api(
+            "POST",
+            f"/plugins/{plugin_slug}",
+            connection_id,
+            json_body={"status": "active"},
+        )
         return {
             "slug": result.get("plugin", plugin_slug),
             "name": result.get("name", ""),
@@ -317,6 +428,14 @@ async def activate_plugin(plugin_slug: str, connection_id: str = "") -> dict:
             "detail": _t(
                 de=f"Plugin '{result.get('name', plugin_slug)}' aktiviert.",
                 en=f"Plugin '{result.get('name', plugin_slug)}' activated.",
+                fr=f"Plugin '{result.get('name', plugin_slug)}' activé.",
+                es=f"Plugin '{result.get('name', plugin_slug)}' activado.",
+                it=f"Plugin '{result.get('name', plugin_slug)}' attivato.",
+                nl=f"Plugin '{result.get('name', plugin_slug)}' geactiveerd.",
+                pl=f"Plugin '{result.get('name', plugin_slug)}' włączony.",
+                pt=f"Plugin '{result.get('name', plugin_slug)}' ativado.",
+                ja=f"プラグイン '{result.get('name', plugin_slug)}' を有効化しました。",
+                zh=f"插件 '{result.get('name', plugin_slug)}' 已激活。",
             ),
         }
     except Exception as e:
@@ -330,7 +449,12 @@ async def deactivate_plugin(plugin_slug: str, connection_id: str = "") -> dict:
     plugin_slug format: 'akismet/akismet'
     """
     try:
-        result = await _wp_api("POST", f"/plugins/{plugin_slug}", connection_id, json_body={"status": "inactive"})
+        result = await _wp_api(
+            "POST",
+            f"/plugins/{plugin_slug}",
+            connection_id,
+            json_body={"status": "inactive"},
+        )
         return {
             "slug": result.get("plugin", plugin_slug),
             "name": result.get("name", ""),
@@ -338,6 +462,14 @@ async def deactivate_plugin(plugin_slug: str, connection_id: str = "") -> dict:
             "detail": _t(
                 de=f"Plugin '{result.get('name', plugin_slug)}' deaktiviert.",
                 en=f"Plugin '{result.get('name', plugin_slug)}' deactivated.",
+                fr=f"Plugin '{result.get('name', plugin_slug)}' désactivé.",
+                es=f"Plugin '{result.get('name', plugin_slug)}' desactivado.",
+                it=f"Plugin '{result.get('name', plugin_slug)}' disattivato.",
+                nl=f"Plugin '{result.get('name', plugin_slug)}' gedeactiveerd.",
+                pl=f"Plugin '{result.get('name', plugin_slug)}' wyłączony.",
+                pt=f"Plugin '{result.get('name', plugin_slug)}' desativado.",
+                ja=f"プラグイン '{result.get('name', plugin_slug)}' を無効化しました。",
+                zh=f"插件 '{result.get('name', plugin_slug)}' 已停用。",
             ),
         }
     except Exception as e:
@@ -351,7 +483,9 @@ async def update_plugin(plugin_slug: str, connection_id: str = "") -> dict:
     plugin_slug format: 'akismet/akismet'
     """
     try:
-        result = await _wp_api("PUT", f"/plugins/{plugin_slug}", connection_id, json_body={"update": True})
+        result = await _wp_api(
+            "PUT", f"/plugins/{plugin_slug}", connection_id, json_body={"update": True}
+        )
         return {
             "slug": result.get("plugin", plugin_slug),
             "name": result.get("name", ""),
@@ -359,6 +493,14 @@ async def update_plugin(plugin_slug: str, connection_id: str = "") -> dict:
             "detail": _t(
                 de=f"Plugin '{result.get('name', plugin_slug)}' aktualisiert.",
                 en=f"Plugin '{result.get('name', plugin_slug)}' updated.",
+                fr=f"Plugin '{result.get('name', plugin_slug)}' mis à jour.",
+                es=f"Plugin '{result.get('name', plugin_slug)}' actualizado.",
+                it=f"Plugin '{result.get('name', plugin_slug)}' aggiornato.",
+                nl=f"Plugin '{result.get('name', plugin_slug)}' bijgewerkt.",
+                pl=f"Plugin '{result.get('name', plugin_slug)}' zaktualizowany.",
+                pt=f"Plugin '{result.get('name', plugin_slug)}' atualizado.",
+                ja=f"プラグイン '{result.get('name', plugin_slug)}' を更新しました。",
+                zh=f"插件 '{result.get('name', plugin_slug)}' 已更新。",
             ),
         }
     except Exception as e:
@@ -380,6 +522,14 @@ async def delete_plugin(plugin_slug: str, connection_id: str = "") -> dict:
             "detail": _t(
                 de=f"Plugin '{plugin_slug}' wurde gelöscht.",
                 en=f"Plugin '{plugin_slug}' has been deleted.",
+                fr=f"Plugin '{plugin_slug}' a été supprimé.",
+                es=f"Plugin '{plugin_slug}' ha sido eliminado.",
+                it=f"Plugin '{plugin_slug}' è stato eliminato.",
+                nl=f"Plugin '{plugin_slug}' is verwijderd.",
+                pl=f"Plugin '{plugin_slug}' został usunięty.",
+                pt=f"Plugin '{plugin_slug}' foi excluído.",
+                ja=f"プラグイン '{plugin_slug}' を削除しました。",
+                zh=f"插件 '{plugin_slug}' 已删除。",
             ),
         }
     except Exception as e:
@@ -390,15 +540,25 @@ async def delete_plugin(plugin_slug: str, connection_id: str = "") -> dict:
 # Page Management Tools
 # ═══════════════════════════════════════════════════════
 
+
 @tool
-async def list_pages(status: str = "publish", per_page: int = 20, search: str = "", connection_id: str = "") -> list[dict]:
+async def list_pages(
+    status: str = "publish",
+    per_page: int = 20,
+    search: str = "",
+    connection_id: str = "",
+) -> list[dict]:
     """
     List WordPress pages.
     status: 'publish', 'draft', 'pending', 'trash', 'any'
     search: search term for title/content
     """
     try:
-        params: dict[str, Any] = {"per_page": per_page, "orderby": "modified", "order": "desc"}
+        params: dict[str, Any] = {
+            "per_page": per_page,
+            "orderby": "modified",
+            "order": "desc",
+        }
         if status != "any":
             params["status"] = status
         if search:
@@ -451,7 +611,14 @@ async def get_page(page_id: int, connection_id: str = "") -> dict:
 
 
 @tool
-async def create_page(title: str, content: str, status: str = "draft", slug: str = "", parent: int = 0, connection_id: str = "") -> dict:
+async def create_page(
+    title: str,
+    content: str,
+    status: str = "draft",
+    slug: str = "",
+    parent: int = 0,
+    connection_id: str = "",
+) -> dict:
     """
     Create a new WordPress page.
     title: page title
@@ -481,6 +648,14 @@ async def create_page(title: str, content: str, status: str = "draft", slug: str
             "detail": _t(
                 de=f"Seite '{result.get('title', {}).get('rendered', '')}' erstellt (ID: {result['id']}).",
                 en=f"Page '{result.get('title', {}).get('rendered', '')}' created (ID: {result['id']}).",
+                fr=f"Page '{result.get('title', {}).get('rendered', '')}' créée (ID: {result['id']}).",
+                es=f"Página '{result.get('title', {}).get('rendered', '')}' creada (ID: {result['id']}).",
+                it=f"Pagina '{result.get('title', {}).get('rendered', '')}' creata (ID: {result['id']}).",
+                nl=f"Pagina '{result.get('title', {}).get('rendered', '')}' aangemaakt (ID: {result['id']}).",
+                pl=f"Strona '{result.get('title', {}).get('rendered', '')}' utworzona (ID: {result['id']}).",
+                pt=f"Página '{result.get('title', {}).get('rendered', '')}' criada (ID: {result['id']}).",
+                ja=f"ページ '{result.get('title', {}).get('rendered', '')}' を作成しました（ID: {result['id']}）。",
+                zh=f"页面 '{result.get('title', {}).get('rendered', '')}' 已创建（ID: {result['id']}）。",
             ),
         }
     except Exception as e:
@@ -488,7 +663,14 @@ async def create_page(title: str, content: str, status: str = "draft", slug: str
 
 
 @tool
-async def update_page(page_id: int, title: str = "", content: str = "", status: str = "", slug: str = "", connection_id: str = "") -> dict:
+async def update_page(
+    page_id: int,
+    title: str = "",
+    content: str = "",
+    status: str = "",
+    slug: str = "",
+    connection_id: str = "",
+) -> dict:
     """
     Update an existing WordPress page.
     Only specified fields are changed.
@@ -510,9 +692,24 @@ async def update_page(page_id: int, title: str = "", content: str = "", status: 
             body["slug"] = slug
 
         if not body:
-            return {"error": _t(de="Keine Änderungen angegeben.", en="No changes specified.")}
+            return {
+                "error": _t(
+                    de="Keine Änderungen angegeben.",
+                    en="No changes specified.",
+                    fr="Aucun changement spécifié.",
+                    es="No se especificaron cambios.",
+                    it="Nessuna modifica specificata.",
+                    nl="Geen wijzigingen opgegeven.",
+                    pl="Nie określono żadnych zmian.",
+                    pt="Nenhuma alteração especificada.",
+                    ja="変更が指定されていません。",
+                    zh="未指定任何更改。",
+                )
+            }
 
-        result = await _wp_api("PUT", f"/pages/{page_id}", connection_id, json_body=body)
+        result = await _wp_api(
+            "PUT", f"/pages/{page_id}", connection_id, json_body=body
+        )
         return {
             "id": result["id"],
             "title": result.get("title", {}).get("rendered", ""),
@@ -522,6 +719,14 @@ async def update_page(page_id: int, title: str = "", content: str = "", status: 
             "detail": _t(
                 de=f"Seite ID {page_id} aktualisiert.",
                 en=f"Page ID {page_id} updated.",
+                fr=f"Page ID {page_id} mise à jour.",
+                es=f"Página ID {page_id} actualizada.",
+                it=f"Pagina ID {page_id} aggiornata.",
+                nl=f"Pagina ID {page_id} bijgewerkt.",
+                pl=f"Strona ID {page_id} zaktualizowana.",
+                pt=f"Página ID {page_id} atualizada.",
+                ja=f"ページ ID {page_id} を更新しました。",
+                zh=f"页面 ID {page_id} 已更新。",
             ),
         }
     except Exception as e:
@@ -529,7 +734,9 @@ async def update_page(page_id: int, title: str = "", content: str = "", status: 
 
 
 @tool
-async def delete_page(page_id: int, force: bool = False, connection_id: str = "") -> dict:
+async def delete_page(
+    page_id: int, force: bool = False, connection_id: str = ""
+) -> dict:
     """
     Delete a WordPress page.
     force=false moves to trash, force=true permanently deletes.
@@ -537,13 +744,23 @@ async def delete_page(page_id: int, force: bool = False, connection_id: str = ""
     """
     try:
         params = {"force": 1} if force else {}
-        result = await _wp_api("DELETE", f"/pages/{page_id}", connection_id, params=params)
+        result = await _wp_api(
+            "DELETE", f"/pages/{page_id}", connection_id, params=params
+        )
         return {
             "page_id": page_id,
             "status": "deleted" if force else "trashed",
             "detail": _t(
                 de=f"Seite ID {page_id} {'endgültig gelöscht' if force else 'in den Papierkorb verschoben'}.",
                 en=f"Page ID {page_id} {'permanently deleted' if force else 'moved to trash'}.",
+                fr=f"Page ID {page_id} {'supprimée définitivement' if force else 'déplacée dans la corbeille'}.",
+                es=f"Página ID {page_id} {'eliminada permanentemente' if force else 'movida a la papelera'}.",
+                it=f"Pagina ID {page_id} {'eliminata definitivamente' if force else 'spostata nel cestino'}.",
+                nl=f"Pagina ID {page_id} {'permanent verwijderd' if force else 'naar prullenbak verplaatst'}.",
+                pl=f"Strona ID {page_id} {'trwale usunięta' if force else 'przeniesiona do kosza'}.",
+                pt=f"Página ID {page_id} {'excluída permanentemente' if force else 'movida para a lixeira'}.",
+                ja=f"ページ ID {page_id} を{'完全に削除' if force else 'ゴミ箱に移動'}しました。",
+                zh=f"页面 ID {page_id} 已{'永久删除' if force else '移至回收站'}。",
             ),
         }
     except Exception as e:
@@ -554,15 +771,25 @@ async def delete_page(page_id: int, force: bool = False, connection_id: str = ""
 # Posts Management Tools
 # ═══════════════════════════════════════════════════════
 
+
 @tool
-async def list_posts(status: str = "publish", per_page: int = 20, search: str = "", connection_id: str = "") -> list[dict]:
+async def list_posts(
+    status: str = "publish",
+    per_page: int = 20,
+    search: str = "",
+    connection_id: str = "",
+) -> list[dict]:
     """
     List WordPress posts.
     status: 'publish', 'draft', 'pending', 'trash', 'any'
     search: search term
     """
     try:
-        params: dict[str, Any] = {"per_page": per_page, "orderby": "modified", "order": "desc"}
+        params: dict[str, Any] = {
+            "per_page": per_page,
+            "orderby": "modified",
+            "order": "desc",
+        }
         if status != "any":
             params["status"] = status
         if search:
@@ -614,7 +841,15 @@ async def get_post(post_id: int, connection_id: str = "") -> dict:
 
 
 @tool
-async def create_post(title: str, content: str, status: str = "draft", slug: str = "", categories: str = "", tags: str = "", connection_id: str = "") -> dict:
+async def create_post(
+    title: str,
+    content: str,
+    status: str = "draft",
+    slug: str = "",
+    categories: str = "",
+    tags: str = "",
+    connection_id: str = "",
+) -> dict:
     """
     Create a new WordPress post.
     title: title
@@ -633,7 +868,9 @@ async def create_post(title: str, content: str, status: str = "draft", slug: str
         if slug:
             body["slug"] = slug
         if categories:
-            body["categories"] = [int(c.strip()) for c in categories.split(",") if c.strip()]
+            body["categories"] = [
+                int(c.strip()) for c in categories.split(",") if c.strip()
+            ]
         if tags:
             body["tags"] = [int(t.strip()) for t in tags.split(",") if t.strip()]
 
@@ -647,6 +884,14 @@ async def create_post(title: str, content: str, status: str = "draft", slug: str
             "detail": _t(
                 de=f"Beitrag '{result.get('title', {}).get('rendered', '')}' erstellt (ID: {result['id']}).",
                 en=f"Post '{result.get('title', {}).get('rendered', '')}' created (ID: {result['id']}).",
+                fr=f"Article '{result.get('title', {}).get('rendered', '')}' créé (ID: {result['id']}).",
+                es=f"Artículo '{result.get('title', {}).get('rendered', '')}' creado (ID: {result['id']}).",
+                it=f"Articolo '{result.get('title', {}).get('rendered', '')}' creato (ID: {result['id']}).",
+                nl=f"Bericht '{result.get('title', {}).get('rendered', '')}' aangemaakt (ID: {result['id']}).",
+                pl=f"Wpis '{result.get('title', {}).get('rendered', '')}' utworzony (ID: {result['id']}).",
+                pt=f"Post '{result.get('title', {}).get('rendered', '')}' criado (ID: {result['id']}).",
+                ja=f"投稿 '{result.get('title', {}).get('rendered', '')}' を作成しました（ID: {result['id']}）。",
+                zh=f"文章 '{result.get('title', {}).get('rendered', '')}' 已创建（ID: {result['id']}）。",
             ),
         }
     except Exception as e:
@@ -654,7 +899,14 @@ async def create_post(title: str, content: str, status: str = "draft", slug: str
 
 
 @tool
-async def update_post(post_id: int, title: str = "", content: str = "", status: str = "", slug: str = "", connection_id: str = "") -> dict:
+async def update_post(
+    post_id: int,
+    title: str = "",
+    content: str = "",
+    status: str = "",
+    slug: str = "",
+    connection_id: str = "",
+) -> dict:
     """
     Update an existing WordPress post.
     Only specified fields are changed.
@@ -671,9 +923,24 @@ async def update_post(post_id: int, title: str = "", content: str = "", status: 
             body["slug"] = slug
 
         if not body:
-            return {"error": _t(de="Keine Änderungen angegeben.", en="No changes specified.")}
+            return {
+                "error": _t(
+                    de="Keine Änderungen angegeben.",
+                    en="No changes specified.",
+                    fr="Aucun changement spécifié.",
+                    es="No se especificaron cambios.",
+                    it="Nessuna modifica specificata.",
+                    nl="Geen wijzigingen opgegeven.",
+                    pl="Nie określono żadnych zmian.",
+                    pt="Nenhuma alteração especificada.",
+                    ja="変更が指定されていません。",
+                    zh="未指定任何更改。",
+                )
+            }
 
-        result = await _wp_api("PUT", f"/posts/{post_id}", connection_id, json_body=body)
+        result = await _wp_api(
+            "PUT", f"/posts/{post_id}", connection_id, json_body=body
+        )
         return {
             "id": result["id"],
             "title": result.get("title", {}).get("rendered", ""),
@@ -682,6 +949,14 @@ async def update_post(post_id: int, title: str = "", content: str = "", status: 
             "detail": _t(
                 de=f"Beitrag ID {post_id} aktualisiert.",
                 en=f"Post ID {post_id} updated.",
+                fr=f"Article ID {post_id} mis à jour.",
+                es=f"Artículo ID {post_id} actualizado.",
+                it=f"Articolo ID {post_id} aggiornato.",
+                nl=f"Bericht ID {post_id} bijgewerkt.",
+                pl=f"Wpis ID {post_id} zaktualizowany.",
+                pt=f"Post ID {post_id} atualizado.",
+                ja=f"投稿 ID {post_id} を更新しました。",
+                zh=f"文章 ID {post_id} 已更新。",
             ),
         }
     except Exception as e:
@@ -689,20 +964,32 @@ async def update_post(post_id: int, title: str = "", content: str = "", status: 
 
 
 @tool
-async def delete_post(post_id: int, force: bool = False, connection_id: str = "") -> dict:
+async def delete_post(
+    post_id: int, force: bool = False, connection_id: str = ""
+) -> dict:
     """
     Delete a WordPress post.
     force=false → trash, force=true → permanent delete.
     """
     try:
         params = {"force": 1} if force else {}
-        result = await _wp_api("DELETE", f"/posts/{post_id}", connection_id, params=params)
+        result = await _wp_api(
+            "DELETE", f"/posts/{post_id}", connection_id, params=params
+        )
         return {
             "post_id": post_id,
             "status": "deleted" if force else "trashed",
             "detail": _t(
                 de=f"Beitrag ID {post_id} {'endgültig gelöscht' if force else 'in den Papierkorb verschoben'}.",
                 en=f"Post ID {post_id} {'permanently deleted' if force else 'moved to trash'}.",
+                fr=f"Article ID {post_id} {'supprimé définitivement' if force else 'déplacé dans la corbeille'}.",
+                es=f"Artículo ID {post_id} {'eliminado permanentemente' if force else 'movido a la papelera'}.",
+                it=f"Articolo ID {post_id} {'eliminato definitivamente' if force else 'spostato nel cestino'}.",
+                nl=f"Bericht ID {post_id} {'permanent verwijderd' if force else 'naar prullenbak verplaatst'}.",
+                pl=f"Wpis ID {post_id} {'trwale usunięty' if force else 'przeniesiony do kosza'}.",
+                pt=f"Post ID {post_id} {'excluído permanentemente' if force else 'movido para a lixeira'}.",
+                ja=f"投稿 ID {post_id} を{'完全に削除' if force else 'ゴミ箱に移動'}しました。",
+                zh=f"文章 ID {post_id} 已{'永久删除' if force else '移至回收站'}。",
             ),
         }
     except Exception as e:
@@ -713,13 +1000,21 @@ async def delete_post(post_id: int, force: bool = False, connection_id: str = ""
 # Categories & Tags
 # ═══════════════════════════════════════════════════════
 
+
 @tool
 async def list_categories(connection_id: str = "") -> list[dict]:
     """List all post categories."""
     try:
-        cats = await _wp_api("GET", "/categories", connection_id, params={"per_page": 100})
+        cats = await _wp_api(
+            "GET", "/categories", connection_id, params={"per_page": 100}
+        )
         return [
-            {"id": c["id"], "name": c.get("name", ""), "slug": c.get("slug", ""), "count": c.get("count", 0)}
+            {
+                "id": c["id"],
+                "name": c.get("name", ""),
+                "slug": c.get("slug", ""),
+                "count": c.get("count", 0),
+            }
             for c in cats
         ]
     except Exception as e:
@@ -727,7 +1022,9 @@ async def list_categories(connection_id: str = "") -> list[dict]:
 
 
 @tool
-async def create_category(name: str, slug: str = "", parent: int = 0, connection_id: str = "") -> dict:
+async def create_category(
+    name: str, slug: str = "", parent: int = 0, connection_id: str = ""
+) -> dict:
     """Create a new category."""
     try:
         body: dict[str, Any] = {"name": name}
@@ -743,6 +1040,14 @@ async def create_category(name: str, slug: str = "", parent: int = 0, connection
             "detail": _t(
                 de=f"Kategorie '{result.get('name', '')}' erstellt (ID: {result['id']}).",
                 en=f"Category '{result.get('name', '')}' created (ID: {result['id']}).",
+                fr=f"Catégorie '{result.get('name', '')}' créée (ID: {result['id']}).",
+                es=f"Categoría '{result.get('name', '')}' creada (ID: {result['id']}).",
+                it=f"Categoria '{result.get('name', '')}' creata (ID: {result['id']}).",
+                nl=f"Categorie '{result.get('name', '')}' aangemaakt (ID: {result['id']}).",
+                pl=f"Kategoria '{result.get('name', '')}' utworzona (ID: {result['id']}).",
+                pt=f"Categoria '{result.get('name', '')}' criada (ID: {result['id']}).",
+                ja=f"カテゴリー '{result.get('name', '')}' を作成しました（ID: {result['id']}）。",
+                zh=f"类别 '{result.get('name', '')}' 已创建（ID: {result['id']}）。",
             ),
         }
     except Exception as e:
@@ -755,7 +1060,12 @@ async def list_tags(connection_id: str = "") -> list[dict]:
     try:
         tags = await _wp_api("GET", "/tags", connection_id, params={"per_page": 100})
         return [
-            {"id": t["id"], "name": t.get("name", ""), "slug": t.get("slug", ""), "count": t.get("count", 0)}
+            {
+                "id": t["id"],
+                "name": t.get("name", ""),
+                "slug": t.get("slug", ""),
+                "count": t.get("count", 0),
+            }
             for t in tags
         ]
     except Exception as e:
@@ -776,6 +1086,14 @@ async def create_tag(name: str, slug: str = "", connection_id: str = "") -> dict
             "detail": _t(
                 de=f"Tag '{result.get('name', '')}' erstellt (ID: {result['id']}).",
                 en=f"Tag '{result.get('name', '')}' created (ID: {result['id']}).",
+                fr=f"Tag '{result.get('name', '')}' créé (ID: {result['id']}).",
+                es=f"Etiqueta '{result.get('name', '')}' creada (ID: {result['id']}).",
+                it=f"Tag '{result.get('name', '')}' creato (ID: {result['id']}).",
+                nl=f"Tag '{result.get('name', '')}' aangemaakt (ID: {result['id']}).",
+                pl=f"Tag '{result.get('name', '')}' utworzony (ID: {result['id']}).",
+                pt=f"Tag '{result.get('name', '')}' criado (ID: {result['id']}).",
+                ja=f"タグ '{result.get('name', '')}' を作成しました（ID: {result['id']}）。",
+                zh=f"标签 '{result.get('name', '')}' 已创建（ID: {result['id']}）。",
             ),
         }
     except Exception as e:
@@ -786,11 +1104,14 @@ async def create_tag(name: str, slug: str = "", connection_id: str = "") -> dict
 # User Management
 # ═══════════════════════════════════════════════════════
 
+
 @tool
 async def list_users(per_page: int = 20, connection_id: str = "") -> list[dict]:
     """List WordPress users."""
     try:
-        users = await _wp_api("GET", "/users", connection_id, params={"per_page": per_page})
+        users = await _wp_api(
+            "GET", "/users", connection_id, params={"per_page": per_page}
+        )
         return [
             {
                 "id": u["id"],
@@ -815,7 +1136,9 @@ async def get_current_user(connection_id: str = "") -> dict:
     try:
         client_cfg = await _get_wp_client(connection_id)
         url = f"{client_cfg['api_base']}/users/me"
-        async with httpx.AsyncClient(timeout=15, verify=client_cfg["verify_ssl"]) as client:
+        async with httpx.AsyncClient(
+            timeout=15, verify=client_cfg["verify_ssl"]
+        ) as client:
             resp = await client.get(url, headers=client_cfg["headers"])
             if resp.status_code >= 400:
                 return {"error": f"HTTP {resp.status_code}: {resp.text[:200]}"}
@@ -836,6 +1159,7 @@ async def get_current_user(connection_id: str = "") -> dict:
 # ═══════════════════════════════════════════════════════
 # Settings
 # ═══════════════════════════════════════════════════════
+
 
 @tool
 async def get_site_settings(connection_id: str = "") -> dict:
@@ -864,7 +1188,12 @@ async def get_site_settings(connection_id: str = "") -> dict:
 
 
 @tool
-async def update_site_settings(title: str = "", description: str = "", posts_per_page: int = 0, connection_id: str = "") -> dict:
+async def update_site_settings(
+    title: str = "",
+    description: str = "",
+    posts_per_page: int = 0,
+    connection_id: str = "",
+) -> dict:
     """
     Update WordPress settings.
     Only specified fields are changed.
@@ -882,7 +1211,20 @@ async def update_site_settings(title: str = "", description: str = "", posts_per
             body["posts_per_page"] = posts_per_page
 
         if not body:
-            return {"error": _t(de="Keine Änderungen angegeben.", en="No changes specified.")}
+            return {
+                "error": _t(
+                    de="Keine Änderungen angegeben.",
+                    en="No changes specified.",
+                    fr="Aucun changement spécifié.",
+                    es="No se especificaron cambios.",
+                    it="Nessuna modifica specificata.",
+                    nl="Geen wijzigingen opgegeven.",
+                    pl="Nie określono żadnych zmian.",
+                    pt="Nenhuma alteração especificada.",
+                    ja="変更が指定されていません。",
+                    zh="未指定任何更改。",
+                )
+            }
 
         result = await _wp_api("PUT", "/settings", connection_id, json_body=body)
         return {
@@ -891,6 +1233,14 @@ async def update_site_settings(title: str = "", description: str = "", posts_per
             "detail": _t(
                 de="Einstellungen aktualisiert.",
                 en="Settings updated.",
+                fr="Paramètres mis à jour.",
+                es="Configuración actualizada.",
+                it="Impostazioni aggiornate.",
+                nl="Instellingen bijgewerkt.",
+                pl="Ustawienia zaktualizowane.",
+                pt="Configurações atualizadas.",
+                ja="設定を更新しました。",
+                zh="设置已更新。",
             ),
         }
     except Exception as e:
@@ -901,14 +1251,21 @@ async def update_site_settings(title: str = "", description: str = "", posts_per
 # Media-Management
 # ═══════════════════════════════════════════════════════
 
+
 @tool
-async def list_media(per_page: int = 20, media_type: str = "", connection_id: str = "") -> list[dict]:
+async def list_media(
+    per_page: int = 20, media_type: str = "", connection_id: str = ""
+) -> list[dict]:
     """
     List uploaded media files.
     media_type: 'image', 'video', 'audio', 'document' or empty for all.
     """
     try:
-        params: dict[str, Any] = {"per_page": per_page, "orderby": "date", "order": "desc"}
+        params: dict[str, Any] = {
+            "per_page": per_page,
+            "orderby": "date",
+            "order": "desc",
+        }
         if media_type:
             params["media_type"] = media_type
         media = await _wp_api("GET", "/media", connection_id, params=params)

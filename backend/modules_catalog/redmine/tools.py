@@ -75,6 +75,14 @@ async def _get_api_client(connection_id: str = "") -> dict:
                 _t(
                     de=f"Redmine-Verbindung mit ID '{connection_id}' nicht gefunden.",
                     en=f"Redmine connection with ID '{connection_id}' not found.",
+                    fr=f"Connexion Redmine avec l'ID '{connection_id}' non trouvée.",
+                    es=f"Conexión de Redmine con ID '{connection_id}' no encontrada.",
+                    it=f"Connessione Redmine con ID '{connection_id}' non trovata.",
+                    nl=f"Redmine-verbinding met ID '{connection_id}' niet gevonden.",
+                    pl=f"Połączenie Redmine z ID '{connection_id}' nie znaleziono.",
+                    pt=f"Conexão Redmine com ID '{connection_id}' não encontrada.",
+                    ja=f"ID '{connection_id}' のRedmine接続が見つかりません。",
+                    zh=f"未找到ID为'{connection_id}'的Redmine连接。",
                 )
             )
     else:
@@ -118,6 +126,46 @@ async def _get_api_client(connection_id: str = "") -> dict:
                     "No Redmine connection configured. "
                     "Please create a connection in Settings → Module → Gear, "
                     "or set the env vars REDMINE_URL / REDMINE_API_KEY."
+                ),
+                fr=(
+                    "Aucune connexion Redmine configurée. "
+                    "Veuillez créer une connexion dans Paramètres → Module → Engrenage, "
+                    "ou définir les variables d'environnement REDMINE_URL / REDMINE_API_KEY."
+                ),
+                es=(
+                    "No hay conexión de Redmine configurada. "
+                    "Por favor cree una conexión en Configuración → Módulo → Engranaje, "
+                    "o establezca las variables de entorno REDMINE_URL / REDMINE_API_KEY."
+                ),
+                it=(
+                    "Nessuna connessione Redmine configurata. "
+                    "Per favore crea una connessione in Impostazioni → Modulo → Ingranaggio, "
+                    "o imposta le variabili di ambiente REDMINE_URL / REDMINE_API_KEY."
+                ),
+                nl=(
+                    "Geen Redmine-verbinding geconfigureerd. "
+                    "Maak een verbinding aan in Instellingen → Module → Tandwiel, "
+                    "of stel de omgevingsvariabelen REDMINE_URL / REDMINE_API_KEY in."
+                ),
+                pl=(
+                    "Nie skonfigurowano połączenia Redmine. "
+                    "Utwórz połączenie w panelu w sekcji Ustawienia → Moduł → Ikona koła zębatego "
+                    "lub ustaw zmienne środowiskowe REDMINE_URL / REDMINE_API_KEY."
+                ),
+                pt=(
+                    "Nenhuma conexão Redmine configurada. "
+                    "Por favor crie uma conexão em Configurações → Módulo → Engrenagem, "
+                    "ou defina as variáveis de ambiente REDMINE_URL / REDMINE_API_KEY."
+                ),
+                ja=(
+                    "Redmine接続が設定されていません。 "
+                    "ダッシュボードで設定→モジュール→歯車から接続を作成するか、"
+                    "環境変数REDMINE_URL / REDMINE_API_KEYを設定してください。"
+                ),
+                zh=(
+                    "未配置Redmine连接。 "
+                    "请在设置→模块→齿轮下创建连接，"
+                    "或设置环境变量REDMINE_URL / REDMINE_API_KEY。"
                 ),
             )
         )
@@ -644,9 +692,7 @@ async def call_redmine_reporting_api(
             raise ValueError("method must be one of GET, POST, PUT, DELETE")
 
         client = await _get_api_client(connection_id)
-        full_endpoint = _build_plugin_endpoint(
-            client["reporting_api_prefix"], endpoint
-        )
+        full_endpoint = _build_plugin_endpoint(client["reporting_api_prefix"], endpoint)
         query_params = _coerce_dict(params, "params")
         body = _coerce_dict(payload, "payload")
 

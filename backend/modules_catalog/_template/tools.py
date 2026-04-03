@@ -34,6 +34,14 @@ async def _get_api_client(connection_id: str = "") -> dict:
                 _t(
                     de=f"Template-Verbindung mit ID '{connection_id}' nicht gefunden.",
                     en=f"Template connection with ID '{connection_id}' not found.",
+                    fr=f"Connexion Template avec l'ID '{connection_id}' non trouvée.",
+                    es=f"Conexión de Template con ID '{connection_id}' no encontrada.",
+                    it=f"Connessione Template con ID '{connection_id}' non trovata.",
+                    nl=f"Template-verbinding met ID '{connection_id}' niet gevonden.",
+                    pl=f"Połączenie Template z ID '{connection_id}' nie znaleziono.",
+                    pt=f"Conexão Template com ID '{connection_id}' não encontrada.",
+                    ja=f"ID '{connection_id}' のTemplate接続が見つかりません。",
+                    zh=f"未找到ID为'{connection_id}'的Template连接。",
                 )
             )
     else:
@@ -65,6 +73,46 @@ async def _get_api_client(connection_id: str = "") -> dict:
                     "Please create a connection in Settings → Module → Gear, "
                     "or set the env vars TEMPLATE_URL / TEMPLATE_API_KEY."
                 ),
+                fr=(
+                    "Aucune connexion Template configurée. "
+                    "Veuillez créer une connexion dans Paramètres → Module → Engrenage, "
+                    "ou définir les variables d'environnement TEMPLATE_URL / TEMPLATE_API_KEY."
+                ),
+                es=(
+                    "No hay conexión de Template configurada. "
+                    "Por favor cree una conexión en Configuración → Módulo → Engranaje, "
+                    "o establezca las variables de entorno TEMPLATE_URL / TEMPLATE_API_KEY."
+                ),
+                it=(
+                    "Nessuna connessione Template configurata. "
+                    "Per favore crea una connessione in Impostazioni → Modulo → Ingranaggio, "
+                    "o imposta le variabili di ambiente TEMPLATE_URL / TEMPLATE_API_KEY."
+                ),
+                nl=(
+                    "Geen Template-verbinding geconfigureerd. "
+                    "Maak een verbinding aan in Instellingen → Module → Tandwiel, "
+                    "of stel de omgevingsvariabelen TEMPLATE_URL / TEMPLATE_API_KEY in."
+                ),
+                pl=(
+                    "Nie skonfigurowano połączenia Template. "
+                    "Utwórz połączenie w panelu w sekcji Ustawienia → Moduł → Ikona koła zębatego "
+                    "lub ustaw zmienne środowiskowe TEMPLATE_URL / TEMPLATE_API_KEY."
+                ),
+                pt=(
+                    "Nenhuma conexão Template configurada. "
+                    "Por favor crie uma conexão em Configurações → Módulo → Engrenagem, "
+                    "ou defina as variáveis de ambiente TEMPLATE_URL / TEMPLATE_API_KEY."
+                ),
+                ja=(
+                    "Template接続が設定されていません。 "
+                    "ダッシュボードで設定→モジュール→歯車から接続を作成するか、"
+                    "環境変数TEMPLATE_URL / TEMPLATE_API_KEYを設定してください。"
+                ),
+                zh=(
+                    "未配置Template连接。 "
+                    "请在设置→模块→齿轮下创建连接，"
+                    "或设置环境变量TEMPLATE_URL / TEMPLATE_API_KEY。"
+                ),
             )
         )
 
@@ -76,6 +124,7 @@ async def _get_api_client(connection_id: str = "") -> dict:
 # IMPORTANT: Keep docstrings precise (LLM uses them for tool selection).
 # Register read-only tools in safeguard._TOOL_READONLY.
 # ═══════════════════════════════════════════════════════
+
 
 @tool
 async def beispiel_tool(parameter: str, connection_id: str = "") -> str:
@@ -95,6 +144,14 @@ async def beispiel_tool(parameter: str, connection_id: str = "") -> str:
         return _t(
             de="Anfrage fehlgeschlagen. Prüfe die Verbindungskonfiguration.",
             en="Request failed. Check connection configuration.",
+            fr="La requête a échoué. Vérifiez la configuration de la connexion.",
+            es="Solicitud fallida. Verifique la configuración de conexión.",
+            it="Richiesta non riuscita. Controlla la configurazione della connessione.",
+            nl="Verzoek mislukt. Controleer de verbindingsconfiguratie.",
+            pl="Żądanie nie powiodło się. Sprawdź konfigurację połączenia.",
+            pt="Solicitação falhou. Verifique a configuração da conexão.",
+            ja="リクエストが失敗しました。接続設定を確認してください。",
+            zh="请求失败。请检查连接配置。",
         )
 
 

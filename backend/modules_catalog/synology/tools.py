@@ -35,6 +35,14 @@ async def _get_api_client(connection_id: str = "") -> dict:
                 _t(
                     de=f"Synology-Verbindung mit ID '{connection_id}' nicht gefunden.",
                     en=f"Synology connection with ID '{connection_id}' not found.",
+                    fr=f"Connexion Synology avec l'ID '{connection_id}' non trouvée.",
+                    es=f"Conexión de Synology con ID '{connection_id}' no encontrada.",
+                    it=f"Connessione Synology con ID '{connection_id}' non trovata.",
+                    nl=f"Synology-verbinding met ID '{connection_id}' niet gevonden.",
+                    pl=f"Połączenie Synology z ID '{connection_id}' nie znaleziono.",
+                    pt=f"Conexão Synology com ID '{connection_id}' não encontrada.",
+                    ja=f"ID '{connection_id}' のSynology接続が見つかりません。",
+                    zh=f"未找到ID为'{connection_id}'的Synology连接。",
                 )
             )
     else:
@@ -78,6 +86,46 @@ async def _get_api_client(connection_id: str = "") -> dict:
                     "No Synology connection configured. "
                     "Please create a connection in Settings → Module → Gear, "
                     "or set the env vars SYNOLOGY_URL / SYNOLOGY_USERNAME / SYNOLOGY_PASSWORD."
+                ),
+                fr=(
+                    "Aucune connexion Synology configurée. "
+                    "Veuillez créer une connexion dans Paramètres → Module → Engrenage, "
+                    "ou définir les variables d'environnement SYNOLOGY_URL / SYNOLOGY_USERNAME / SYNOLOGY_PASSWORD."
+                ),
+                es=(
+                    "No hay conexión de Synology configurada. "
+                    "Por favor cree una conexión en Configuración → Módulo → Engranaje, "
+                    "o establezca las variables de entorno SYNOLOGY_URL / SYNOLOGY_USERNAME / SYNOLOGY_PASSWORD."
+                ),
+                it=(
+                    "Nessuna connessione Synology configurata. "
+                    "Per favore crea una connessione in Impostazioni → Modulo → Ingranaggio, "
+                    "o imposta le variabili di ambiente SYNOLOGY_URL / SYNOLOGY_USERNAME / SYNOLOGY_PASSWORD."
+                ),
+                nl=(
+                    "Geen Synology-verbinding geconfigureerd. "
+                    "Maak een verbinding aan in Instellingen → Module → Tandwiel, "
+                    "of stel de omgevingsvariabelen SYNOLOGY_URL / SYNOLOGY_USERNAME / SYNOLOGY_PASSWORD in."
+                ),
+                pl=(
+                    "Nie skonfigurowano połączenia Synology. "
+                    "Utwórz połączenie w panelu w sekcji Ustawienia → Moduł → Ikona koła zębatego "
+                    "lub ustaw zmienne środowiskowe SYNOLOGY_URL / SYNOLOGY_USERNAME / SYNOLOGY_PASSWORD."
+                ),
+                pt=(
+                    "Nenhuma conexão Synology configurada. "
+                    "Por favor crie uma conexão em Configurações → Módulo → Engrenagem, "
+                    "ou defina as variáveis de ambiente SYNOLOGY_URL / SYNOLOGY_USERNAME / SYNOLOGY_PASSWORD."
+                ),
+                ja=(
+                    "Synology接続が設定されていません。 "
+                    "ダッシュボードで設定→モジュール→歯車から接続を作成するか、"
+                    "環境変数SYNOLOGY_URL / SYNOLOGY_USERNAME / SYNOLOGY_PASSWORDを設定してください。"
+                ),
+                zh=(
+                    "未配置Synology连接。 "
+                    "请在设置→模块→齿轮下创建连接，"
+                    "或设置环境变量SYNOLOGY_URL / SYNOLOGY_USERNAME / SYNOLOGY_PASSWORD。"
                 ),
             )
         )
@@ -154,8 +202,11 @@ async def get_synology_system_info(connection_id: str = "") -> dict:
 
             try:
                 info = await _synology_request(
-                    client["base_url"], "entry.cgi", session,
-                    "SYNO.Core.System", "info",
+                    client["base_url"],
+                    "entry.cgi",
+                    session,
+                    "SYNO.Core.System",
+                    "info",
                     {"type": "all"},
                 )
 
@@ -170,7 +221,12 @@ async def get_synology_system_info(connection_id: str = "") -> dict:
             finally:
                 await http.get(
                     f"{client['base_url']}/webapi/entry.cgi",
-                    params={"api": "SYNO.API.Auth", "method": "logout", "version": "7", "_sid": session},
+                    params={
+                        "api": "SYNO.API.Auth",
+                        "method": "logout",
+                        "version": "7",
+                        "_sid": session,
+                    },
                 )
 
     except Exception as e:
@@ -210,14 +266,20 @@ async def get_synology_storage(connection_id: str = "") -> dict:
 
             try:
                 storage = await _synology_request(
-                    client["base_url"], "entry.cgi", session,
-                    "SYNO.Core.Storage", "info",
+                    client["base_url"],
+                    "entry.cgi",
+                    session,
+                    "SYNO.Core.Storage",
+                    "info",
                     {"type": "storage"},
                 )
 
                 disks = await _synology_request(
-                    client["base_url"], "entry.cgi", session,
-                    "SYNO.Core.Storage", "disk",
+                    client["base_url"],
+                    "entry.cgi",
+                    session,
+                    "SYNO.Core.Storage",
+                    "disk",
                     {"type": "basic"},
                 )
 
@@ -229,7 +291,12 @@ async def get_synology_storage(connection_id: str = "") -> dict:
             finally:
                 await http.get(
                     f"{client['base_url']}/webapi/entry.cgi",
-                    params={"api": "SYNO.API.Auth", "method": "logout", "version": "7", "_sid": session},
+                    params={
+                        "api": "SYNO.API.Auth",
+                        "method": "logout",
+                        "version": "7",
+                        "_sid": session,
+                    },
                 )
 
     except Exception as e:
@@ -269,8 +336,11 @@ async def get_synology_packages(connection_id: str = "") -> dict:
 
             try:
                 packages = await _synology_request(
-                    client["base_url"], "entry.cgi", session,
-                    "SYNO.PackageManager", "list",
+                    client["base_url"],
+                    "entry.cgi",
+                    session,
+                    "SYNO.PackageManager",
+                    "list",
                     {"type": "all", "app_category": "all"},
                 )
 
@@ -281,7 +351,12 @@ async def get_synology_packages(connection_id: str = "") -> dict:
             finally:
                 await http.get(
                     f"{client['base_url']}/webapi/entry.cgi",
-                    params={"api": "SYNO.API.Auth", "method": "logout", "version": "7", "_sid": session},
+                    params={
+                        "api": "SYNO.API.Auth",
+                        "method": "logout",
+                        "version": "7",
+                        "_sid": session,
+                    },
                 )
 
     except Exception as e:
@@ -321,8 +396,11 @@ async def get_synology_services(connection_id: str = "") -> dict:
 
             try:
                 services = await _synology_request(
-                    client["base_url"], "entry.cgi", session,
-                    "SYNO.Core.Service", "list",
+                    client["base_url"],
+                    "entry.cgi",
+                    session,
+                    "SYNO.Core.Service",
+                    "list",
                     {},
                 )
 
@@ -333,7 +411,12 @@ async def get_synology_services(connection_id: str = "") -> dict:
             finally:
                 await http.get(
                     f"{client['base_url']}/webapi/entry.cgi",
-                    params={"api": "SYNO.API.Auth", "method": "logout", "version": "7", "_sid": session},
+                    params={
+                        "api": "SYNO.API.Auth",
+                        "method": "logout",
+                        "version": "7",
+                        "_sid": session,
+                    },
                 )
 
     except Exception as e:
@@ -373,8 +456,11 @@ async def restart_synology_service(service_name: str, connection_id: str = "") -
 
             try:
                 result = await _synology_request(
-                    client["base_url"], "entry.cgi", session,
-                    "SYNO.Core.Service", "set",
+                    client["base_url"],
+                    "entry.cgi",
+                    session,
+                    "SYNO.Core.Service",
+                    "set",
                     {"service_name": service_name, "action": "restart"},
                 )
 
@@ -386,7 +472,12 @@ async def restart_synology_service(service_name: str, connection_id: str = "") -
             finally:
                 await http.get(
                     f"{client['base_url']}/webapi/entry.cgi",
-                    params={"api": "SYNO.API.Auth", "method": "logout", "version": "7", "_sid": session},
+                    params={
+                        "api": "SYNO.API.Auth",
+                        "method": "logout",
+                        "version": "7",
+                        "_sid": session,
+                    },
                 )
 
     except Exception as e:
@@ -426,8 +517,11 @@ async def get_synology_tasks(connection_id: str = "") -> dict:
 
             try:
                 tasks = await _synology_request(
-                    client["base_url"], "entry.cgi", session,
-                    "SYNO.TaskScheduler", "list",
+                    client["base_url"],
+                    "entry.cgi",
+                    session,
+                    "SYNO.TaskScheduler",
+                    "list",
                     {"type": "all"},
                 )
 
@@ -438,7 +532,12 @@ async def get_synology_tasks(connection_id: str = "") -> dict:
             finally:
                 await http.get(
                     f"{client['base_url']}/webapi/entry.cgi",
-                    params={"api": "SYNO.API.Auth", "method": "logout", "version": "7", "_sid": session},
+                    params={
+                        "api": "SYNO.API.Auth",
+                        "method": "logout",
+                        "version": "7",
+                        "_sid": session,
+                    },
                 )
 
     except Exception as e:
@@ -478,8 +577,11 @@ async def check_synology_updates(connection_id: str = "") -> dict:
 
             try:
                 updates = await _synology_request(
-                    client["base_url"], "entry.cgi", session,
-                    "SYNO.Core.Upgrade", "check",
+                    client["base_url"],
+                    "entry.cgi",
+                    session,
+                    "SYNO.Core.Upgrade",
+                    "check",
                     {"history": "false"},
                 )
 
@@ -493,7 +595,12 @@ async def check_synology_updates(connection_id: str = "") -> dict:
             finally:
                 await http.get(
                     f"{client['base_url']}/webapi/entry.cgi",
-                    params={"api": "SYNO.API.Auth", "method": "logout", "version": "7", "_sid": session},
+                    params={
+                        "api": "SYNO.API.Auth",
+                        "method": "logout",
+                        "version": "7",
+                        "_sid": session,
+                    },
                 )
 
     except Exception as e:
@@ -502,7 +609,9 @@ async def check_synology_updates(connection_id: str = "") -> dict:
 
 
 @tool
-async def install_synology_update(confirm: bool = False, connection_id: str = "") -> dict:
+async def install_synology_update(
+    confirm: bool = False, connection_id: str = ""
+) -> dict:
     """
     Install available DSM update.
     Use this when the user asks to update DSM or install the latest version.
@@ -540,8 +649,11 @@ async def install_synology_update(confirm: bool = False, connection_id: str = ""
 
             try:
                 result = await _synology_request(
-                    client["base_url"], "entry.cgi", session,
-                    "SYNO.Core.Upgrade", "update",
+                    client["base_url"],
+                    "entry.cgi",
+                    session,
+                    "SYNO.Core.Upgrade",
+                    "update",
                     {},
                 )
 
@@ -553,7 +665,12 @@ async def install_synology_update(confirm: bool = False, connection_id: str = ""
             finally:
                 await http.get(
                     f"{client['base_url']}/webapi/entry.cgi",
-                    params={"api": "SYNO.API.Auth", "method": "logout", "version": "7", "_sid": session},
+                    params={
+                        "api": "SYNO.API.Auth",
+                        "method": "logout",
+                        "version": "7",
+                        "_sid": session,
+                    },
                 )
 
     except Exception as e:
@@ -562,7 +679,9 @@ async def install_synology_update(confirm: bool = False, connection_id: str = ""
 
 
 @tool
-async def install_synology_package(package_id: str, confirm: bool = False, connection_id: str = "") -> dict:
+async def install_synology_package(
+    package_id: str, confirm: bool = False, connection_id: str = ""
+) -> dict:
     """
     Install a Synology package (by package ID).
     Use this when the user asks to install a package like 'Audio Station', 'Video Station', etc.
@@ -600,8 +719,11 @@ async def install_synology_package(package_id: str, confirm: bool = False, conne
 
             try:
                 result = await _synology_request(
-                    client["base_url"], "entry.cgi", session,
-                    "SYNO.PackageManager", "install",
+                    client["base_url"],
+                    "entry.cgi",
+                    session,
+                    "SYNO.PackageManager",
+                    "install",
                     {"package": package_id},
                 )
 
@@ -613,7 +735,12 @@ async def install_synology_package(package_id: str, confirm: bool = False, conne
             finally:
                 await http.get(
                     f"{client['base_url']}/webapi/entry.cgi",
-                    params={"api": "SYNO.API.Auth", "method": "logout", "version": "7", "_sid": session},
+                    params={
+                        "api": "SYNO.API.Auth",
+                        "method": "logout",
+                        "version": "7",
+                        "_sid": session,
+                    },
                 )
 
     except Exception as e:
@@ -622,7 +749,9 @@ async def install_synology_package(package_id: str, confirm: bool = False, conne
 
 
 @tool
-async def uninstall_synology_package(package_id: str, confirm: bool = False, connection_id: str = "") -> dict:
+async def uninstall_synology_package(
+    package_id: str, confirm: bool = False, connection_id: str = ""
+) -> dict:
     """
     Uninstall a Synology package (by package ID).
     Use this when the user asks to uninstall a package.
@@ -660,8 +789,11 @@ async def uninstall_synology_package(package_id: str, confirm: bool = False, con
 
             try:
                 result = await _synology_request(
-                    client["base_url"], "entry.cgi", session,
-                    "SYNO.PackageManager", "uninstall",
+                    client["base_url"],
+                    "entry.cgi",
+                    session,
+                    "SYNO.PackageManager",
+                    "uninstall",
                     {"package": package_id},
                 )
 
@@ -673,7 +805,12 @@ async def uninstall_synology_package(package_id: str, confirm: bool = False, con
             finally:
                 await http.get(
                     f"{client['base_url']}/webapi/entry.cgi",
-                    params={"api": "SYNO.API.Auth", "method": "logout", "version": "7", "_sid": session},
+                    params={
+                        "api": "SYNO.API.Auth",
+                        "method": "logout",
+                        "version": "7",
+                        "_sid": session,
+                    },
                 )
 
     except Exception as e:
@@ -713,8 +850,11 @@ async def get_synology_network_info(connection_id: str = "") -> dict:
 
             try:
                 network = await _synology_request(
-                    client["base_url"], "entry.cgi", session,
-                    "SYNO.Core.Network", "get",
+                    client["base_url"],
+                    "entry.cgi",
+                    session,
+                    "SYNO.Core.Network",
+                    "get",
                     {},
                 )
 
@@ -725,7 +865,12 @@ async def get_synology_network_info(connection_id: str = "") -> dict:
             finally:
                 await http.get(
                     f"{client['base_url']}/webapi/entry.cgi",
-                    params={"api": "SYNO.API.Auth", "method": "logout", "version": "7", "_sid": session},
+                    params={
+                        "api": "SYNO.API.Auth",
+                        "method": "logout",
+                        "version": "7",
+                        "_sid": session,
+                    },
                 )
 
     except Exception as e:
@@ -765,8 +910,11 @@ async def get_synology_users(connection_id: str = "") -> dict:
 
             try:
                 users = await _synology_request(
-                    client["base_url"], "entry.cgi", session,
-                    "SYNO.Core.User", "list",
+                    client["base_url"],
+                    "entry.cgi",
+                    session,
+                    "SYNO.Core.User",
+                    "list",
                     {"limit": 100, "offset": 0},
                 )
 
@@ -777,7 +925,12 @@ async def get_synology_users(connection_id: str = "") -> dict:
             finally:
                 await http.get(
                     f"{client['base_url']}/webapi/entry.cgi",
-                    params={"api": "SYNO.API.Auth", "method": "logout", "version": "7", "_sid": session},
+                    params={
+                        "api": "SYNO.API.Auth",
+                        "method": "logout",
+                        "version": "7",
+                        "_sid": session,
+                    },
                 )
 
     except Exception as e:
@@ -825,8 +978,11 @@ async def shutdown_synologyNAS(confirm: bool = False, connection_id: str = "") -
 
             try:
                 result = await _synology_request(
-                    client["base_url"], "entry.cgi", session,
-                    "SYNO.Core.System", "shutdown",
+                    client["base_url"],
+                    "entry.cgi",
+                    session,
+                    "SYNO.Core.System",
+                    "shutdown",
                     {},
                 )
 
@@ -881,8 +1037,11 @@ async def reboot_synologyNAS(confirm: bool = False, connection_id: str = "") -> 
 
             try:
                 result = await _synology_request(
-                    client["base_url"], "entry.cgi", session,
-                    "SYNO.Core.System", "reboot",
+                    client["base_url"],
+                    "entry.cgi",
+                    session,
+                    "SYNO.Core.System",
+                    "reboot",
                     {},
                 )
 
@@ -935,9 +1094,16 @@ async def create_synology_user(
 
             try:
                 result = await _synology_request(
-                    client["base_url"], "entry.cgi", session,
-                    "SYNO.Core.User", "create",
-                    {"name": username, "password": password, "description": description},
+                    client["base_url"],
+                    "entry.cgi",
+                    session,
+                    "SYNO.Core.User",
+                    "create",
+                    {
+                        "name": username,
+                        "password": password,
+                        "description": description,
+                    },
                 )
 
                 return {
@@ -948,7 +1114,12 @@ async def create_synology_user(
             finally:
                 await http.get(
                     f"{client['base_url']}/webapi/entry.cgi",
-                    params={"api": "SYNO.API.Auth", "method": "logout", "version": "7", "_sid": session},
+                    params={
+                        "api": "SYNO.API.Auth",
+                        "method": "logout",
+                        "version": "7",
+                        "_sid": session,
+                    },
                 )
 
     except Exception as e:
@@ -957,7 +1128,9 @@ async def create_synology_user(
 
 
 @tool
-async def delete_synology_user(username: str, confirm: bool = False, connection_id: str = "") -> dict:
+async def delete_synology_user(
+    username: str, confirm: bool = False, connection_id: str = ""
+) -> dict:
     """
     Delete a Synology user.
     Use this when the user asks to delete a user account.
@@ -995,8 +1168,11 @@ async def delete_synology_user(username: str, confirm: bool = False, connection_
 
             try:
                 result = await _synology_request(
-                    client["base_url"], "entry.cgi", session,
-                    "SYNO.Core.User", "delete",
+                    client["base_url"],
+                    "entry.cgi",
+                    session,
+                    "SYNO.Core.User",
+                    "delete",
                     {"name": username},
                 )
 
@@ -1007,7 +1183,12 @@ async def delete_synology_user(username: str, confirm: bool = False, connection_
             finally:
                 await http.get(
                     f"{client['base_url']}/webapi/entry.cgi",
-                    params={"api": "SYNO.API.Auth", "method": "logout", "version": "7", "_sid": session},
+                    params={
+                        "api": "SYNO.API.Auth",
+                        "method": "logout",
+                        "version": "7",
+                        "_sid": session,
+                    },
                 )
 
     except Exception as e:
@@ -1051,8 +1232,11 @@ async def change_synology_user_password(
 
             try:
                 result = await _synology_request(
-                    client["base_url"], "entry.cgi", session,
-                    "SYNO.Core.User", "set_password",
+                    client["base_url"],
+                    "entry.cgi",
+                    session,
+                    "SYNO.Core.User",
+                    "set_password",
                     {"name": username, "password": new_password},
                 )
 
@@ -1063,7 +1247,12 @@ async def change_synology_user_password(
             finally:
                 await http.get(
                     f"{client['base_url']}/webapi/entry.cgi",
-                    params={"api": "SYNO.API.Auth", "method": "logout", "version": "7", "_sid": session},
+                    params={
+                        "api": "SYNO.API.Auth",
+                        "method": "logout",
+                        "version": "7",
+                        "_sid": session,
+                    },
                 )
 
     except Exception as e:
@@ -1103,8 +1292,11 @@ async def get_synology_groups(connection_id: str = "") -> dict:
 
             try:
                 groups = await _synology_request(
-                    client["base_url"], "entry.cgi", session,
-                    "SYNO.Core.Group", "list",
+                    client["base_url"],
+                    "entry.cgi",
+                    session,
+                    "SYNO.Core.Group",
+                    "list",
                     {"limit": 100, "offset": 0},
                 )
 
@@ -1115,7 +1307,12 @@ async def get_synology_groups(connection_id: str = "") -> dict:
             finally:
                 await http.get(
                     f"{client['base_url']}/webapi/entry.cgi",
-                    params={"api": "SYNO.API.Auth", "method": "logout", "version": "7", "_sid": session},
+                    params={
+                        "api": "SYNO.API.Auth",
+                        "method": "logout",
+                        "version": "7",
+                        "_sid": session,
+                    },
                 )
 
     except Exception as e:
@@ -1159,8 +1356,11 @@ async def create_synology_group(
 
             try:
                 result = await _synology_request(
-                    client["base_url"], "entry.cgi", session,
-                    "SYNO.Core.Group", "create",
+                    client["base_url"],
+                    "entry.cgi",
+                    session,
+                    "SYNO.Core.Group",
+                    "create",
                     {"name": group_name, "description": description},
                 )
 
@@ -1172,7 +1372,12 @@ async def create_synology_group(
             finally:
                 await http.get(
                     f"{client['base_url']}/webapi/entry.cgi",
-                    params={"api": "SYNO.API.Auth", "method": "logout", "version": "7", "_sid": session},
+                    params={
+                        "api": "SYNO.API.Auth",
+                        "method": "logout",
+                        "version": "7",
+                        "_sid": session,
+                    },
                 )
 
     except Exception as e:
@@ -1216,8 +1421,11 @@ async def add_user_to_group(
 
             try:
                 result = await _synology_request(
-                    client["base_url"], "entry.cgi", session,
-                    "SYNO.Core.Group", "set_users",
+                    client["base_url"],
+                    "entry.cgi",
+                    session,
+                    "SYNO.Core.Group",
+                    "set_users",
                     {"name": group_name, "users": [username], "action": "add"},
                 )
 
@@ -1229,7 +1437,12 @@ async def add_user_to_group(
             finally:
                 await http.get(
                     f"{client['base_url']}/webapi/entry.cgi",
-                    params={"api": "SYNO.API.Auth", "method": "logout", "version": "7", "_sid": session},
+                    params={
+                        "api": "SYNO.API.Auth",
+                        "method": "logout",
+                        "version": "7",
+                        "_sid": session,
+                    },
                 )
 
     except Exception as e:
@@ -1273,8 +1486,11 @@ async def remove_user_from_group(
 
             try:
                 result = await _synology_request(
-                    client["base_url"], "entry.cgi", session,
-                    "SYNO.Core.Group", "set_users",
+                    client["base_url"],
+                    "entry.cgi",
+                    session,
+                    "SYNO.Core.Group",
+                    "set_users",
                     {"name": group_name, "users": [username], "action": "remove"},
                 )
 
@@ -1285,7 +1501,12 @@ async def remove_user_from_group(
             finally:
                 await http.get(
                     f"{client['base_url']}/webapi/entry.cgi",
-                    params={"api": "SYNO.API.Auth", "method": "logout", "version": "7", "_sid": session},
+                    params={
+                        "api": "SYNO.API.Auth",
+                        "method": "logout",
+                        "version": "7",
+                        "_sid": session,
+                    },
                 )
 
     except Exception as e:

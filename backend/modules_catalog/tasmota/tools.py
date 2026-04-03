@@ -61,6 +61,14 @@ async def get_tasmota_status(connection_id: str = "") -> Dict:
                 _t(
                     de="Keine Tasmota-Verbindung konfiguriert. Bitte im Dashboard unter Einstellungen → Modul → Zahnrad eine Verbindung anlegen, oder die Env-Variable TASMOTA_HOST setzen.",
                     en="No Tasmota connection configured. Please create a connection in the dashboard under Settings → Module → gear icon, or set the environment variable TASMOTA_HOST.",
+                    fr="Aucune connexion Tasmota configurée. Veuillez créer une connexion dans le tableau de bord sous Paramètres → Module → icône d'engrenage, ou définir la variable d'environnement TASMOTA_HOST.",
+                    es="No hay conexión Tasmota configurada. Por favor cree una conexión en el panel bajo Configuración → Módulo → icono de engranaje, o establezca la variable de entorno TASMOTA_HOST.",
+                    it="Nessuna connessione Tasmota configurata. Per favore crea una connessione nel cruscotto sotto Impostazioni → Modulo → icona ingranaggio, o imposta la variabile di ambiente TASMOTA_HOST.",
+                    nl="Geen Tasmota-verbinding geconfigureerd. Maak een verbinding aan in het dashboard onder Instellingen → Module → tandwielpictogram, of stel de omgevingsvariabele TASMOTA_HOST in.",
+                    pl="Nie skonfigurowano połączenia Tasmota. Utwórz połączenie w panelu w sekcji Ustawienia → Moduł → ikona koła zębatego lub ustaw zmienną środowiskową TASMOTA_HOST.",
+                    pt="Nenhuma conexão Tasmota configurada. Por favor crie uma conexão no painel em Configurações → Módulo → ícone de engrenagem, ou defina a variável de ambiente TASMOTA_HOST.",
+                    ja="Tasmota接続が設定されていません。ダッシュボードで設定→モジュール→歯車アイコンから接続を作成するか、環境変数TASMOTA_HOSTを設定してください。",
+                    zh="未配置Tasmota连接。请在仪表板中的设置→模块→齿轮图标下创建连接，或设置环境变量TASMOTA_HOST。",
                 )
             )
 
@@ -77,7 +85,9 @@ async def get_tasmota_status(connection_id: str = "") -> Dict:
 
         return {
             "device_name": status.get("DeviceName", ""),
-            "friendly_name": friendly[0] if isinstance(friendly, list) and friendly else "",
+            "friendly_name": friendly[0]
+            if isinstance(friendly, list) and friendly
+            else "",
             "hostname": status.get("Hostname", ""),
             "ip_address": status.get("IPAddress", ""),
             "uptime": status.get("Uptime", ""),
@@ -100,10 +110,20 @@ async def get_tasmota_power(connection_id: str = "") -> Dict:
     try:
         host = await _get_tasmota_host(connection_id)
         if not host:
-            raise ValueError(_t(
-                de="Keine Tasmota-Host-Adresse konfiguriert.",
-                en="No Tasmota host address configured.",
-            ))
+            raise ValueError(
+                _t(
+                    de="Keine Tasmota-Host-Adresse konfiguriert.",
+                    en="No Tasmota host address configured.",
+                    fr="Aucune adresse hôte Tasmota configurée.",
+                    es="No hay dirección de host Tasmota configurada.",
+                    it="Nessun indirizzo host Tasmota configurato.",
+                    nl="Geen Tasmota-hostadres geconfigureerd.",
+                    pl="Nie skonfigurowano adresu hosta Tasmota.",
+                    pt="Nenhum endereço de host Tasmota configurado.",
+                    ja="Tasmotaホストアドレスが設定されていません。",
+                    zh="未配置Tasmota主机地址。",
+                )
+            )
 
         result = await _tasmota_request(host, "Power")
         # Single-relay: {"POWER": "ON"}, Multi-relay: {"POWER1": "ON", "POWER2": "OFF"}
@@ -123,7 +143,9 @@ async def get_tasmota_power(connection_id: str = "") -> Dict:
 
 
 @tool
-async def set_tasmota_power(state: bool, relay: int = 1, connection_id: str = "") -> str:
+async def set_tasmota_power(
+    state: bool, relay: int = 1, connection_id: str = ""
+) -> str:
     """
     Switches a relay on a Tasmota device on or off.
     state: True = on, False = off.
@@ -136,6 +158,14 @@ async def set_tasmota_power(state: bool, relay: int = 1, connection_id: str = ""
             return _t(
                 de="Fehler: Keine Tasmota-Host-Adresse konfiguriert.",
                 en="Error: No Tasmota host address configured.",
+                fr="Erreur: Aucune adresse hôte Tasmota configurée.",
+                es="Error: No hay dirección de host Tasmota configurada.",
+                it="Errore: Nessun indirizzo host Tasmota configurato.",
+                nl="Fout: Geen Tasmota-hostadres geconfigureerd.",
+                pl="Błąd: Nie skonfigurowano adresu hosta Tasmota.",
+                pt="Erro: Nenhum endereço de host Tasmota configurado.",
+                ja="エラー：Tasmotaホストアドレスが設定されていません。",
+                zh="错误：未配置Tasmota主机地址。",
             )
 
         command = f"Power{relay}" if relay > 1 else "Power"
@@ -147,12 +177,28 @@ async def set_tasmota_power(state: bool, relay: int = 1, connection_id: str = ""
         return _t(
             de=f"Relais {relay} wurde auf {'AN' if actual.upper() == 'ON' else 'AUS'} gesetzt.",
             en=f"Relay {relay} has been set to {'ON' if actual.upper() == 'ON' else 'OFF'}.",
+            fr=f"Relais {relay} défini sur {'ON' if actual.upper() == 'ON' else 'OFF'}.",
+            es=f"Relé {relay} establecido en {'ON' if actual.upper() == 'ON' else 'OFF'}.",
+            it=f"Relè {relay} impostato su {'ON' if actual.upper() == 'ON' else 'OFF'}.",
+            nl=f"Relais {relay} ingesteld op {'AAN' if actual.upper() == 'ON' else 'UIT'}.",
+            pl=f"Przekaźnik {relay} ustawiony na {'WŁ' if actual.upper() == 'ON' else 'WYŁ'}.",
+            pt=f"Relé {relay} definido como {'LIGADO' if actual.upper() == 'ON' else 'DESLIGADO'}.",
+            ja=f"リレー {relay} を {'オン' if actual.upper() == 'ON' else 'オフ'} に設定しました。",
+            zh=f"继电器 {relay} 已设置为 {'开' if actual.upper() == 'ON' else '关'}。",
         )
     except Exception as e:
         logger.error("Failed to switch Tasmota relay: %s", e)
         return _t(
             de=f"Fehler: {e}",
             en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
         )
 
 
@@ -166,10 +212,20 @@ async def get_tasmota_sensors(connection_id: str = "") -> Dict:
     try:
         host = await _get_tasmota_host(connection_id)
         if not host:
-            raise ValueError(_t(
-                de="Keine Tasmota-Host-Adresse konfiguriert.",
-                en="No Tasmota host address configured.",
-            ))
+            raise ValueError(
+                _t(
+                    de="Keine Tasmota-Host-Adresse konfiguriert.",
+                    en="No Tasmota host address configured.",
+                    fr="Aucune adresse hôte Tasmota configurée.",
+                    es="No hay dirección de host Tasmota configurada.",
+                    it="Nessun indirizzo host Tasmota configurato.",
+                    nl="Geen Tasmota-hostadres geconfigureerd.",
+                    pl="Nie skonfigurowano adresu hosta Tasmota.",
+                    pt="Nenhum endereço de host Tasmota configurado.",
+                    ja="Tasmotaホストアドレスが設定されていません。",
+                    zh="未配置Tasmota主机地址。",
+                )
+            )
 
         result = await _tasmota_request(host, "StatusSNS")
         sensors = result.get("StatusSNS", {})
@@ -214,10 +270,20 @@ async def get_tasmota_wifi_info(connection_id: str = "") -> Dict:
     try:
         host = await _get_tasmota_host(connection_id)
         if not host:
-            raise ValueError(_t(
-                de="Keine Tasmota-Host-Adresse konfiguriert.",
-                en="No Tasmota host address configured.",
-            ))
+            raise ValueError(
+                _t(
+                    de="Keine Tasmota-Host-Adresse konfiguriert.",
+                    en="No Tasmota host address configured.",
+                    fr="Aucune adresse hôte Tasmota configurée.",
+                    es="No hay dirección de host Tasmota configurada.",
+                    it="Nessun indirizzo host Tasmota configurato.",
+                    nl="Geen Tasmota-hostadres geconfigureerd.",
+                    pl="Nie skonfigurowano adresu hosta Tasmota.",
+                    pt="Nenhum endereço de host Tasmota configurado.",
+                    ja="Tasmotaホストアドレスが設定されていません。",
+                    zh="未配置Tasmota主机地址。",
+                )
+            )
 
         result = await _tasmota_request(host, "Status 5")
         status5 = result.get("StatusNET", {})
@@ -243,10 +309,20 @@ async def send_tasmota_command(command: str, connection_id: str = "") -> Dict:
     try:
         host = await _get_tasmota_host(connection_id)
         if not host:
-            raise ValueError(_t(
-                de="Keine Tasmota-Host-Adresse konfiguriert.",
-                en="No Tasmota host address configured.",
-            ))
+            raise ValueError(
+                _t(
+                    de="Keine Tasmota-Host-Adresse konfiguriert.",
+                    en="No Tasmota host address configured.",
+                    fr="Aucune adresse hôte Tasmota configurée.",
+                    es="No hay dirección de host Tasmota configurada.",
+                    it="Nessun indirizzo host Tasmota configurato.",
+                    nl="Geen Tasmota-hostadres geconfigureerd.",
+                    pl="Nie skonfigurowano adresu hosta Tasmota.",
+                    pt="Nenhum endereço de host Tasmota configurado.",
+                    ja="Tasmotaホストアドレスが設定されていません。",
+                    zh="未配置Tasmota主机地址。",
+                )
+            )
 
         result = await _tasmota_request(host, command)
         return {

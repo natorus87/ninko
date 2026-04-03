@@ -26,7 +26,9 @@ async def _get_opnsense_auth(connection_id: str = "") -> tuple:
     if connection_id:
         conn = await ConnectionManager.get_connection("opnsense", connection_id)
         if not conn:
-            raise ValueError(f"OPNsense connection with ID '{connection_id}' not found.")
+            raise ValueError(
+                f"OPNsense connection with ID '{connection_id}' not found."
+            )
     else:
         conn = await ConnectionManager.get_default_connection("opnsense")
 
@@ -55,6 +57,14 @@ async def _get_opnsense_auth(connection_id: str = "") -> tuple:
             _t(
                 de="Keine OPNsense-Verbindung konfiguriert. Bitte im Dashboard unter Einstellungen → Modul → Zahnrad eine Verbindung anlegen, oder die Env-Variablen OPNSENSE_HOST, OPNSENSE_API_KEY, OPNSENSE_API_SECRET setzen.",
                 en="No OPNsense connection configured. Please create a connection in the dashboard under Settings → Module → gear icon, or set the environment variables OPNSENSE_HOST, OPNSENSE_API_KEY, OPNSENSE_API_SECRET.",
+                fr="Aucune connexion OPNsense configurée. Veuillez créer une connexion dans le tableau de bord sous Paramètres → Module → icône d'engrenage, ou définir les variables d'environnement OPNSENSE_HOST, OPNSENSE_API_KEY, OPNSENSE_API_SECRET.",
+                es="No hay conexión OPNsense configurada. Por favor cree una conexión en el panel bajo Configuración → Módulo → icono de engranaje, o establezca las variables de entorno OPNSENSE_HOST, OPNSENSE_API_KEY, OPNSENSE_API_SECRET.",
+                it="Nessuna connessione OPNsense configurata. Per favore crea una connessione nel cruscotto sotto Impostazioni → Modulo → icona ingranaggio, o imposta le variabili di ambiente OPNSENSE_HOST, OPNSENSE_API_KEY, OPNSENSE_API_SECRET.",
+                nl="Geen OPNsense-verbinding geconfigureerd. Maak een verbinding aan in het dashboard onder Instellingen → Module → tandwielpictogram, of stel de omgevingsvariabelen OPNSENSE_HOST, OPNSENSE_API_KEY, OPNSENSE_API_SECRET in.",
+                pl="Nie skonfigurowano połączenia OPNsense. Utwórz połączenie w panelu w sekcji Ustawienia → Moduł → ikona koła zębatego lub ustaw zmienne środowiskowe OPNSENSE_HOST, OPNSENSE_API_KEY, OPNSENSE_API_SECRET.",
+                pt="Nenhuma conexão OPNsense configurada. Por favor crie uma conexão no painel em Configurações → Módulo → ícone de engrenagem, ou defina as variáveis de ambiente OPNSENSE_HOST, OPNSENSE_API_KEY, OPNSENSE_API_SECRET.",
+                ja="OPNSense接続が設定されていません。ダッシュボードで設定→モジュール→歯車アイコンから接続を作成するか、環境変数OPNSENSE_HOST、OPNSENSE_API_KEY、OPNSENSE_API_SECRETを設定してください。",
+                zh="未配置OPNSense连接。请在仪表板中的设置→模块→齿轮图标下创建连接，或设置环境变量OPNSENSE_HOST、OPNSENSE_API_KEY、OPNSENSE_API_SECRET。",
             )
         )
 
@@ -66,7 +76,12 @@ async def _get_opnsense_auth(connection_id: str = "") -> tuple:
     return host, (api_key, api_secret), verify_ssl
 
 
-async def _opnsense_request(endpoint: str, connection_id: str = "", method: str = "GET", json_data: dict | None = None) -> Any:
+async def _opnsense_request(
+    endpoint: str,
+    connection_id: str = "",
+    method: str = "GET",
+    json_data: dict | None = None,
+) -> Any:
     """Sends a request to the OPNsense API."""
     host, auth, verify = await _get_opnsense_auth(connection_id)
 
@@ -141,7 +156,12 @@ async def get_opnsense_interfaces(connection_id: str = "") -> List[Dict]:
     Use this tool to get network interface information (IP, MAC, status).
     """
     try:
-        result = await _opnsense_request("/api/interfaces/overview/interfacesInfo", connection_id, method="POST", json_data={})
+        result = await _opnsense_request(
+            "/api/interfaces/overview/interfacesInfo",
+            connection_id,
+            method="POST",
+            json_data={},
+        )
         interfaces = result.get("rows", [])
 
         return [
@@ -188,17 +208,23 @@ async def get_opnsense_gateways(connection_id: str = "") -> List[Dict]:
 
 
 @tool
-async def get_opnsense_firewall_rules(connection_id: str = "", interface: str = "") -> List[Dict]:
+async def get_opnsense_firewall_rules(
+    connection_id: str = "", interface: str = ""
+) -> List[Dict]:
     """
     Retrieves firewall rules. Optionally filtered by interface (e.g. 'wan', 'lan').
     Use this tool to list active firewall rules.
     """
     try:
-        result = await _opnsense_request("/api/firewall/filter/searchRule", connection_id)
+        result = await _opnsense_request(
+            "/api/firewall/filter/searchRule", connection_id
+        )
         rules = result.get("rows", [])
 
         if interface:
-            rules = [r for r in rules if interface.lower() in r.get("interface", "").lower()]
+            rules = [
+                r for r in rules if interface.lower() in r.get("interface", "").lower()
+            ]
 
         return [
             {
@@ -226,7 +252,9 @@ async def get_opnsense_nat_rules(connection_id: str = "") -> List[Dict]:
     Use this tool to list NAT rules.
     """
     try:
-        result = await _opnsense_request("/api/firewall/filter/searchRule?type=nat", connection_id)
+        result = await _opnsense_request(
+            "/api/firewall/filter/searchRule?type=nat", connection_id
+        )
         rules = result.get("rows", [])
 
         return [
@@ -280,7 +308,9 @@ async def get_opnsense_dhcp_leases(connection_id: str = "") -> List[Dict]:
     Use this tool to see DHCP leases and connected devices.
     """
     try:
-        result = await _opnsense_request("/api/dhcpv4/leases/searchLease", connection_id)
+        result = await _opnsense_request(
+            "/api/dhcpv4/leases/searchLease", connection_id
+        )
         leases = result.get("rows", [])
 
         return [
@@ -307,7 +337,7 @@ async def create_opnsense_firewall_rule(
     source: str,
     destination: str,
     description: str = "",
-    connection_id: str = ""
+    connection_id: str = "",
 ) -> str:
     """
     Creates a new firewall rule on OPNsense.
@@ -329,22 +359,46 @@ async def create_opnsense_firewall_rule(
             "/api/firewall/filter/addRule",
             connection_id,
             method="POST",
-            json_data=payload
+            json_data=payload,
         )
         if result.get("status") == "ok":
             return _t(
                 de=f"Firewall-Regel erstellt: {description}",
                 en=f"Firewall rule created: {description}",
+                fr=f"Règle de pare-feu créée: {description}",
+                es=f"Regla de firewall creada: {description}",
+                it=f"Regola firewall creata: {description}",
+                nl=f"Firewall-regel aangemaakt: {description}",
+                pl=f"Utworzono regułę firewall: {description}",
+                pt=f"Regra de firewall criada: {description}",
+                ja=f"ファイアウォールルールを作成しました: {description}",
+                zh=f"已创建防火墙规则: {description}",
             )
         return _t(
             de=f"Fehler beim Erstellen der Regel: {result}",
             en=f"Error creating rule: {result}",
+            fr=f"Erreur lors de la création de la règle: {result}",
+            es=f"Error al crear la regla: {result}",
+            it=f"Errore durante la creazione della regola: {result}",
+            nl=f"Fout bij het aanmaken van de regel: {result}",
+            pl=f"Błąd podczas tworzenia reguły: {result}",
+            pt=f"Erro ao criar a regra: {result}",
+            ja=f"ルール作成エラー: {result}",
+            zh=f"创建规则错误: {result}",
         )
     except Exception as e:
         logger.error("Failed to create OPNsense firewall rule: %s", e)
         return _t(
             de=f"Fehler: {e}",
             en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
         )
 
 
@@ -355,24 +409,46 @@ async def delete_opnsense_firewall_rule(rule_uuid: str, connection_id: str = "")
     """
     try:
         result = await _opnsense_request(
-            f"/api/firewall/filter/deleteRule/{rule_uuid}",
-            connection_id,
-            method="POST"
+            f"/api/firewall/filter/deleteRule/{rule_uuid}", connection_id, method="POST"
         )
         if result.get("status") == "ok":
             return _t(
                 de=f"Firewall-Regel {rule_uuid} gelöscht.",
                 en=f"Firewall rule {rule_uuid} deleted.",
+                fr=f"Règle de pare-feu {rule_uuid} supprimée.",
+                es=f"Regla de firewall {rule_uuid} eliminada.",
+                it=f"Regola firewall {rule_uuid} eliminata.",
+                nl=f"Firewall-regel {rule_uuid} verwijderd.",
+                pl=f"Reguła firewall {rule_uuid} usunięta.",
+                pt=f"Regra de firewall {rule_uuid} excluída.",
+                ja=f"ファイアウォールルール {rule_uuid} を削除しました。",
+                zh=f"已删除防火墙规则 {rule_uuid}。",
             )
         return _t(
             de=f"Fehler beim Löschen der Regel: {result}",
             en=f"Error deleting rule: {result}",
+            fr=f"Erreur lors de la suppression de la règle: {result}",
+            es=f"Error al eliminar la regla: {result}",
+            it=f"Errore durante l'eliminazione della regola: {result}",
+            nl=f"Fout bij het verwijderen van de regel: {result}",
+            pl=f"Błąd podczas usuwania reguły: {result}",
+            pt=f"Erro ao excluir a regra: {result}",
+            ja=f"ルール削除エラー: {result}",
+            zh=f"删除规则错误: {result}",
         )
     except Exception as e:
         logger.error("Failed to delete OPNsense firewall rule: %s", e)
         return _t(
             de=f"Fehler: {e}",
             en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
         )
 
 
@@ -385,7 +461,7 @@ async def create_opnsense_nat_rule(
     target: str,
     target_port: str,
     description: str = "",
-    connection_id: str = ""
+    connection_id: str = "",
 ) -> str:
     """
     Creates a new NAT rule (port forwarding) on OPNsense.
@@ -408,22 +484,46 @@ async def create_opnsense_nat_rule(
             "/api/firewall/filter/addRule",
             connection_id,
             method="POST",
-            json_data=payload
+            json_data=payload,
         )
         if result.get("status") == "ok":
             return _t(
                 de=f"NAT-Regel erstellt: {description}",
                 en=f"NAT rule created: {description}",
+                fr=f"Règle NAT créée: {description}",
+                es=f"Regla NAT creada: {description}",
+                it=f"Regola NAT creata: {description}",
+                nl=f"NAT-regel aangemaakt: {description}",
+                pl=f"Utworzono regułę NAT: {description}",
+                pt=f"Regra NAT criada: {description}",
+                ja=f"NATルールを作成しました: {description}",
+                zh=f"已创建NAT规则: {description}",
             )
         return _t(
             de=f"Fehler beim Erstellen der NAT-Regel: {result}",
             en=f"Error creating NAT rule: {result}",
+            fr=f"Erreur lors de la création de la règle NAT: {result}",
+            es=f"Error al crear la regla NAT: {result}",
+            it=f"Errore durante la creazione della regola NAT: {result}",
+            nl=f"Fout bij het aanmaken van de NAT-regel: {result}",
+            pl=f"Błąd podczas tworzenia reguły NAT: {result}",
+            pt=f"Erro ao criar a regra NAT: {result}",
+            ja=f"NATルール作成エラー: {result}",
+            zh=f"创建NAT规则错误: {result}",
         )
     except Exception as e:
         logger.error("Failed to create OPNsense NAT rule: %s", e)
         return _t(
             de=f"Fehler: {e}",
             en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
         )
 
 
@@ -434,24 +534,46 @@ async def delete_opnsense_nat_rule(rule_uuid: str, connection_id: str = "") -> s
     """
     try:
         result = await _opnsense_request(
-            f"/api/firewall/filter/deleteRule/{rule_uuid}",
-            connection_id,
-            method="POST"
+            f"/api/firewall/filter/deleteRule/{rule_uuid}", connection_id, method="POST"
         )
         if result.get("status") == "ok":
             return _t(
                 de=f"NAT-Regel {rule_uuid} gelöscht.",
                 en=f"NAT rule {rule_uuid} deleted.",
+                fr=f"Règle NAT {rule_uuid} supprimée.",
+                es=f"Regla NAT {rule_uuid} eliminada.",
+                it=f"Regola NAT {rule_uuid} eliminata.",
+                nl=f"NAT-regel {rule_uuid} verwijderd.",
+                pl=f"Reguła NAT {rule_uuid} usunięta.",
+                pt=f"Regra NAT {rule_uuid} excluída.",
+                ja=f"NATルール {rule_uuid} を削除しました。",
+                zh=f"已删除NAT规则 {rule_uuid}。",
             )
         return _t(
             de=f"Fehler beim Löschen der NAT-Regel: {result}",
             en=f"Error deleting NAT rule: {result}",
+            fr=f"Erreur lors de la suppression de la règle NAT: {result}",
+            es=f"Error al eliminar la regla NAT: {result}",
+            it=f"Errore durante l'eliminazione della regola NAT: {result}",
+            nl=f"Fout bij het verwijderen van de NAT-regel: {result}",
+            pl=f"Błąd podczas usuwania reguły NAT: {result}",
+            pt=f"Erro ao excluir a regra NAT: {result}",
+            ja=f"NATルール削除エラー: {result}",
+            zh=f"删除NAT规则错误: {result}",
         )
     except Exception as e:
         logger.error("Failed to delete OPNsense NAT rule: %s", e)
         return _t(
             de=f"Fehler: {e}",
             en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
         )
 
 
@@ -463,25 +585,47 @@ async def restart_opnsense_service(service_name: str, connection_id: str = "") -
     """
     try:
         result = await _opnsense_request(
-            f"/api/core/service/restart/{service_name}",
-            connection_id,
-            method="POST"
+            f"/api/core/service/restart/{service_name}", connection_id, method="POST"
         )
 
         if result.get("status") == "ok":
             return _t(
                 de=f"Service '{service_name}' wurde neu gestartet.",
                 en=f"Service '{service_name}' has been restarted.",
+                fr=f"Le service '{service_name}' a été redémarré.",
+                es=f"El servicio '{service_name}' ha sido reiniciado.",
+                it=f"Il servizio '{service_name}' è stato riavviato.",
+                nl=f"Service '{service_name}' is opnieuw gestart.",
+                pl=f"Usługa '{service_name}' została ponownie uruchomiona.",
+                pt=f"O serviço '{service_name}' foi reiniciado.",
+                ja=f"サービス '{service_name}' を再起動しました。",
+                zh=f"服务 '{service_name}' 已重启。",
             )
         return _t(
             de=f"Fehler beim Neustart: {result}",
             en=f"Restart failed: {result}",
+            fr=f"Échec du redémarrage: {result}",
+            es=f"Error al reiniciar: {result}",
+            it=f"Riavvio non riuscito: {result}",
+            nl=f"Herstart mislukt: {result}",
+            pl=f"Błąd podczas ponownego uruchamiania: {result}",
+            pt=f"Falha ao reiniciar: {result}",
+            ja=f"再起動に失敗しました: {result}",
+            zh=f"重启失败: {result}",
         )
     except Exception as e:
         logger.error("Failed to restart OPNsense service: %s", e)
         return _t(
             de=f"Fehler: {e}",
             en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
         )
 
 
