@@ -1,0 +1,106 @@
+"""
+Netgear Module – Manifest.
+
+Netgear Switches, Routers, and Access Points.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+
+import aiohttp
+
+from core.module_registry import ModuleManifest
+
+logger = logging.getLogger("ninko.modules.netgear")
+
+
+async def check_netgear_health() -> dict:
+    """Health check for Netgear API."""
+    try:
+        from core.connections import ConnectionManager
+        from core.vault import get_vault
+
+        conn = await ConnectionManager.get_default_connection("netgear")
+        if not conn:
+            host = os.environ.get("NETGEAR_HOST", "")
+            if not host:
+                return {"status": "ok", "detail": "No connection configured (expected)"}
+            user = os.environ.get("NETGEAR_USER", "admin")
+            vault = get_vault()
+            password = await vault.get_secret("NETGEAR_PASSWORD")
+            if not password:
+                return {"status": "error", "detail": "Missing password"}
+
+            auth = aiohttp.BasicAuth(user, password)
+            async with aiohttp.ClientSession(
+                auth=auth,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as session:
+                async with session.get(f"http://{host}/sysinfo") as resp:
+                    if resp.status == 200:
+                        return {
+                            "status": "ok",
+                            "detail": f"Netgear reachable at {host}",
+                        }
+                    return {"status": "error", "detail": f"HTTP {resp.status}"}
+
+        host = conn.config.get("host", "")
+        user = conn.config.get("user", "admin")
+        vault = get_vault()
+        password = None
+        password_path = conn.vault_keys.get("NETGEAR_PASSWORD")
+        if password_path:
+            password = await vault.get_secret(password_path)
+        if not password:
+            password = os.environ.get("NETGEAR_PASSWORD", "")
+
+        if not host or not password:
+            return {"status": "error", "detail": "Missing config"}
+
+        auth = aiohttp.BasicAuth(user, password)
+        async with aiohttp.ClientSession(
+            auth=auth,
+            timeout=aiohttp.ClientTimeout(total=10),
+        ) as session:
+            async with session.get(f"http://{host}/sysinfo") as resp:
+                if resp.status == 200:
+                    return {"status": "ok", "detail": "Netgear reachable"}
+                return {"status": "error", "detail": f"HTTP {resp.status}"}
+
+    except aiohttp.ClientResponseError as e:
+        return {"status": "error", "detail": f"HTTP {e.status}: {e.message}"}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+
+module_manifest = ModuleManifest(
+    name="netgear",
+    display_name="Netgear",
+    description="Netgear Network Devices – Switches, Routers, Access Points – Port Status, VLANs, and Traffic Management.",
+    version="1.0.0",
+    author="Ninko",
+    enabled_by_default=False,
+    env_prefix="NETGEAR_",
+    required_secrets=["NETGEAR_PASSWORD"],
+    optional_secrets=[],
+    routing_keywords=[
+        "netgear",
+        "netgear switch",
+        "netgear router",
+        "netgear ap",
+        "netgear access point",
+        "gs108",
+        "gs110",
+        "gs116",
+        "prosafe",
+    ],
+    api_prefix="/api/netgear",
+    dashboard_tab={
+        "id": "netgear",
+        "label": "Netgear",
+        "icon": "📶",
+    },
+    health_check=check_netgear_health,
+)

@@ -245,6 +245,16 @@ _TOOL_LABELS: dict[str, tuple[str, str]] = {
         "Creating firewall rule",
     ),
     "add_mikrotik_ip_address": ("Füge IP hinzu", "Adding IP address"),
+    # Netgear
+    "get_netgear_sysinfo": ("Lade Geräteinfo", "Loading device info"),
+    "list_netgear_ports": ("Lade Ports", "Loading ports"),
+    "list_netgear_vlans": ("Lade VLANs", "Loading VLANs"),
+    "get_netgear_port_stats": ("Lade Port-Stats", "Loading port stats"),
+    "list_netgear_arp": ("Lade ARP", "Loading ARP"),
+    "list_netgear_lldp": ("Lade LLDP", "Loading LLDP"),
+    "enable_netgear_port": ("Aktiviere Port", "Enabling port"),
+    "disable_netgear_port": ("Deaktiviere Port", "Disabling port"),
+    "reboot_netgear": ("Neustart Gerät", "Rebooting device"),
     # Redmine
     "get_redmine_projects": ("Lade Projekte", "Loading projects"),
     "get_redmine_project": ("Lade Projekt", "Loading project"),

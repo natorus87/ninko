@@ -1,0 +1,67 @@
+<!-- Netgear Dashboard Tab -->
+<style>
+#netgear-tab-content .netgear-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+</style>
+
+<div id="netgear-tab-content" class="module-tab-content">
+    <div class="netgear-grid">
+        <div class="status-card" id="netgear-card-model">
+            <span class="status-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                     stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <rect x="2" y="3" width="20" height="14" rx="2"/>
+                    <line x1="8" y1="21" x2="16" y2="21"/>
+                    <line x1="12" y1="17" x2="12" y2="21"/>
+                </svg>
+            </span>
+            <span class="status-value" id="netgear-model">-</span>
+            <span class="status-label">Device</span>
+        </div>
+        <div class="status-card" id="netgear-card-firmware">
+            <span class="status-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                     stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                </svg>
+            </span>
+            <span class="status-value" id="netgear-firmware">-</span>
+            <span class="status-label">Firmware</span>
+        </div>
+        <div class="status-card" id="netgear-card-ports">
+            <span class="status-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                     stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                </svg>
+            </span>
+            <span class="status-value" id="netgear-ports-count">-</span>
+            <span class="status-label">Ports</span>
+        </div>
+    </div>
+
+    <div style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap; margin-bottom:1.5rem;">
+        <button type="button" class="btn btn-refresh" data-action="netgear-refresh">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                <path d="M21 3v5h-5"/>
+                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                <path d="M8 16H3v5"/>
+            </svg>
+            Aktualisieren
+        </button>
+    </div>
+
+    <div class="k8s-section">
+        <h3 class="section-title" style="text-wrap:balance">Übersicht</h3>
+        <div id="netgear-info" class="nodes-grid">
+            <p class="empty-state">Keine Daten geladen.</p>
+        </div>
+    </div>
+</div>

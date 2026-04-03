@@ -106,6 +106,13 @@
       "author": "Ninko"
     },
     {
+      "name": "netgear",
+      "display_name": "Netgear",
+      "description": "Netgear Network Devices – Switches, Routers, APs – Port Status, VLANs.",
+      "version": "1.0.0",
+      "author": "Ninko"
+    },
+    {
       "name": "opnsense",
       "display_name": "OPNsense",
       "description": "Management und Monitoring einer OPNsense Firewall via REST API.",
