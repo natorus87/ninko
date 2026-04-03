@@ -168,7 +168,7 @@
       "version": "1.0.0",
       "author": "Ninko Team"
     },
-    {
+{
       "name": "tasmota",
       "display_name": "Tasmota",
       "description": "Steuerung und Monitoring von Tasmota-Geräten (ESP8266/ESP32) via HTTP REST API.",
@@ -176,18 +176,11 @@
       "author": "Ninko"
     },
     {
-      "name": "teams",
-      "display_name": "Microsoft Teams",
-      "description": "Ermöglicht das Chatten mit dem Ninko Orchestrator über Microsoft Teams",
+      "name": "ubiquiti",
+      "display_name": "Ubiquiti",
+      "description": "Ubiquiti UniFi – Switches, Routers, APs – Device Status, Clients, Traffic.",
       "version": "1.0.0",
-      "author": "Ninko Team"
-    },
-    {
-      "name": "telegram",
-      "display_name": "Telegram Bot",
-      "description": "Ermöglicht das Chatten mit dem Ninko Orchestrator über Telegram",
-      "version": "1.0.0",
-      "author": "Ninko Team"
+      "author": "Ninko"
     },
     {
       "name": "wordpress",

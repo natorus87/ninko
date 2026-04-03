@@ -255,6 +255,18 @@ _TOOL_LABELS: dict[str, tuple[str, str]] = {
     "enable_netgear_port": ("Aktiviere Port", "Enabling port"),
     "disable_netgear_port": ("Deaktiviere Port", "Disabling port"),
     "reboot_netgear": ("Neustart Gerät", "Rebooting device"),
+    # Ubiquiti
+    "list_ubiquiti_devices": ("Lade Geräte", "Loading devices"),
+    "list_ubiquiti_clients": ("Lade Clients", "Loading clients"),
+    "get_ubiquiti_device": ("Lade Gerätedetails", "Loading device details"),
+    "list_ubiquiti_wlans": ("Lade WLANs", "Loading WLANs"),
+    "list_ubiquiti_switch_ports": ("Lade Ports", "Loading ports"),
+    "get_ubiquiti_network_stats": ("Lade Netzwerk-Stats", "Loading network stats"),
+    "list_ubiquiti_firewall_rules": ("Lade Firewall", "Loading firewall rules"),
+    "restart_ubiquiti_device": ("Neustart Gerät", "Restarting device"),
+    "enable_ubiquiti_wlan": ("Aktiviere WLAN", "Enabling WLAN"),
+    "disable_ubiquiti_wlan": ("Deaktiviere WLAN", "Disabling WLAN"),
+    "kick_ubiquiti_client": ("Trenne Client", "Kicking client"),
     # Redmine
     "get_redmine_projects": ("Lade Projekte", "Loading projects"),
     "get_redmine_project": ("Lade Projekt", "Loading project"),

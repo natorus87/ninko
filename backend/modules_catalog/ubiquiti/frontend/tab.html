@@ -1,0 +1,70 @@
+<!-- Ubiquiti Dashboard Tab -->
+<style>
+#ubiquiti-tab-content .ubiquiti-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+</style>
+
+<div id="ubiquiti-tab-content" class="module-tab-content">
+    <div class="ubiquiti-grid">
+        <div class="status-card" id="ubiquiti-card-devices">
+            <span class="status-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                     stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <rect x="2" y="3" width="20" height="14" rx="2"/>
+                    <line x1="8" y1="21" x2="16" y2="21"/>
+                    <line x1="12" y1="17" x2="12" y2="21"/>
+                </svg>
+            </span>
+            <span class="status-value" id="ubiquiti-devices-count">-</span>
+            <span class="status-label">Geräte</span>
+        </div>
+        <div class="status-card" id="ubiquiti-card-clients">
+            <span class="status-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                     stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+                    <line x1="12" y1="18" x2="12" y2="18"/>
+                </svg>
+            </span>
+            <span class="status-value" id="ubiquiti-clients-count">-</span>
+            <span class="status-label">Clients</span>
+        </div>
+        <div class="status-card" id="ubiquiti-card-wlans">
+            <span class="status-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                     stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+                    <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+                    <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+                    <line x1="12" y1="20" x2="12" y2="20"/>
+                </svg>
+            </span>
+            <span class="status-value" id="ubiquiti-wlans-count">-</span>
+            <span class="status-label">WLANs</span>
+        </div>
+    </div>
+
+    <div style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap; margin-bottom:1.5rem;">
+        <button type="button" class="btn btn-refresh" data-action="ubiquiti-refresh">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                <path d="M21 3v5h-5"/>
+                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                <path d="M8 16H3v5"/>
+            </svg>
+            Aktualisieren
+        </button>
+    </div>
+
+    <div class="k8s-section">
+        <h3 class="section-title" style="text-wrap:balance">Übersicht</h3>
+        <div id="ubiquiti-info" class="nodes-grid">
+            <p class="empty-state">Keine Daten geladen.</p>
+        </div>
+    </div>
+</div>
