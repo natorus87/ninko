@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/ubiquiti", tags=["ubiquiti"])
 
 
 @router.get("/health")
-async def health_check():
+async def health_check() -> object:
     """Health check endpoint."""
     from .manifest import check_ubiquiti_health
 
@@ -22,7 +22,7 @@ async def health_check():
 
 
 @router.get("/status")
-async def get_status(connection_id: str = ""):
+async def get_status(connection_id: str = "") -> object:
     """Get UniFi status for dashboard."""
     try:
         from .tools import _get_api_client, UnifiSession
@@ -38,5 +38,5 @@ async def get_status(connection_id: str = ""):
             "clients_count": len(clients),
             "wlans_count": len(wlans),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"error": str(e)}

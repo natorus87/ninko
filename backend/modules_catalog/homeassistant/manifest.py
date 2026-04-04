@@ -13,7 +13,7 @@ async def check_homeassistant_health() -> dict:
         # the client returning some basic data if configured. Usually Ninko expects a real check.
         # But we'll trust that the client data is present.
         return {"status": "ok", "detail": "Home Assistant configuration present."}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": str(e)}
 
 module_manifest = ModuleManifest(

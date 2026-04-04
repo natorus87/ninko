@@ -20,7 +20,7 @@ async def get_spaces(connection_id: str = "") -> dict:
     try:
         result = await get_confluence_spaces.ainvoke({"connection_id": connection_id})
         return {"status": "ok", "data": result}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": str(e)}
 
 
@@ -35,5 +35,5 @@ async def get_pages(space_id: str = "", connection_id: str = "") -> dict:
             }
         )
         return {"status": "ok", "data": result}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": str(e)}

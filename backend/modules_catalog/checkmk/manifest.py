@@ -26,7 +26,7 @@ async def check_checkmk_health() -> dict:
             return {"status": "error", "detail": result["error"]}
 
         return {"status": "ok", "detail": "Checkmk erreichbar"}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": f"Checkmk nicht erreichbar: {e}"}
 
 

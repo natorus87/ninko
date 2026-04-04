@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/slack", tags=["slack"])
 
 
 @router.get("/health")
-async def health_check():
+async def health_check() -> object:
     """Health check endpoint."""
     from .manifest import check_slack_health
 
@@ -22,7 +22,7 @@ async def health_check():
 
 
 @router.get("/status")
-async def get_status(connection_id: str = ""):
+async def get_status(connection_id: str = "") -> object:
     """Get Slack workspace status."""
     try:
         from .tools import _get_token, _slack_request
@@ -39,5 +39,5 @@ async def get_status(connection_id: str = ""):
             "channels_count": len(channels.get("channels", [])),
             "users_count": len(users.get("members", [])),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"error": str(e)}

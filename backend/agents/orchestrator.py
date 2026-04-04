@@ -22,7 +22,24 @@ from typing import TYPE_CHECKING
 from langchain_core.messages import HumanMessage
 
 from agents.base_agent import BaseAgent, _t
-from agents.core_tools import execute_cli_command, create_custom_agent, update_custom_agent, install_skill, create_dag_workflow, create_linear_workflow, execute_workflow, remember_fact, recall_memory, forget_fact, confirm_forget, call_module_agent, run_pipeline, configure_routing, get_routing_info, wait
+from agents.core_tools import (
+    execute_cli_command,
+    create_custom_agent,
+    update_custom_agent,
+    install_skill,
+    create_dag_workflow,
+    create_linear_workflow,
+    execute_workflow,
+    remember_fact,
+    recall_memory,
+    forget_fact,
+    confirm_forget,
+    call_module_agent,
+    run_pipeline,
+    configure_routing,
+    get_routing_info,
+    wait,
+)
 from modules.image_gen.tools import generate_image
 from core import status_bus
 
@@ -45,32 +62,42 @@ _ORCH_RECOVERABLE_EXCEPTIONS = (
 # ── Tier-4 Konstanten ─────────────────────────────────────────────────────────
 
 # Utility-Module zählen für Compound-Scoring nur wenn explizit erwähnt
-_UTILITY_MODULES: frozenset[str] = frozenset({
-    "web_search", "image_gen", "telegram", "email", "teams",
-})
+_UTILITY_MODULES: frozenset[str] = frozenset(
+    {
+        "web_search",
+        "image_gen",
+        "telegram",
+        "email",
+        "teams",
+    }
+)
 
 # Sequentielle Verknüpfungs-Muster (word-boundary-gesichert)
-_MULTISTEP_PATTERNS: list[re.Pattern] = [re.compile(p, re.IGNORECASE) for p in [
-    r'\bund\s+dann\b',
-    r'\bund\s+danach\b',
-    r'\bdanach\b',
-    r'\banschlie[ßs]end\b',
-    r'\bals\s+n[äa]chstes\b',
-    r'\bzuerst\b.{1,80}\bdann\b',
-    r'\berst\b.{1,80}\bdann\b',
-    r'\bnachdem\b',
-    r'\bwenn\s+fertig\b',
-    r'\bim\s+anschluss\b',
-    r'\bthen\b',
-    r'\bafter\s+that\b',
-    r'\bfollowed\s+by\b',
-    r'\bwhen\s+done\b',
-]]
+_MULTISTEP_PATTERNS: list[re.Pattern] = [
+    re.compile(p, re.IGNORECASE)
+    for p in [
+        r"\bund\s+dann\b",
+        r"\bund\s+danach\b",
+        r"\bdanach\b",
+        r"\banschlie[ßs]end\b",
+        r"\bals\s+n[äa]chstes\b",
+        r"\bzuerst\b.{1,80}\bdann\b",
+        r"\berst\b.{1,80}\bdann\b",
+        r"\bnachdem\b",
+        r"\bwenn\s+fertig\b",
+        r"\bim\s+anschluss\b",
+        r"\bthen\b",
+        r"\bafter\s+that\b",
+        r"\bfollowed\s+by\b",
+        r"\bwhen\s+done\b",
+    ]
+]
 
 # Timeout für den Pipeline-Planner-LLM-Call
 _LLM_ROUTING_TIMEOUT: float = 10.0
 
 # ── Routing-Konfiguration ─────────────────────────────────────────────────────
+
 
 @dataclass
 class RoutingConfig:
@@ -81,9 +108,10 @@ class RoutingConfig:
     - Tier 1 (invoke): Alles andere → Orchestrator-ReAct-Loop entscheidet selbst
       via call_module_agent / run_pipeline / create_custom_agent / direkte Antwort.
     """
-    tier1_enabled: bool = True   # ReAct-Loop für alles ohne eindeutigen Keyword-Match
-    tier2_enabled: bool = True   # Keyword-Fast-Path direkt zum Modul-Agent
-    tier4_enabled: bool = True   # Multi-Modul-Pipeline-Planner
+
+    tier1_enabled: bool = True  # ReAct-Loop für alles ohne eindeutigen Keyword-Match
+    tier2_enabled: bool = True  # Keyword-Fast-Path direkt zum Modul-Agent
+    tier4_enabled: bool = True  # Multi-Modul-Pipeline-Planner
     preset: str = "default"
 
     @classmethod
@@ -100,7 +128,11 @@ ROUTING_PRESETS: dict[str, dict] = {
     # fast: kein Pipeline-Overhead, direkte Antworten priorisiert
     "fast": {"preset": "fast", "tier4_enabled": False},
     # module-only: Tier 1 (direkte Antwort) und Tier 4 (Pipeline) deaktiviert
-    "module-only": {"preset": "module-only", "tier1_enabled": False, "tier4_enabled": False},
+    "module-only": {
+        "preset": "module-only",
+        "tier1_enabled": False,
+        "tier4_enabled": False,
+    },
 }
 
 # ── Session-scoped Routing State ──────────────────────────────────────────────
@@ -112,16 +144,33 @@ _session_stats: dict[str, dict] = {}
 _SESSION_ROUTING_TTL = 86400.0  # 24h, matching Redis chat-history TTL
 
 # Speed signals that trigger auto-fast preset for a session (DE + EN)
-_SPEED_SIGNALS = frozenset({
-    "schnell", "schnelle", "schneller", "schnelles", "quick", "fast",
-    "kurz", "kurze", "kurzer", "kurzes", "brief", "knapp", "simplified",
-    "einfach", "kürzer", "kürze",
-})
+_SPEED_SIGNALS = frozenset(
+    {
+        "schnell",
+        "schnelle",
+        "schneller",
+        "schnelles",
+        "quick",
+        "fast",
+        "kurz",
+        "kurze",
+        "kurzer",
+        "kurzes",
+        "brief",
+        "knapp",
+        "simplified",
+        "einfach",
+        "kürzer",
+        "kürze",
+    }
+)
 
 # Explizite Agent-Erstellungs-Intention (DE + EN)
 _AGENT_CREATE_PATTERNS: tuple[re.Pattern, ...] = (
     re.compile(r"\berstell(?:e|en|t)?\b.{0,40}\bagent(?:en)?\b", re.IGNORECASE),
-    re.compile(r"\bleg(?:e|en|t)?\b.{0,40}\bagent(?:en)?\b.{0,20}\ban\b", re.IGNORECASE),
+    re.compile(
+        r"\bleg(?:e|en|t)?\b.{0,40}\bagent(?:en)?\b.{0,20}\ban\b", re.IGNORECASE
+    ),
     re.compile(r"\bbau(?:e|en|t)?\b.{0,40}\bagent(?:en)?\b", re.IGNORECASE),
     re.compile(r"\bcreate\b.{0,40}\bagent\b", re.IGNORECASE),
     re.compile(r"\bbuild\b.{0,40}\bagent\b", re.IGNORECASE),
@@ -130,8 +179,14 @@ _AGENT_CREATE_PATTERNS: tuple[re.Pattern, ...] = (
 
 # How-to / Anleitung statt Ausführung
 _AGENT_HOWTO_PATTERNS: tuple[re.Pattern, ...] = (
-    re.compile(r"\bwie\b.{0,30}\b(agent|agenten)\b.{0,20}\b(erstell|anleg|bau)\w*", re.IGNORECASE),
-    re.compile(r"\bhow\b.{0,20}\b(to\b.{0,10})?(create|build|make)\b.{0,30}\bagent\b", re.IGNORECASE),
+    re.compile(
+        r"\bwie\b.{0,30}\b(agent|agenten)\b.{0,20}\b(erstell|anleg|bau)\w*",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bhow\b.{0,20}\b(to\b.{0,10})?(create|build|make)\b.{0,30}\bagent\b",
+        re.IGNORECASE,
+    ),
     re.compile(r"\banleitung\b.{0,40}\bagent\b", re.IGNORECASE),
 )
 
@@ -142,13 +197,20 @@ _WORKFLOW_CREATE_PATTERNS: tuple[re.Pattern, ...] = (
     re.compile(r"\bbau(?:e|en|t)?\b.{0,40}\bworkflow\b", re.IGNORECASE),
     re.compile(r"\bcreate\b.{0,40}\bworkflow\b", re.IGNORECASE),
     re.compile(r"\bbuild\b.{0,40}\bworkflow\b", re.IGNORECASE),
-    re.compile(r"\bautomatisier\w*\b.{0,40}\b(ablauf|prozess|workflow)\b", re.IGNORECASE),
+    re.compile(
+        r"\bautomatisier\w*\b.{0,40}\b(ablauf|prozess|workflow)\b", re.IGNORECASE
+    ),
 )
 
 # How-to / Anleitung statt Ausführung
 _WORKFLOW_HOWTO_PATTERNS: tuple[re.Pattern, ...] = (
-    re.compile(r"\bwie\b.{0,30}\bworkflow\b.{0,20}\b(erstell|anleg|bau)\w*", re.IGNORECASE),
-    re.compile(r"\bhow\b.{0,20}\b(to\b.{0,10})?(create|build|make)\b.{0,30}\bworkflow\b", re.IGNORECASE),
+    re.compile(
+        r"\bwie\b.{0,30}\bworkflow\b.{0,20}\b(erstell|anleg|bau)\w*", re.IGNORECASE
+    ),
+    re.compile(
+        r"\bhow\b.{0,20}\b(to\b.{0,10})?(create|build|make)\b.{0,30}\bworkflow\b",
+        re.IGNORECASE,
+    ),
     re.compile(r"\banleitung\b.{0,40}\bworkflow\b", re.IGNORECASE),
 )
 
@@ -223,7 +285,25 @@ class OrchestratorAgent(BaseAgent):
         super().__init__(
             name="orchestrator",
             system_prompt=SYSTEM_PROMPT,
-            tools=[execute_cli_command, create_custom_agent, update_custom_agent, install_skill, create_dag_workflow, create_linear_workflow, execute_workflow, remember_fact, recall_memory, forget_fact, confirm_forget, call_module_agent, run_pipeline, generate_image, configure_routing, get_routing_info, wait],
+            tools=[
+                execute_cli_command,
+                create_custom_agent,
+                update_custom_agent,
+                install_skill,
+                create_dag_workflow,
+                create_linear_workflow,
+                execute_workflow,
+                remember_fact,
+                recall_memory,
+                forget_fact,
+                confirm_forget,
+                call_module_agent,
+                run_pipeline,
+                generate_image,
+                configure_routing,
+                get_routing_info,
+                wait,
+            ],
         )
         self.registry = registry
         self._routing_map: dict[str, str] = {}
@@ -250,6 +330,7 @@ class OrchestratorAgent(BaseAgent):
         # 2. Optional: konfigurierte Verbindungen
         try:
             from core.connections import ConnectionManager
+
             conn_lines: list[str] = []
             for manifest in modules:
                 conns = await ConnectionManager.list_connections(manifest.name)
@@ -267,11 +348,14 @@ class OrchestratorAgent(BaseAgent):
                     "der User eingreifen will, falls die Frage ungenau ist (z.B. 'prod' vs 'staging')."
                 )
         except _ORCH_RECOVERABLE_EXCEPTIONS as e:
-            logger.warning("Konnte globale Connections für Orchestrator nicht laden: %s", e)
+            logger.warning(
+                "Konnte globale Connections für Orchestrator nicht laden: %s", e
+            )
 
         # 3. Registrierte dynamische Agenten aus dem Pool
         try:
             from core.agent_pool import get_agent_pool
+
             pool = get_agent_pool()
             agent_lines: list[str] = []
             for agent_id, meta in pool._meta.items():
@@ -329,16 +413,32 @@ class OrchestratorAgent(BaseAgent):
 
         # ── Heuristik 1: Speed-Signale → Fast-Preset für diese Session ──────
         if cfg.preset != "fast" and words & _SPEED_SIGNALS:
-            new_cfg = RoutingConfig.from_dict({**RoutingConfig().to_dict(), "preset": "fast"})
+            new_cfg = RoutingConfig.from_dict(
+                {**RoutingConfig().to_dict(), "preset": "fast"}
+            )
             set_session_routing_config(session_id, new_cfg)
-            logger.info("Proaktives Routing: Speed-Signal erkannt → Fast-Preset für Session '%s'", session_id)
+            logger.info(
+                "Proaktives Routing: Speed-Signal erkannt → Fast-Preset für Session '%s'",
+                session_id,
+            )
             return new_cfg
 
         # ── Heuristik 2: Reset-Signale → zurück zu Defaults ─────────────────
-        _RESET_SIGNALS = {"default", "normal", "reset", "zurück", "standard", "alles", "wieder"}
+        _RESET_SIGNALS = {
+            "default",
+            "normal",
+            "reset",
+            "zurück",
+            "standard",
+            "alles",
+            "wieder",
+        }
         if words & _RESET_SIGNALS and cfg.preset != "default":
             clear_session_routing_config(session_id)
-            logger.info("Proaktives Routing: Reset-Signal erkannt → Defaults für Session '%s'", session_id)
+            logger.info(
+                "Proaktives Routing: Reset-Signal erkannt → Defaults für Session '%s'",
+                session_id,
+            )
             return RoutingConfig()
 
         # ── Heuristik 3: Modul-Fokus → Tier 2 dominiert, kein Bedarf für ReAct-Loop ─
@@ -353,17 +453,22 @@ class OrchestratorAgent(BaseAgent):
             and not cfg.preset.startswith("focus:")
         ):
             dominant = recent_modules[0]
-            new_cfg = RoutingConfig.from_dict({**cfg.to_dict(), "preset": f"focus:{dominant}"})
+            new_cfg = RoutingConfig.from_dict(
+                {**cfg.to_dict(), "preset": f"focus:{dominant}"}
+            )
             set_session_routing_config(session_id, new_cfg)
             logger.info(
                 "Proaktives Routing: Modul-Fokus '%s' erkannt (Session '%s')",
-                dominant, session_id,
+                dominant,
+                session_id,
             )
             return new_cfg
 
         return cfg
 
-    def _update_session_stats(self, session_id: str, tier: int, module: str | None) -> None:
+    def _update_session_stats(
+        self, session_id: str, tier: int, module: str | None
+    ) -> None:
         """Trackt Tier-Nutzung und Modul-Verteilung pro Session für proaktive Heuristiken."""
         if not session_id:
             return
@@ -407,20 +512,40 @@ class OrchestratorAgent(BaseAgent):
             return False
         return any(p.search(msg) for p in _WORKFLOW_CREATE_PATTERNS)
 
-    async def _auto_create_custom_agent(self, message: str, session_id: str) -> tuple[str, bool]:
+    async def _auto_create_custom_agent(
+        self, message: str, session_id: str
+    ) -> tuple[str, bool]:
         """Erstellt bei explizitem User-Wunsch deterministisch einen Custom-Agenten.
 
         Verhindert den Fall, dass der ReAct-Loop nur eine Anleitung ausgibt,
         obwohl der User einen echten Create-Call erwartet.
         """
-        await status_bus.emit(session_id, _t("Erstelle Custom-Agent…", "Creating custom agent…"))
+        await status_bus.emit(
+            session_id,
+            _t(
+                de="Erstelle Custom-Agent…",
+                en="Creating custom agent…",
+                fr="Création de l'agent personnalisé…",
+                es="Creando agente personalizado…",
+                it="Creazione agente personalizzato…",
+                nl="Aangepaste agent aan het maken…",
+                pl="Tworzenie agenta niestandardowego…",
+                pt="Criando agente personalizado…",
+                ja="カスタムエージェント作成中…",
+                zh="正在创建自定义代理…",
+            ),
+        )
 
         from core.llm_factory import get_llm
         from core.agent_pool import get_agent_pool
 
         modules = self.registry.list_modules()
         module_names = [m.name for m in modules]
-        module_line = ", ".join(module_names) if module_names else "kubernetes, linux_server, docker"
+        module_line = (
+            ", ".join(module_names)
+            if module_names
+            else "kubernetes, linux_server, docker"
+        )
 
         prompt = f"""Du bist ein Agent-Builder für Ninko.
 Erzeuge aus der User-Anfrage ein JSON für create_custom_agent.
@@ -464,12 +589,29 @@ JSON-SCHEMA:
                 raise ValueError("Kein JSON-Objekt in der LLM-Antwort gefunden.")
             spec = _json.loads(m.group(0))
         except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
-            logger.warning("Auto-Create-Agent: Spec-Generierung fehlgeschlagen: %s", exc)
+            logger.warning(
+                "Auto-Create-Agent: Spec-Generierung fehlgeschlagen: %s", exc
+            )
             return _t(
-                "Fehler: Die Agent-Spezifikation konnte nicht erzeugt werden. "
+                de="Fehler: Die Agent-Spezifikation konnte nicht erzeugt werden. "
                 "Bitte beschreibe Zweck, Module und gewünschtes Output-Format präziser.",
-                "Error: Failed to generate the agent specification. "
+                en="Error: Failed to generate the agent specification. "
                 "Please describe purpose, modules, and expected output format more precisely.",
+                fr="Erreur : La spécification de l'agent n'a pas pu être générée. "
+                "Veuillez décrire plus précisément l'objectif, les modules et le format de sortie attendu.",
+                es="Error: No se pudo generar la especificación del agente. "
+                "Por favor, describe con más precisión el propósito, los módulos y el formato de salida esperado.",
+                it="Errore: impossibile generare la specifica dell'agente. "
+                "Descrivi più precisamente lo scopo, i moduli e il formato di output previsto.",
+                nl="Fout: De agentspecificatie kon niet worden gegenereerd. "
+                "Beschrijf doel, modules en verwachte output-formaat nauwkeuriger.",
+                pl="Błąd: Nie można wygenerować specyfikacji agenta. "
+                "Opisz dokładniej cel, moduły i oczekiwany format wyjściowy.",
+                pt="Erro: Falha ao gerar a especificação do agente. "
+                "Por favor, descreva com mais precisão o objetivo, módulos e formato de saída esperado.",
+                ja="エラー：エージェント仕様を生成できませんでした。"
+                "目的、モジュール、出力形式をより正確に説明してください。",
+                zh="错误：无法生成代理规范。请更准确地描述目标、模块和预期输出格式。",
             ), False
 
         name = str(spec.get("name", "")).strip()[:80]
@@ -478,36 +620,109 @@ JSON-SCHEMA:
 
         if not name or not system_prompt:
             return _t(
-                "Fehler: Die erzeugte Agent-Spezifikation ist unvollständig (Name/System-Prompt).",
-                "Error: The generated agent specification is incomplete (name/system_prompt).",
+                de="Fehler: Die erzeugte Agent-Spezifikation ist unvollständig (Name/System-Prompt).",
+                en="Error: The generated agent specification is incomplete (name/system_prompt).",
+                fr="Erreur : La spécification de l'agent générée est incomplète (nom/system_prompt).",
+                es="Error: La especificación del agente generada está incompleta (nombre/system_prompt).",
+                it="Errore: La specifica dell'agente generata è incompleta (nome/system_prompt).",
+                nl="Fout: De gegenereerde agentspecificatie is onvolledig (naam/system_prompt).",
+                pl="Błąd: Wygenerowana specyfikacja agenta jest niekompletna (nazwa/system_prompt).",
+                pt="Erro: A especificação do agente gerada está incompleta (nome/system_prompt).",
+                ja="エラー：生成されたエージェント仕様が不完全です（名前/system_prompt）。",
+                zh="错误：生成代理规范不完整（名称/system_prompt）。",
             ), False
 
         if len(system_prompt) < 120:
             return _t(
-                "Fehler: Die erzeugte Agent-Spezifikation ist zu kurz. "
+                de="Fehler: Die erzeugte Agent-Spezifikation ist zu kurz. "
                 "Bitte beschreibe den Use-Case genauer.",
-                "Error: The generated agent specification is too short. "
+                en="Error: The generated agent specification is too short. "
                 "Please provide a more detailed use case.",
+                fr="Erreur : La spécification de l'agent générée est trop courte. "
+                "Veuillez fournir un cas d'utilisation plus détaillé.",
+                es="Error: La especificación del agente generada es demasiado corta. "
+                "Por favor, proporciona un caso de uso más detallado.",
+                it="Errore: La specifica dell'agente generata è troppo breve. "
+                "Fornisci un caso d'uso più dettagliato.",
+                nl="Fout: De gegenereerde agentspecificatie is te kort. "
+                "Geef een meer gedetailleerd gebruiksscenario.",
+                pl="Błąd: Wygenerowana specyfikacja agenta jest zbyt krótka. "
+                "Podaj bardziej szczegółowy przypadek użycia.",
+                pt="Erro: A especificação do agente gerada é muito curta. "
+                "Por favor, forneça um caso de uso mais detalhado.",
+                ja="エラー：生成されたエージェント仕様が短すぎます。"
+                "より詳細なユースケースを説明してください。",
+                zh="错误：生成的代理规范太短。请提供更详细的用例。",
             ), False
 
         pool = get_agent_pool()
-        agent_id, _ = await pool.register(name=name, system_prompt=system_prompt, description=description)
+        agent_id, _ = await pool.register(
+            name=name, system_prompt=system_prompt, description=description
+        )
         logger.info("Auto-Create-Agent erfolgreich: '%s' (%s)", name, agent_id)
 
         return _t(
-            f"✅ Agent '{name}' wurde erstellt.\n\n"
+            de=f"✅ Agent '{name}' wurde erstellt.\n\n"
             f"- ID: `{agent_id}`\n"
             f"- Beschreibung: {description or '-'}\n\n"
             f"Du kannst ihn jetzt im Agenten-Editor anpassen oder direkt verwenden.",
-            f"✅ Agent '{name}' was created.\n\n"
+            en=f"✅ Agent '{name}' was created.\n\n"
             f"- ID: `{agent_id}`\n"
             f"- Description: {description or '-'}\n\n"
             f"You can now refine it in the agent editor or use it directly.",
+            fr=f"✅ Agent '{name}' a été créé.\n\n"
+            f"- ID: `{agent_id}`\n"
+            f"- Description: {description or '-'}\n\n"
+            f"Vous pouvez maintenant l'affiner dans l'éditeur d'agents ou l'utiliser directement.",
+            es=f"✅ El agente '{name}' ha sido creado.\n\n"
+            f"- ID: `{agent_id}`\n"
+            f"- Descripción: {description or '-'}\n\n"
+            f"Ahora puedes refinearlo en el editor de agentes o usarlo directamente.",
+            it=f"✅ L'agente '{name}' è stato creato.\n\n"
+            f"- ID: `{agent_id}`\n"
+            f"- Descrizione: {description or '-'}\n\n"
+            f"Ora puoi perfezionarlo nell'editor degli agenti o usarlo direttamente.",
+            nl=f"✅ Agent '{name}' is aangemaakt.\n\n"
+            f"- ID: `{agent_id}`\n"
+            f"- Beschrijving: {description or '-'}\n\n"
+            f"Je kunt hem nu in de agent-editor aanpassen of direct gebruiken.",
+            pl=f"✅ Agent '{name}' został utworzony.\n\n"
+            f"- ID: `{agent_id}`\n"
+            f"- Opis: {description or '-'}\n\n"
+            f"Możesz go teraz dostosować w edytorze agentów lub użyć bezpośrednio.",
+            pt=f"✅ Agente '{name}' foi criado.\n\n"
+            f"- ID: `{agent_id}`\n"
+            f"- Descrição: {description or '-'}\n\n"
+            f"Você pode refiná-lo no editor de agentes ou usá-lo diretamente.",
+            ja=f"✅ エージェント '{name}' が作成されました。\n\n"
+            f"- ID: `{agent_id}`\n"
+            f"- 説明: {description or '-'}\n\n"
+            f"エージェントエディターで調整するか、直接使用できます。",
+            zh=f"✅ 代理 '{name}' 已创建。\n\n"
+            f"- ID: `{agent_id}`\n"
+            f"- 描述: {description or '-'}\n\n"
+            f"您现在可以在代理编辑器中对其进行调整或直接使用。",
         ), False
 
-    async def _auto_create_workflow(self, message: str, session_id: str) -> tuple[str, bool]:
+    async def _auto_create_workflow(
+        self, message: str, session_id: str
+    ) -> tuple[str, bool]:
         """Erstellt bei explizitem User-Wunsch deterministisch einen Workflow."""
-        await status_bus.emit(session_id, _t("Erstelle Workflow…", "Creating workflow…"))
+        await status_bus.emit(
+            session_id,
+            _t(
+                de="Erstelle Workflow…",
+                en="Creating workflow…",
+                fr="Création du workflow…",
+                es="Creando workflow…",
+                it="Creazione workflow…",
+                nl="Workflow aan het maken…",
+                pl="Tworzenie workflow…",
+                pt="Criando workflow…",
+                ja="ワークフロー作成中…",
+                zh="正在创建工作流…",
+            ),
+        )
         from core.llm_factory import get_llm
 
         prompt = f"""Du bist ein Workflow-Builder für Ninko.
@@ -545,43 +760,94 @@ JSON-SCHEMA:
                 raise ValueError("Kein JSON-Objekt in der LLM-Antwort gefunden.")
             spec = _json.loads(m.group(0))
         except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
-            logger.warning("Auto-Create-Workflow: Spec-Generierung fehlgeschlagen: %s", exc)
+            logger.warning(
+                "Auto-Create-Workflow: Spec-Generierung fehlgeschlagen: %s", exc
+            )
             return _t(
-                "Fehler: Die Workflow-Spezifikation konnte nicht erzeugt werden. "
+                de="Fehler: Die Workflow-Spezifikation konnte nicht erzeugt werden. "
                 "Bitte beschreibe Ablauf und Ziel klarer.",
-                "Error: Failed to generate the workflow specification. "
+                en="Error: Failed to generate the workflow specification. "
                 "Please describe flow and goal more clearly.",
+                fr="Erreur : La spécification du workflow n'a pas pu être générée. "
+                "Veuillez décrire plus clairement le flux et l'objectif.",
+                es="Error: No se pudo generar la especificación del workflow. "
+                "Por favor, describe el flujo y el objetivo con más claridad.",
+                it="Errore: impossibile generare la specifica del workflow. "
+                "Descrivi più chiaramente il flusso e l'obiettivo.",
+                nl="Fout: De workflow-specificatie kon niet worden gegenereerd. "
+                "Beschrijf de stroom en het doel duidelijker.",
+                pl="Błąd: Nie można wygenerować specyfikacji workflow. "
+                "Opisz jasniej przepływ i cel.",
+                pt="Erro: Falha ao gerar a especificação do workflow. "
+                "Por favor, descreva o fluxo e o objetivo com mais clareza.",
+                ja="エラー：ワークフロー仕様を生成できませんでした。"
+                "フローと目標を明確に説明してください。",
+                zh="错误：无法生成工作流规范。请更清楚地描述流程和目标。",
             ), False
 
         name = str(spec.get("name", "")).strip()[:120]
         description = str(spec.get("description", "")).strip()[:500]
         steps_raw = spec.get("steps", [])
-        steps = [str(s).strip() for s in (steps_raw if isinstance(steps_raw, list) else []) if str(s).strip()]
+        steps = [
+            str(s).strip()
+            for s in (steps_raw if isinstance(steps_raw, list) else [])
+            if str(s).strip()
+        ]
 
         if not name:
             return _t(
-                "Fehler: Die Workflow-Spezifikation enthält keinen gültigen Namen.",
-                "Error: The workflow specification has no valid name.",
+                de="Fehler: Die Workflow-Spezifikation enthält keinen gültigen Namen.",
+                en="Error: The workflow specification has no valid name.",
+                fr="Erreur : La spécification du workflow ne contient pas de nom valide.",
+                es="Error: La especificación del workflow no contiene un nombre válido.",
+                it="Errore: La specifica del workflow non contiene un nome valido.",
+                nl="Fout: De workflow-specificatie bevat geen geldige naam.",
+                pl="Błąd: Specyfikacja workflow nie zawiera prawidłowej nazwy.",
+                pt="Erro: A especificação do workflow não contém um nome válido.",
+                ja="エラー：ワークフロー仕様に有効な名前が含まれていません。",
+                zh="错误：工作流规范没有有效的名称。",
             ), False
         if len(steps) < 2:
             return _t(
-                "Fehler: Für einen Workflow werden mindestens 2 Schritte benötigt.",
-                "Error: A workflow needs at least 2 steps.",
+                de="Fehler: Für einen Workflow werden mindestens 2 Schritte benötigt.",
+                en="Error: A workflow needs at least 2 steps.",
+                fr="Erreur : Un workflow nécessite au moins 2 étapes.",
+                es="Error: Un workflow necesita al menos 2 pasos.",
+                it="Errore: Un workflow richiede almeno 2 passaggi.",
+                nl="Fout: Een workflow heeft minimaal 2 stappen nodig.",
+                pl="Błąd: Workflow wymaga co najmniej 2 kroków.",
+                pt="Erro: Um workflow precisa de pelo menos 2 etapas.",
+                ja="エラー：ワークフローには少なくとも2つのステップが必要です。",
+                zh="错误：工作流至少需要2个步骤。",
             ), False
         if len(steps) > 6:
             steps = steps[:6]
 
         try:
-            result = await create_linear_workflow.ainvoke({
-                "name": name,
-                "description": description,
-                "steps": steps,
-            })
+            result = await create_linear_workflow.ainvoke(
+                {
+                    "name": name,
+                    "description": description,
+                    "steps": steps,
+                }
+            )
         except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
-            logger.error("Auto-Create-Workflow: create_linear_workflow fehlgeschlagen: %s", exc, exc_info=True)
+            logger.error(
+                "Auto-Create-Workflow: create_linear_workflow fehlgeschlagen: %s",
+                exc,
+                exc_info=True,
+            )
             return _t(
-                "Fehler: Workflow konnte nicht erstellt werden.",
-                "Error: Workflow could not be created.",
+                de="Fehler: Workflow konnte nicht erstellt werden.",
+                en="Error: Workflow could not be created.",
+                fr="Erreur : Le workflow n'a pas pu être créé.",
+                es="Error: El workflow no pudo ser creado.",
+                it="Errore: Il workflow non ha potuto essere creato.",
+                nl="Fout: Workflow kon niet worden aangemaakt.",
+                pl="Błąd: Workflow nie mógł zostać utworzony.",
+                pt="Erro: O workflow não pôde ser criado.",
+                ja="エラー：ワークフローを作成できませんでした。",
+                zh="错误：无法创建工作流。",
             ), False
 
         return str(result), False
@@ -598,20 +864,29 @@ JSON-SCHEMA:
     def _strip_bot_context(message: str) -> str:
         """Entfernt Bot-Kontext-Präfixe vor dem Keyword-Routing (z. B. '[Telegram Chat-ID: 123]').
         Das LLM erhält weiterhin den vollen Text — nur die Routing-Erkennung nutzt den bereinigten Text."""
-        return re.sub(r'^\[(?:Telegram Chat-ID|Teams User|Erkannte Sprache):[^\]]+\]\n?', '', message).strip()
+        return re.sub(
+            r"^\[(?:Telegram Chat-ID|Teams User|Erkannte Sprache):[^\]]+\]\n?",
+            "",
+            message,
+        ).strip()
 
     def _get_module_scores(self, text: str) -> dict[str, int]:
         """Keyword-Scoring für einen Text. Gibt Module → Score zurück (ohne History-Fallback)."""
         text_lower = text.lower()
-        text_compact = re.sub(r'[\W_]+', '', text_lower)
+        text_compact = re.sub(r"[\W_]+", "", text_lower)
         scores: dict[str, int] = {}
         for keyword, module_name in self._routing_map.items():
             kw_lower = keyword.lower()
-            kw_compact = re.sub(r'[\W_]+', '', kw_lower)
-            matches = len(re.findall(r'\b' + re.escape(kw_lower) + r'\b', text_lower))
+            kw_compact = re.sub(r"[\W_]+", "", kw_lower)
+            matches = len(re.findall(r"\b" + re.escape(kw_lower) + r"\b", text_lower))
             if len(kw_compact) >= 7 and matches == 0 and kw_compact in text_compact:
                 matches = 1
-            weight = 5 if kw_lower in [module_name.lower(), module_name.lower().replace("-", "")] else 1
+            weight = (
+                5
+                if kw_lower
+                in [module_name.lower(), module_name.lower().replace("-", "")]
+                else 1
+            )
             if matches > 0:
                 scores[module_name] = scores.get(module_name, 0) + (matches * weight)
         return scores
@@ -647,17 +922,30 @@ JSON-SCHEMA:
         """
         # Core-Overrides: explizite Core-Feature-Anfragen nicht an Module delegieren
         core_patterns = [
-            r"\bwork?flows?\b", r"\bworflows?\b",
-            r"\bagenten?\b", r"\bagent\s*erstellen\b", r"\bneuen?\s*agent\b",
-            r"\bcreate\s*agent\b", r"\bnew\s*agent\b",
-            r"\bcli\s*befehl\b", r"\blokales?\s*kommando\b", r"\bskript\s*ausführen\b",
-            r"\bcli\s*command\b", r"\brun\s*script\b", r"\bshell\s*command\b",
-            r"\bterminal\b", r"\bsystembefehl\b", r"\bping\b", r"\buptime\b",
+            r"\bwork?flows?\b",
+            r"\bworflows?\b",
+            r"\bagenten?\b",
+            r"\bagent\s*erstellen\b",
+            r"\bneuen?\s*agent\b",
+            r"\bcreate\s*agent\b",
+            r"\bnew\s*agent\b",
+            r"\bcli\s*befehl\b",
+            r"\blokales?\s*kommando\b",
+            r"\bskript\s*ausführen\b",
+            r"\bcli\s*command\b",
+            r"\brun\s*script\b",
+            r"\bshell\s*command\b",
+            r"\bterminal\b",
+            r"\bsystembefehl\b",
+            r"\bping\b",
+            r"\buptime\b",
         ]
         msg_lower = message.lower()
         for pattern in core_patterns:
             if re.search(pattern, msg_lower):
-                logger.info("Core-Override erkannt ('%s'), überspringe Modul-Routing.", pattern)
+                logger.info(
+                    "Core-Override erkannt ('%s'), überspringe Modul-Routing.", pattern
+                )
                 return None, False
 
         # Scoring der aktuellen Nachricht
@@ -674,18 +962,27 @@ JSON-SCHEMA:
                 return best, False
             elif history_scores:
                 # Mehrere Treffer aus History → ReAct entscheiden lassen (nie Compound)
-                sorted_h = sorted(history_scores.items(), key=lambda x: x[1], reverse=True)
+                sorted_h = sorted(
+                    history_scores.items(), key=lambda x: x[1], reverse=True
+                )
                 logger.info("History-Ambiguität %s → ReAct-Loop", sorted_h)
                 return None, False
             return None, False
 
         if not current_scores:
-            logger.info("Kein Keyword-Treffer → ReAct-Loop entscheidet für: '%s…'", message[:60])
+            logger.info(
+                "Kein Keyword-Treffer → ReAct-Loop entscheidet für: '%s…'", message[:60]
+            )
             return None, False
 
         if len(current_scores) == 1:
             best = next(iter(current_scores))
-            logger.info("Keyword-Fast-Path: '%s…' → '%s' (Score: %d)", message[:60], best, current_scores[best])
+            logger.info(
+                "Keyword-Fast-Path: '%s…' → '%s' (Score: %d)",
+                message[:60],
+                best,
+                current_scores[best],
+            )
             return best, False
 
         # Mehrere Module — Utility-Module filtern: nur wenn explizit erwähnt
@@ -720,7 +1017,8 @@ JSON-SCHEMA:
         # Scores zu niedrig oder unausgewogen → stärkstes Modul gewinnt
         logger.info(
             "Schwache Ambiguität %s → Tier 2 mit stärkstem Modul '%s'",
-            sorted_f[:3], sorted_f[0][0],
+            sorted_f[:3],
+            sorted_f[0][0],
         )
         return sorted_f[0][0], False
 
@@ -744,7 +1042,9 @@ JSON-SCHEMA:
             cfg = RoutingConfig()
 
         routing_message = self._strip_bot_context(message)
-        target_module, is_compound = self._detect_module_fast(routing_message, chat_history)
+        target_module, is_compound = self._detect_module_fast(
+            routing_message, chat_history
+        )
 
         # ── Tier 4: Multi-Modul-Pipeline ─────────────────────────────────────
         if cfg.tier4_enabled:
@@ -780,9 +1080,21 @@ JSON-SCHEMA:
         """
         from core.llm_factory import get_llm
 
-        await status_bus.emit(session_id, _t(
-            "Plane mehrstufige Aufgabe…", "Planning multi-step task…",
-        ))
+        await status_bus.emit(
+            session_id,
+            _t(
+                de="Plane mehrstufige Aufgabe…",
+                en="Planning multi-step task…",
+                fr="Planification de la tâche multi-étapes…",
+                es="Planificando tarea de múltiples pasos…",
+                it="Pianificazione attività multi-passo…",
+                nl="Meerstaps-taak plannen…",
+                pl="Planowanie zadania wieloetapowego…",
+                pt="Planejando tarefa de múltiplas etapas…",
+                ja="複数ステップのタスクを計画中…",
+                zh="正在规划多步骤任务…",
+            ),
+        )
 
         modules = self.registry.list_modules()
         valid_module_names: set[str] = {m.name for m in modules}
@@ -825,23 +1137,37 @@ JSON-SCHEMA:
             )
             raw = response.content if hasattr(response, "content") else str(response)
             # Thinking-Blöcke entfernen
-            raw = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL).strip()
+            raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
             # Erstes JSON-Array extrahieren
-            json_match = re.search(r'\[[\s\S]*?\]', raw)
+            json_match = re.search(r"\[[\s\S]*?\]", raw)
             if not json_match:
                 raise ValueError("Kein JSON-Array im Planner-Output gefunden")
             steps: list[dict] = _json.loads(json_match.group(0))
         except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
             logger.warning(
-                "Tier-4-Planner fehlgeschlagen (%s) → Fallback Tier 1", exc,
+                "Tier-4-Planner fehlgeschlagen (%s) → Fallback Tier 1",
+                exc,
             )
-            await status_bus.emit(session_id, _t(
-                "Pipeline-Planung fehlgeschlagen, direkte Verarbeitung…",
-                "Pipeline planning failed, direct processing…",
-            ))
+            await status_bus.emit(
+                session_id,
+                _t(
+                    de="Pipeline-Planung fehlgeschlagen, direkte Verarbeitung…",
+                    en="Pipeline planning failed, direct processing…",
+                    fr="Échec de la planification du pipeline, traitement direct…",
+                    es="Error en la planificación del pipeline, procesamiento directo…",
+                    it="Pianificazione pipeline non riuscita, elaborazione diretta…",
+                    nl="Pipeline-planning mislukt, directe verwerking…",
+                    pl="Planowanie pipeline nie powiodło się, bezpośrednie przetwarzanie…",
+                    pt="Falha no planejamento do pipeline, processamento direto…",
+                    ja="パイプライン計画に失敗しました、直接処理中…",
+                    zh="管道规划失败，直接处理中…",
+                ),
+            )
             return await self.invoke(
-                message=message, chat_history=chat_history,
-                session_id=session_id, confirmed=confirmed,
+                message=message,
+                chat_history=chat_history,
+                session_id=session_id,
+                confirmed=confirmed,
             )
 
         # ── Validierung ────────────────────────────────────────────────────
@@ -856,7 +1182,8 @@ JSON-SCHEMA:
                 continue
             if mod in _UTILITY_MODULES and mod not in utility_explicitly_mentioned:
                 logger.warning(
-                    "Tier-4: Utility-Modul '%s' nicht explizit erwähnt → verworfen", mod,
+                    "Tier-4: Utility-Modul '%s' nicht explizit erwähnt → verworfen",
+                    mod,
                 )
                 continue
             valid_steps.append({"module": mod, "task": task})
@@ -864,20 +1191,36 @@ JSON-SCHEMA:
                 break
 
         if not valid_steps:
-            logger.warning("Tier-4: Keine validen Schritte nach Validierung → Fallback Tier 1")
+            logger.warning(
+                "Tier-4: Keine validen Schritte nach Validierung → Fallback Tier 1"
+            )
             return await self.invoke(
-                message=message, chat_history=chat_history,
-                session_id=session_id, confirmed=confirmed,
+                message=message,
+                chat_history=chat_history,
+                session_id=session_id,
+                confirmed=confirmed,
             )
 
         logger.info(
             "Tier-4-Pipeline: %d Schritte: %s",
-            len(valid_steps), [s["module"] for s in valid_steps],
+            len(valid_steps),
+            [s["module"] for s in valid_steps],
         )
-        await status_bus.emit(session_id, _t(
-            f"Führe {len(valid_steps)}-Schritt-Pipeline aus…",
-            f"Executing {len(valid_steps)}-step pipeline…",
-        ))
+        await status_bus.emit(
+            session_id,
+            _t(
+                de=f"Führe {len(valid_steps)}-Schritt-Pipeline aus…",
+                en=f"Executing {len(valid_steps)}-step pipeline…",
+                fr=f"Exécution du pipeline à {len(valid_steps)} étapes…",
+                es=f"Ejecutando pipeline de {len(valid_steps)} pasos…",
+                it=f"Esecuzione pipeline a {len(valid_steps)} passaggi…",
+                nl=f"{len(valid_steps)}-staps pipeline uitvoeren…",
+                pl=f"Wykonuję pipeline {len(valid_steps)}-etapowy…",
+                pt=f"Executando pipeline de {len(valid_steps)} etapas…",
+                ja=f"{len(valid_steps)}ステップのパイプラインを実行中…",
+                zh=f"正在执行{len(valid_steps)}步管道…",
+            ),
+        )
 
         result = await run_pipeline.ainvoke({"steps": valid_steps})
         return str(result), False
@@ -890,14 +1233,23 @@ JSON-SCHEMA:
         und delegiert an agent.resume_safeguard_tool(session_id).
         """
         from core.redis_client import get_redis
+
         redis = get_redis()
         pending_raw = await redis.connection.get(
             f"ninko:safeguard_tool_pending:{session_id}"
         )
         if not pending_raw:
             return _t(
-                "Fehler: Kein ausstehender Tool-Aufruf für diese Session.",
-                "Error: No pending tool call for this session.",
+                de="Fehler: Kein ausstehender Tool-Aufruf für diese Session.",
+                en="Error: No pending tool call for this session.",
+                fr="Erreur : Aucun appel d'outil en attente pour cette session.",
+                es="Error: No hay llamada de herramienta pendiente para esta sesión.",
+                it="Errore: Nessuna chiamata di strumento in attesa per questa sessione.",
+                nl="Fout: Geen openstaande tool-aanroep voor deze sessie.",
+                pl="Błąd: Brak oczekującego wywołania narzędzia dla tej sesji.",
+                pt="Erro: Nenhuma chamada de ferramenta pendente para esta sessão.",
+                ja="エラー：このセッションには保留中のツール呼び出しがありません。",
+                zh="错误：此会话没有待处理的工具调用。",
             ), False
 
         try:
@@ -915,6 +1267,7 @@ JSON-SCHEMA:
             if agent is None:
                 try:
                     from core.agent_pool import get_agent_pool
+
                     pool = get_agent_pool()
                     agent = pool.get_agent_by_id(agent_name)
                 except _ORCH_RECOVERABLE_EXCEPTIONS:
@@ -922,8 +1275,16 @@ JSON-SCHEMA:
 
         if agent is None:
             return _t(
-                f"Fehler: Agent '{agent_name}' nicht gefunden.",
-                f"Error: Agent '{agent_name}' not found.",
+                de=f"Fehler: Agent '{agent_name}' nicht gefunden.",
+                en=f"Error: Agent '{agent_name}' not found.",
+                fr=f"Erreur : Agent '{agent_name}' non trouvé.",
+                es=f"Error: Agente '{agent_name}' no encontrado.",
+                it=f"Errore: Agente '{agent_name}' non trovato.",
+                nl=f"Fout: Agent '{agent_name}' niet gevonden.",
+                pl=f"Błąd: Agent '{agent_name}' nie znaleziony.",
+                pt=f"Erro: Agente '{agent_name}' não encontrado.",
+                ja=f"エラー：エージェント '{agent_name}' が見つかりません。",
+                zh=f"错误：找不到代理 '{agent_name}'。",
             ), False
 
         return await agent.resume_safeguard_tool(session_id)
@@ -948,7 +1309,21 @@ JSON-SCHEMA:
             tuple[str, str | None, bool]: (Antwort, Modul oder None, did_compact)
         """
         status_bus.set_session_id(session_id)
-        await status_bus.emit(session_id, _t("Analysiere deine Anfrage…", "Analyzing your request…"))
+        await status_bus.emit(
+            session_id,
+            _t(
+                de="Analysiere deine Anfrage…",
+                en="Analyzing your request…",
+                fr="Analyse de votre demande…",
+                es="Analizando tu solicitud…",
+                it="Analizzando la tua richiesta…",
+                nl="Je verzoek analyseren…",
+                pl="Analizowanie Twojego żądania…",
+                pt="Analisando sua solicitação…",
+                ja="リクエストを分析中…",
+                zh="正在分析您的请求…",
+            ),
+        )
 
         self._refresh_routing_map()
         cfg = await self._load_routing_config(session_id)
@@ -961,11 +1336,31 @@ JSON-SCHEMA:
             if agent is None:
                 try:
                     from core.agent_pool import get_agent_pool
+
                     pool = get_agent_pool()
                     pool_agent, pool_name = pool.get_agent_by_id(force_module)
                     if pool_agent is not None:
-                        await status_bus.emit(session_id, _t(f"Rufe Agent '{pool_name}' direkt auf…", f"Calling agent '{pool_name}' directly…"))
-                        logger.info("Direktes Routing an Custom-Agent '%s' (id=%s): %s…", pool_name, force_module, message[:80])
+                        await status_bus.emit(
+                            session_id,
+                            _t(
+                                de=f"Rufe Agent '{pool_name}' direkt auf…",
+                                en=f"Calling agent '{pool_name}' directly…",
+                                fr=f"Appel de l'agent '{pool_name}' directement…",
+                                es=f"Llamando al agente '{pool_name}' directamente…",
+                                it=f"Chiamando l'agente '{pool_name}' direttamente…",
+                                nl=f"Agent '{pool_name}' direct aanroepen…",
+                                pl=f"Wywołuję agenta '{pool_name}' bezpośrednio…",
+                                pt=f"Chamando agente '{pool_name}' diretamente…",
+                                ja=f"エージェント '{pool_name}' を直接呼び出し中…",
+                                zh=f"正在直接调用代理 '{pool_name}'…",
+                            ),
+                        )
+                        logger.info(
+                            "Direktes Routing an Custom-Agent '%s' (id=%s): %s…",
+                            pool_name,
+                            force_module,
+                            message[:80],
+                        )
                         try:
                             response, did_compact = await pool_agent.invoke(
                                 message=message,
@@ -975,7 +1370,12 @@ JSON-SCHEMA:
                             )
                             return response, force_module, did_compact
                         except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
-                            logger.error("Direktes Routing Custom-Agent '%s' Fehler: %s", force_module, exc, exc_info=True)
+                            logger.error(
+                                "Direktes Routing Custom-Agent '%s' Fehler: %s",
+                                force_module,
+                                exc,
+                                exc_info=True,
+                            )
                             return (
                                 _t(
                                     f"Fehler: Agent '{pool_name}' hat einen Fehler gemeldet: {exc}.",
@@ -989,8 +1389,16 @@ JSON-SCHEMA:
             if agent is None:
                 return (
                     _t(
-                        f"Fehler: Modul '{force_module}' ist nicht verfügbar oder nicht aktiviert.",
-                        f"Error: Module '{force_module}' is not available or not enabled.",
+                        de=f"Fehler: Modul '{force_module}' ist nicht verfügbar oder nicht aktiviert.",
+                        en=f"Error: Module '{force_module}' is not available or not enabled.",
+                        fr=f"Erreur : Le module '{force_module}' n'est pas disponible ou n'est pas activé.",
+                        es=f"Error: El módulo '{force_module}' no está disponible o no está activado.",
+                        it=f"Errore: Il modulo '{force_module}' non è disponibile o non è attivato.",
+                        nl=f"Fout: Module '{force_module}' is niet beschikbaar of niet geactiveerd.",
+                        pl=f"Błąd: Moduł '{force_module}' nie jest dostępny lub nie jest włączony.",
+                        pt=f"Erro: Módulo '{force_module}' não disponível ou não ativado.",
+                        ja=f"エラー：モジュール '{force_module}' が利用できないか、有効になっていません。",
+                        zh=f"错误：模块 '{force_module}' 不可用或未启用。",
                     ),
                     force_module,
                     False,
@@ -999,8 +1407,24 @@ JSON-SCHEMA:
             display = manifests.get(
                 force_module, type("", (), {"display_name": force_module})()
             ).display_name
-            await status_bus.emit(session_id, _t(f"Rufe {display} direkt auf…", f"Calling {display} directly…"))
-            logger.info("Direktes Routing an Modul '%s': %s…", force_module, message[:80])
+            await status_bus.emit(
+                session_id,
+                _t(
+                    de=f"Rufe {display} direkt auf…",
+                    en=f"Calling {display} directly…",
+                    fr=f"Appel de {display} directement…",
+                    es=f"Llamando a {display} directamente…",
+                    it=f"Chiamando {display} direttamente…",
+                    nl=f"{display} direct aanroepen…",
+                    pl=f"Wywołuję {display} bezpośrednio…",
+                    pt=f"Chamando {display} diretamente…",
+                    ja=f"{display} を直接呼び出し中…",
+                    zh=f"正在直接调用 {display}…",
+                ),
+            )
+            logger.info(
+                "Direktes Routing an Modul '%s': %s…", force_module, message[:80]
+            )
             try:
                 response, did_compact = await agent.invoke(
                     message=message,
@@ -1010,11 +1434,24 @@ JSON-SCHEMA:
                 )
                 return response, force_module, did_compact
             except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
-                logger.error("Direktes Routing: Modul '%s' Fehler: %s", force_module, exc, exc_info=True)
+                logger.error(
+                    "Direktes Routing: Modul '%s' Fehler: %s",
+                    force_module,
+                    exc,
+                    exc_info=True,
+                )
                 return (
                     _t(
-                        f"Fehler: Modul '{force_module}' hat einen Fehler gemeldet: {exc}.",
-                        f"Error: Module '{force_module}' reported an error: {exc}.",
+                        de=f"Fehler: Modul '{force_module}' hat einen Fehler gemeldet: {exc}.",
+                        en=f"Error: Module '{force_module}' reported an error: {exc}.",
+                        fr=f"Erreur : Le module '{force_module}' a signalé une erreur : {exc}.",
+                        es=f"Error: El módulo '{force_module}' reportó un error: {exc}.",
+                        it=f"Errore: Il modulo '{force_module}' ha segnalato un errore: {exc}.",
+                        nl=f"Fout: Module '{force_module}' heeft een fout gerapporteerd: {exc}.",
+                        pl=f"Błąd: Moduł '{force_module}' zgłosił błąd: {exc}.",
+                        pt=f"Erro: Módulo '{force_module}' relatou um erro: {exc}.",
+                        ja=f"エラー：モジュール '{force_module}' がエラーを報告しました: {exc}。",
+                        zh=f"错误：模块 '{force_module}' 报告了错误: {exc}。",
                     ),
                     force_module,
                     False,
@@ -1023,15 +1460,23 @@ JSON-SCHEMA:
         # ── Explizite Agent-Erstellung: deterministischer Create-Fast-Path ──
         # Verhindert "nur Anleitung", wenn der User klar "Agent erstellen" verlangt.
         if self._wants_agent_creation(message):
-            logger.info("Explizite Agent-Erstellungs-Intention erkannt → Auto-Create-Fast-Path.")
-            response, did_compact = await self._auto_create_custom_agent(message, session_id)
+            logger.info(
+                "Explizite Agent-Erstellungs-Intention erkannt → Auto-Create-Fast-Path."
+            )
+            response, did_compact = await self._auto_create_custom_agent(
+                message, session_id
+            )
             return response, "orchestrator", did_compact
 
         # ── Explizite Workflow-Erstellung: deterministischer Create-Fast-Path ─
         # Verhindert "nur Anleitung", wenn der User klar "Workflow erstellen" verlangt.
         if self._wants_workflow_creation(message):
-            logger.info("Explizite Workflow-Erstellungs-Intention erkannt → Auto-Create-Fast-Path.")
-            response, did_compact = await self._auto_create_workflow(message, session_id)
+            logger.info(
+                "Explizite Workflow-Erstellungs-Intention erkannt → Auto-Create-Fast-Path."
+            )
+            response, did_compact = await self._auto_create_workflow(
+                message, session_id
+            )
             return response, "orchestrator", did_compact
 
         tier, target_module = self._classify_tier(message, chat_history, cfg)
@@ -1057,8 +1502,24 @@ JSON-SCHEMA:
                 display = manifests.get(
                     target_module, type("", (), {"display_name": target_module})()
                 ).display_name
-                await status_bus.emit(session_id, f"Rufe {display} auf…")
-                logger.info("Tier 2: Routing an Modul '%s': %s…", target_module, message[:80])
+                await status_bus.emit(
+                    session_id,
+                    _t(
+                        de=f"Rufe {display} auf…",
+                        en=f"Calling {display}…",
+                        fr=f"Appel de {display}…",
+                        es=f"Llamando a {display}…",
+                        it=f"Chiamando {display}…",
+                        nl=f"{display} aanroepen…",
+                        pl=f"Wywołuję {display}…",
+                        pt=f"Chamando {display}…",
+                        ja=f"{display} を呼び出し中…",
+                        zh=f"正在调用 {display}…",
+                    ),
+                )
+                logger.info(
+                    "Tier 2: Routing an Modul '%s': %s…", target_module, message[:80]
+                )
                 try:
                     response, did_compact = await agent.invoke(
                         message=message,
@@ -1068,23 +1529,41 @@ JSON-SCHEMA:
                     )
                     return response, target_module, did_compact
                 except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
-                    logger.error("Tier 2: Modul '%s' Fehler: %s", target_module, exc, exc_info=True)
+                    logger.error(
+                        "Tier 2: Modul '%s' Fehler: %s",
+                        target_module,
+                        exc,
+                        exc_info=True,
+                    )
                     return (
                         _t(
-                            f"Fehler: Modul '{target_module}' hat einen Fehler gemeldet: {exc}.",
-                            f"Error: Module '{target_module}' reported an error: {exc}.",
+                            de=f"Fehler: Modul '{target_module}' hat einen Fehler gemeldet: {exc}.",
+                            en=f"Error: Module '{target_module}' reported an error: {exc}.",
+                            fr=f"Erreur : Le module '{target_module}' a signalé une erreur : {exc}.",
+                            es=f"Error: El módulo '{target_module}' reportó un error: {exc}.",
+                            it=f"Errore: Il modulo '{target_module}' ha segnalato un errore: {exc}.",
+                            nl=f"Fout: Module '{target_module}' heeft een fout gerapporteerd: {exc}.",
+                            pl=f"Błąd: Moduł '{target_module}' zgłosił błąd: {exc}.",
+                            pt=f"Erro: Módulo '{target_module}' relatou um erro: {exc}.",
+                            ja=f"エラー：モジュール '{target_module}' がエラーを報告しました: {exc}。",
+                            zh=f"错误：模块 '{target_module}' 报告了错误: {exc}。",
                         ),
                         target_module,
                         False,
                     )
             else:
-                logger.warning("Modul '%s' hat keinen registrierten Agent — Fallback auf ReAct-Loop.", target_module)
+                logger.warning(
+                    "Modul '%s' hat keinen registrierten Agent — Fallback auf ReAct-Loop.",
+                    target_module,
+                )
 
         # ── Tier 1: Orchestrator-ReAct-Loop ─────────────────────────────
         # LLM entscheidet: call_module_agent, run_pipeline, create_custom_agent oder direkte Antwort.
         logger.info("Tier 1: Orchestrator-ReAct-Loop für: %s…", message[:80])
         response, did_compact = await self.invoke(
-            message=message, chat_history=chat_history, session_id=session_id,
+            message=message,
+            chat_history=chat_history,
+            session_id=session_id,
             confirmed=confirmed,
         )
         return response, None, did_compact

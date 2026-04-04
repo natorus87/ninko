@@ -96,7 +96,7 @@ async def get_tasmota_status(connection_id: str = "") -> Dict:
             "hardware": fw.get("Hardware", ""),
             "wifi_rssi": wifi.get("RSSI", 0) if isinstance(wifi, dict) else 0,
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         logger.error("Failed to retrieve Tasmota status: %s", e)
         return {"error": str(e)}
 
@@ -137,7 +137,7 @@ async def get_tasmota_power(connection_id: str = "") -> Dict:
             relays["POWER"] = result["POWER"].upper() == "ON"
 
         return {"relays": relays, "raw": result}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         logger.error("Failed to retrieve Tasmota power status: %s", e)
         return {"error": str(e)}
 
@@ -186,7 +186,7 @@ async def set_tasmota_power(
             ja=f"リレー {relay} を {'オン' if actual.upper() == 'ON' else 'オフ'} に設定しました。",
             zh=f"继电器 {relay} 已设置为 {'开' if actual.upper() == 'ON' else '关'}。",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         logger.error("Failed to switch Tasmota relay: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -256,7 +256,7 @@ async def get_tasmota_sensors(connection_id: str = "") -> Dict:
             "energy_current": energy_data.get("Current"),
             "raw": result,
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         logger.error("Failed to retrieve Tasmota sensor data: %s", e)
         return {"error": str(e)}
 
@@ -295,7 +295,7 @@ async def get_tasmota_wifi_info(connection_id: str = "") -> Dict:
             "rssi": status5.get("RSSI", 0),
             "signal_dbm": status5.get("Signal", 0),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         logger.error("Failed to retrieve Tasmota WiFi info: %s", e)
         return {"error": str(e)}
 
@@ -330,7 +330,7 @@ async def send_tasmota_command(command: str, connection_id: str = "") -> Dict:
             "result": result,
             "success": True,
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         logger.error("Failed to send Tasmota command: %s", e)
         return {
             "command": command,

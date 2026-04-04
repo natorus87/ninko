@@ -1,6 +1,6 @@
-# Ninko — User & Developer Documentation
+# Ninko — Documentation
 
-This document covers the Ninko platform in depth: the dashboard, AI agent architecture, modules, memory system, automation features, and developer extension points.
+Ninko is a modular, AI-powered IT-Operations platform built on FastAPI (Python 3.12). The core is immutable — modules register themselves at startup, and no module name is hardcoded in the core.
 
 ---
 
@@ -9,7 +9,7 @@ This document covers the Ninko platform in depth: the dashboard, AI agent archit
 1. [Architecture Overview](#1-architecture-overview)
 2. [The Orchestrator — 4-Tier Routing](#2-the-orchestrator--4-tier-routing)
 3. [How an Agent Processes a Request](#3-how-an-agent-processes-a-request)
-4. [Safeguard Middleware](#4-safeguard-middleware)
+4. [SafeGuard Middleware](#4-safeguard-middleware)
 5. [Semantic Memory](#5-semantic-memory)
 6. [Skills System](#6-skills-system)
 7. [Soul System](#7-soul-system)
@@ -19,198 +19,272 @@ This document covers the Ninko platform in depth: the dashboard, AI agent archit
 11. [Custom Agents](#11-custom-agents)
 12. [Workflows (DAG Automation)](#12-workflows-dag-automation)
 13. [Scheduler (Scheduled Tasks)](#13-scheduler-scheduled-tasks)
-14. [Modules Reference](#14-modules-reference)
+14. [Module Reference](#14-module-reference)
 15. [Security](#15-security)
 16. [Developing a Module](#16-developing-a-module)
-17. [Startup Sequence & Persistence Reference](#17-startup-sequence--persistence-reference)
-18. [Theme System (Branding & Design Tokens)](#18-theme-system-branding--design-tokens)
+17. [Startup Order & Persistence](#17-startup-order--persistence)
+18. [Theme System](#18-theme-system)
+19. [REST API Reference](#19-rest-api-reference)
 
 ---
 
 ## 1. Architecture Overview
 
-Ninko is a modular, AI-powered IT Operations platform. Its design follows two core principles:
+### Core Principles
 
-- **Immutable core** — no module name is hardcoded in the orchestrator or routing logic. Every module registers itself at startup.
-- **Auto-discovering modules** — adding a new module requires only creating a folder under `backend/modules/`. Nothing else in the codebase needs to change.
+| Principle | Description |
+|---|---|
+| **Immutable Core** | No module name is hardcoded in the orchestrator or routing logic |
+| **Auto-Discovering Modules** | Modules register themselves at startup via `ModuleManifest` |
+| **4-Tier Routing** | Every request is automatically assigned to the correct handler |
+| **Local AI by Default** | All LLM calls remain within the local network (Ollama / LM Studio) |
 
-```
-┌───────────────────────────────────────────────────────┐
-│                    Ninko Dashboard                    │
-│    Chat  │  Kubernetes  │  Proxmox  │  GLPI  │  …    │
-└───────────────────────┬───────────────────────────────┘
-                        │
-┌───────────────────────▼───────────────────────────────┐
-│              Orchestrator Agent                       │
-│  Tier 1: Direct  │  Tier 2: Module  │  Tier 3: Dyn.  │
-│                  Tier 4: Pipeline                     │
-└───────────────────────┬───────────────────────────────┘
-                        │
-┌───────────────────────▼───────────────────────────────┐
-│               Module Registry                         │
-│         Auto-Discovery · backend/modules/             │
-└──────┬──────────┬──────────┬──────────┬──────────────┘
-       │          │          │          │
-  Kubernetes  Proxmox     GLPI     + 12 more modules
-       │          │          │
-┌──────▼──────────▼──────────▼────────────────────────┐
-│  LLM Factory  │  ChromaDB  │  Redis  │  Vault/SQLite │
-│  (Ollama/LMS) │  (Memory)  │ (Cache) │   (Secrets)   │
-└─────────────────────────────────────────────────────┘
-```
-
-**Request lifecycle (simplified):**
+### System Diagram
 
 ```
-User input → Safeguard (pre-check) → Orchestrator (tier routing)
-  → [Module Agent | Dynamic Agent | Pipeline] → BaseAgent.invoke()
-  → [Soul + RAG + Skills + Language] → ReAct loop with tools → Response
-  → Auto-memorize (background) → Response to user
+┌─────────────────────────────────────────────────────────────────┐
+│                        Ninko Dashboard                          │
+│     Chat  │  Kubernetes  │  Proxmox  │  GLPI  │  + Modules     │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │  HTTP / WebSocket
+┌───────────────────────────▼─────────────────────────────────────┐
+│                    FastAPI Backend (:8000)                       │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │                  SafeGuard Middleware                    │    │
+│  │  Keyword-Pre-Filter → LLM-Classifier → Confirmation     │    │
+│  └──────────────────────────┬──────────────────────────────┘    │
+│  ┌───────────────────────────▼──────────────────────────────┐   │
+│  │                   OrchestratorAgent                       │   │
+│  │  Tier 1: Direct  │  Tier 2: Module  │  Tier 3: Dynamic  │   │
+│  │                    Tier 4: Pipeline                       │   │
+│  └──────────────────────────┬──────────────────────────────-┘   │
+│  ┌───────────────────────────▼──────────────────────────────┐   │
+│  │                   Module Registry                         │   │
+│  │   backend/modules/   +   backend/plugins/  (Hot-Load)    │   │
+│  └───┬───────────┬────────────┬─────────────┬───────────────┘   │
+│      │           │            │             │                    │
+│  Kubernetes  Proxmox       GLPI        + 30 Modules             │
+└──────┼───────────┼────────────┼─────────────┼────────────────────┘
+       │           │            │             │
+┌──────▼───────────▼────────────▼─────────────▼────────────────────┐
+│   LLM Factory   │  ChromaDB (Memory)  │  Redis  │  Vault/SQLite  │
+│ Ollama/LMStudio │  Embeddings + RAG   │  Cache  │  Secrets       │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+### Request Lifecycle
+
+```
+User input
+  → SafeGuard (Keyword-Pre-Filter → LLM-Classifier)
+  → Orchestrator (Tier decision)
+  → [Module Agent | Dynamic Agent | Pipeline]
+  → BaseAgent.invoke()
+    → Soul + RAG context + Skills + Language
+    → ReAct loop with tools (LangGraph)
+    → <think> stripping (thinking models)
+  → Response to user
+  → Auto-Memorize in background (asyncio.create_task)
+```
+
+### Directory Structure
+
+```
+ninko/
+├── backend/
+│   ├── agents/           # OrchestratorAgent, BaseAgent, MonitorAgent, SchedulerAgent
+│   ├── api/              # FastAPI routes (routes_*.py)
+│   ├── core/             # Core singletons: LLMFactory, ModuleRegistry, Redis, Vault, ...
+│   ├── modules/          # Core modules (always in image): web_search, image_gen, codelab
+│   ├── modules_catalog/  # Catalog modules (installable via Marketplace)
+│   ├── plugins/          # Runtime-installed plugins (via Marketplace or ZIP)
+│   ├── skills/           # Built-in SKILL.md files
+│   ├── souls/            # Built-in Soul MD files
+│   ├── themes/           # Built-in dashboard themes
+│   └── main.py           # FastAPI app, lifespan startup
+├── frontend/             # Vanilla JS single-page app (static files)
+├── data/                 # Persistent volume: skills/, themes/, plugins/
+├── k8s/                  # Kubernetes manifests (placeholders, committed)
+├── k8s-conbro/           # Kubernetes manifests (real values, gitignored)
+└── docker-compose.yml
 ```
 
 ---
 
 ## 2. The Orchestrator — 4-Tier Routing
 
-The `OrchestratorAgent` is the central brain. Every user message passes through it (unless safeguard blocks it first). It determines the best way to handle the request via a 4-tier decision hierarchy.
+The `OrchestratorAgent` is the central brain. Every user message passes through it (unless SafeGuard blocks it beforehand). The tier decision runs in this fixed order:
+
+```
+Compound-Check ──→ Tier 4 (Pipeline)
+       ↓ no
+Module-Detection ──→ Tier 2 (Module Agent)
+       ↓ no match
+Simple-Query-Check ──→ Tier 1 (Direct Answer)
+       ↓ complex
+Tier 3 (Dynamic Agent)
+```
 
 ### Tier 1 — Direct Answer
 
-**Condition:** The message is short (< 120 characters) AND contains no action verbs.
+**Condition:** Message < 120 characters AND no action verbs.
 
-Action verbs that trigger escalation: `create`, `delete`, `update`, `install`, `configure`, `restart`, `scale`, `deploy`, `run`, `start`, `stop`, `remove`, `show me`, and their equivalents in all 10 supported languages.
+Action verbs (in all 10 languages) that trigger escalation: `create`, `delete`, `update`, `install`, `configure`, `restart`, `scale`, `deploy`, `run`, `start`, `stop`, `remove`, `erstelle`, `lösche`, `aktualisiere`, `installiere`, `starte`, `stoppe`, `crée`, `supprime`, `crea`, `elimina`, …
 
-If the message passes both checks, the orchestrator answers directly from LLM knowledge — no module invocation, no tool use. This makes simple questions like "What is a Kubernetes pod?" fast and cheap.
+When the condition is met, the orchestrator answers directly from LLM knowledge — no module, no tools. Fast and lightweight.
+
+**Examples:**
+```
+"What is a Kubernetes pod?"  → Tier 1 → Direct LLM answer
+"Explain BGP"                → Tier 1 → Direct LLM answer
+```
 
 ### Tier 2 — Module Agent
 
-**Condition:** The message is about a specific module (e.g., Kubernetes, Pi-hole, Proxmox).
+**Condition:** The message refers to a specific module.
 
-Module detection is a **two-stage** process:
+Module detection in **two stages:**
 
-**Stage 1 — Keyword fast-path** (no LLM call):
+**Stage 1 — Keyword Fast-Path** (no LLM call):
 - Each module registers `routing_keywords` in its manifest.
-- The orchestrator scores every module against the tokenized message.
-- Short keywords (< 7 chars) require `\b` word-boundary matching (e.g., `"pod"` won't match `"tripod"`).
-- Long keywords (≥ 7 chars) also use compact substring matching (e.g., `"ipadresse"` matches `"ip-adresse"`).
-- If **exactly one** module scores above zero → dispatch immediately.
+- The orchestrator scores each module against the tokenized message.
+- Keywords < 7 characters: only `\b` word-boundary matching (`"pod"` does not match `"tripod"`).
+- Keywords ≥ 7 characters: additionally compact substring matching (`"ipadresse"` matches `"ip-adresse"`).
+- Exactly one module with score > 0 → forward immediately.
 
-**Stage 2 — LLM classification** (fires only when Stage 1 is ambiguous):
-- Fires when: no module matched at all (score = 0) OR two or more modules tied.
-- Builds a dynamic prompt from all module descriptions and routing keywords — no hardcoding.
-- 8-second timeout; falls back to keyword behavior on timeout or error.
-- Result is cached by MD5(message) with a 60-second TTL to avoid duplicate calls.
+**Stage 2 — LLM Classification** (only on ambiguity):
+- Fires when: score = 0 (no match) OR two or more modules with score > 0.
+- Dynamic prompt built from all module descriptions and keywords — no hardcoding.
+- 8-second timeout; fallback to keyword behavior on error.
+- Result is cached by MD5(message) with 60s TTL.
 
-Once a module is identified, the orchestrator calls `call_module_agent(module_name, user_task)`, which routes to that module's `BaseAgent` subclass.
+```
+"Show all failing pods"           → kubernetes (keyword: "pod")
+"Pi-hole statistics today"        → pihole (keyword: "pi-hole")
+"FritzBox external IP"            → fritzbox (keyword: "fritzbox")
+```
 
 ### Tier 3 — Dynamic Agent
 
-**Condition:** No module match AND the message is complex (not a simple query).
+**Condition:** No module match AND complex request.
 
-The orchestrator searches the `DynamicAgentPool` for an existing custom agent that is a good match for the task (Jaccard keyword-overlap ≥ 18%). If found, it reuses that agent. If not found, it creates a new one on the fly:
+1. Search `DynamicAgentPool` for a matching custom agent (Jaccard keyword overlap ≥ 18%).
+2. If found → route directly.
+3. If not found → LLM generates agent spec (name, description, system prompt as JSON), `create_custom_agent` registers it in Redis, immediate execution.
 
-1. LLM generates an agent specification (name, description, system prompt) as JSON.
-2. `create_custom_agent(name, system_prompt, description)` registers the agent in Redis and instantiates it as a `BaseAgent`.
-3. The new agent has 4 base tools: `execute_cli_command`, `call_module_agent`, `recall_memory`, `remember_fact`.
-4. The agent handles the task and is available for future requests.
+```
+"Create an agent for security audits"
+→ Tier 3 → LLM generates spec → New agent created and used immediately
+```
 
-### Tier 4 — Pipeline (Multi-step / Compound)
+### Tier 4 — Pipeline (Multi-Step / Compound)
 
-**Condition:** The message involves multiple modules simultaneously, or contains explicit multi-step patterns like "first … then …", "step 1 … step 2 …".
+**Condition:** Message concerns multiple modules simultaneously, or contains explicit multi-step patterns.
 
-The orchestrator uses `run_pipeline`, which:
-1. Makes a single LLM call to produce a structured JSON execution plan.
-2. Executes each step sequentially via the `WorkflowEngine`.
-3. Passes the output of each step to the next as `{previous_output}`.
+Detection patterns: `"first … then"`, `"and afterwards"`, `"step 1 … step 2"`, `"also"`, `"and send"`, `"and report"`, …
 
-Example: *"Check Kubernetes and send me a Telegram report"* → two pipeline steps (kubernetes → telegram).
+**Flow:**
+1. Single LLM call → structured JSON execution plan.
+2. `run_pipeline` executes each step sequentially.
+3. Output of each step is passed to the next as `{previous_output}`.
 
-### Core Orchestrator Tools
+```
+"Check the Kubernetes cluster and send me a Telegram report"
+→ Tier 4 → Pipeline: [kubernetes → telegram]
+```
 
-Beyond routing, the orchestrator has its own tools it can invoke during a conversation:
+### Utility Module Exclusion
 
-| Tool | What it does |
+`_UTILITY_MODULES = {"web_search", "image_gen", "telegram", "email", "teams"}` — These modules are excluded from compound scoring unless they are explicitly named in the text. Prevents false-positive Tier-4 routing caused by history contamination.
+
+### Orchestrator Tools
+
+| Tool | Function |
 |---|---|
 | `execute_cli_command` | Run a shell command on the backend host |
 | `create_custom_agent` | Create and register a new Tier-3 dynamic agent |
+| `update_custom_agent` | Update an existing agent (takes effect immediately) |
 | `install_skill` | Write a SKILL.md to the persistent volume and hot-reload |
-| `create_linear_workflow` | Build and save a workflow programmatically |
-| `execute_workflow` | Trigger a saved workflow by ID |
+| `create_linear_workflow` | Programmatically create and save a workflow |
+| `execute_workflow` | Execute a saved workflow by ID |
 | `remember_fact` | Store a fact in semantic memory |
-| `recall_memory` | Semantic search over long-term memory |
-| `forget_fact` / `confirm_forget` | Two-step memory deletion (preview then confirm) |
-| `call_module_agent` | Delegate a task to any module agent by name |
+| `recall_memory` | Semantic search in long-term memory |
+| `forget_fact` / `confirm_forget` | Two-step memory deletion (preview → confirmation) |
+| `call_module_agent` | Delegate a task to any module agent |
 | `run_pipeline` | Execute a sequential JSON plan |
+| `wait` | Wait dynamically (1–60 seconds) with a reason |
 
 ---
 
 ## 3. How an Agent Processes a Request
 
-All agents — module agents, dynamic agents, and the orchestrator — share the same `BaseAgent.invoke()` foundation. Understanding this flow explains everything from context management to why Ninko "remembers" things.
+All agents — module agents, dynamic agents, and the orchestrator — share the same `BaseAgent.invoke()` foundation.
 
 ### Invoke Flow
 
 ```
 BaseAgent.invoke(user_message, session_id, chat_history)
 │
-├─ 1. Context-window calibration (first call only, cached)
-│     Query LLM provider for model's context window.
-│     Set history budget = 25% of window − MAX_OUTPUT_TOKENS.
+├─ 1. Context-Window Calibration (first call only, cached)
+│     Query LLM provider for the model's context window.
+│     History budget = 25% of window − MAX_OUTPUT_TOKENS.
 │
-├─ 2. History trimming / compaction
-│     If token count > budget:
-│     └─ LLM summarizes old messages into a compression summary.
+├─ 2. History Trimming / Compaction
+│     Token count > budget?
+│     └─ LLM summarizes old messages into a compaction summary.
 │        Summary is inserted as a SystemMessage at position 1.
 │
-├─ 3. System prompt assembly (in this exact order):
-│     a. Soul MD            ← persistent agent identity
-│     b. Core system_prompt ← tools + behavior instructions
-│     c. Connection context ← active connections for this module
-│     d. Compression summary ← if history was compacted
-│     e. RAG context         ← top-3 semantic memory hits (cosine < 0.5)
-│     f. Skills injection     ← max 2 matching SKILL.md files (threshold 12%)
-│     g. Language instruction ← "Answer in Spanish. Use emojis."
+├─ 3. System Prompt Assembly (exact order):
+│     a. Soul MD               ← persistent agent identity
+│     b. Core system_prompt    ← tools + behavioral instructions
+│     c. Connection context    ← active connections for this module
+│     d. Compaction summary    ← if history was compacted
+│     e. RAG context           ← top-3 semantic memory hits (cosine < 0.5)
+│     f. Skills injection      ← max. 2 matching SKILL.md files (threshold 12%)
+│     g. Date/time injection   ← current date+time (TIMEZONE env)
+│     h. Language instruction  ← "Answer in English." / "Antworte auf Deutsch."
 │
-├─ 4. JIT Tool Injection (if agent has > 6 tools)
-│     Score each tool against the message.
-│     Keep only the top 8 most relevant tools.
-│     Create a temporary agent with the reduced tool set.
+├─ 4. JIT Tool Injection (when agent has > 6 tools)
+│     Each tool is scored against the message.
+│     Only the top-8 most relevant tools are kept.
+│     A temporary agent with a reduced tool set is created.
 │
-├─ 5. ReAct agent execution (LangGraph)
-│     Timeout: 1800 seconds. Recursion limit: 10000 (effectively unlimited).
-│     Real-time status events emitted to frontend (SSE status bus).
+├─ 5. ReAct Agent Execution (LangGraph)
+│     Timeout: 1800 seconds. Recursion limit: 10,000 (effectively unlimited).
+│     Real-time status events via SSE bus to the frontend.
 │
-├─ 6. Response extraction
+├─ 6. Response Extraction
 │     Strip <think>…</think> blocks (thinking models like Qwen3.5).
-│     Extract final text from AIMessage.
+│     Final text extraction from AIMessage.
+│     If empty → fall back to ToolMessage content or default error string.
 │
-└─ 7. Auto-memorize (background asyncio task — never blocks response)
+└─ 7. Auto-Memorize (background asyncio task — never blocks the response)
       Cooldown: 60 seconds per agent.
-      Skipped for: monitor, scheduler agents; responses < 80 chars.
+      Skipped for: monitor, scheduler; responses < 80 characters.
       LLM extracts 1–2 permanent facts.
       Stored in ChromaDB under category "agent_memory".
 ```
 
-### The Three Context Layers Explained
+### Return Value
 
-**Soul** — *Who is this agent?*
-Injected first. Defines the agent's role, purpose, and behavior guidelines. Think of it as the agent's "personality card." Built-in souls (stored in `backend/souls/`) are baked into the image. Dynamic agent souls are auto-generated and stored in Redis.
+`BaseAgent.invoke()` always returns `tuple[str, bool]` — `(response, did_compact)`.
+`OrchestratorAgent.route()` returns `tuple[str, str | None, bool]` — `(response, module, did_compact)`.
 
-**RAG Context** — *What does Ninko already know about this?*
-Before each response, a semantic search runs against ChromaDB using the user's message as the query. Hits with a cosine distance below 0.5 are injected as context. This is how Ninko "remembers" that your Pi-hole runs on `192.168.1.10` even after a container restart.
-
-**Skills** — *How should this agent approach this specific type of problem?*
-Procedural know-how files (SKILL.md) are auto-injected when they match the message (keyword overlap ≥ 12%). Example: a "kubernetes-incident-response" skill gets injected when diagnosing CrashLoopBackOff errors.
+**Important:** All call sites must unpack both or all three values:
+```python
+response, _ = await agent.invoke(...)
+response, module, _ = await orchestrator.route(...)
+```
 
 ---
 
 ## 4. SafeGuard Middleware
 
-SafeGuard runs **before** the orchestrator on every user message (and optionally on every tool call). Since v0.7.2 it is fully profile-based — a `SafeguardProfile` controls exactly what is checked, what requires confirmation, and how LLM errors are handled.
+SafeGuard runs **before** the orchestrator on every user message (and optionally on every tool call). Since v0.7.2 it is fully profile-based.
 
 ### Built-in Profiles
 
-| Profile ID | Checks user messages | Checks tool calls | Injection detection | fail_open |
+| Profile ID | User messages | Tool calls | Injection detection | fail_open |
 |---|---|---|---|---|
 | `strict` | ✓ | ✓ | ✓ | No |
 | `moderate` *(default)* | ✓ | ✓ | No | No |
@@ -218,127 +292,110 @@ SafeGuard runs **before** the orchestrator on every user message (and optionally
 | `llm_only` | No | ✓ | No | No |
 | `disabled` | No | No | No | Yes |
 
-Custom profiles can be created in **Settings → SafeGuard**.
+### Classification Categories
 
-### Categories
+| Category | Meaning | Examples |
+|---|---|---|
+| `SAFE` | Read-only | `show pods`, `list DNS records`, `status` |
+| `STATE_CHANGING` | Creates or modifies something | `create pod`, `update DNS`, `deploy` |
+| `DESTRUCTIVE` | Irreversible | `delete namespace`, `rm -rf`, `DROP TABLE` |
+| `PROMPT_INJECTION` | Instruction hijacking detected | `ignore previous instructions`, `you are now` |
+| `UNKNOWN` | Parse error or LLM failure | — |
 
-| Category | Meaning |
-|---|---|
-| `SAFE` | Read-only (status, list, show, logs) |
-| `STATE_CHANGING` | Creates or modifies something (create pod, update DNS) |
-| `DESTRUCTIVE` | Irreversible (delete, rm -rf, DROP TABLE) |
-| `PROMPT_INJECTION` | Instruction-hijacking attempt detected |
-| `UNKNOWN` | Parse error or LLM failure |
-
-The `confirm_categories` list in each profile controls which categories actually require user confirmation. An empty list means "classify but never block".
+The `confirm_categories` field in the profile controls which categories actually require confirmation. Empty list = classify but never block.
 
 ### Three-Stage Evaluation
 
-**Stage 1 — Profile check**
-`resolve_profile(agent_id, session_id)` determines the active profile. Resolution order: per-chat session (Redis, TTL 24h) → per-agent (`AgentConfigStore`) → global active profile → `moderate`. If the resolved profile has `check_user_messages=False`, the message passes immediately without any LLM call.
+**Stage 1 — Profile Resolution**
 
-**Stage 2 — Keyword pre-filter** (messages ≤ 200 characters)
-A fast in-process check against curated keyword lists in all 10 supported languages:
-- Safe patterns: `show`, `list`, `get`, `logs`, `status`, `what`, `explain`, `wie`, `pokaż`, `显示`, `表示`, …
-- Destructive terms: `delete`, `rm -`, `drop`, `lösche`, `supprim`, `elimin`, `削除`, …
-- State-changing terms: `create`, `deploy`, `scale`, `erstell`, `crée`, `crea`, `作成`, …
-- Injection patterns: `ignore previous instructions`, `you are now`, `forget your rules`, `system prompt override`, …
+Order (first match wins):
 
-Priority: safe → destructive → state-changing → injection. First match wins. No LLM call needed.
+```
+1. Per-chat session   → Redis ninko:safeguard:profile:chat:{session_id} (TTL 24h)
+2. Per-agent          → AgentConfigStore (ninko:agent_configs hash)
+3. Global profile     → Redis ninko:settings:safeguard
+4. Fallback           → "moderate"
+```
 
-> **Note:** `"del"` is intentionally absent from destructive keywords — it is a common preposition in Spanish, Italian, and French.
+**Stage 2 — Keyword Pre-Filter** (messages ≤ 200 characters)
 
-**Stage 3 — LLM classifier** (if no pre-filter match)
-An LLM call with `max_tokens=150` and an 8-second timeout classifies the request. The response is parsed robustly: `<think>` blocks are stripped first, markdown fences removed, and the first `{…}` JSON object is extracted. Profiles with `detect_prompt_injection=True` receive an extended system prompt that instructs the LLM to also detect instruction-hijacking patterns.
+Fast in-process check without an LLM call. Detected patterns in all 10 languages:
+
+- **Safe:** `show`, `list`, `get`, `logs`, `status`, `what`, `explain`, `zeige`, `liste`, `pokaż`, `显示`, `表示` …
+- **Destructive:** `delete`, `rm -`, `drop`, `lösche`, `supprim`, `elimin`, `削除` …
+- **State-Changing:** `create`, `deploy`, `scale`, `erstell`, `crée`, `crea`, `作成` …
+- **Injection patterns:** `ignore previous instructions`, `you are now`, `forget your rules`, `system prompt override` …
+
+Priority: safe → destructive → state-changing → injection. First match wins.
+
+> **Note:** `"del"` is intentionally absent from destructive keywords — it is a common preposition in Spanish, Italian, and French (`"del pod"` = `"of the pod"`).
+
+**Stage 3 — LLM Classifier** (when no pre-filter match)
+
+LLM call with `max_tokens=150` and an 8s timeout. Response parsing: strip `<think>` blocks, remove markdown fences, extract the first `{…}` JSON object.
 
 ### Confirmation Flow
 
-**Dashboard (REST API):**
-When safeguard blocks a request, the frontend receives `confirmation_required: true` and displays a confirmation dialog with the detected category and rationale. For `PROMPT_INJECTION`, a dedicated warning banner is shown. The user's next click sends `confirmed: true` in the request body, which bypasses safeguard for that specific request.
+**Dashboard (REST):**
+SafeGuard blocks → frontend receives `confirmation_required: true` → confirmation dialog with category + rationale. For `PROMPT_INJECTION` a special warning banner appears. The next click sends `confirmed: true` in the request body.
 
 **Telegram / Teams (bot channels):**
-Bots cannot add a `confirmed: true` field to a follow-up message. Ninko stores the pending message in Redis with a 300-second TTL (`ninko:safeguard_pending:{session_id}`). If the user replies with a confirmation word (`yes`, `ja`, `confirm`, `ok`, `si`, `oui`, …) within 5 minutes, the original message is re-executed. Any other message starts a fresh normal flow.
+Bots cannot send `confirmed: true` in a follow-up request. Ninko stores the pending message in Redis (`ninko:safeguard_pending:{session_id}`, TTL 300s). If the user replies within 5 minutes with a confirmation word (`ja`, `yes`, `confirm`, `ok`, `si`, `oui`, `tak`, `はい`, `确认` …), the original message is re-executed. Any other message starts a normal new flow.
 
 ### fail_open Mode
 
-When `fail_open: true` in a profile, any LLM error (timeout, parse failure) causes the request to be **allowed** instead of blocked. This prevents Ninko from becoming unusable when the LLM is unavailable. The `disabled` profile always has `fail_open: true`.
+When `fail_open: true` in the profile, any LLM error (timeout, parse error) causes the request to be **passed through** instead of blocked. Prevents Ninko from becoming unusable when the LLM is down.
 
-### Profile Assignment
-
-Profiles can be assigned at three levels (highest priority first):
-
-| Level | API | Storage |
-|---|---|---|
-| Per-chat session | `POST /api/safeguard/chats/{session_id}/profile` | Redis TTL 24h |
-| Per-agent | `POST /api/safeguard/agents/{agent_id}/profile` | `ninko:agent_configs` hash |
-| Global | `POST /api/safeguard/active` | `ninko:settings:safeguard` |
-
-```
-GET  /api/safeguard/active               # Current global profile
-POST /api/safeguard/active               # Set global profile {"profile_id": "strict"}
-GET  /api/safeguard/profiles             # List all profiles (built-in + custom)
-POST /api/safeguard/profiles             # Create custom profile
-PUT  /api/safeguard/profiles/{id}        # Update custom profile
-DELETE /api/safeguard/profiles/{id}      # Delete custom profile (built-ins protected)
-GET  /api/safeguard/status               # Legacy: enabled/disabled state + active profile_id
-POST /api/safeguard/enable               # Legacy: set global to "moderate"
-POST /api/safeguard/disable              # Legacy: set global to "disabled"
-```
-
-The agent editor in the dashboard shows a profile dropdown (Settings → Agents → General → SafeGuard Profile). The chat toolbar shows a profile picker popover (shield button) for per-chat overrides.
-
-> **Warning:** If the LLM backend is unavailable and the active profile has `fail_open: false`, safeguard defaults to `requires_confirmation: true` for every message. Workaround: switch to a profile with `fail_open: true`, or set the global profile to `disabled` via `POST /api/safeguard/active` with `{"profile_id": "disabled"}`.
+> **Warning:** With `fail_open: false` and an unreachable LLM, `safeguard.check()` returns `requires_confirmation=True` for every message. Workaround: `POST /api/safeguard/active` with `{"profile_id": "disabled"}` or create a profile with `fail_open: true`.
 
 ---
 
 ## 5. Semantic Memory
 
-Ninko has a **persistent long-term memory** backed by ChromaDB vector embeddings. Unlike chat history (short-term, 7-day TTL in Redis), semantic memory survives container restarts and new sessions.
+Ninko has a **persistent long-term memory** based on ChromaDB vector embeddings. Unlike chat history (7-day TTL in Redis), semantic memory survives container restarts and new sessions.
 
-### Automatic Memory
+### Automatic Storage
 
-After every agent response, a background task checks whether the conversation contained a permanently relevant fact (user preferences, known IPs, resolved incidents, decisions). If so, it is stored silently without delaying the response.
+After each agent response, a background task checks whether the conversation contained a permanently relevant fact (user preferences, known IPs, resolved incidents, decisions). If so, it is stored silently.
 
-The extraction uses the active LLM with a focused prompt. It skips storage if:
-- The response is shorter than 80 characters.
-- The agent is `monitor` or `scheduler` (background agents).
-- A 60-second cooldown is still active for this agent.
+Skipped when:
+- Response < 80 characters
+- Agent is `monitor` or `scheduler`
+- 60-second cooldown for this agent is still active
 
 ### Manual Storage
 
 ```
-"Remember: the Pi-hole runs on 192.168.1.10"
-"Please note that I work in the Infrastructure team"
-"Save this: prod cluster runs on node k3s-prod-01"
+"Remember: Pi-hole runs on 192.168.1.10"
+"Please note that I work in the infrastructure team"
+"Store: Prod cluster runs on node k3s-prod-01"
 ```
 
 ### Retrieval
 
 ```
 "What do you know about our infrastructure?"
-"Do you remember which IP the Pi-hole was on?"
-"What was the outcome of last week's incident?"
+"Do you remember what IP the Pi-hole had?"
+"What was the result of the last incident?"
 ```
 
-### Memory Deletion (Two-Step)
-
-Deletion is intentionally two-step to prevent accidental data loss:
+### Deletion (two-step)
 
 **Step 1 — Preview:**
 ```
-"Forget that the Pi-hole runs on 192.168.1.10"
+"Forget that Pi-hole runs on 192.168.1.10"
 ```
-Ninko finds matching entries and shows them with their content and ID. Nothing is deleted yet.
+Ninko shows matching entries with content and ID. Nothing is deleted yet.
 
-**Step 2 — Confirm:**
+**Step 2 — Confirmation:**
 ```
 "Yes, delete that" / "confirm" / "delete all"
 ```
-Only after confirmation are the entries permanently removed from ChromaDB.
+Only after confirmation are the entries removed from ChromaDB.
 
-### How RAG Works
+### RAG Mechanism
 
-At every `invoke()` call, the user's message is embedded and compared against all stored memory entries via cosine similarity. Entries with a distance below 0.5 (where 0 = identical, 1 = completely different) are prepended to the system prompt as context:
+On every `invoke()` call, the user message is embedded and compared via cosine similarity against all stored entries. Entries with distance < 0.5 are prepended to the system prompt:
 
 ```
 Relevant context from memory:
@@ -346,109 +403,131 @@ Relevant context from memory:
 - Prod cluster is on node k3s-prod-01
 ```
 
-This happens transparently — the agent "knows" things without being explicitly told in the current conversation.
+### Cosine Distance Threshold
+
+Default: `threshold=0.25` for `delete_by_content()`. Too low (< 0.1) = too strict, too high (> 0.5) = deletes related but distinct facts. The quality of auto-memorization depends heavily on model size — models < 7B respond with `NICHTS` too often.
 
 ---
 
 ## 6. Skills System
 
-Skills are procedural domain knowledge files (SKILL.md) that are automatically injected into agent prompts when they match the current request.
+Skills are procedural knowledge files (SKILL.md) that are automatically injected into agent prompts when they match the current request.
 
-**Skills vs. Memory vs. Soul:**
-- **Soul** → *Who the agent is* (identity, role, behavioral guidelines)
-- **Skills** → *How to approach a specific problem* (step-by-step procedures, best practices)
-- **Memory** → *What has happened* (facts, IPs, past decisions, preferences)
+### Skills vs. Memory vs. Soul
+
+| Type | Content | Question |
+|---|---|---|
+| **Soul** | Persistent agent identity | *Who is this agent?* |
+| **Skills** | Procedural domain knowledge | *How should one approach this problem?* |
+| **Memory** | Episodic facts | *What has happened / is known?* |
 
 ### SKILL.md Format
 
 ```markdown
 ---
 name: kubernetes-incident-response
-description: Step-by-step guide for diagnosing pod failures in Kubernetes
+description: Step-by-step guide for pod failure diagnosis in Kubernetes
 modules: [kubernetes]
 ---
 
 ## Step 1 — Check pod status
-Run `get_failing_pods()` to identify which pods are in a non-running state.
+Run `get_failing_pods()` to identify pods in a non-running state.
 
 ## Step 2 — Analyze logs
-…
+Check the last 100 lines with `get_pod_logs(pod_name, namespace)`.
+...
 ```
 
-The `modules` field restricts injection to specific agents. An empty array means the skill is available to all agents.
+The `modules` field restricts injection to specific agents. Empty array = available to all agents.
 
 ### Built-in Skills
 
-| Skill | Applies to | Purpose |
+| Skill | Module | Purpose |
 |---|---|---|
 | `kubernetes-incident-response` | kubernetes | CrashLoopBackOff, OOMKilled, eviction diagnosis |
 | `pihole-session-management` | pihole | Session token caching, 429 handling, rate limits |
 | `ionos-dns-quirks` | ionos | IONOS API quirks (zones vs. records, em-dash in keys) |
 | `proxmox-troubleshooting` | proxmox | Common Proxmox error patterns |
+| `fritzbox-network-diagnostics` | fritzbox | Network diagnostics, WAN troubleshooting |
+| `homeassistant-automation` | homeassistant | Automation templates and patterns |
+| `glpi-ticket-workflow` | glpi | Ticket creation and escalation workflow |
+| `email-alert-templates` | email | Email templates for alerts and reports |
+| `web-search-strategy` | web_search | Search strategies for research |
+| `wordpress-publishing` | wordpress | Publishing workflow for posts |
+| `agent-builder` | all | 5-question interview for agent creation |
+| `workflow-builder` | all | DAG workflow planning and patterns |
+
+### Injection Logic
+
+On every `invoke()` call, `SkillsManager.find_matching_skills(message, agent_name)` runs:
+1. Tokenize the message.
+2. Per skill: check module filter, then calculate keyword overlap.
+3. Return top-2 skills with overlap ≥ 12%.
+4. Append as formatted Markdown to the end of the system prompt.
 
 ### Installing Custom Skills
 
-The orchestrator can install skills via the `install_skill` tool:
+Via chat:
+```
+"Teach Ninko how to restart the payment service: [describe procedure]"
+```
 
-```
-"Teach Ninko how to handle a specific incident: [describe the procedure]"
-```
+Via API:
+```http
+POST /api/skills/
+Content-Type: application/json
 
-Or install directly via API:
-```
-POST /api/skills/install
 {
-  "name": "my-runbook",
-  "description": "Runbook for restarting the payment service",
-  "content": "## Step 1\n…",
+  "name": "payment-service-restart",
+  "description": "Restart procedure for the payment service",
+  "content": "## Step 1\nFirst check the pod logs...",
   "modules": ["kubernetes", "docker"]
 }
 ```
 
-Installed skills are written to `/app/data/skills/` (persistent volume) and survive container restarts.
-
-### Injection Logic
-
-At each `invoke()` call, `SkillsManager.find_matching_skills(message, agent_name)` runs:
-1. Tokenizes the message.
-2. For each skill: checks module filter, then calculates keyword overlap.
-3. Returns the top 2 skills with overlap ≥ 12%.
-4. They are appended to the system prompt as formatted markdown.
+Skills are written to `data/skills/` (persistent volume) and survive container restarts.
 
 ---
 
 ## 7. Soul System
 
-Every agent in Ninko has a "Soul" — a Markdown file that defines its persistent identity, purpose, capabilities, and behavioral constraints. The soul is injected at the very beginning of the system prompt, before RAG context, skills, or language instructions.
+Every agent in Ninko has a "Soul" — a Markdown file that defines its persistent identity, purpose, capabilities, and behavioral constraints. The Soul is injected at the very beginning of the system prompt, before RAG context, skills, or language instructions.
 
 ### Soul Types
 
 **Built-in Souls** (`backend/souls/*.md`)
-Baked into the Docker image. Protected from deletion. Ninko's own soul (`ninko.md`) is injected into the orchestrator, shaping how it communicates and makes decisions.
+Baked into the Docker image. Protected from deletion. Ninko's own Soul (`ninko.md`) is injected into the orchestrator.
 
 **Module Agent Souls**
-Auto-generated at startup from the module's manifest description and tool names. Only created if no soul exists yet. Example: the Kubernetes agent receives a soul that explains its role as a Kubernetes specialist.
+Automatically generated at startup from the manifest description and tool names. Only created if no soul exists yet.
 
 **Dynamic Agent Souls**
-Auto-generated when a custom agent is created via `create_custom_agent` or the Agents UI. Generated from the agent's name, description, and system prompt bullets. Stored in Redis (`ninko:souls`).
+Automatically generated when a custom agent is created via `create_custom_agent` or the Agents UI. Generated from name, description, and system prompt bullet points. Stored in Redis (`ninko:souls`).
 
 ### Soul Structure
 
-A generated soul includes:
+A generated Soul contains:
 - **Identity** — "You are [Name], [role] for Ninko."
 - **Purpose** — The agent's primary mission.
 - **Capabilities** — Extracted from system prompt bullet points.
 - **Behavior Guidelines** — Tone, escalation paths, tool usage conventions.
-- **Constraints** — What the agent should NOT do.
-- **Escalation Rules** — When to call back to the orchestrator.
+- **Constraints** — What the agent should **not** do.
+- **Escalation Rules** — When to delegate back to the orchestrator.
 
-Souls can be viewed and edited via `GET /api/agents/{id}` (includes `soul_md` field) and through the Agent editor in the dashboard.
+### Soul vs. System Prompt
+
+| | Soul | System Prompt |
+|---|---|---|
+| **Purpose** | Persistent identity / personality | Operational instructions and tool rules |
+| **Location** | `backend/souls/` or Redis `ninko:souls` | In `BaseAgent.__init__()` or dynamic agent JSON |
+| **Injection position** | Very beginning of the final system prompt | After the Soul |
+| **Mutability** | Built-in: read-only; dynamic: editable | Always editable |
 
 ---
 
 ## 8. LLM Providers
 
-Ninko supports three LLM backend types. All providers use a unified interface (`LLMFactory`) so modules and agents never need to know which backend is active.
+Ninko supports four backend types. All providers use a unified interface (`LLMFactory`) so modules and agents never need to know which backend is active.
 
 ### Supported Backends
 
@@ -456,65 +535,77 @@ Ninko supports three LLM backend types. All providers use a unified interface (`
 |---|---|---|
 | `ollama` | Local model server (Ollama) | No |
 | `lmstudio` | Local model server (LM Studio) | No |
-| `openai_compatible` | Any OpenAI-compatible API (OpenRouter, Groq, Heimaker, etc.) | Yes |
+| `openai_compatible` | Any OpenAI-compatible API (OpenRouter, Groq, Heimaker) | Yes |
+| `litellm` | LiteLLM proxy (any model behind a proxy) | Yes (any value) |
 
 ### Adding a Provider
 
-1. Go to **Settings → LLM Providers**.
-2. Click **Add Provider**.
-3. Select the backend type.
-4. Enter the base URL:
+1. **Settings → LLM Providers → Add Provider**
+2. Choose backend type
+3. Enter base URL:
    - Ollama (Docker): `http://ollama:11434`
-   - LM Studio (on your machine): `http://192.168.1.100:1234` — `/v1` is appended automatically if missing.
-   - External API: full URL, e.g. `https://openrouter.ai/api/v1`
-5. Enter the default model name exactly as the provider expects it (e.g., `qwen2.5:14b`, `llama3.2:3b`).
-6. Toggle **Set as Default** to make this the active provider.
-
-Switching providers takes effect immediately — no restart required. The LLM factory invalidates its context-window cache and all agents reinitialize on their next call.
+   - LM Studio (local): `http://192.168.1.100:1234` — `/v1` is appended automatically
+   - OpenRouter: `https://openrouter.ai/api/v1`
+   - LiteLLM: your own proxy URL
+4. Model name exactly as expected by the provider (e.g. `qwen2.5:14b`, `llama3.2:3b`)
+5. **Set as default** → active immediately without restart
 
 ### Embedding Model
 
-The embedding model used for ChromaDB (semantic memory and RAG) is configured separately under **Settings → LLM Providers → Embedding Model**. It is independent of the active LLM provider. Changing the embedding model requires re-embedding existing memories for consistency.
+The embedding model for ChromaDB (semantic memory and RAG) is configured separately under **Settings → LLM Providers → Embedding Model**. It is independent of the active LLM provider. When changing the embedding model, existing memory entries should be re-embedded.
 
 ### Thinking Models (Qwen3.5, DeepSeek-R1)
 
-These models emit `<think>…</think>` blocks before their actual response. Ninko automatically strips these before returning the result to the user, before parsing safeguard JSON, and before storing to memory. No configuration needed.
+These models emit `<think>…</think>` blocks before their actual response. Ninko strips these automatically before the response reaches the user, before SafeGuard JSON parsing, and before memory storage. No configuration required.
+
+### LM Studio — Known Limitations
+
+LM Studio's embedded Jinja2 does not support the `is sequence` test. This causes three known errors, all fixed in `llm_factory.py`:
+
+1. **HTTP 400 "Unknown test: sequence"** for list content → `_NormalizingChatOpenAI` normalizes lists to strings.
+2. **Model generates `example_function_name`** instead of real tool names → `_inject_tools_into_system()` appends tool definitions as readable text to the SystemMessage.
+3. **HTTP 400** for `AIMessage` with `tool_calls` list → `_convert_tool_messages_to_text()` converts to XML format (`<tool_call>`, `<tool_response>`).
+
+### SSL Certificates
+
+For self-signed certificates (e.g. internal LiteLLM proxy): set `verify_ssl: false` in the provider. **Important:** `get_safeguard_openai_client()` must use the same `verify` value, otherwise the SafeGuard classifier fails with `CERTIFICATE_VERIFY_FAILED`.
 
 ---
 
 ## 9. Module Connections
 
-Ninko supports **multi-connection** per module: one module (e.g., Kubernetes) can manage multiple environments simultaneously (prod, staging, dev, lab).
+Ninko supports **multi-connection** per module: a module (e.g. Kubernetes) can manage multiple environments simultaneously (prod, staging, dev, lab).
 
 ### Creating a Connection
 
-1. Click **Settings** in the left sidebar (bottom nav).
-2. Select a module from the left navigation (e.g., `kubernetes`, `proxmox`, `pihole`).
-3. Click the **Connections** tab.
-4. Fill in the fields:
-   - **Name** — A descriptive label (e.g., "Prod Cluster Frankfurt").
-   - **Environment** — `prod`, `staging`, `dev`, `lab`, or `local`. This label helps the Safeguard middleware assess risk.
-   - **Non-secret fields** — URLs, usernames, options.
-   - **Secret fields** (Vault) — Passwords, API keys, tokens. These fields always appear empty in the UI even when a value is stored, for security reasons.
-5. **Set as default** — When enabled, this connection is used automatically unless a different one is requested in the chat.
-6. Click **Save**.
+1. **Settings → [Module] → Connections**
+2. Click **New Connection**
+3. Fill in the fields:
+   - **Name** — Descriptive label (e.g. "Prod Cluster Frankfurt")
+   - **Environment** — `prod`, `staging`, `dev`, `lab`, or `local` (affects SafeGuard risk assessment)
+   - **Non-secret fields** — URLs, usernames, options
+   - **Secret fields** — Passwords, API keys, tokens (always displayed empty, stored in Vault)
+4. **Set as default** — Used automatically when no other connection is requested
+5. **Save**
 
-> **Note:** Empty secret fields never overwrite previously saved secrets. You can update only non-secret fields without re-entering passwords.
+> **Note:** Empty secret fields never overwrite saved values. Non-secret fields can be updated without re-entering passwords.
 
-### Using a Specific Connection in Chat
+### Using a Connection in Chat
 
 ```
 "Restart the nginx pod in the staging cluster"
-"Scale the payment service in the prod connection"
-"Show me the Pi-hole stats on the 'Home Lab' connection"
+"Show Pi-hole statistics on the 'Home Lab' connection"
+"Scale the payment service to 3 replicas on the prod connection"
 ```
 
-The orchestrator extracts connection hints from the message and passes them to the module agent.
+### Two Separate Configuration Systems
 
-### Troubleshooting
+| System | API | Storage | Used by |
+|---|---|---|---|
+| Legacy module settings | `PUT /api/settings/modules/{name}` | Redis `ninko:settings:modules` | Older configuration fields |
+| ConnectionManager | `POST /api/connections/{module_id}` | Redis `ninko:connections:{id}` + Vault | All current modules (tools) |
 
-- **Profile disappears after save** — Check that the environment label exactly matches one of the allowed values (`prod`, `staging`, `dev`, `lab`, `local`). A mismatch in the Pydantic `Literal` type causes a silent 422 error.
-- **Duplicate profiles** — The UI disables the Save button on click to prevent race conditions. If duplicates appear, they can safely be deleted; their Vault secrets are cleaned up automatically.
+Tools always read via `ConnectionManager.get_default_connection(module_id)`. If no UI connection exists, modules fall back to env vars (e.g. `FRITZBOX_HOST`, `HOMEASSISTANT_URL`).
 
 ---
 
@@ -522,349 +613,334 @@ The orchestrator extracts connection hints from the message and passes them to t
 
 ### Navigation
 
-The left sidebar has three sections:
-
-| Area | Items |
+| Area | Elements |
 |---|---|
-| Top nav | **New Chat** (opens a fresh session), **Automation** (Tasks, Agents, Workflows) |
-| Bottom nav | **Modules**, **Settings** |
-| History | Chat history list — directly below the top nav, no header bar |
+| Top navigation bar | **New Chat**, **Automation** (Tasks, Agents, Workflows) |
+| Bottom navigation bar | **Modules**, **Settings** |
+| History | Chat history list (directly below the top nav, no separate header bar) |
 
-**Connection status** — a single green/red dot in the top-right corner of the sidebar header. No label text is shown.
-
-**Settings** contains: LLM Provider, Modules, System, Language, TTS, Image Generation, and **Logs**.
+**Connection status** — Single green/red dot in the top right of the sidebar header.
 
 ### Sending Messages
 
-Type your request in natural language. The orchestrator handles routing automatically. You don't need to specify a module — Ninko detects intent from keywords and context.
+Enter requests in natural language. The orchestrator handles routing automatically.
 
-Examples:
-- `"Show me all failing pods"` → Tier 2 → Kubernetes agent
-- `"What is BGP?"` → Tier 1 → Direct LLM answer
-- `"Check the cluster and send a Telegram report"` → Tier 4 → Pipeline
-- `"Create an agent that monitors my Docker containers"` → Tier 3 → Dynamic agent creation
+| Input | Tier | Handler |
+|---|---|---|
+| `"What is BGP?"` | 1 | Direct LLM answer |
+| `"Show all failing pods"` | 2 | Kubernetes agent |
+| `"Create a security agent"` | 3 | Dynamic agent created |
+| `"Check cluster and send Telegram report"` | 4 | Pipeline |
 
-### Voice Input
+### Module Pre-Selection (Chat Toolbar)
 
-Click the microphone button to record a voice message. Ninko transcribes it using Whisper (running locally inside the backend — no external API call) and sends the text as a chat message.
+The module-picker pill next to the chat title (`Ninko._forcedModule`) enables direct routing:
+- **Auto** — 4-tier routing as normal
+- **Module name** — Directly to the module agent (bypasses all tiers)
+- **Custom agent UUID** — Directly to the custom agent (from `DynamicAgentPool`)
 
-Supported configuration via env vars:
-- `WHISPER_MODEL_SIZE` (default: `base`) — Larger models are more accurate but slower.
-- `WHISPER_LANGUAGE` (default: `de`) — Helps Whisper choose the right language.
-- `WHISPER_DEVICE` (default: `cpu`)
+Custom agents appear in the dropdown under "My Agents" with a 🤖 prefix.
 
-> **Note:** The microphone only works over HTTPS or `localhost`. Over plain HTTP, browsers block `navigator.mediaDevices`. Configure a Traefik IngressRoute with TLS for production use.
+### Voice Control
+
+Click the microphone button → record a voice message → Whisper transcribes it (locally, no external API call) → text is sent as a chat message.
+
+> **Note:** The microphone only works over HTTPS or `localhost`. Over plain HTTP, browsers block `navigator.mediaDevices`.
 
 ### Multilingual Support
 
-Ninko supports 10 languages: German, English, French, Spanish, Italian, Portuguese, Dutch, Polish, Chinese, and Japanese. The UI language can be changed in **Settings → Language** without a page reload. Agent responses automatically switch to the selected language.
+10 languages: German, English, French, Spanish, Italian, Portuguese, Dutch, Polish, Chinese, Japanese. Language change in **Settings → Language** without page reload.
 
 ---
 
 ## 11. Custom Agents
 
-Custom agents are specialized AI personas that can be created manually or generated automatically by the orchestrator (Tier 3).
+Custom agents are specialized AI personas that can be created manually or automatically by the orchestrator (Tier 3).
 
-### Creating an Agent via the UI
+### Creating an Agent (UI)
 
-1. Go to the **Agents** tab.
-2. Click **New Agent**.
-3. Fill in:
-   - **Name** — Used for routing and soul generation.
-   - **Description** — Helps the Tier-3 routing match this agent to future requests.
-   - **System Prompt** — Defines the agent's role and knowledge. Use bullet points for capabilities; the soul generator uses them.
-   - **LLM Provider** — Leave empty to use the global default.
-   - **Safeguard** — Toggle whether this agent requires confirmation for state-changing actions.
-4. Click **Save**.
+1. **Agents tab → New Agent**
+2. Fill in the fields:
+   - **Name** — Used for routing and Soul generation
+   - **Description** — Helps Tier-3 routing to match future requests (Jaccard ≥ 18%)
+   - **System Prompt** — Bullet points for capabilities recommended (used by the Soul generator)
+   - **LLM Provider** — Empty = global default
+   - **SafeGuard Profile** — Which security profile for this agent
+3. **Save** → Immediately registered in `DynamicAgentPool`, stored in Redis
 
-The agent is immediately registered in the `DynamicAgentPool`, stored in Redis (`ninko:agents`), and available for routing.
+### Base Tools (all Custom Agents)
 
-### Using an Agent
+Every custom agent automatically receives 4 base tools:
 
-Once registered, the orchestrator automatically routes relevant requests to your agent based on keyword overlap (threshold: 18% Jaccard similarity). You can also explicitly invoke it:
+| Tool | Function |
+|---|---|
+| `execute_cli_command` | Run shell commands |
+| `call_module_agent` | Invoke any module agent |
+| `recall_memory` | Search semantic memory |
+| `remember_fact` | Store in semantic memory |
 
+### Agent Templates
+
+6 built-in templates as a starting point:
+
+| Template ID | Label | Category |
+|---|---|---|
+| `it_ops` | IT Operations Generalist | ops |
+| `k8s_specialist` | Kubernetes Specialist | ops |
+| `security_scanner` | Security Scanner | security |
+| `monitor_reporter` | Monitor & Reporter | monitoring |
+| `helpdesk` | Helpdesk Agent | support |
+| `home_automation` | Home Automation | smart_home |
+
+### LLM Generation
+
+```http
+POST /api/agents/generate
+{"use_case": "Monitors Docker containers and sends alerts via Telegram", "allowed_modules": ["docker", "telegram"]}
 ```
-"Ask the security-analyst agent to review the Kubernetes RBAC setup"
-```
 
-### Agent Base Tools
-
-All custom agents receive 4 base tools regardless of their system prompt:
-- `execute_cli_command` — Run shell commands
-- `call_module_agent` — Invoke any module agent
-- `recall_memory` — Search semantic memory
-- `remember_fact` — Store to semantic memory
+Returns `name`, `description`, and `system_prompt` — ready to save.
 
 ---
 
 ## 12. Workflows (DAG Automation)
 
-The Workflow editor provides a visual canvas for building multi-step automation pipelines as Directed Acyclic Graphs (DAGs).
+The workflow editor provides a visual canvas for multi-step automation pipelines as Directed Acyclic Graphs (DAGs).
 
 ### Node Types
 
-| Node | Configuration | Purpose |
+| Node | Configuration fields | Purpose |
 |---|---|---|
 | **Trigger** | — | Entry point of every workflow |
 | **Agent** | `agent_id`, `prompt` | Delegate a task to the orchestrator (full 4-tier routing) |
-| **Condition** | `expression`, `true_label`, `false_label` | Branch: `output.contains("error")` → take true path |
+| **Condition** | `expression`, `true_label`, `false_label` | Branch: `output.contains("error")` → true path |
 | **Variable** | `name`, `value` | Set a variable, supports `{other_variable}` interpolation |
 | **Loop** | `variable`, `items` | Iterate over a list |
 | **End** | `status` | Terminal node |
 
-### Building a Workflow
-
-1. Go to the **Workflows** tab and click **New Workflow**.
-2. Drag nodes from the **Palette** onto the canvas.
-3. Connect nodes by dragging from the output dot (bottom of a node) to the input dot (top of the next node).
-4. Click a node to open the **Inspector** panel on the right and configure it.
-5. Click **Save** to persist the workflow.
-
 ### Variable Interpolation
 
-Outputs flow through the workflow via the `{previous_output}` variable. You can also define named variables with the Variable node:
+Outputs flow through the workflow via `{previous_output}`. Named variables via the Variable node:
 
 ```
 Variable: result = "Cluster is healthy"
 Agent prompt: "Summarize this for a status report: {result}"
 ```
 
-### Running a Workflow
+### Starting a Workflow
 
-- **Manual:** Click the ▶ Run button on the workflow card.
-- **Scheduled:** Assign the workflow to a scheduled task (see Section 13).
-- **Via chat:** `"Execute the daily-k8s-report workflow"` — the orchestrator calls `execute_workflow`.
+- **Manually:** ▶ button on the workflow card
+- **Scheduled:** Assign the workflow to a scheduled task (→ Section 13)
+- **Via chat:** `"Execute the daily-k8s-report workflow"` — orchestrator calls `execute_workflow`
 
-### Monitoring
+### Run Status
 
-The **Run Dashboard** shows live execution status:
-- Each step shows its current state (pending → running → succeeded/failed).
-- Click a step to see the full LLM output and duration.
-- Failed runs show the error message and which step failed.
+| Status | Meaning |
+|---|---|
+| `idle` | Not yet started |
+| `running` | Currently executing |
+| `succeeded` | Completed successfully |
+| `failed` | Aborted with an error |
+
+Each step has its own status: `pending`, `running`, `succeeded`, `failed`, `skipped`.
 
 ---
 
 ## 13. Scheduler (Scheduled Tasks)
 
-The Scheduler runs tasks automatically on a cron schedule using background coroutines inside the backend process.
+The scheduler runs tasks automatically on a cron schedule via background coroutines in the backend process.
 
-### Creating a Scheduled Task
+### Task Types and Execution Paths
 
-1. Go to the **Tasks** (Aufgaben) tab.
-2. Click **New Task**.
-3. Fill in:
-   - **Name** — A descriptive label.
-   - **Schedule (Cron)** — A standard cron expression. Use the template dropdown for common intervals.
-4. Select a **Task Type**:
-   - **Agent Prompt** — A natural-language prompt sent through the full orchestrator routing.
-   - **Call Custom Agent** — Direct invocation of a specific custom agent (bypasses orchestrator routing).
-   - **Execute Workflow** — Trigger a saved workflow by ID.
-5. Click **Save**.
+```
+workflow_id present → WorkflowEngine.execute(workflow)
+agent_id present    → DynamicAgentPool.get_agent_by_id(id) → agent.invoke()
+prompt present      → orchestrator.route(prompt)  [default path]
+```
 
-### Cron Syntax Reference
+Scheduled tasks do **not** pass through SafeGuard — they are trusted background processes.
+
+### Cron Syntax
 
 | Expression | Meaning |
 |---|---|
 | `*/5 * * * *` | Every 5 minutes |
-| `0 * * * *` | Every hour |
+| `0 * * * *` | Hourly |
 | `0 8 * * *` | Daily at 08:00 |
 | `0 8 * * 1` | Every Monday at 08:00 |
 | `0 */6 * * *` | Every 6 hours |
-
-### Execution Paths
-
-The scheduler runs tasks through three prioritized paths:
-
-```
-1. workflow_id present → WorkflowEngine.execute(workflow)
-2. agent_id present   → DynamicAgentPool.get_agent_by_id(agent_id) → agent.invoke()
-3. prompt present     → orchestrator.route(prompt)  [default path]
-```
-
-Scheduled tasks do **not** go through safeguard — they are trusted background processes.
+| `0 9,17 * * 1-5` | Mon–Fri at 09:00 and 17:00 |
 
 ### Task Logs
 
-Click the log icon on any task card to view the last 50 execution logs, including timestamps, duration, status (ok/error), and full LLM output.
+Click the log icon on a task card → last 50 execution logs with timestamp, duration, status (ok/error), and full LLM output.
 
 ---
 
-## 14. Modules Reference
+## 14. Module Reference
 
-### Kubernetes (☸)
+### Core Modules (always in the image)
 
-Manages Kubernetes clusters via the official Python client.
+#### Web Search (🔍)
+Web search via a local SearXNG instance (aggregates Bing, Mojeek, Qwant).
 
-**Capabilities:**
-- Cluster health and node status
-- Pod listing, log retrieval, restart
-- Deployment scaling and rollout restart
-- **Write operations** (v0.5.6+): `apply_manifest` (server-side apply, any resource kind), `delete_resource`, `get_resource_yaml`, `create_namespace`, `list_deployments`
-- Event analysis and failure diagnosis
+**Configuration:** `SEARXNG_URL` env var. Docker Compose: set automatically. Kubernetes: enter in `deployment.yaml`.
 
-**Connection fields:** kubeconfig path or in-cluster service account.
+```
+"What is the current Bitcoin price?"
+"Search Kubernetes 1.30 release notes"
+"News about Redis 8"
+```
 
-**Examples:**
+#### Image Generation (🎨)
+AI image generation via any compatible API.
+
+**Providers:** Together AI, OpenAI DALL-E, Google Imagen, local Stable Diffusion. API key in Settings → Image Generation.
+
+```
+"Create an image of a Kubernetes cluster diagram"
+```
+
+#### CodeLab (💻)
+Code execution and analysis in the browser. Supports Python, Bash, JavaScript.
+
+### Catalog Modules (installable via Marketplace)
+
+#### Kubernetes (☸)
+
+| Capability | Description |
+|---|---|
+| Cluster health | Node status, resource usage |
+| Pod management | List, logs, restart |
+| Deployment scaling | `scale`, `rollout restart` |
+| Write operations | `apply_manifest`, `delete_resource`, `create_namespace` |
+| Event analysis | Error diagnosis, CrashLoopBackOff, OOMKilled |
+
 ```
 "Show all failing pods in the production namespace"
 "Restart the payment-api pod"
-"Create a nginx test pod in the default namespace"
+"Create an nginx test pod in the default namespace"
 "Scale the frontend deployment to 3 replicas"
 "Apply this manifest: [YAML]"
 ```
 
-### Proxmox (🖥)
-
+#### Proxmox (🖥)
 VM and LXC container management via the Proxmox REST API.
 
-**Examples:**
 ```
 "List all VMs on pve-01"
 "Start VM 105"
-"Take a snapshot of VM 200 named 'pre-update'"
+"Create a snapshot of VM 200 named 'before-update'"
+"Migrate VM 200 to pve-02"
 ```
 
-### GLPI Helpdesk (🎫)
-
+#### GLPI Helpdesk (🎫)
 Ticket and asset management via the GLPI REST API.
 
-**Examples:**
 ```
 "Create an incident ticket: server unreachable"
-"What is the status of ticket #1234?"
+"Status of ticket #1234?"
 "Show all open tickets assigned to me"
 ```
 
-### IONOS DNS (🌐)
-
+#### IONOS DNS (🌐)
 DNS zone and record management via the IONOS Hosting API.
 
 **Authentication:** API key in `prefix.secret` format (two parts separated by `.`).
 
-**Known quirk:** The IONOS API embeds records inside the zone object (`GET /zones/{id}`) rather than as a separate records endpoint. Ninko handles this automatically.
+**Known quirk:** The IONOS API embeds records in the zone object (`GET /zones/{id}`), no separate records endpoint. Ninko handles this automatically.
 
-**Examples:**
 ```
-"Which DNS zones do we have on IONOS?"
-"Create an A record for dev.example.com pointing to 10.0.0.5"
+"Which DNS zones do we have at IONOS?"
+"Create an A record for dev.example.com → 10.0.0.5"
 "Delete the TXT record _acme-challenge.example.com"
 ```
 
-### FritzBox (📶)
+#### FritzBox (📶)
+Home and office network management.
 
-Home and small office network management.
-
-**Examples:**
 ```
 "What is my external IP address?"
-"Enable the guest Wi-Fi"
+"Enable the guest Wi-Fi network"
 "Show connected devices"
+"Create a port forwarding rule for port 8080"
 ```
 
-### Home Assistant (🏠)
+#### Home Assistant (🏠)
+Smart home automation.
 
-Smart home automation control.
-
-**Examples:**
 ```
 "Turn on the living room lights"
 "Set the heating to 21°C"
-"What is the current temperature in the bedroom?"
+"Current temperature in the bedroom?"
+"Create an automation: when motion detected → turn on light"
 ```
 
-### Pi-hole (🛡)
-
-DNS-level ad blocking and custom DNS management (Pi-hole v6).
-
-**Authentication:** Pi-hole web UI password, stored as a connection secret.
+#### Pi-hole (🛡)
+DNS-based ad blocking and custom DNS management (Pi-hole v6).
 
 **Known quirk:** Pi-hole v6 uses a session-based API with rate limiting. Ninko caches the session token (5-minute TTL) and handles 429 errors with automatic retry.
 
-**Examples:**
 ```
 "Block the domain tracking.example.com"
 "Show today's network statistics"
-"Add a local DNS record for nas.home → 192.168.1.50"
+"Add a local DNS record: nas.home → 192.168.1.50"
 ```
 
-### Docker (🐳)
-
+#### Docker (🐳)
 Container management via the Docker socket API.
 
-**Examples:**
 ```
 "List all running containers"
 "Show logs for container nginx-proxy"
-"Restart the container my-app"
+"Restart container my-app"
+"Clean up Docker system (images, volumes)"
 ```
 
-### Linux Server (🖥)
+#### Checkmk (📊)
+Monitoring platform integration.
 
+```
+"Show all critical hosts in Checkmk"
+"Acknowledge the alert for web-server-01"
+"Create a maintenance window for db-01"
+```
+
+#### Linux Server (🖥)
 SSH-based remote server administration.
 
-**Examples:**
 ```
 "Check disk usage on server web-01"
-"Show the last 50 lines of /var/log/syslog"
+"Show last 50 lines of /var/log/syslog"
 "Restart the nginx service"
 ```
 
-### WordPress (📝)
-
+#### WordPress (📝)
 Content management via the WordPress REST API.
 
-**Prerequisite:** WordPress must use any permalink format other than "Plain" (Settings → Permalinks). Plain permalinks disable the REST API.
+**Prerequisite:** WordPress must use a permalink format other than "Plain" (Settings → Permalinks). Plain permalinks disable the REST API.
 
-**Examples:**
 ```
-"Create a draft post titled 'Q1 Recap'"
+"Create a draft with the title 'Q1 Summary'"
 "List the last 5 published posts"
 ```
 
-### Web Search (🔍)
-
-Web search via a local SearXNG instance (aggregates Bing, Mojeek, Qwant).
-
-**Configuration:** Set `SEARXNG_URL` environment variable. In Docker Compose this is set automatically; in Kubernetes it must be added to `deployment.yaml`.
-
-**Examples:**
-```
-"What does Bitcoin cost right now?"
-"Search the web for Kubernetes 1.30 release notes"
-"Latest news about Redis 8"
-```
-
-### Email (📧)
-
-SMTP sending and IMAP retrieval.
-
-**Examples:**
-```
-"Send an email to ops@example.com: the deployment was successful"
-"Show my last 5 unread emails"
-```
-
-### Telegram Bot (💬)
-
+#### Telegram Bot (💬)
 Full bidirectional Telegram messenger integration.
 
 **Features:**
-- Voice messages are automatically transcribed via Whisper and processed as text.
-- Replies can be sent as voice (TTS via Piper) if TTS is enabled.
-- Safeguard uses a pending-confirmation flow for bot channels (see Section 4).
-- Session ID is tied to the Telegram User ID and persists across restarts.
+- Voice messages are automatically transcribed via Whisper and processed as text
+- Replies can be sent as voice messages (TTS via Piper) when TTS is active
+- SafeGuard uses a pending confirmation flow for bot channels
+- Session ID is tied to the Telegram user ID and survives restarts
 
-**Commands:**
-- `/start`, `/clear`, `/reset` — Wipe the chat history for the current session.
+**Commands:** `/start`, `/clear`, `/reset` — delete the chat history of the current session
 
-### Image Generation (🎨)
+#### Microsoft Entra / Intune, Cisco, Confluence, Jira, OpenProject, Redmine, Slack, Teams
+Additional enterprise integrations — each via REST API, connection via ConnectionManager, secrets in Vault.
 
-AI image generation via any compatible API.
-
-**Examples:**
-```
-"Generate an image of a Kubernetes cluster diagram"
-```
+#### Synology, Netgear, Mikrotik, Ubiquiti, Tasmota, OPNsense, HPE iLO, Lenovo XClarity
+Network, NAS, and hardware management integrations.
 
 ---
 
@@ -872,43 +948,39 @@ AI image generation via any compatible API.
 
 ### Local AI by Default
 
-All LLM calls stay within your network when using Ollama or LM Studio. No data is sent to external services unless an OpenAI-compatible external provider is explicitly configured.
+All LLM calls remain within the network when using Ollama or LM Studio. No data goes to external services unless an OpenAI-compatible external provider is explicitly configured.
 
-### Secrets
+### Secrets Storage
 
-All module credentials (API keys, passwords, tokens) are stored encrypted via HashiCorp Vault or an SQLite fallback. They are never stored in plaintext on disk or returned in API responses (secret fields always appear empty in the UI).
+All module credentials (API keys, passwords, tokens) are stored encrypted via HashiCorp Vault or SQLite fallback. Never in plain text on disk. Always displayed as empty in API responses.
 
 ### SafeGuard
 
-Every user-initiated message is classified before execution using the active SafeGuard profile. State-changing, destructive, and prompt-injection attempts require explicit confirmation. Profiles control scope (user messages / tool calls / both), categories requiring confirmation, injection detection, and fail_open behavior. See Section 4 for full details.
+Every user-initiated message is classified before execution (→ Section 4). State-changing, destructive, and prompt injection attempts require explicit confirmation.
 
-### Destructive Action Confirmation (Proxmox)
+### Proxmox — Additional Protection Layer
 
-The Proxmox module has an additional layer of protection for destructive VM operations. Set `PROXMOX_CONFIRM_DESTRUCTIVE=true` (default) to require agent-level confirmation before executing irreversible actions.
+`PROXMOX_CONFIRM_DESTRUCTIVE=true` (default) requires agent-level confirmation before irreversible VM operations.
 
 ### Network Exposure
 
-Ninko is designed for internal network use only. It is **not** designed to be exposed directly to the internet. For production use, place a reverse proxy (Traefik, Nginx) with TLS and optionally basic auth or OAuth middleware in front.
+Ninko is designed for internal network operation. Do **not** expose it directly to the internet. For production use, place a reverse proxy (Traefik, Nginx) with TLS and optionally basic auth or OAuth middleware in front of it.
 
-### Log Safety
+### Log Security
 
-Ninko writes logs to a capped Redis list (`ninko:logs`, visible in the Logs tab). Secret API keys passed through tools are not automatically masked in logs. Avoid including raw secrets in system prompts or chat messages.
-
-### `.env` File
-
-Never commit `.env` to version control. It is listed in `.gitignore`. Use `.env.example` as the template.
+Ninko writes logs to a capped Redis list (`ninko:logs`, visible in the Logs tab). Secret API keys passing through tools are not automatically masked in logs. Do not include raw secrets in system prompts or chat messages.
 
 ---
 
 ## 16. Developing a Module
 
-Every module follows the same self-contained structure. Adding a new module requires only creating a folder — nothing in the core changes.
+Every module follows the same self-contained structure. Adding a new module only requires creating a folder — nothing in the core changes.
 
 ### File Structure
 
 ```
-backend/modules/mymodule/
-├── __init__.py       ← exports: module_manifest, agent, router
+backend/modules_catalog/mymodule/
+├── __init__.py       ← Exports: module_manifest, agent, router
 ├── manifest.py       ← ModuleManifest with routing_keywords
 ├── agent.py          ← BaseAgent subclass
 ├── tools.py          ← @tool functions (LangChain)
@@ -925,19 +997,20 @@ backend/modules/mymodule/
 from backend.core.module_registry import ModuleManifest
 
 module_manifest = ModuleManifest(
-    name="mymodule",                          # Internal ID, lowercase
-    display_name="My Module",                 # UI label
-    description="Manages MyService instances",# Used by LLM for routing — keep it descriptive
+    name="mymodule",                            # Internal ID, lowercase
+    display_name="My Module",                   # UI label
+    description="Manages MyService instances",  # Used by LLM for routing — keep descriptive
     version="1.0.0",
     routing_keywords=[
         "myservice", "my-module", "specific-term",
-        # Keep keywords unique across all modules to avoid routing ambiguity.
-        # Short keywords (< 7 chars) use \b word-boundary matching only.
-        # Keywords >= 7 chars also match inside compound words.
+        # Keep keywords unique across all modules.
+        # Short keywords (< 7 chars) use only \b word-boundary matching.
+        # Keywords >= 7 chars also match within compound words.
     ],
     api_prefix="/api/mymodule",
     dashboard_tab={"id": "mymodule", "label": "My Module", "icon": "🔧"},
     health_check=lambda: {"status": "ok"},
+    enabled_by_default=False,  # False = requires credentials before meaningful operation
 )
 ```
 
@@ -945,18 +1018,21 @@ module_manifest = ModuleManifest(
 
 ```python
 from backend.agents.base_agent import BaseAgent
-from backend.modules.mymodule.tools import my_tool, my_other_tool
+from backend.modules_catalog.mymodule.tools import my_tool, my_other_tool
 
 class MyModuleAgent(BaseAgent):
     def __init__(self):
         super().__init__(
             name="mymodule",
-            system_prompt="You are the My Module specialist for Ninko.\n\n"
-                          "Capabilities:\n"
-                          "- Do X\n"
-                          "- Do Y\n\n"
-                          "Rules:\n"
-                          "- Always confirm before deleting\n",
+            system_prompt=(
+                "You are the My Module specialist for Ninko.\n\n"
+                "Capabilities:\n"
+                "- List resources and check status\n"
+                "- Create and update resources\n\n"
+                "Rules:\n"
+                "- Always confirm before deleting\n"
+                "- Always pass connection_id to tools\n"
+            ),
             tools=[my_tool, my_other_tool],
         )
 ```
@@ -965,23 +1041,28 @@ class MyModuleAgent(BaseAgent):
 
 ```python
 from langchain_core.tools import tool
+from backend.core.connections import ConnectionManager
 
 @tool
-def my_tool(resource_id: str, connection_id: str = "") -> str:
+def get_my_resource(resource_id: str, connection_id: str = "") -> str:
     """
-    Retrieve the status of a resource.
+    Retrieves the status of a resource.
 
     Args:
-        resource_id: The ID of the resource to inspect.
-        connection_id: Optional connection profile to use.
+        resource_id: The ID of the resource to check.
+        connection_id: Optional connection profile.
 
-    Returns a JSON string with status details.
+    Returns:
+        JSON string with status details.
     """
-    # Tool docstrings matter — the agent LLM uses them to decide which tool to call.
-    # Keep them accurate and descriptive.
+    # Tool docstrings matter — the agent LLM uses them for tool selection.
     conn = ConnectionManager.get_default_connection("mymodule", connection_id)
-    ...
+    # ... API call ...
 ```
+
+**Read-only tools** (read-only, no writes) must be registered in `backend/core/safeguard.py:_TOOL_READONLY`:
+- `get_*`, `list_*`, `search_*`, `inspect_*`, `check_*` → read-only → add to the frozenset
+- `start_*`, `stop_*`, `restart_*`, `delete_*`, `create_*`, `set_*` → write → **do not** add
 
 ### routes.py
 
@@ -990,8 +1071,8 @@ from fastapi import APIRouter
 
 router = APIRouter(prefix="/api/mymodule", tags=["mymodule"])
 
-@router.get("/status")
-async def get_status(connection_id: str = ""):
+@router.get("/resources")
+async def list_resources(connection_id: str = ""):
     """Dashboard API — always accept connection_id and pass it to tools."""
     ...
 ```
@@ -999,11 +1080,11 @@ async def get_status(connection_id: str = ""):
 ### frontend/tab.js
 
 ```javascript
-// Must NOT use ES module syntax (no export/import).
-// Core modules: define a global object and register in app.js:getTabObject()
+// No ES module syntax (no export/import).
+// Core modules: define a global object, register it in app.js:getTabObject().
 const MyModuleTab = {
     async init() {
-        // Called when the tab is first activated.
+        // Called on first tab activation.
     }
 };
 
@@ -1011,128 +1092,1388 @@ const MyModuleTab = {
 if (typeof Ninko !== 'undefined') Ninko._pluginTabs['mymodule'] = MyModuleTab;
 ```
 
-### Enabling the Module
+### Activating a Module
 
 ```env
 NINKO_MODULE_MYMODULE=true
 ```
 
-Ninko discovers and loads the module automatically on next startup.
-
-### Registering Secret Fields
-
-If your module has secret connection fields (ending in `_KEY`, `_PASSWORD`, `_TOKEN`, `_SECRET`), register them in `backend/api/routes_settings.py`:
-- `_get_secret_keys()` — list of field names to route through Vault
-- `_get_env_connection()` — env-var fallback mapping
+Ninko discovers and loads the module automatically on the next start.
 
 ### Checklist
 
 - [ ] `routing_keywords` are unique across all modules.
-- [ ] Tool docstrings accurately describe what each tool does and returns.
-- [ ] `manifest.description` is informative (used by LLM for routing decisions).
-- [ ] `ModuleManifest.version` is bumped on breaking changes.
-- [ ] Secret fields registered in `routes_settings.py`.
-- [ ] Frontend tab.js does NOT use `export`/`import`.
+- [ ] Tool docstrings describe exactly what each tool does and returns.
+- [ ] `manifest.description` is informative (used by the LLM for routing decisions).
+- [ ] Increment `ModuleManifest.version` on breaking changes.
+- [ ] Register secret fields in `routes_settings.py:_get_secret_keys()` and `_get_env_connection()`.
+- [ ] Register read-only tools in `safeguard.py:_TOOL_READONLY`.
 - [ ] `routes.py` endpoints accept `connection_id: str = ""`.
+- [ ] `frontend/tab.js` does not use `export`/`import`.
 
 ---
 
-## 17. Startup Sequence & Persistence Reference
+## 17. Startup Order & Persistence
 
-### Startup Order (`main.py` lifespan)
+### Startup Order (`main.py` Lifespan)
 
 ```
-1. ModuleRegistry        — scan backend/modules/ + backend/plugins/, import manifests
-2. SoulManager.load()    — load built-in souls from backend/souls/
-3. SoulManager.load_from_redis()        — merge dynamic souls from Redis
-4. ModuleRegistry.auto_generate_module_souls() — create souls for modules that don't have one
-5. SkillsManager.load()  — load from backend/skills/ + /app/data/skills/
-6. SafeguardProfileStore.seed_builtins() + migrate_legacy() — seed built-in profiles, migrate old toggle value
-7. SafeguardMiddleware.init() — restore active profile ID from Redis, attach profile_store
-8. DynamicAgentPool.load_from_redis()   — instantiate custom agents from Redis
-9. OrchestratorAgent()   — initialize with module registry
-10. SchedulerAgent.start_loop()          — background cron loop
-11. MonitorAgent.start_loop()           — background health check loop
+1.  ModuleRegistry.scan()             → Scan backend/modules/ + backend/plugins/, load manifests
+2.  SoulManager.load()                → Load built-in souls from backend/souls/
+3.  SoulManager.load_from_redis()     → Merge dynamic souls from Redis
+4.  ModuleRegistry.auto_generate_souls() → Generate souls for modules without their own soul
+5.  SkillsManager.load()              → Load backend/skills/ + /app/data/skills/
+6.  SafeguardProfileStore.seed_builtins() + migrate_legacy()
+7.  SafeguardMiddleware.init()        → Restore active profile ID from Redis
+8.  DynamicAgentPool.load_from_redis() → Instantiate custom agents from Redis
+9.  OrchestratorAgent()               → Initialize with module registry
+10. SchedulerAgent.start_loop()       → Start background cron loop
+11. MonitorAgent.start_loop()         → Start background health-check loop
 ```
 
 ### Persistence Reference
 
-| Data | Storage key / path | Durability | Restored at |
+| Data | Redis key / path | Durability | Restored at |
 |---|---|---|---|
-| LLM provider settings | Redis `ninko:settings:llm_providers` | Persistent | Startup |
-| Embedding model | Redis `ninko:settings:embed_model` | Persistent | Startup |
-| Active safeguard profile ID | Redis `ninko:settings:safeguard` | Persistent | Startup |
-| SafeGuard profiles | Redis `ninko:safeguard:profiles` (hash) | Persistent | Startup |
-| Per-chat safeguard profile | Redis `ninko:safeguard:profile:chat:{id}` | 24h TTL | Per request |
-| Module settings | Redis `ninko:settings:modules` | Persistent | On demand |
-| Module connections | Redis `ninko:connections:{module_id}` | Persistent | ConnectionManager |
+| LLM provider settings | `ninko:settings:llm_providers` | Persistent | Startup |
+| Embedding model | `ninko:settings:embed_model` | Persistent | Startup |
+| Active SafeGuard profile ID | `ninko:settings:safeguard` | Persistent | Startup |
+| SafeGuard profiles | `ninko:safeguard:profiles` (hash) | Persistent | Startup |
+| Per-chat SafeGuard profile | `ninko:safeguard:profile:chat:{id}` | 24h TTL | Per request |
+| Module settings | `ninko:settings:modules` | Persistent | On demand |
+| Module connections | `ninko:connections:{module_id}` | Persistent | ConnectionManager |
 | Connection secrets | Vault / SQLite (`ninko:secrets`) | Persistent | Per request |
-| Dynamic agents | Redis `ninko:agents` | Persistent | load_from_redis() |
-| Agent souls | Redis `ninko:souls` | Persistent | load_from_redis() |
-| Per-agent safeguard profile | Redis `ninko:agent_configs` (hash, `safeguard_profile` field) | Persistent | Per request |
-| Semantic memory | ChromaDB collection `ninko_memory` | Persistent (PVC) | Auto-connect |
-| Chat history | Redis `ninko:history:{session_id}` | 7-day TTL | Per session |
-| Workflows | Redis `ninko:workflows` | Persistent | load() |
-| Workflow run logs | Redis `ninko:workflow:runs:{id}` | Persistent | Per request |
-| Scheduled tasks | Redis `ninko:scheduler:tasks` | Persistent | Startup |
-| Task execution logs | Redis `ninko:scheduler:log:{task_id}` | 50-entry cap | Per request |
+| Dynamic agents | `ninko:agents` | Persistent | load_from_redis() |
+| Agent souls | `ninko:souls` | Persistent | load_from_redis() |
+| Per-agent SafeGuard profile | `ninko:agent_configs` (hash) | Persistent | Per request |
+| Semantic memory | ChromaDB `ninko_memory` | Persistent (PVC) | Auto-connect |
+| Chat history | `ninko:history:{session_id}` | 7-day TTL | Per session |
+| Workflows | `ninko:workflows` | Persistent | load() |
+| Workflow run logs | `ninko:workflow:runs:{id}` | Persistent | Per request |
+| Scheduled tasks | `ninko:scheduler:tasks` | Persistent | Startup |
+| Task execution logs | `ninko:scheduler:log:{task_id}` | 50-entry cap | Per request |
 | Built-in skills | `backend/skills/` (in image) | Image-baked | load() |
 | Custom skills | `/app/data/skills/` (PVC) | Persistent | load() |
 | Built-in souls | `backend/souls/` (in image) | Image-baked | load() |
-| Pending safeguard (bot) | Redis `ninko:safeguard_pending:{session}` | 300s TTL | Per request |
+| Pending SafeGuard confirmation (bot) | `ninko:safeguard_pending:{session}` | 300s TTL | Per request |
+| Active theme | `ninko:settings:theme_active` | Persistent | Startup |
+| Branding settings | `ninko:settings:branding` | Persistent | On demand |
+| Language setting | `ninko:settings:language` | Persistent | On demand |
 
 ### Infrastructure
 
-| Service | Container | Port |
-|---|---|---|
-| Backend (FastAPI) | `ninko-backend` | 8000 |
-| Redis | `ninko-redis` | 6379 |
-| ChromaDB | `ninko-chromadb` | 8100 → 8000 |
-| SearXNG | `ninko-searxng` | 8080 |
-| Whisper | Inside `ninko-backend` | — |
-| Piper TTS | Inside `ninko-backend` | — |
+| Service | Container | Port | Notes |
+|---|---|---|---|
+| Backend (FastAPI) | `ninko-backend` | 8000 | Whisper + Piper TTS included |
+| Redis | `ninko-redis` | 6379 | Primary state store |
+| ChromaDB | `ninko-chromadb` | 8100 → 8000 | Pinned to v0.4.24, numpy < 2.0 |
+| SearXNG | `ninko-searxng` | 8080 | Only for the web search module |
 
-> **Piper TTS** is only included in the image when built with `--build-arg INSTALL_PIPER=true`. `docker compose build backend` handles this automatically.
+> **Piper TTS** is only included in the image when built with `--build-arg INSTALL_PIPER=true`. `docker compose build backend` sets this automatically.
 
 ---
 
-## 18. Theme System (Branding & Design Tokens)
-
-Ninko supports persistent dashboard theming with built-in presets, custom themes, and GitHub repository imports.
+## 18. Theme System
 
 ### Data Model
 
-- `ThemeDefinition` contains:
-  - metadata: `id`, `name`, `description`, `version`, `author`, `preview_url`
-  - token maps: `tokens_dark`, `tokens_light` (CSS custom property overrides)
+`ThemeDefinition` contains:
+- Metadata: `id`, `name`, `description`, `version`, `author`, `preview_url`
+- Token maps: `tokens_dark`, `tokens_light` (CSS custom property overrides)
 
 ### Persistence
 
-- Built-in themes are loaded from `backend/themes/<theme_id>/theme.json`.
-- Custom themes are stored in `data/themes/<theme_id>/theme.json`.
-- Active theme is persisted in Redis key: `ninko:settings:theme_active`.
+- Built-in themes: `backend/themes/<theme_id>/theme.json` (in image)
+- Custom themes: `data/themes/<theme_id>/theme.json` (persistent volume)
+- Active theme: Redis key `ninko:settings:theme_active`
 
-### API Endpoints
+### Theme in the Frontend
 
-- `GET /api/themes/` — list available themes + active theme
-- `GET /api/themes/item/{theme_id}` — detailed theme payload
-- `GET/PUT /api/themes/active` — read/set active theme
-- `POST/PUT/DELETE /api/themes/custom...` — custom theme CRUD
-- `POST /api/themes/custom/{theme_id}/duplicate` — duplicate theme
-- `GET/POST/PUT/DELETE /api/themes/repos...` — manage GitHub theme repos
-- `GET /api/themes/repos/{repo_id}/themes` — list available remote themes
-- `POST /api/themes/install-from-repo/{theme_id}` — install selected theme
+On startup and on light/dark toggle:
+- Active tokens are applied to `document.documentElement.style`
+- The mode-specific token set is used automatically (`tokens_dark` vs. `tokens_light`)
 
-### Frontend Runtime Behavior
-
-- Settings → Themes provides:
-  - preset activation
-  - custom editor for dark/light token JSON
-  - repository management and one-click theme installation
-- On startup and on light/dark toggle:
-  - active tokens are applied to `document.documentElement.style`
-  - mode-specific token set is used automatically (`tokens_dark` vs `tokens_light`)
+**FOUC prevention:** An inline `<script>` in `<head>` reads `localStorage('ninko_theme')` synchronously and sets `light-mode-pre` on `<html>` — before the first pixel is rendered. `body` starts with `opacity: 0` and a 180ms transition; `init()` sets `opacity: 1` after all async setup completes.
 
 ---
 
-*For contributor notes, known gotchas, and architectural decisions, see [CLAUDE.md](CLAUDE.md). For the version history, see [CHANGELOG.md](CHANGELOG.md).*
+## 19. REST API Reference
+
+**Base URL:** `http://localhost:8000` (Dev) · `https://ninko.your-domain.local` (Prod via Traefik)
+
+**Interactive docs:** `http://localhost:8000/docs` (Swagger UI) · `http://localhost:8000/redoc` (ReDoc)
+
+**General conventions:**
+- All responses are JSON unless otherwise noted
+- Errors: `{"detail": "Error message"}`
+- Pagination: via `limit` query parameter where applicable
+- Date fields: ISO-8601 format (`2026-01-15T08:30:00Z`)
+- Secret fields (ending in `_KEY`, `_PASSWORD`, `_TOKEN`, `_SECRET`) are always masked in responses
+
+---
+
+### 19.1 Chat
+
+#### `POST /api/chat/`
+
+Sends a user message through the orchestrator.
+
+**Request Body:**
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `message` | string | ✓ | — | User's message (1–10,000 characters) |
+| `session_id` | string | — | `"default"` | Session ID for chat history |
+| `language` | string | — | `"de"` | Response language |
+| `confirmed` | bool | — | `false` | `true` → skip SafeGuard for this request |
+| `force_module` | string \| null | — | `null` | Module name or custom agent UUID (bypasses 4-tier routing) |
+
+**Response `200 ChatResponse`:**
+
+| Field | Type | Description |
+|---|---|---|
+| `response` | string | Agent's response |
+| `module_used` | string \| null | Which module responded (e.g. `"kubernetes"`) |
+| `session_id` | string | Echo of the session ID |
+| `compacted` | bool | `true` → chat history was compacted |
+| `timestamp` | datetime | Response timestamp |
+| `confirmation_required` | bool | `true` → SafeGuard has blocked |
+| `safeguard` | object \| null | `{category, rationale, violation}` when blocked |
+
+**Example:**
+```http
+POST /api/chat/
+Content-Type: application/json
+
+{
+  "message": "Show all failing pods",
+  "session_id": "user-abc-123",
+  "language": "en"
+}
+```
+
+```json
+{
+  "response": "I found the following pods in an error state: ...",
+  "module_used": "kubernetes",
+  "session_id": "user-abc-123",
+  "compacted": false,
+  "timestamp": "2026-04-03T10:15:30Z",
+  "confirmation_required": false,
+  "safeguard": null
+}
+```
+
+---
+
+#### `GET /api/chat/stream?session_id={id}`
+
+SSE stream for live status updates during chat processing.
+
+**Response:** `text/event-stream`
+
+Each event has the format:
+```
+data: {"type": "status", "message": "Kubernetes agent responding..."}
+
+data: {"type": "tool", "tool": "list_pods", "status": "running"}
+
+data: {"type": "done"}
+```
+
+---
+
+#### `GET /api/chat/history/{session_id}`
+
+Retrieve the chat history of a session.
+
+**Response:**
+
+| Field | Type | Description |
+|---|---|---|
+| `session_id` | string | Session ID |
+| `messages` | list[ChatMessage] | Message list |
+| `total` | int | Number of messages |
+
+`ChatMessage`: `{role: "user"|"assistant"|"system", content: string, timestamp: datetime|null}`
+
+---
+
+#### `DELETE /api/chat/history/{session_id}`
+
+Delete the chat history of a session (removes the Redis key).
+
+---
+
+#### `PUT /api/chat/history/{session_id}`
+
+Fully replace the chat history.
+
+**Request Body:** `{"messages": [{"role": "user", "content": "..."}]}`
+
+---
+
+#### `GET /api/chat/ui-history`
+
+Retrieve all saved conversations (cross-device, stored in Redis).
+
+---
+
+#### `POST /api/chat/ui-history`
+
+Save or update a conversation.
+
+**Request Body:** `{"id": "uuid", "title": "Kubernetes Debugging", "timestamp": "...", "messages": [...]}`
+
+---
+
+#### `DELETE /api/chat/ui-history/{conv_id}`
+
+Delete a saved conversation.
+
+---
+
+### 19.2 Agents
+
+#### `GET /api/agents/`
+
+List all custom agents.
+
+**Response:** `{"agents": [AgentDefinition], "total": int}`
+
+`AgentDefinition` fields: `id`, `name`, `description`, `system_prompt`, `llm_provider_id`, `enabled`, `created_at`, `updated_at`
+
+---
+
+#### `POST /api/agents/` *(201)*
+
+Create a new custom agent.
+
+**Request Body `AgentCreate`:**
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `name` | string | ✓ | — | Display name (1–128 characters) |
+| `description` | string | — | `""` | Short description (for Tier-3 keyword matching) |
+| `system_prompt` | string | — | `""` | System prompt; bullet points for capabilities recommended |
+| `llm_provider_id` | string \| null | — | `null` | Provider ID; null = global default |
+| `enabled` | bool | — | `true` | Is the agent active? |
+
+**Response:** `{"id": "uuid", "status": "created"}`
+
+---
+
+#### `GET /api/agents/{agent_id}`
+
+Retrieve a single agent.
+
+**Response:** `AgentDefinition` + `soul_md: string | null` (Soul MD content if present)
+
+---
+
+#### `PUT /api/agents/{agent_id}`
+
+Update an agent. Same fields as `POST`. The running agent is **immediately** re-instantiated.
+
+---
+
+#### `DELETE /api/agents/{agent_id}`
+
+Delete an agent (Redis + Soul MD + `AgentConfigStore` entry).
+
+---
+
+#### `GET /api/agents/templates`
+
+Retrieve built-in agent templates.
+
+**Response:** `{"templates": [Template]}`
+
+`Template` fields: `id`, `label`, `icon`, `category`, `description`, `tags`, `suggested_modules`, `system_prompt`
+
+Built-in template IDs: `it_ops`, `k8s_specialist`, `security_scanner`, `monitor_reporter`, `helpdesk`, `home_automation`
+
+---
+
+#### `POST /api/agents/generate`
+
+Generate an agent spec via LLM from a use case. Makes an LLM call with `max_tokens=600`.
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `use_case` | string | ✓ | Description of the desired agent |
+| `allowed_modules` | list[string] | — | Modules to include (hints for the LLM prompt) |
+
+**Response:** `{"name": "...", "description": "...", "system_prompt": "..."}` (`<think>` blocks are removed)
+
+---
+
+#### `POST /api/agents/{agent_id}/duplicate` *(201)*
+
+Duplicate an agent (new name with suffix, new UUID).
+
+---
+
+### 19.3 Workflows
+
+#### `GET /api/workflows/`
+
+List all workflows including the last run status.
+
+**Response:** `{"workflows": [WorkflowDefinition], "total": int}`
+
+`WorkflowDefinition` fields: `id`, `name`, `description`, `nodes`, `edges`, `variables`, `enabled`, `created_at`, `updated_at`
+
+---
+
+#### `POST /api/workflows/` *(201)*
+
+Create a new workflow.
+
+**Request Body `WorkflowCreate`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | ✓ | Workflow name (1–128 characters) |
+| `description` | string | — | Short description |
+| `nodes` | list[WorkflowNode] | — | Node definitions |
+| `edges` | list[WorkflowEdge] | — | Edges between nodes |
+| `variables` | list[WorkflowVariable] | — | Workflow variables |
+| `enabled` | bool | — | Default: `true` |
+
+**`WorkflowNode`:**
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Unique node ID |
+| `type` | string | `"trigger"`, `"agent"`, `"condition"`, `"loop"`, `"variable"`, `"end"` |
+| `label` | string | Display name |
+| `config` | object | Type-specific configuration |
+| `position` | `{x: float, y: float}` | Canvas position |
+
+**`WorkflowEdge`:** `{id, source_id, target_id, label}`
+
+**`WorkflowVariable`:** `{name, value}`
+
+---
+
+#### `GET /api/workflows/{workflow_id}` / `PUT /api/workflows/{workflow_id}` / `DELETE /api/workflows/{workflow_id}`
+
+Standard CRUD. DELETE also removes the run history.
+
+---
+
+#### `POST /api/workflows/{workflow_id}/run` *(202)*
+
+Start a workflow asynchronously.
+
+**Response:** `{"run_id": "uuid", "status": "started"}`
+
+---
+
+#### `GET /api/workflows/{workflow_id}/runs`
+
+Run history of a workflow.
+
+**Response:** `{"runs": [WorkflowRun], "total": int}`
+
+`WorkflowRun` fields: `id`, `workflow_id`, `workflow_name`, `status` (`idle|running|succeeded|failed`), `started_at`, `finished_at`, `duration_ms`, `steps`, `variables`, `error`, `triggered_by`
+
+---
+
+#### `GET /api/workflows/runs/{run_id}`
+
+Query the live status of a running run (polling).
+
+**`WorkflowRunStep` fields:** `node_id`, `node_type`, `node_label`, `status` (`pending|running|succeeded|failed|skipped`), `started_at`, `finished_at`, `duration_ms`, `output`, `error`
+
+---
+
+### 19.4 Scheduler
+
+#### `GET /api/scheduler/tasks`
+
+List all scheduled tasks.
+
+**Response:** `{"tasks": [ScheduledTaskInfo], "total": int}`
+
+`ScheduledTaskInfo` fields: `id`, `name`, `cron`, `enabled`, `prompt`, `workflow_id`, `agent_id`, `target_module`, `last_run`, `next_run`, `last_result`
+
+---
+
+#### `POST /api/scheduler/tasks` *(201)*
+
+Create a new task.
+
+**Request Body `ScheduledTaskCreate`:**
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `name` | string | ✓ | — | Task name (1–100 characters) |
+| `cron` | string | ✓ | — | Cron expression (e.g. `"0 8 * * *"`) |
+| `prompt` | string | — | `""` | Free prompt → orchestrator |
+| `workflow_id` | string \| null | — | `null` | Workflow ID → WorkflowEngine |
+| `agent_id` | string \| null | — | `null` | Custom agent ID → DynamicAgentPool |
+| `target_module` | string \| null | — | `null` | Route directly to a module agent |
+| `enabled` | bool | — | `true` | Task active immediately? |
+
+Execution priority: `workflow_id` → `agent_id` → `prompt`.
+
+---
+
+#### `PUT /api/scheduler/tasks/{task_id}`
+
+Update a task (`ScheduledTaskUpdate` — all fields optional).
+
+---
+
+#### `DELETE /api/scheduler/tasks/{task_id}`
+
+Delete a task.
+
+---
+
+#### `PUT /api/scheduler/tasks/{task_id}/toggle`
+
+Enable/disable a task.
+
+**Response:** `ScheduledTaskInfo` with updated `enabled` field.
+
+---
+
+#### `POST /api/scheduler/tasks/{task_id}/run`
+
+Manually trigger a task immediately.
+
+**Response:** `{"status": "triggered", "task_id": "..."}`
+
+---
+
+#### `GET /api/scheduler/tasks/{task_id}/logs`
+
+Execution logs for a task.
+
+**Query params:** `limit` (max 50, default 20)
+
+**Response `TaskExecutionLog`:**
+
+| Field | Type | Description |
+|---|---|---|
+| `task_id` | string | Task ID |
+| `task_name` | string | Task name |
+| `timestamp` | datetime | Execution timestamp |
+| `status` | string | `"ok"` or `"error"` |
+| `module_used` | string \| null | Module used |
+| `prompt` | string | Executed prompt |
+| `response` | string | LLM response |
+| `duration_ms` | int | Execution duration in milliseconds |
+
+---
+
+### 19.5 Settings — LLM
+
+#### `GET /api/settings/llm`
+
+Retrieve current LLM configuration.
+
+**Response `LlmSettingsResponse`:**
+
+| Field | Type | Description |
+|---|---|---|
+| `backend` | string | `"ollama"`, `"lmstudio"`, `"openai_compatible"`, `"litellm"` |
+| `base_url` | string | Provider base URL |
+| `model` | string | Active model |
+| `api_key` | string | Always `""` (never returned) |
+| `api_key_set` | bool | `true` if an API key is stored |
+| `source` | string | `"default"` or `"redis"` |
+
+---
+
+#### `PUT /api/settings/llm`
+
+Update LLM configuration. Request Body `LlmSettings`: `backend`, `base_url`, `model`, `api_key`, `verify_ssl` (bool, default `true`).
+
+---
+
+#### `GET /api/settings/llm/embed-model` / `PUT /api/settings/llm/embed-model`
+
+Read/set the global embedding model. PUT body: `{"model": "nomic-embed-text:latest"}`
+
+---
+
+#### `GET /api/settings/llm/providers`
+
+List all configured LLM providers.
+
+**Response:** List of `LLMProvider`
+
+`LLMProvider` fields: `id`, `name`, `backend`, `base_url`, `model`, `api_key` (always `""`), `is_default`, `status` (`unknown|connected|unreachable`), `created_at`, `context_window`, `verify_ssl`
+
+---
+
+#### `POST /api/settings/llm/providers` *(201)*
+
+Create a new LLM provider.
+
+**Request Body `LLMProviderCreate`:**
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `name` | string | ✓ | — | Display name (1–128 characters) |
+| `backend` | string | ✓ | `"ollama"` | `"ollama"`, `"lmstudio"`, `"openai_compatible"`, `"litellm"` |
+| `base_url` | string | ✓ | — | Base URL (`/v1` is appended automatically if missing) |
+| `model` | string | ✓ | — | Model name (e.g. `"qwen2.5:14b"`) |
+| `api_key` | string | — | `""` | API key (only for `openai_compatible`/`litellm`) |
+| `is_default` | bool | — | `false` | Set as default |
+| `context_window` | int | — | `0` | Override the auto-detected context window |
+| `verify_ssl` | bool | — | `true` | Verify TLS certificate |
+
+---
+
+#### `PUT /api/settings/llm/providers/{provider_id}` / `DELETE /api/settings/llm/providers/{provider_id}`
+
+Update / delete a provider.
+
+---
+
+#### `POST /api/settings/llm/providers/{provider_id}/test`
+
+Test the connection to a provider.
+
+**Response:** `{"ok": true, "models": ["model1", "model2"], "latency_ms": 245}` or `{"ok": false, "error": "Connection refused"}`
+
+---
+
+#### `GET /api/settings/llm/context-window`
+
+Query the context window of the active model.
+
+**Response:** `{"context_window": 32768, "model": "qwen2.5:14b", "source": "api"}`
+
+---
+
+#### `PUT /api/settings/llm/default`
+
+Set the default provider. Body: `{"provider_id": "uuid"}`
+
+---
+
+### 19.6 Settings — Branding
+
+#### `GET /api/settings/branding`
+
+Retrieve dashboard branding.
+
+**Response `BrandingSettingsResponse`:**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `brand_name` | string | `"Ninko"` | Name in the sidebar |
+| `page_title` | string | `"Ninko"` | Browser tab title |
+| `logo_url` | string | `/static/images/logo_icon.png` | Logo URL |
+| `welcome_mode` | string | `"image"` | `"image"`, `"text"`, `"off"` |
+| `welcome_title` | string | `"Ninko"` | Welcome text title |
+| `welcome_text` | string | `""` | Welcome text (Markdown) |
+| `welcome_image_url` | string | (dashboard logo) | Welcome image URL |
+| `welcome_show_eyes` | bool | `true` | Show Ninko eye animation |
+| `show_quick_actions` | bool | `true` | Show quick action buttons |
+| `source` | string | `"default"` | `"default"` or `"redis"` |
+
+---
+
+#### `PUT /api/settings/branding`
+
+Update branding. Same fields without `source`.
+
+**`POST /api/settings/branding/reset`** — Reset to default values.
+
+**`POST /api/settings/branding/upload`** — Upload an image (multipart/form-data, field `file`). Response: `{"url": "/api/settings/branding/assets/logo.png"}`
+
+**`GET /api/settings/branding/assets/{filename}`** — Serve an asset file.
+
+**`DELETE /api/settings/branding/assets/{filename}`** — Delete an asset file.
+
+---
+
+### 19.7 Settings — Language, Modules, Kubernetes, TTS/STT
+
+#### `GET /api/settings/language` / `PUT /api/settings/language`
+
+Read/set the current language.
+
+GET response: `{"language": "de", "source": "redis"}`
+
+PUT body: `{"language": "en"}` — Possible values: `de`, `en`, `fr`, `es`, `it`, `pt`, `nl`, `pl`, `zh`, `ja`
+
+---
+
+#### `GET /api/settings/modules`
+
+List all modules with their configuration.
+
+**Response:** List of `ModuleSettingsItem`
+
+`ModuleSettingsItem` fields: `name`, `display_name`, `enabled`, `description`, `version`, `connection` (key-value map, secrets masked)
+
+---
+
+#### `PUT /api/settings/modules/{module_name}`
+
+Update module settings.
+
+**Request Body `ModuleToggleRequest`:** `{"enabled": true, "connection": {"HOST": "192.168.1.1", "PORT": "80"}}`
+
+Merge strategy: empty fields do not overwrite saved values (passwords are preserved).
+
+---
+
+#### `GET /api/settings/k8s/clusters`
+
+List all configured Kubernetes clusters.
+
+**Response:** `{"clusters": [K8sClusterInfo], "total": int}`
+
+`K8sClusterInfo` fields: `name`, `context`, `is_default`, `has_kubeconfig`
+
+---
+
+#### `POST /api/settings/k8s/clusters` *(201)*
+
+Create a new Kubernetes cluster.
+
+**Request Body `K8sClusterCreate`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | ✓ | Cluster name (lowercase, hyphens, 1–64 characters) |
+| `kubeconfig_base64` | string | ✓ | Base64-encoded kubeconfig (min. 10 characters) |
+| `context` | string | — | Kubeconfig context name (optional) |
+| `is_default` | bool | — | Set as default cluster |
+
+---
+
+#### `DELETE /api/settings/k8s/clusters/{cluster_name}` / `PUT /api/settings/k8s/clusters/{cluster_name}/default`
+
+Delete a cluster / set as default.
+
+---
+
+#### `GET /api/settings/tts` / `PUT /api/settings/tts`
+
+Read/set TTS configuration.
+
+GET response: `{"enabled": true, "voice": "thorsten", "lang": "de", "speed": 1.0}`
+
+---
+
+#### `GET /api/settings/stt` / `PUT /api/settings/stt`
+
+Read/set STT configuration.
+
+GET response: `{"model_size": "base", "language": "de", "device": "cpu"}`
+
+---
+
+### 19.8 Plugins (Marketplace)
+
+#### `POST /api/plugins/upload` *(201)*
+
+Upload and install a plugin ZIP.
+
+Multipart form, field `file`. The ZIP must contain a valid Ninko module (`__init__.py`, `manifest.py`, etc.).
+
+**Response:** `{"module_name": "pihole", "status": "installed"}`
+
+---
+
+#### `DELETE /api/plugins/{plugin_name}`
+
+Uninstall a plugin. Removes files from `backend/plugins/` and unloads the module from the registry.
+
+`plugin_name` is validated against `[a-zA-Z0-9_\-]+` (prevents path traversal).
+
+---
+
+#### `GET /api/plugins/marketplace/repos`
+
+List all configured marketplace repos. The official Ninko repo is pre-installed and cannot be deleted.
+
+---
+
+#### `POST /api/plugins/marketplace/repos` *(201)*
+
+Add a new repo.
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | ✓ | Display name |
+| `url` | string | ✓ | GitHub repo URL (`https://github.com/owner/repo`) |
+| `branch` | string | — | Branch (default: `"main"`) |
+| `token` | string | — | GitHub token (for private repos) |
+
+---
+
+#### `PUT /api/plugins/marketplace/repos/{repo_id}` / `DELETE /api/plugins/marketplace/repos/{repo_id}`
+
+Update / remove a repo (official repo is protected).
+
+---
+
+#### `GET /api/plugins/marketplace/repos/{repo_id}/modules`
+
+List available modules from a repo (5-minute cache).
+
+**Response:** `{"modules": [{"name": "...", "display_name": "...", "description": "...", "version": "...", "installed": true|false}]}`
+
+---
+
+#### `POST /api/plugins/install-from-repo/{module_name}` *(201)*
+
+Install a module from a repo. No GitHub API rate limit — uses tarball download.
+
+**Query param:** `repo_id` (default: `"official"`)
+
+**Response:** `{"module_name": "...", "status": "installed", "version": "..."}`
+
+---
+
+### 19.9 Skills
+
+#### `GET /api/skills/`
+
+List all loaded skills (without content).
+
+**Response:** `[{"name": "...", "description": "...", "modules": [...], "source": "builtin"|"runtime"}]`
+
+---
+
+#### `GET /api/skills/{name}`
+
+Retrieve a single skill with full content.
+
+**Response:** `{"name": "...", "description": "...", "modules": [...], "content": "...", "source": "..."}`
+
+---
+
+#### `POST /api/skills/` *(201)*
+
+Create a new skill.
+
+**Request Body `SkillCreate`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | ✓ | Unique skill name (URL-safe) |
+| `description` | string | ✓ | Short description (basis for injection matching) |
+| `content` | string | ✓ | Skill content (Markdown) |
+| `modules` | list[string] \| null | — | Module filter; null/empty = available to all agents |
+
+Skills are written to `data/skills/` and survive container restarts.
+
+---
+
+#### `PUT /api/skills/{name}`
+
+Update a skill. `SkillUpdate` — `description`, `content`, `modules` all optional.
+
+---
+
+#### `DELETE /api/skills/{name}`
+
+Delete a skill. Built-in skills (`source: "builtin"`) cannot be deleted → `403`.
+
+---
+
+### 19.10 SafeGuard — Status & Global Control
+
+#### `GET /api/safeguard/status`
+
+Retrieve global SafeGuard status.
+
+**Response:** `{"enabled": true, "profile_id": "moderate"}`
+
+---
+
+#### `POST /api/safeguard/enable` / `POST /api/safeguard/disable`
+
+Enable SafeGuard globally (sets profile to `"moderate"`) / disable (sets profile to `"disabled"`).
+
+---
+
+#### `GET /api/safeguard/active` / `POST /api/safeguard/active`
+
+Read/set the active global profile.
+
+POST body: `{"profile_id": "strict"}`
+
+---
+
+### 19.11 SafeGuard — Profile Assignment
+
+#### Per-Chat Session
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/safeguard/chats/{session_id}/profile` | Retrieve the session's profile |
+| `POST` | `/api/safeguard/chats/{session_id}/profile` | Set profile (TTL 24h). Body: `{"profile_id": "..."}` |
+| `DELETE` | `/api/safeguard/chats/{session_id}/profile` | Delete the chat-specific profile |
+
+#### Per-Agent
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/safeguard/agents/{agent_id}/profile` | Retrieve the agent's profile |
+| `POST` | `/api/safeguard/agents/{agent_id}/profile` | Set profile for the agent. Body: `{"profile_id": "..."}` |
+| `DELETE` | `/api/safeguard/agents/{agent_id}/profile` | Delete the agent's profile |
+| `GET` | `/api/safeguard/agents/{agent_id}` | SafeGuard status (legacy) |
+| `POST` | `/api/safeguard/agents/{agent_id}/enable` | Enable (legacy) |
+| `POST` | `/api/safeguard/agents/{agent_id}/disable` | Disable (legacy) |
+
+#### Classifier Policy (per agent)
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/safeguard/agents/{agent_id}/policy` | Retrieve custom policy |
+| `POST` | `/api/safeguard/agents/{agent_id}/policy` | Set policy. Body: `{"policy": "..."}` |
+| `DELETE` | `/api/safeguard/agents/{agent_id}/policy` | Delete policy |
+
+---
+
+### 19.12 SafeGuard — Profile CRUD
+
+#### `GET /api/safeguard/profiles`
+
+List all profiles (built-in + custom).
+
+**Response:** List of profile objects
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Profile ID (e.g. `"moderate"`) |
+| `name` | string | Display name |
+| `check_user_messages` | bool | Classify user messages |
+| `check_tool_calls` | bool | Check tool calls |
+| `confirm_categories` | list[string] | Categories that require confirmation |
+| `detect_prompt_injection` | bool | Prompt injection detection active |
+| `fail_open` | bool | Pass through on LLM error |
+
+---
+
+#### `POST /api/safeguard/profiles` *(201)*
+
+Create a custom profile.
+
+**Request Body `ProfileCreateRequest`:**
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `id` | string | ✓ | — | Unique profile ID |
+| `name` | string | ✓ | — | Display name |
+| `check_user_messages` | bool | ✓ | — | Classify user messages |
+| `check_tool_calls` | bool | ✓ | — | Check tool calls |
+| `confirm_categories` | list[string] | ✓ | — | e.g. `["DESTRUCTIVE", "STATE_CHANGING"]` |
+| `detect_prompt_injection` | bool | — | `false` | Injection detection |
+| `fail_open` | bool | — | `false` | Pass through on LLM error |
+
+---
+
+#### `GET /api/safeguard/profiles/{profile_id}` / `PUT /api/safeguard/profiles/{profile_id}` / `DELETE /api/safeguard/profiles/{profile_id}`
+
+Read / update / delete a single profile *(204)*.
+
+PUT and DELETE on built-in profiles → `403 Forbidden`.
+
+---
+
+### 19.13 SafeGuard — Audit Log
+
+#### `GET /api/safeguard/audit`
+
+Retrieve audit log entries.
+
+**Query Params:**
+
+| Param | Type | Description |
+|---|---|---|
+| `category` | string | `SAFE`, `STATE_CHANGING`, `DESTRUCTIVE`, `PROMPT_INJECTION`, `UNKNOWN` |
+| `action` | string | `allowed`, `blocked`, `confirmed` |
+| `outcome` | string | Outcome of the tool call |
+| `agent_id` | string | Filter by agent ID |
+| `session_id` | string | Filter by session ID |
+| `from_ts` | string | ISO timestamp (earliest date) |
+| `to_ts` | string | ISO timestamp (latest date) |
+| `search` | string | Free-text search in message/rationale |
+| `limit` | int | Max entries (default: 200, max: 2000) |
+
+---
+
+#### `DELETE /api/safeguard/audit`
+
+Delete the entire audit log.
+
+---
+
+### 19.14 Logs
+
+#### `GET /api/logs/`
+
+Retrieve log entries.
+
+**Query Params:**
+
+| Param | Type | Description |
+|---|---|---|
+| `level` | string | `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` |
+| `category` | string | Category filter (e.g. `"orchestrator"`, `"kubernetes"`) |
+| `source` | string | Logger name |
+| `search` | string | Free-text search |
+| `from_ts` | string | ISO timestamp |
+| `to_ts` | string | ISO timestamp |
+| `limit` | int | Max entries (default: 500, max: 2000) |
+
+**Response:** `{"logs": [{"ts": "...", "level": "INFO", "category": "...", "source": "...", "message": "..."}]}`
+
+---
+
+#### `DELETE /api/logs/`
+
+Delete all log entries.
+
+---
+
+### 19.15 Themes
+
+#### `GET /api/themes/`
+
+List all themes including the active theme.
+
+**Response `ThemeListResponse`:**
+
+| Field | Type | Description |
+|---|---|---|
+| `themes` | list[ThemeSummary] | All themes (built-in + custom) |
+| `active_theme_id` | string | ID of the active theme |
+
+`ThemeSummary` fields: `id`, `name`, `description`, `version`, `author`, `preview_url`, `is_builtin`, `is_active`, `source`
+
+---
+
+#### `GET /api/themes/item/{theme_id}`
+
+Retrieve a single theme (including full token maps).
+
+**Response `ThemeDefinition`:**
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Theme ID (1–64 characters) |
+| `name` | string | Display name (1–128 characters) |
+| `description` | string | Short description |
+| `version` | string | Version number |
+| `author` | string | Author |
+| `preview_url` | string | Preview image URL |
+| `tokens_dark` | object | CSS custom property overrides for dark mode |
+| `tokens_light` | object | CSS custom property overrides for light mode |
+
+---
+
+#### `GET /api/themes/active` / `PUT /api/themes/active`
+
+Read/set the active theme. PUT body: `{"theme_id": "cyberpunk"}`
+
+---
+
+#### Theme CRUD
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/themes/custom` *(201)* | Create a custom theme (`ThemeDefinition`) |
+| `PUT` | `/api/themes/custom/{theme_id}` | Update a theme |
+| `DELETE` | `/api/themes/custom/{theme_id}` | Delete a theme |
+| `POST` | `/api/themes/custom/{theme_id}/duplicate` *(201)* | Duplicate a theme |
+
+---
+
+#### Theme Repos
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/themes/repos` | List repos |
+| `POST` | `/api/themes/repos` *(201)* | Add a repo. Body: `{"name", "repo_url", "branch", "themes_path", "github_token"}` |
+| `PUT` | `/api/themes/repos/{repo_id}` | Update a repo |
+| `DELETE` | `/api/themes/repos/{repo_id}` | Delete a repo (official repo is protected) |
+| `GET` | `/api/themes/repos/{repo_id}/themes` | List themes from a repo |
+| `POST` | `/api/themes/install-from-repo/{theme_id}` *(201)* | Install a theme from a repo. Query: `repo_id` |
+
+---
+
+### 19.16 Transcription (STT)
+
+#### `POST /api/transcription/`
+
+Transcribe an audio file (Whisper, runs locally in the backend — no external API call).
+
+**Request:** Multipart form, field `file` (WAV, MP3, OGG, FLAC, M4A, etc.)
+
+**Response `TranscriptionResponse`:**
+
+| Field | Type | Description |
+|---|---|---|
+| `text` | string | Transcribed text |
+| `language` | string | Detected language (e.g. `"de"`) |
+
+**Configuration via env vars:** `WHISPER_MODEL_SIZE` (default: `"base"`), `WHISPER_LANGUAGE` (default: `"de"`), `WHISPER_DEVICE` (default: `"cpu"`)
+
+---
+
+### 19.17 Text-to-Speech (TTS)
+
+#### `GET /api/tts/voices`
+
+List installed Piper voices.
+
+**Response:** `[{"name": "thorsten", "lang": "de", "quality": "medium"}]`
+
+---
+
+#### `POST /api/tts/synthesize`
+
+Synthesize text to WAV audio.
+
+**Request Body `SynthesizeRequest`:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `text` | string | ✓ | Text to speak (Markdown, emojis, tables are cleaned internally) |
+| `lang` | string \| null | — | Language (e.g. `"de"`) — default: active UI language |
+| `voice` | string \| null | — | Voice name — default: first available voice |
+
+**Response:** `audio/wav` (binary). HTTP 503 if TTS is not available.
+
+---
+
+#### `POST /api/tts/voices/download`
+
+Download a voice from HuggingFace.
+
+**Request Body `DownloadRequest`:** `{"lang": "de", "voice": "thorsten"}`
+
+**Response:** `{"status": "downloaded", "lang": "de", "voice": "thorsten"}`
+
+---
+
+#### `DELETE /api/tts/voices/{lang}/{voice}`
+
+Delete an installed voice.
+
+---
+
+### 19.18 Semantic Memory
+
+#### `POST /api/memory/store`
+
+Write an entry to semantic memory.
+
+**Request Body `MemoryStoreRequest`:**
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `content` | string | ✓ | — | Fact to store (min. 1 character) |
+| `category` | string | — | `"general"` | Category (e.g. `"agent_memory"`, `"incident"`) |
+| `metadata` | object | — | `{}` | Arbitrary metadata |
+
+**Response `MemoryStoreResponse`:** `{"id": "uuid", "category": "...", "stored_at": "..."}`
+
+---
+
+#### `POST /api/memory/search`
+
+Semantic search in memory.
+
+**Request Body `MemorySearchRequest`:**
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `query` | string | ✓ | — | Search query |
+| `top_k` | int | — | `5` | Number of results (1–50) |
+| `category` | string \| null | — | `null` | Search only in this category |
+
+**Response `MemorySearchResponse`:** `{"query": "...", "results": [MemoryEntry], "total": int}`
+
+`MemoryEntry` fields: `id`, `content`, `distance` (cosine distance, 0 = identical), `metadata`
+
+---
+
+#### `GET /api/memory/incidents`
+
+Retrieve current incidents from memory.
+
+**Query params:** `query` (search term), `top_k` (default: 10)
+
+---
+
+#### `GET /api/memory/stats`
+
+Memory statistics.
+
+**Response `MemoryStatsResponse`:** `{"collection": "ninko_memory", "document_count": 142}`
+
+---
+
+### 19.19 Module Connections
+
+#### `GET /api/connections/{module_id}`
+
+List all connections for a module.
+
+**Response:** `{"module_id": "...", "connections": [ConnectionRead], "total": int}`
+
+`ConnectionRead` fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Connection UUID |
+| `module_id` | string | Module ID |
+| `name` | string | Connection name |
+| `environment` | string | `prod`, `staging`, `dev`, `lab`, `local`, `unknown` |
+| `description` | string \| null | Optional description |
+| `is_default` | bool | Default connection? |
+| `config` | object | Non-secret key-value pairs |
+| `vault_keys` | object | Which keys are stored in Vault |
+| `status` | string \| null | Connection status (optional) |
+
+---
+
+#### `POST /api/connections/{module_id}` *(201)*
+
+Create a new connection.
+
+**Request Body `ConnectionCreate`:**
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `name` | string | ✓ | — | Connection name |
+| `environment` | string | ✓ | `"unknown"` | `prod`, `staging`, `dev`, `lab`, `local`, `unknown` |
+| `description` | string \| null | — | `null` | Optional description |
+| `is_default` | bool | — | `false` | Set as default |
+| `config` | object | ✓ | `{}` | Non-secret parameters (URLs, ports, etc.) |
+| `secrets` | object | — | `{}` | Secret fields → stored in Vault |
+
+**Important:** Fields in `config` ending in `_KEY`, `_PASSWORD`, `_TOKEN`, or `_SECRET` are automatically redirected to Vault.
+
+---
+
+#### `PUT /api/connections/{module_id}/{connection_id}`
+
+Update a connection (`ConnectionUpdate` — all fields optional).
+
+**Important:** Empty secret fields (`""`) do **not** overwrite saved Vault values. Secrets are preserved if not explicitly re-set.
+
+---
+
+#### `DELETE /api/connections/{module_id}/{connection_id}` *(204)*
+
+Delete a connection and all its associated Vault secrets.
+
+---
+
+### 19.20 Secrets
+
+#### `GET /api/secrets/`
+
+List all secret keys (**no values** — key names only).
+
+**Response `SecretListResponse`:** `{"keys": ["PIHOLE_PASSWORD", "OPENAI_API_KEY"]}`
+
+---
+
+#### `POST /api/secrets/`
+
+Store or update a secret.
+
+**Request Body `SecretSetRequest`:** `{"key": "MY_SECRET_KEY", "value": "secretvalue123"}`
+
+**Response `SecretSetResponse`:** `{"key": "MY_SECRET_KEY", "status": "stored"}`
+
+---
+
+#### `GET /api/secrets/{key}`
+
+Check whether a secret exists (value is **never** returned).
+
+**Response:** `{"key": "MY_SECRET_KEY", "exists": true}`
+
+---
+
+#### `DELETE /api/secrets/{key}`
+
+Delete a secret.
+
+**Response `SecretDeleteResponse`:** `{"key": "MY_SECRET_KEY", "status": "deleted"}`
+
+---
+
+#### `GET /api/secrets/health/check`
+
+Check the health of the secrets backend.
+
+**Response `VaultHealthResponse`:** `{"backend": "vault"|"sqlite", "healthy": true, "message": "Connected to Vault at http://vault:8200"}`
+
+---
+
+### 19.21 Auth
+
+#### `POST /api/auth/login`
+
+Admin login via session cookie.
+
+**Request Body `LoginRequest`:** `{"username": "admin", "password": "..."}`
+
+**Response:** `{"status": "ok", "role": "admin"}` + `Set-Cookie: ninko_session=...`
+
+---
+
+#### `POST /api/auth/logout`
+
+Admin logout (delete session cookie).
+
+---
+
+#### `GET /api/auth/me`
+
+Retrieve current auth status.
+
+**Response:** `{"authenticated": true, "role": "admin"}` or `{"authenticated": false}`
+
+---
+
+### 19.22 Module Registry
+
+#### `GET /api/modules` / `GET /api/modules/`
+
+List all registered modules.
+
+**Response:** List of `ModuleInfo` with `name`, `display_name`, `description`, `version`, `enabled`, `api_prefix`
+
+---
+
+#### `GET /api/modules/tabs`
+
+Dashboard tab metadata for all enabled modules.
+
+**Response:** List of `ModuleTabInfo` with `id`, `label`, `icon`, `html_url`, `js_url`
+
+---
+
+#### `GET /api/modules/health`
+
+Retrieve the health status of all modules.
+
+**Response:** `{"modules": {"kubernetes": {"status": "ok"}, "pihole": {"status": "error", "detail": "Auth failed"}}}`
+
+---
+
+#### `GET /api/modules/{module_name}/frontend/{filename}`
+
+Serve a module frontend file (`tab.html` or `tab.js`).
+
+---
+
+### 19.23 WebSocket
+
+#### `WS /ws`
+
+Real-time log streaming and alert notifications.
+
+**Connection:** `ws://host:8000/ws` (or `wss://` with TLS)
+
+The WebSocket sends JSON objects:
+
+**Log event:**
+```json
+{
+  "type": "log",
+  "ts": "2026-04-03T10:15:30Z",
+  "level": "INFO",
+  "category": "kubernetes",
+  "source": "kubernetes.agent",
+  "message": "Pod nginx-abc restarted successfully"
+}
+```
+
+**Alert event (from the Monitor Agent):**
+```json
+{
+  "type": "alert",
+  "severity": "critical",
+  "module": "kubernetes",
+  "message": "3 pods in CrashLoopBackOff in namespace production",
+  "ts": "2026-04-03T10:15:30Z"
+}
+```
+
+**Status event (from the chat SSE bus):**
+```json
+{
+  "type": "status",
+  "session_id": "user-abc-123",
+  "message": "Kubernetes agent responding..."
+}
+```
+
+---
+
+### 19.24 Image Generation
+
+#### `GET /api/images/{filename}`
+
+Serve a generated image (stored locally after generation).
+
+---
+
+#### `GET /api/settings/image-provider`
+
+Retrieve image provider configuration (API key masked).
+
+**Response:** `{"backend": "together", "model": "black-forest-labs/FLUX.1-schnell", "api_key": "sk-***"}`
+
+---
+
+#### `PUT /api/settings/image-provider`
+
+Update image provider configuration.
+
+**Request Body `ImageProviderConfig`:**
+
+| Field | Type | Description |
+|---|---|---|
+| `backend` | string | Provider ID (e.g. `"together"`, `"openai"`, `"google"`, `"local"`) |
+| `api_key` | string | Provider API key |
+| `model` | string | Model name (e.g. `"black-forest-labs/FLUX.1-schnell"`) |
+
+---
+
+### 19.25 HTTP Status Codes
+
+| Code | Meaning | When |
+|---|---|---|
+| `200 OK` | Successful request | Standard success |
+| `201 Created` | Resource created | POST endpoints that create |
+| `202 Accepted` | Async job started | Workflow run, task trigger |
+| `204 No Content` | Successfully deleted | DELETE without response body |
+| `400 Bad Request` | Invalid input | Validation error, wrong parameters |
+| `401 Unauthorized` | Not logged in | No valid session |
+| `403 Forbidden` | Insufficient permissions | Built-in resource is read-only |
+| `404 Not Found` | Resource not found | Unknown ID or name |
+| `409 Conflict` | Resource already exists | Duplicate ID on creation |
+| `422 Unprocessable Entity` | Pydantic validation error | Missing required fields, wrong type |
+| `500 Internal Server Error` | Server-side error | LLM unreachable, Redis down |
+| `503 Service Unavailable` | Service not available | TTS disabled, ChromaDB down |
+
+---
+
+*Contributor notes, known gotchas, and architecture decisions: [CLAUDE.md](CLAUDE.md) · Version history: [CHANGELOG.md](CHANGELOG.md)*

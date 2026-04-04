@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/cisco", tags=["cisco"])
 
 
 @router.get("/health")
-async def health_check():
+async def health_check() -> object:
     """Health check endpoint."""
     from .manifest import check_cisco_health
 
@@ -22,7 +22,7 @@ async def health_check():
 
 
 @router.get("/status")
-async def get_status(connection_id: str = ""):
+async def get_status(connection_id: str = "") -> object:
     """Get Cisco device status for dashboard."""
     try:
         from .tools import _get_api_client, _cisco_request
@@ -38,5 +38,5 @@ async def get_status(connection_id: str = ""):
             "interfaces_count": len(ifaces.get("interface", [])),
             "vlans_count": len(vlans.get("vlan", [])),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"error": str(e)}

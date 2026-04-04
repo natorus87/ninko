@@ -22,7 +22,7 @@ async def get_status(connection_id: str = "") -> dict:
             {"connection_id": connection_id}
         )
         return {"status": "ok", "data": result}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": str(e)}
 
 
@@ -32,7 +32,7 @@ async def get_storage(connection_id: str = "") -> dict:
     try:
         result = await get_synology_storage.ainvoke({"connection_id": connection_id})
         return {"status": "ok", "data": result}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": str(e)}
 
 
@@ -42,5 +42,5 @@ async def get_packages(connection_id: str = "") -> dict:
     try:
         result = await get_synology_packages.ainvoke({"connection_id": connection_id})
         return {"status": "ok", "data": result}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": str(e)}

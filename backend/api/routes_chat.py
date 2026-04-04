@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timezone
+from typing import AsyncGenerator
 
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
@@ -32,7 +33,7 @@ def _parse_sentinel(response_text: str) -> dict:
     """Extrahiert Tool-Infos aus dem Safeguard-Sentinel-String."""
     try:
         return json.loads(response_text[len(_TOOL_SAFEGUARD_SENTINEL):])
-    except Exception:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError):
         return {}
 
 
@@ -99,7 +100,7 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
                         outcome="confirmed",
                         rationale=_pending_info.get("rationale", ""),
                     )
-            except Exception:
+            except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError):
                 pass
             # Redis-Key nicht löschen — resume_tool_execution() macht das selbst
             response_text, did_compact = await orchestrator.resume_tool_execution(
@@ -237,14 +238,14 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
 
 
 @router.get("/stream")
-async def chat_stream(session_id: str):
+async def chat_stream(session_id: str) -> StreamingResponse:
     """
     SSE-Stream für Live-Status-Updates während der Chat-Verarbeitung.
     Verbinde BEVOR der POST /api/chat/ abgeschickt wird.
     """
     q = status_bus.get_queue(session_id)
 
-    async def event_generator():
+    async def event_generator() -> AsyncGenerator[str, None]:
         try:
             while True:
                 try:

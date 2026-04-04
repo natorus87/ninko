@@ -123,7 +123,7 @@ async def restart_with_db_dependency(
 
         return report
 
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         error_report = {
             "action": "restart_with_db_dependency",
             "namespace": namespace,
@@ -182,7 +182,7 @@ async def ordered_namespace_restart(
                 steps.append(f"⚠️ {deployment_name}: Timeout nach 120s")
                 errors.append(deployment_name)
 
-        except Exception as exc:
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
             steps.append(f"❌ {deployment_name}: {exc}")
             errors.append(deployment_name)
 

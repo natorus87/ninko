@@ -133,7 +133,7 @@ async def _ensure_collection(client: Any, collection: str) -> int:
         size = info.config.params.vectors.size
         QDRANT_VECTOR_SIZE_CACHE[collection] = size
         return size
-    except Exception:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError):
         pass  # Collection does not exist yet — create it
 
     # Determine dimension via test embedding
@@ -255,7 +255,7 @@ async def search_knowledge(
             for r in results
         ]
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         logger.exception("Error in search_knowledge")
         return [
             {
@@ -364,7 +364,7 @@ async def add_knowledge(
         logger.info("Qdrant add_knowledge: %s (title=%r)", msg, title)
         return msg
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         logger.exception("Error in add_knowledge")
         return _t(
             de=f"Fehler beim Speichern: {e}",
@@ -417,7 +417,7 @@ async def delete_knowledge_by_id(
             zh=f"已成功删除条目 {point_id}。",
         )
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         logger.exception("Error in delete_knowledge_by_id")
         return _t(
             de=f"Fehler beim Löschen: {e}",
@@ -462,7 +462,7 @@ async def list_knowledge_collections(connection_id: str = "") -> list[dict]:
                         else 0,
                     }
                 )
-            except Exception:
+            except (RuntimeError, ValueError, TypeError, KeyError, OSError):
                 collections.append({"name": c.name, "status": "unknown"})
 
         return (
@@ -486,7 +486,7 @@ async def list_knowledge_collections(connection_id: str = "") -> list[dict]:
             ]
         )
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         logger.exception("Error in list_knowledge_collections")
         return [{"error": f"Error: {e}"}]
 
@@ -527,6 +527,6 @@ async def get_collection_stats(
             "segments_count": info.segments_count or 0,
         }
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         logger.exception("Error in get_collection_stats")
         return {"error": f"Error: {e}"}

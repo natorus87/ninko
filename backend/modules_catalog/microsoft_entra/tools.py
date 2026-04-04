@@ -190,7 +190,7 @@ async def list_entra_users(connection_id: str = "") -> str:
             )
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_entra_users failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -262,7 +262,7 @@ async def search_entra_user(query: str, connection_id: str = "") -> str:
                 lines.append(f"    🏢 {u.get('department')}")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("search_entra_user failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -330,7 +330,7 @@ async def get_user_details(user_principal_name: str, connection_id: str = "") ->
         lines.append(f"  Status: {status}")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("get_user_details failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -408,7 +408,7 @@ async def list_entra_groups(connection_id: str = "") -> str:
         )
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_entra_groups failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -495,7 +495,7 @@ async def get_group_members(group_name: str, connection_id: str = "") -> str:
             lines.append(f"  {icon} {m.get('displayName', '-')}")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("get_group_members failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -587,7 +587,7 @@ async def list_entra_applications(connection_id: str = "") -> str:
         )
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_entra_applications failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -665,7 +665,7 @@ async def list_entra_devices(connection_id: str = "") -> str:
         )
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_entra_devices failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -722,7 +722,7 @@ async def create_entra_user(
             ja=f"✅ ユーザー作成: {result.get('userPrincipalName')}",
             zh=f"✅ 用户已创建: {result.get('userPrincipalName')}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("create_entra_user failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -765,7 +765,7 @@ async def disable_entra_user(user_principal_name: str, connection_id: str = "") 
             ja=f"✅ ユーザー無効化: {user_principal_name}",
             zh=f"✅ 用户已禁用: {user_principal_name}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("disable_entra_user failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -817,7 +817,7 @@ async def reset_entra_user_password(
             ja=f"✅ パスワードリセット: {user_principal_name}",
             zh=f"✅ 密码已重置: {user_principal_name}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("reset_entra_user_password failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -865,7 +865,7 @@ async def create_entra_group(
             ja=f"✅ グループ作成: {result.get('displayName')}",
             zh=f"✅ 组已创建: {result.get('displayName')}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("create_entra_group failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -934,7 +934,7 @@ async def add_user_to_group(
             ja=f"✅ グループに追加: {user_principal_name} → {group_name}",
             zh=f"✅ 用户已添加到组: {user_principal_name} → {group_name}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("add_user_to_group failed: %s", e)
         return _t(
             de=f"Fehler: {e}",

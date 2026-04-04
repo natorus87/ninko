@@ -74,7 +74,7 @@ async def ha_get_entity_state(entity_id: str, connection_id: str = "") -> str:
             return f"Entity '{entity_id}' was not found."
         logger.error("HTTP error in ha_get_entity_state: %s", e)
         return f"Error communicating with Home Assistant: {e}"
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         logger.error("Error in ha_get_entity_state: %s", e)
         return f"An unexpected error occurred: {e}"
 
@@ -126,7 +126,7 @@ async def ha_call_service(service_name: str, entity_id: str, service_data_json: 
     except httpx.HTTPError as e:
         logger.error("HTTP error in ha_call_service: %s", e)
         return f"Error communicating with Home Assistant API: {e}"
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         logger.error("Error in ha_call_service: %s", e)
         return f"An unexpected error occurred: {e}"
 
@@ -196,7 +196,7 @@ async def ha_list_entities(domain_filter: str = "", name_search: str = "", conne
                 return header + "\n" + "\n".join(entities[:60])
 
             return header + "\n" + "\n".join(entities)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         logger.error("Error in ha_list_entities: %s", e)
         return f"Error listing entities: {e}"
 
@@ -250,7 +250,7 @@ async def ha_find_device(search: str, connection_id: str = "") -> str:
                 if area_resp.status_code == 200:
                     for a in area_resp.json():
                         areas[a.get("area_id", "")] = a.get("name", "")
-            except Exception:
+            except (RuntimeError, ValueError, TypeError, KeyError, OSError):
                 pass
 
             # Load current state of all entities (for state display)
@@ -334,7 +334,7 @@ async def ha_find_device(search: str, connection_id: str = "") -> str:
                 "Use 'ha_list_entities' with name_search instead."
             )
         return f"Error communicating with Home Assistant: {e}"
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         logger.error("Error in ha_find_device: %s", e)
         return f"An unexpected error occurred: {e}"
 
@@ -377,6 +377,6 @@ async def ha_get_entity_details(entity_id: str, connection_id: str = "") -> str:
         if e.response.status_code == 404:
             return f"Entity '{entity_id}' was not found."
         return f"Error communicating with Home Assistant: {e}"
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         logger.error("Error in ha_get_entity_details: %s", e)
         return f"An unexpected error occurred: {e}"

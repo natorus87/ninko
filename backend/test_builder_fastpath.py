@@ -49,7 +49,7 @@ class BuilderFastPathRouteTest(unittest.IsolatedAsyncioTestCase):
         async def _load_cfg(session_id: str = "") -> RoutingConfig:
             return RoutingConfig()
 
-        async def _auto_create_custom_agent(message: str, session_id: str):
+        async def _auto_create_custom_agent(message: str, session_id: str) -> object:
             return "agent-created", False
 
         agent._load_routing_config = _load_cfg
@@ -76,7 +76,7 @@ class BuilderFastPathRouteTest(unittest.IsolatedAsyncioTestCase):
         async def _load_cfg(session_id: str = "") -> RoutingConfig:
             return RoutingConfig()
 
-        async def _auto_create_workflow(message: str, session_id: str):
+        async def _auto_create_workflow(message: str, session_id: str) -> object:
             return "workflow-created", False
 
         agent._load_routing_config = _load_cfg

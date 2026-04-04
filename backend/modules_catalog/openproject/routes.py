@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/openproject", tags=["openproject"])
 
 
 @router.get("/health")
-async def health_check():
+async def health_check() -> object:
     """Health check endpoint."""
     from .manifest import check_openproject_health
 
@@ -22,7 +22,7 @@ async def health_check():
 
 
 @router.get("/status")
-async def get_status(connection_id: str = ""):
+async def get_status(connection_id: str = "") -> object:
     """Get OpenProject status for dashboard."""
     try:
         from .tools import _get_api_client, _op_request
@@ -39,5 +39,5 @@ async def get_status(connection_id: str = ""):
             ),
             "users_count": len(users.get("_embedded", {}).get("elements", [])),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"error": str(e)}

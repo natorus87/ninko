@@ -61,7 +61,7 @@ async def check_proxmox_health() -> dict:
         # SSL fallback for self-signed certs
         try:
             version = proxmox.version.get()
-        except Exception as e:
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
             if verify_ssl and ("ssl" in str(e).lower() or "certificate" in str(e).lower()):
                 proxmox = ProxmoxAPI(host_addr, port=8006, user=base_user, token_name=token_id, token_value=token_secret, verify_ssl=False)
                 version = proxmox.version.get()
@@ -69,7 +69,7 @@ async def check_proxmox_health() -> dict:
                 raise
 
         return {"status": "ok", "detail": f"Proxmox VE {version.get('version', '?')} reachable ({conn.name})"}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": f"Proxmox not reachable: {e}"}
 
 

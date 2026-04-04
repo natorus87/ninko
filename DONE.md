@@ -137,7 +137,7 @@ Stand: 2026-04-03
 
 ## Multilingual Migration ✅ *2026-04-02*
 
-Alle 15 Catalog-Module multilingual-konform:
+Alle verfügbaren Catalog-Module multilingual-konform:
 - [x] System-Prompts → `_t(de, en)`
 - [x] Tool Docstrings → English
 - [x] Log Messages → English
@@ -174,6 +174,22 @@ Module: kubernetes, proxmox, pihole, fritzbox, homeassistant, ionos, glpi, email
 
 - [x] OPNsense-Modul (Firewall-Management)
 - [x] Tasmota-Modul (IoT-Gerät-Steuerung)
+
+---
+
+## Catalog-Erweiterungen ✅ *2026-04-03*
+
+- [x] Netzwerk-Module ergänzt: Cisco, MikroTik, Netgear, Ubiquiti
+- [x] Kollaboration/PM ergänzt: OpenProject, Nextcloud, Slack
+- [x] Redmine erweitert um AlphaNodes HRM + Reporting API-Endpunkte
+
+---
+
+## Exception-Hardening ✅ *2026-04-03*
+
+- [x] Breite Exception-Handler in Core/Agents reduziert und präzisiert
+- [x] Fehlerbehandlung in mehreren Katalog-Modulen vereinheitlicht
+- [x] Syntax-/Indentation-Fixes in Pi-hole und MikroTik Modulen
 
 ---
 
@@ -219,13 +235,7 @@ Aktion Input: {"seconds": 5, "reason": "Datenbank-Synchronisation"}
 
 ## Nächste Schritte (Backlog)
 
----
-
-## Nächste Schritte (Backlog)
-
-- [ ] HTTPS für `ninko.conbro.local` via Traefik
 - [ ] Whisper-Modell-Upgrade: `base` → `small`
-- [ ] K8s Namespace Migration: `kumio` → `ninko`
 - [ ] OPNsense: Interface/DHCP konfigurieren
 - [ ] Frontend Tab-JS → English fallback
 - [ ] Rollback-Mechanismen für destruktive Aktionen

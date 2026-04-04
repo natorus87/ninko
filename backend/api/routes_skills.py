@@ -58,7 +58,7 @@ async def create_skill(body: SkillCreate) -> dict:
     try:
         path = mgr.install_skill(body.name, body.description, body.content, body.modules)
         return {"status": "created", "name": body.name, "path": str(path)}
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         logger.error("Skill-Erstellung fehlgeschlagen: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -70,7 +70,7 @@ async def update_skill(name: str, body: SkillUpdate) -> dict:
     try:
         path = mgr.update_skill(name, body.description, body.content, body.modules)
         return {"status": "updated", "name": name, "path": str(path)}
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         logger.error("Skill-Update fehlgeschlagen: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -88,5 +88,5 @@ async def delete_skill(name: str) -> dict:
         raise HTTPException(status_code=403, detail=str(exc))
     except HTTPException:
         raise
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         raise HTTPException(status_code=500, detail=str(exc))

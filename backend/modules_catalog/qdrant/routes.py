@@ -36,27 +36,27 @@ def _error(msg: str, status: int = 502) -> JSONResponse:
 # ── Collections ────────────────────────────────────────────────────────────────
 
 @router.get("/collections")
-async def get_collections(connection_id: str = ""):
+async def get_collections(connection_id: str = "") -> object:
     """All collections with statistics."""
     try:
         return await list_knowledge_collections.ainvoke({"connection_id": connection_id})
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return _error(str(e))
 
 
 @router.get("/collections/{name}/stats")
-async def collection_stats(name: str, connection_id: str = ""):
+async def collection_stats(name: str, connection_id: str = "") -> object:
     """Statistics for a single collection."""
     try:
         return await get_collection_stats.ainvoke(
             {"collection": name, "connection_id": connection_id}
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return _error(str(e))
 
 
 @router.post("/collections")
-async def create_collection(req: CreateCollectionRequest, connection_id: str = ""):
+async def create_collection(req: CreateCollectionRequest, connection_id: str = "") -> object:
     """Create a new empty collection."""
     try:
         from .tools import _get_qdrant_client, _ensure_collection
@@ -64,14 +64,14 @@ async def create_collection(req: CreateCollectionRequest, connection_id: str = "
         client, _ = await _get_qdrant_client(connection_id)
         await _ensure_collection(client, req.name)
         return {"message": f"Collection '{req.name}' created.", "name": req.name}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return _error(str(e))
 
 
 # ── Suche ──────────────────────────────────────────────────────────────────────
 
 @router.post("/search")
-async def search(req: SearchRequest, connection_id: str = ""):
+async def search(req: SearchRequest, connection_id: str = "") -> object:
     """Semantic search in the knowledge bank."""
     try:
         results = await search_knowledge.ainvoke({
@@ -86,14 +86,14 @@ async def search(req: SearchRequest, connection_id: str = ""):
         if req.score_threshold > 0:
             results = [r for r in results if r.get("score", 1.0) >= req.score_threshold]
         return results
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return _error(str(e))
 
 
 # ── Einträge verwalten ─────────────────────────────────────────────────────────
 
 @router.post("/entries")
-async def add_entry(req: AddEntryRequest, connection_id: str = ""):
+async def add_entry(req: AddEntryRequest, connection_id: str = "") -> object:
     """Add a single entry to the knowledge bank."""
     try:
         msg = await add_knowledge.ainvoke({
@@ -106,12 +106,12 @@ async def add_entry(req: AddEntryRequest, connection_id: str = ""):
             "connection_id": connection_id,
         })
         return {"message": msg}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return _error(str(e))
 
 
 @router.post("/entries/batch")
-async def batch_add_entries(req: BatchAddRequest, connection_id: str = ""):
+async def batch_add_entries(req: BatchAddRequest, connection_id: str = "") -> object:
     """Add multiple entries in a single request."""
     results = []
     for entry in req.entries:
@@ -127,7 +127,7 @@ async def batch_add_entries(req: BatchAddRequest, connection_id: str = ""):
                 "connection_id": connection_id,
             })
             results.append({"title": entry.title, "status": "ok", "message": msg})
-        except Exception as e:
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
             results.append({"title": entry.title, "status": "error", "message": str(e)})
 
     ok = sum(1 for r in results if r["status"] == "ok")
@@ -135,7 +135,7 @@ async def batch_add_entries(req: BatchAddRequest, connection_id: str = ""):
 
 
 @router.delete("/entries/{point_id}")
-async def delete_entry(point_id: str, collection: str = "", connection_id: str = ""):
+async def delete_entry(point_id: str, collection: str = "", connection_id: str = "") -> object:
     """Delete a single entry by ID."""
     try:
         msg = await delete_knowledge_by_id.ainvoke({
@@ -144,12 +144,12 @@ async def delete_entry(point_id: str, collection: str = "", connection_id: str =
             "connection_id": connection_id,
         })
         return {"message": msg}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return _error(str(e))
 
 
 @router.post("/entries/delete-by-filter")
-async def delete_by_filter(req: DeleteEntryRequest, connection_id: str = ""):
+async def delete_by_filter(req: DeleteEntryRequest, connection_id: str = "") -> object:
     """Delete multiple entries by payload filter (category or source)."""
     try:
         from qdrant_client.models import Filter, FieldCondition, MatchValue
@@ -172,7 +172,7 @@ async def delete_by_filter(req: DeleteEntryRequest, connection_id: str = ""):
             points_selector=Filter(must=conditions),
         )
         return {"message": f"Entries with filter deleted from '{target}'."}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return _error(str(e))
 
 
@@ -228,5 +228,5 @@ async def list_entries(
             ],
             "next_offset": next_offset,
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return _error(str(e))

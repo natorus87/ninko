@@ -5,7 +5,7 @@ import sys
 sys.path.append("/app")
 from modules.fritzbox.tools import get_fritz_wan_status, get_fritz_bandwidth
 
-async def main():
+async def main() -> object:
     wan = await get_fritz_wan_status.ainvoke({"connection_id": ""})
     print("WAN Status Tool Output:", wan)
     

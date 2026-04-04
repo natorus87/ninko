@@ -10,7 +10,7 @@ from core.vault import get_vault
 from fritzconnection.lib.fritzhosts import FritzHosts
 from fritzconnection import FritzConnection
 
-async def main():
+async def main() -> object:
     conn_data = await ConnectionManager.get_default_connection("fritzbox")
     if not conn_data:
         print("No default connection found.")

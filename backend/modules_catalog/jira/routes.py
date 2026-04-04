@@ -20,7 +20,7 @@ async def get_projects(connection_id: str = "") -> dict:
     try:
         result = await get_jira_projects.ainvoke({"connection_id": connection_id})
         return {"status": "ok", "data": result}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": str(e)}
 
 
@@ -38,5 +38,5 @@ async def get_issues(
             }
         )
         return {"status": "ok", "data": result}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": str(e)}

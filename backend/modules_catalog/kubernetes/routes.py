@@ -27,37 +27,37 @@ router = APIRouter()
 
 
 @router.get("/status")
-async def cluster_status(connection_id: str = ""):
+async def cluster_status(connection_id: str = "") -> object:
     """Overall cluster status."""
     return await get_cluster_status.ainvoke({"connection_id": connection_id})
 
 
 @router.get("/namespaces")
-async def namespaces(connection_id: str = ""):
+async def namespaces(connection_id: str = "") -> object:
     """All namespaces."""
     return await list_namespaces.ainvoke({"connection_id": connection_id})
 
 
 @router.get("/pods/{namespace}")
-async def pods(namespace: str, connection_id: str = ""):
+async def pods(namespace: str, connection_id: str = "") -> object:
     """All pods in a namespace."""
     return await get_all_pods.ainvoke({"namespace": namespace, "connection_id": connection_id})
 
 
 @router.get("/pods")
-async def all_pods(connection_id: str = ""):
+async def all_pods(connection_id: str = "") -> object:
     """All pods in the default namespace."""
     return await get_all_pods.ainvoke({"namespace": "default", "connection_id": connection_id})
 
 
 @router.get("/failing")
-async def failing_pods(namespace: str = "", connection_id: str = ""):
+async def failing_pods(namespace: str = "", connection_id: str = "") -> object:
     """All failing pods."""
     return await get_failing_pods.ainvoke({"namespace": namespace, "connection_id": connection_id})
 
 
 @router.get("/events/{namespace}")
-async def events(namespace: str, minutes: int = 30, connection_id: str = ""):
+async def events(namespace: str, minutes: int = 30, connection_id: str = "") -> object:
     """Recent events of a namespace."""
     return await get_recent_events.ainvoke({
         "namespace": namespace,
@@ -67,13 +67,13 @@ async def events(namespace: str, minutes: int = 30, connection_id: str = ""):
 
 
 @router.get("/services/{namespace}")
-async def services(namespace: str, connection_id: str = ""):
+async def services(namespace: str, connection_id: str = "") -> object:
     """Services in a namespace."""
     return await list_services.ainvoke({"namespace": namespace, "connection_id": connection_id})
 
 
 @router.post("/restart/{namespace}/{pod_name}")
-async def restart_pod_api(namespace: str, pod_name: str, connection_id: str = ""):
+async def restart_pod_api(namespace: str, pod_name: str, connection_id: str = "") -> object:
     """Restart a pod."""
     return await restart_pod_tool.ainvoke({
         "namespace": namespace,
@@ -83,7 +83,7 @@ async def restart_pod_api(namespace: str, pod_name: str, connection_id: str = ""
 
 
 @router.post("/scale/{namespace}/{deployment_name}")
-async def scale_deployment_api(namespace: str, deployment_name: str, replicas: int = 1, connection_id: str = ""):
+async def scale_deployment_api(namespace: str, deployment_name: str, replicas: int = 1, connection_id: str = "") -> object:
     """Scale a deployment."""
     return await scale_deployment_tool.ainvoke({
         "namespace": namespace,
@@ -94,7 +94,7 @@ async def scale_deployment_api(namespace: str, deployment_name: str, replicas: i
 
 
 @router.post("/rollout-restart/{namespace}/{deployment_name}")
-async def rollout_restart_api(namespace: str, deployment_name: str, connection_id: str = ""):
+async def rollout_restart_api(namespace: str, deployment_name: str, connection_id: str = "") -> object:
     """Rollout restart of a deployment."""
     return await rollout_restart_tool.ainvoke({
         "namespace": namespace,
@@ -104,6 +104,6 @@ async def rollout_restart_api(namespace: str, deployment_name: str, connection_i
 
 
 @router.post("/remediate")
-async def remediate(namespace: str = "", connection_id: str = ""):
+async def remediate(namespace: str = "", connection_id: str = "") -> object:
     """Automatic remediation of all failing pods."""
     return await auto_remediate_failing_pods(namespace=namespace)

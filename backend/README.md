@@ -53,7 +53,7 @@ Ninko is a modular, AI-powered IT-Operations platform with an immutable core and
 - `routes_logs.py` — Log viewing
 - `routes_safeguard.py` — Safeguard middleware control
 
-### Modules (`modules/`)
+### Modules (`modules/` + `modules_catalog/`)
 Each module is a self-contained package with:
 - `manifest.py` — ModuleManifest (name, display_name, routing_keywords, api_prefix, dashboard_tab, health_check)
 - `agent.py` — BaseAgent subclass instance
@@ -62,8 +62,13 @@ Each module is a self-contained package with:
 - `schemas.py` — Pydantic models (optional)
 - `frontend/tab.html`, `frontend/tab.js` — Dashboard UI
 
-**Available Modules:**
-kubernetes, proxmox, glpi, ionos, fritzbox, homeassistant, pihole, web_search, telegram, email, wordpress, teams, codelab, image_gen, qdrant, docker, linux_server, tasmota, opnsense
+**Core Modules (`backend/modules/`)**
+web_search, image_gen, codelab
+
+**Catalog Modules (`backend/modules_catalog/`)**
+checkmk, cisco, confluence, docker, email, fritzbox, glpi, homeassistant, hpe_ilo, ionos, jira, kubernetes, linux_server, microsoft_entra, microsoft_intune, mikrotik, netgear, nextcloud, opnsense, openproject, pihole, proxmox, qdrant, redmine, slack, synology, tasmota, teams, telegram, ubiquiti, wordpress
+
+`lenovo_xclarity` is present in source but currently not listed in the official marketplace catalog.
 
 ### Schemas (`schemas/`)
 Pydantic models for API request/response validation.
@@ -158,12 +163,15 @@ backend/
 │   ├── connections.py
 │   ├── workflow_engine.py
 │   └── ... (10 more files)
-├── modules/                # Auto-discovering modules
+├── modules/                # Core modules (baked into image)
+│   ├── web_search/
+│   ├── image_gen/
+│   └── codelab/
+├── modules_catalog/        # Marketplace module source catalog
 │   ├── kubernetes/
-│   ├── proxmox/
-│   ├── glpi/
-│   ├── telegram/
-│   └── ... (18 modules)
+│   ├── redmine/
+│   ├── mikrotik/
+│   └── ... (many modules)
 ├── schemas/                # Pydantic models
 │   ├── chat.py
 │   ├── settings.py

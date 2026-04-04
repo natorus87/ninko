@@ -262,7 +262,7 @@ async def get_site_info(connection_id: str = "") -> dict:
             "timezone": data.get("timezone_string", ""),
             "language": data.get("language", ""),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return {"error": str(e)}
 
 
@@ -292,7 +292,7 @@ async def get_updates_info(connection_id: str = "") -> dict:
             "plugins_with_updates": plugins_with_updates,
             "plugin_update_count": len(plugins_with_updates),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return {"error": str(e)}
 
 
@@ -331,7 +331,7 @@ async def list_plugins(status: str = "all", connection_id: str = "") -> list[dic
                 }
             )
         return result
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return [{"error": str(e)}]
 
 
@@ -373,7 +373,7 @@ async def search_plugins(query: str, connection_id: str = "") -> list[dict]:
                 }
                 for p in plugins[:10]
             ]
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return [{"error": str(e)}]
 
 
@@ -404,7 +404,7 @@ async def install_plugin(slug: str, connection_id: str = "") -> dict:
                 zh=f"插件 '{result.get('name', slug)}' 安装成功。",
             ),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return {"slug": slug, "error": str(e)}
 
 
@@ -438,7 +438,7 @@ async def activate_plugin(plugin_slug: str, connection_id: str = "") -> dict:
                 zh=f"插件 '{result.get('name', plugin_slug)}' 已激活。",
             ),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return {"slug": plugin_slug, "error": str(e)}
 
 
@@ -472,7 +472,7 @@ async def deactivate_plugin(plugin_slug: str, connection_id: str = "") -> dict:
                 zh=f"插件 '{result.get('name', plugin_slug)}' 已停用。",
             ),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return {"slug": plugin_slug, "error": str(e)}
 
 
@@ -503,7 +503,7 @@ async def update_plugin(plugin_slug: str, connection_id: str = "") -> dict:
                 zh=f"插件 '{result.get('name', plugin_slug)}' 已更新。",
             ),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return {"slug": plugin_slug, "error": str(e)}
 
 
@@ -532,7 +532,7 @@ async def delete_plugin(plugin_slug: str, connection_id: str = "") -> dict:
                 zh=f"插件 '{plugin_slug}' 已删除。",
             ),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return {"slug": plugin_slug, "error": str(e)}
 
 
@@ -579,7 +579,7 @@ async def list_pages(
             }
             for p in pages
         ]
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return [{"error": str(e)}]
 
 
@@ -606,7 +606,7 @@ async def get_page(page_id: int, connection_id: str = "") -> dict:
             "link": p.get("link", ""),
             "template": p.get("template", ""),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return {"error": str(e)}
 
 
@@ -658,7 +658,7 @@ async def create_page(
                 zh=f"页面 '{result.get('title', {}).get('rendered', '')}' 已创建（ID: {result['id']}）。",
             ),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return {"error": str(e)}
 
 
@@ -729,7 +729,7 @@ async def update_page(
                 zh=f"页面 ID {page_id} 已更新。",
             ),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return {"page_id": page_id, "error": str(e)}
 
 
@@ -763,7 +763,7 @@ async def delete_page(
                 zh=f"页面 ID {page_id} 已{'永久删除' if force else '移至回收站'}。",
             ),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return {"page_id": page_id, "error": str(e)}
 
 
@@ -811,7 +811,7 @@ async def list_posts(
             }
             for p in posts
         ]
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return [{"error": str(e)}]
 
 
@@ -836,7 +836,7 @@ async def get_post(post_id: int, connection_id: str = "") -> dict:
             "tags": p.get("tags", []),
             "link": p.get("link", ""),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return {"error": str(e)}
 
 
@@ -894,7 +894,7 @@ async def create_post(
                 zh=f"文章 '{result.get('title', {}).get('rendered', '')}' 已创建（ID: {result['id']}）。",
             ),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return {"error": str(e)}
 
 
@@ -959,7 +959,7 @@ async def update_post(
                 zh=f"文章 ID {post_id} 已更新。",
             ),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return {"post_id": post_id, "error": str(e)}
 
 
@@ -992,7 +992,7 @@ async def delete_post(
                 zh=f"文章 ID {post_id} 已{'永久删除' if force else '移至回收站'}。",
             ),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return {"post_id": post_id, "error": str(e)}
 
 
@@ -1017,7 +1017,7 @@ async def list_categories(connection_id: str = "") -> list[dict]:
             }
             for c in cats
         ]
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return [{"error": str(e)}]
 
 
@@ -1050,7 +1050,7 @@ async def create_category(
                 zh=f"类别 '{result.get('name', '')}' 已创建（ID: {result['id']}）。",
             ),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return {"error": str(e)}
 
 
@@ -1068,7 +1068,7 @@ async def list_tags(connection_id: str = "") -> list[dict]:
             }
             for t in tags
         ]
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return [{"error": str(e)}]
 
 
@@ -1096,7 +1096,7 @@ async def create_tag(name: str, slug: str = "", connection_id: str = "") -> dict
                 zh=f"标签 '{result.get('name', '')}' 已创建（ID: {result['id']}）。",
             ),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return {"error": str(e)}
 
 
@@ -1123,7 +1123,7 @@ async def list_users(per_page: int = 20, connection_id: str = "") -> list[dict]:
             }
             for u in users
         ]
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return [{"error": str(e)}]
 
 
@@ -1152,7 +1152,7 @@ async def get_current_user(connection_id: str = "") -> dict:
                 "capabilities": list(u.get("capabilities", {}).keys())[:30],
                 "description": u.get("description", ""),
             }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return {"error": str(e)}
 
 
@@ -1183,7 +1183,7 @@ async def get_site_settings(connection_id: str = "") -> dict:
             "default_post_format": settings.get("default_post_format", ""),
             "permalink_structure": settings.get("permalink_structure", ""),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return {"error": str(e)}
 
 
@@ -1243,7 +1243,7 @@ async def update_site_settings(
                 zh="设置已更新。",
             ),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return {"error": str(e)}
 
 
@@ -1282,5 +1282,5 @@ async def list_media(
             }
             for m in media
         ]
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         return [{"error": str(e)}]

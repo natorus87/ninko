@@ -8,7 +8,7 @@ from core.vault import get_vault
 from fritzconnection.lib.fritzstatus import FritzStatus
 from fritzconnection import FritzConnection
 
-async def main():
+async def main() -> object:
     conn_data = await ConnectionManager.get_default_connection("fritzbox")
     vault = get_vault()
     pwd_key = conn_data.vault_keys.get("password") or conn_data.vault_keys.get("FRITZBOX_PASSWORD")

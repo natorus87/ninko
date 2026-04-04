@@ -437,6 +437,6 @@ class WordPressAgent(BaseAgent):
             ],
         )
 
-    def _select_tools_for_request(self, message: str):  # type: ignore[override]
+    def _select_tools_for_request(self, message: str) -> object:  # type: ignore[override]
         """WordPress: ALWAYS all tools available — JIT filtering disabled."""
         return self.tools

@@ -16,7 +16,7 @@ async def check_wordpress_health() -> dict:
     """Health check for WordPress REST API."""
     try:
         return {"status": "ok", "detail": "WordPress module ready (REST API v2)"}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": str(e)}
 
 

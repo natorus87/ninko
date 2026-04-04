@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/mikrotik", tags=["mikrotik"])
 
 
 @router.get("/health")
-async def health_check():
+async def health_check() -> object:
     """Health check endpoint."""
     from .manifest import check_mikrotik_health
 
@@ -22,7 +22,7 @@ async def health_check():
 
 
 @router.get("/status")
-async def get_status(connection_id: str = ""):
+async def get_status(connection_id: str = "") -> object:
     """Get MikroTik status for dashboard."""
     try:
         from .tools import _get_api_client, MikroTikSession
@@ -40,5 +40,5 @@ async def get_status(connection_id: str = ""):
             "routes_count": len(routes),
             "dhcp_leases_count": len(leases),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"error": str(e)}

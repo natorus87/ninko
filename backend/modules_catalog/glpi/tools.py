@@ -36,7 +36,7 @@ PRIORITY_MAP = {
 
 
 @asynccontextmanager
-async def glpi_session(connection_id: str = ""):
+async def glpi_session(connection_id: str = "") -> object:
     """
     Context manager for GLPI API sessions.
     Creates a session and terminates it after use.
@@ -96,7 +96,7 @@ async def glpi_session(connection_id: str = ""):
                     f"{base_url}/apirest.php/killSession",
                     headers=headers,
                 )
-            except Exception:
+            except (RuntimeError, ValueError, TypeError, KeyError, OSError):
                 pass
 
 
@@ -153,7 +153,7 @@ async def create_ticket(
                     },
                     headers=headers,
                 )
-            except Exception as e:
+            except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
                 logger.warning("Could not assign group: %s", e)
 
         return {
@@ -493,7 +493,7 @@ async def get_ticket_stats(connection_id: str = "") -> dict:
                     count = data.get("totalcount", 0)
                     stats[field] += count
                     stats["total"] += count
-        except Exception:
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError):
             pass
 
     return stats

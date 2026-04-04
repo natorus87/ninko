@@ -7,7 +7,7 @@ from core.connections import ConnectionManager
 from core.vault import get_vault
 from fritzconnection import FritzConnection
 
-async def main():
+async def main() -> object:
     conn_data = await ConnectionManager.get_default_connection("fritzbox")
     vault = get_vault()
     pwd_key = conn_data.vault_keys.get("password") or conn_data.vault_keys.get("FRITZBOX_PASSWORD")
@@ -18,7 +18,7 @@ async def main():
     try:
         mon = fc.call_action("WANCommonInterfaceConfig1", "X_AVM-DE_GetOnlineMonitor", SyncGroupIndex=0)
         print("OnlineMonitor output:", mon)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         print("OnlineMonitor error:", e)
 
 if __name__ == "__main__":

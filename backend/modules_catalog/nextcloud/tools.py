@@ -154,7 +154,7 @@ def _parse_webdav_list(xml_content: str) -> list[dict]:
                     "size": size,
                 }
             )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.warning("Failed to parse WebDAV response: %s", e)
 
     return files
@@ -234,7 +234,7 @@ async def list_nextcloud_files(path: str = "/", connection_id: str = "") -> str:
         lines.append(f"\n✓ {total} Einträge")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_nextcloud_files failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -304,7 +304,7 @@ async def search_nextcloud_files(query: str, connection_id: str = "") -> str:
             lines.append(f"  📄 {name}")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("search_nextcloud_files failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -367,7 +367,7 @@ async def list_nextcloud_users(connection_id: str = "") -> str:
         lines.append(f"\n✓ {total} Benutzer")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_nextcloud_users failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -423,7 +423,7 @@ async def get_nextcloud_user(user_id: str, connection_id: str = "") -> str:
         lines.append(f"  Enabled: {data.get('enabled', True)}")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("get_nextcloud_user failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -489,7 +489,7 @@ async def list_nextcloud_shares(connection_id: str = "") -> str:
         lines.append(f"\n✓ {total} Shares")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_nextcloud_shares failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -546,7 +546,7 @@ async def get_nextcloud_storage(connection_id: str = "") -> str:
             lines.append("  No quota set")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("get_nextcloud_storage failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -596,7 +596,7 @@ async def create_nextcloud_folder(
             ja=f"✅ フォルダを作成: {folder_path}",
             zh=f"✅ 已创建文件夹: {folder_path}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("create_nextcloud_folder failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -653,7 +653,7 @@ async def upload_nextcloud_file(
             ja=f"✅ ファイルをアップロード: {path}",
             zh=f"✅ 已上传文件: {path}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("upload_nextcloud_file failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -695,7 +695,7 @@ async def delete_nextcloud_file(path: str, connection_id: str = "") -> str:
             ja=f"✅ ファイルを削除: {path}",
             zh=f"✅ 已删除文件: {path}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("delete_nextcloud_file failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -754,7 +754,7 @@ async def create_nextcloud_share(
             ja=f"✅ シェアを作成: {share_link or path}",
             zh=f"✅ 已创建分享: {share_link or path}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("create_nextcloud_share failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -800,7 +800,7 @@ async def create_nextcloud_user(
             ja=f"✅ ユーザーを作成: {user_id}",
             zh=f"✅ 已创建用户: {user_id}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("create_nextcloud_user failed: %s", e)
         return _t(
             de=f"Fehler: {e}",

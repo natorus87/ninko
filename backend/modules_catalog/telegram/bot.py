@@ -86,7 +86,7 @@ def _strip_pipeline_headers(text: str) -> str:
 
 
 class TelegramBot:
-    def __init__(self, app: FastAPI):
+    def __init__(self, app: FastAPI) -> None:
         self.app = app
         self.running = False
         self.task: asyncio.Task | None = None
@@ -184,7 +184,7 @@ class TelegramBot:
                 break
             except httpx.ReadTimeout:
                 continue  # Normal for long-polling with no new messages
-            except Exception as e:
+            except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as e:
                 logger.exception("Error in Telegram polling loop: %s", e)
                 await asyncio.sleep(10)
 
@@ -224,7 +224,7 @@ class TelegramBot:
 
                 logger.warning("sendMessage error: %s %s", resp.status_code, resp.text[:100])
                 return False
-        except Exception as exc:
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as exc:
             logger.error("_send error: %s", exc)
             return False
 
@@ -240,7 +240,7 @@ class TelegramBot:
                         "reaction": [{"type": "emoji", "emoji": emoji}],
                     },
                 )
-        except Exception:
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError):
             pass
 
     async def _keep_typing(self, token: str, chat_id: int) -> None:
@@ -253,7 +253,7 @@ class TelegramBot:
                             f"https://api.telegram.org/bot{token}/sendChatAction",
                             json={"chat_id": chat_id, "action": "typing"},
                         )
-                    except Exception:
+                    except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError):
                         pass
                     await asyncio.sleep(4)
         except asyncio.CancelledError:
@@ -291,7 +291,7 @@ class TelegramBot:
             filename = file_path.rsplit("/", 1)[-1]
             text, confidence, detected_lang = await transcribe_bytes_extended(audio_bytes, filename)
             return (text or None), confidence, detected_lang
-        except Exception as exc:
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as exc:
             logger.error("Error transcribing Telegram voice message: %s", exc)
             return None, -2.0, "de"
 
@@ -313,7 +313,7 @@ class TelegramBot:
                     "sendVoice Fehler: %s %s", resp.status_code, resp.text[:100]
                 )
                 return False
-        except Exception as exc:
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as exc:
             logger.error("_send_voice error: %s", exc)
             return False
 
@@ -355,7 +355,7 @@ class TelegramBot:
                     return True
                 logger.warning("sendPhoto Fehler: %s %s", resp.status_code, resp.text[:200])
                 return False
-        except Exception as exc:
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as exc:
             logger.error("_send_photo error: %s", exc)
             return False
 
@@ -436,7 +436,7 @@ class TelegramBot:
                 # Race-condition protection: in-flight requests should not write back history
                 self._cleared_sessions.add(session_id_local)
                 await self._send(token, chat_id, "♻️ Chat history cleared. How can I help?")
-            except Exception as exc:
+            except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as exc:
                 logger.error("Error clearing chat history for %s: %s", chat_id, exc)
                 await self._send(token, chat_id, f"❌ Error clearing history: {exc}")
             return
@@ -577,7 +577,7 @@ class TelegramBot:
                             if age_seconds < 300:  # Only images less than 5 minutes old
                                 image_path = f"/api/images/{imgs[0].name}"
                                 logger.info("Image URL missing in response, using newest image (%ds old): %s", age_seconds, image_path)
-                except Exception as e:
+                except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as e:
                     logger.debug("Error searching for newest image: %s", e)
 
             if image_path:
@@ -587,7 +587,7 @@ class TelegramBot:
                 caption = format_for_telegram(caption)[:1024]  # Telegram caption limit
                 try:
                     await self._send_photo(token, chat_id, image_path, caption)
-                except Exception as img_err:
+                except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as exc:
                     logger.warning("Image send failed, falling back to text: %s", img_err)
                     fallback = format_for_telegram(final_text)
                     await self._send(token, chat_id, fallback, parse_mode="HTML")
@@ -600,7 +600,7 @@ class TelegramBot:
             for chunk in chunks:
                 await self._send(token, chat_id, chunk, parse_mode="HTML")
 
-        except Exception as exc:
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as exc:
             logger.exception("Error in Telegram orchestrator processing: %s", exc)
             # Descriptive error message instead of generic text
             err_type = type(exc).__name__
@@ -652,7 +652,7 @@ class TelegramBot:
                 )
             else:
                 logger.warning("Voice-Reply sendVoice failed for chat %s", chat_id)
-        except Exception as exc:
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as exc:
             logger.error("Voice-Reply error for chat %s: %s", chat_id, exc)
 
 

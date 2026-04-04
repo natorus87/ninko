@@ -18,7 +18,7 @@ async def get_status(connection_id: str = "") -> dict:
     try:
         result = await get_tasmota_status.ainvoke({"connection_id": connection_id})
         return {"status": "ok", "data": result}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return {"status": "error", "detail": str(e)}
 
 
@@ -28,7 +28,7 @@ async def get_sensors(connection_id: str = "") -> dict:
     try:
         result = await get_tasmota_sensors.ainvoke({"connection_id": connection_id})
         return {"status": "ok", "data": result}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return {"status": "error", "detail": str(e)}
 
 
@@ -38,5 +38,5 @@ async def get_power(connection_id: str = "") -> dict:
     try:
         result = await get_tasmota_power.ainvoke({"connection_id": connection_id})
         return {"status": "ok", "data": result}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return {"status": "error", "detail": str(e)}

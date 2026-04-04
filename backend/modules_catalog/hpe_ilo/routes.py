@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/hpe_ilo", tags=["hpe_ilo"])
 
 
 @router.get("/health")
-async def health_check():
+async def health_check() -> object:
     """Health check endpoint."""
     from .manifest import check_hpe_ilo_health
 
@@ -22,7 +22,7 @@ async def health_check():
 
 
 @router.get("/status")
-async def get_status(connection_id: str = ""):
+async def get_status(connection_id: str = "") -> object:
     """Get iLO and server status for dashboard."""
     try:
         from .tools import _get_api_client, _ilo_request
@@ -61,5 +61,5 @@ async def get_status(connection_id: str = ""):
                 "health": hp_system.get("Health", "OK"),
             },
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"error": str(e)}

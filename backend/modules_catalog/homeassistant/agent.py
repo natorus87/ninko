@@ -16,7 +16,7 @@ class HomeAssistantAgent(BaseAgent):
     Inherits from BaseAgent and receives specific HA tools.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             name="homeassistant",
 

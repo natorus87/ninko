@@ -280,7 +280,7 @@ async def list_repo_themes(repo_id: str) -> dict:
                         "version": theme.version,
                     }
                 )
-            except Exception:
+            except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError, UnicodeDecodeError):
                 continue
     return {"themes": themes, "repo_id": repo_id}
 
@@ -333,7 +333,7 @@ async def install_theme_from_repo(theme_id: str, repo_id: str = Query(default=_O
 
     try:
         theme = ThemeDefinition(**json.loads(data["theme.json"].decode("utf-8")))
-    except Exception:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError, UnicodeDecodeError):
         raise HTTPException(status_code=400, detail="theme.json ungültig.")
     if theme.id != theme_id:
         raise HTTPException(status_code=400, detail="Theme-ID passt nicht zum angeforderten Pfad.")

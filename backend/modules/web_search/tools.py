@@ -67,6 +67,6 @@ async def perform_web_search(query: str, connection_id: str = "") -> List[Dict[s
             e.response.text,
         )
         return [{"title": "Error", "url": "", "content": f"Such-Backend meldete einen HTTP Fehler: {e.response.status_code}."}]
-    except Exception:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError):
         logger.exception("Unerwarteter Fehler bei der Web-Suche")
         return [{"title": "Error", "url": "", "content": "Interner Fehler bei der Web-Suche."}]

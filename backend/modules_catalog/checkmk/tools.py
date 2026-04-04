@@ -109,9 +109,9 @@ async def _make_checkmk_request(
         if resp.status_code >= 400:
             try:
                 error_detail = resp.json().get("detail", resp.text)
-            except Exception:
+            except (ValueError, TypeError):
                 error_detail = resp.text
-            raise Exception(f"Checkmk API Error {resp.status_code}: {error_detail}")
+            raise RuntimeError(f"Checkmk API Error {resp.status_code}: {error_detail}")
 
         return resp.json()
 
@@ -147,7 +147,7 @@ async def checkmk_get_hosts(connection_id: str = "", filter_name: str = "") -> s
         more = f"\n... und {total - 20} weitere" if total > 20 else ""
         return f"Hosts ({total}):\n{chr(10).join(summary)}{more}"
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError, OSError) as e:
         logger.error("Fehler beim Laden der Hosts: %s", e)
         return f"Fehler: {e}"
 
@@ -185,7 +185,7 @@ async def checkmk_get_services(connection_id: str = "", host_name: str = "") -> 
         more = f"\n... und {total - 20} weitere" if total > 20 else ""
         return f"Services ({total}):\n{chr(10).join(summary)}{more}"
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError, OSError) as e:
         logger.error("Fehler beim Laden der Services: %s", e)
         return f"Fehler: {e}"
 
@@ -212,7 +212,7 @@ async def checkmk_get_host_status(connection_id: str = "", host_name: str = "") 
 
         return f"Host: {host_name}\nStatus: {state_info}"
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError, OSError) as e:
         logger.error("Fehler beim Laden des Host-Status: %s", e)
         return f"Fehler: {e}"
 
@@ -248,7 +248,7 @@ async def checkmk_get_service_status(connection_id: str = "", host_name: str = "
 
         return f"Host: {host_name}\nService: {service_desc}\nStatus: {state_str}"
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError, OSError) as e:
         logger.error("Fehler beim Laden des Service-Status: %s", e)
         return f"Fehler: {e}"
 
@@ -287,7 +287,7 @@ async def checkmk_get_alerts(connection_id: str = "", max_results: int = 20) -> 
         more = f"\n... und {total - max_results} weitere" if total > max_results else ""
         return f"Probleme ({total}):\n{chr(10).join(summary)}{more}"
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError, OSError) as e:
         logger.error("Fehler beim Laden der Alarme: %s", e)
         return f"Fehler: {e}"
 
@@ -325,7 +325,7 @@ async def checkmk_get_host_details(connection_id: str = "", host_name: str = "")
 
         return output
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError, OSError) as e:
         logger.error("Fehler beim Laden der Host-Details: %s", e)
         return f"Fehler: {e}"
 
@@ -363,7 +363,7 @@ async def checkmk_get_service_details(connection_id: str = "", host_name: str = 
 
         return output
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError, OSError) as e:
         logger.error("Fehler beim Laden der Service-Details: %s", e)
         return f"Fehler: {e}"
 
@@ -384,7 +384,7 @@ async def checkmk_search_hosts(connection_id: str = "", search_term: str = "") -
             {"connection_id": connection_id, "filter_name": search_term}
         )
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError, OSError) as e:
         logger.error("Fehler bei der Host-Suche: %s", e)
         return f"Fehler: {e}"
 
@@ -424,6 +424,6 @@ async def checkmk_search_services(connection_id: str = "", search_term: str = ""
         more = f"\n... und {total - 20} weitere" if total > 20 else ""
         return f"Services mit '{search_term}' ({total}):\n{chr(10).join(summary)}{more}"
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError, OSError) as e:
         logger.error("Fehler bei der Service-Suche: %s", e)
         return f"Fehler: {e}"

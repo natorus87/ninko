@@ -35,7 +35,7 @@ When asked to perform a destructive action (wipe), always confirm first and warn
 When there is uncertainty, ask the user to confirm before proceeding.
 """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
 

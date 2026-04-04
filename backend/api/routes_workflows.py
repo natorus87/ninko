@@ -156,7 +156,7 @@ async def run_workflow(workflow_id: str, request: Request) -> dict:
         orchestrator = request.app.state.orchestrator
         engine = WorkflowEngine(redis, orchestrator)
         asyncio.create_task(engine.execute(wf, run_id))
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as exc:
         logger.warning("Workflow-Engine konnte nicht gestartet werden: %s", exc)
 
     return {"run_id": run_id, "status": "running"}

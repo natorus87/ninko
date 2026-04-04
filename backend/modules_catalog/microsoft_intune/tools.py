@@ -178,7 +178,7 @@ async def list_intune_devices(connection_id: str = "") -> str:
         )
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_intune_devices failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -291,7 +291,7 @@ async def get_intune_device(device_name: str, connection_id: str = "") -> str:
         )
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("get_intune_device failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -355,7 +355,7 @@ async def list_intune_policies(connection_id: str = "") -> str:
             lines.append(f"  • {p.get('name', '-')} ({plat})")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_intune_policies failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -419,7 +419,7 @@ async def list_intune_compliance_policies(connection_id: str = "") -> str:
             lines.append(f"  • {p.get('name', '-')} ({plat})")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_intune_compliance_policies failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -485,7 +485,7 @@ async def list_intune_apps(connection_id: str = "") -> str:
                 lines.append(f"    {pub}")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_intune_apps failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -582,7 +582,7 @@ async def get_intune_device_compliance(
             )
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("get_intune_device_compliance failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -649,7 +649,7 @@ async def wipe_intune_device(device_name: str, connection_id: str = "") -> str:
             ja=f"✅ {device_name} のワイプを開始しました",
             zh=f"✅ 已为 {device_name} 启动擦除",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("wipe_intune_device failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -710,7 +710,7 @@ async def retire_intune_device(device_name: str, connection_id: str = "") -> str
             ja=f"✅ {device_name} をリタイアしました",
             zh=f"✅ 设备已退役: {device_name}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("retire_intune_device failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -771,7 +771,7 @@ async def sync_intune_device(device_name: str, connection_id: str = "") -> str:
             ja=f"✅ {device_name} の同期を開始しました",
             zh=f"✅ 已为 {device_name} 启动同步",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("sync_intune_device failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -844,7 +844,7 @@ async def locate_intune_device(device_name: str, connection_id: str = "") -> str
         ]
         lines.append(f"  {device_name}: {loc}")
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("locate_intune_device failed: %s", e)
         return _t(
             de=f"Fehler: {e}",

@@ -23,7 +23,7 @@ async def messages_webhook(request: Request) -> dict[str, Any]:
     """
     try:
         activity = await request.json()
-    except Exception:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError):
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
     if activity.get("type") == "message":
@@ -49,7 +49,7 @@ async def get_teams_status() -> dict[str, Any]:
             result["allowed_ids"] = [s.strip() for s in str(raw).split(",") if s.strip()] if raw else []
         else:
             result["allowed_ids"] = []
-    except Exception:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError):
         result["allowed_ids"] = []
 
     # Last known conversation
@@ -61,7 +61,7 @@ async def get_teams_status() -> dict[str, Any]:
             result["last_conversation_id"] = conv.get("conversation_id", "")
         else:
             result["last_conversation_id"] = ""
-    except Exception:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError):
         result["last_conversation_id"] = ""
 
     return result

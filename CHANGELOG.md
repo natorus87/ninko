@@ -7,6 +7,40 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.9.4] – 2026-04-03
+
+### Added
+
+- **Neue Catalog-Module**:
+  - `cisco` — Cisco Network Devices (Switches, Router, Nexus)
+  - `mikrotik` — MikroTik RouterOS
+  - `netgear` — Netgear Network Devices
+  - `ubiquiti` — Ubiquiti UniFi
+  - `nextcloud` — Files, Shares, Users
+  - `openproject` — Projects, Tasks, Time Tracking
+
+- **Redmine AlphaNodes-Erweiterung**:
+  - HRM-Endpunkte (Attendances, Capacity, Holidays)
+  - Reporting-Endpunkte (Budgets, Time Logs)
+  - Neue modul-spezifische Tools + API-Routen für read/write Kommunikation
+
+### Fixed
+
+- **Exception handling hardening (broad except reduction)**:
+  - Breite `except Exception`-Blöcke in Core/Agent-Pfaden gezielt reduziert
+  - Präzisere Exception-Typen und sauberere Boundary-Fehlerbehandlung
+- **Module stability fixes**:
+  - Syntaxfehler in `modules_catalog/pihole/tools.py` behoben
+  - Indentation-/Flow-Fehler in `modules_catalog/mikrotik/tools.py` behoben
+
+### Changed
+
+- **i18n rollout erweitert**:
+  - Frontend-Übersetzungen für alle vorhandenen Module ergänzt
+  - Mehrsprachige Texte für alle unterstützten 10 Sprachen konsolidiert
+
+---
+
 ## [0.9.3] – 2026-04-03
 
 ### Added

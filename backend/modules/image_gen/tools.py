@@ -43,6 +43,6 @@ async def generate_image(prompt: str, size: str = "1024x1024") -> str:
     except ValueError as e:
         # Konfigurationsfehler – dem User klar sagen was fehlt
         return f"⚠️ Bildgenerierung nicht konfiguriert: {e}"
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         logger.error("Bildgenerierung fehlgeschlagen: %s", e, exc_info=True)
         return f"❌ Bildgenerierung fehlgeschlagen: {str(e)[:300]}"

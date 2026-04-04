@@ -36,7 +36,7 @@ async def check_qdrant_health() -> dict:
                 "status": "error",
                 "detail": f"Qdrant responded with HTTP {response.status_code}",
             }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": f"Qdrant not reachable: {e}"}
 
 

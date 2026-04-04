@@ -15,7 +15,7 @@ _LENOVO_ROUTE_EXCEPTIONS = (ValueError, TypeError, KeyError, RuntimeError)
 
 
 @router.get("/health")
-async def health_check():
+async def health_check() -> object:
     """Health check endpoint."""
     from .manifest import check_lenovo_xclarity_health
 
@@ -23,7 +23,7 @@ async def health_check():
 
 
 @router.get("/status")
-async def get_status(connection_id: str = ""):
+async def get_status(connection_id: str = "") -> object:
     """Get XClarity status for dashboard."""
     try:
         from .tools import _get_api_client, _xclarity_request

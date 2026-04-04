@@ -34,7 +34,7 @@ async def get_status(connection_id: str = "") -> ApiResponse:
     try:
         result = await get_opnsense_system_status.ainvoke({"connection_id": connection_id})
         return ApiResponse(status="ok", data=result)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return ApiResponse(status="error", detail=str(e))
 
 
@@ -44,7 +44,7 @@ async def get_interfaces(connection_id: str = "") -> ApiResponse:
     try:
         result = await get_opnsense_interfaces.ainvoke({"connection_id": connection_id})
         return ApiResponse(status="ok", data=result)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return ApiResponse(status="error", detail=str(e))
 
 
@@ -54,7 +54,7 @@ async def get_services(connection_id: str = "") -> ApiResponse:
     try:
         result = await get_opnsense_services.ainvoke({"connection_id": connection_id})
         return ApiResponse(status="ok", data=result)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return ApiResponse(status="error", detail=str(e))
 
 
@@ -80,7 +80,7 @@ async def create_firewall_rule(
             "connection_id": connection_id
         })
         return ApiResponse(status="ok", data={"message": result})
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return ApiResponse(status="error", detail=str(e))
 
 
@@ -93,7 +93,7 @@ async def delete_firewall_rule(rule_uuid: str, connection_id: str = "") -> ApiRe
             "connection_id": connection_id
         })
         return ApiResponse(status="ok", data={"message": result})
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return ApiResponse(status="error", detail=str(e))
 
 
@@ -121,7 +121,7 @@ async def create_nat_rule(
             "connection_id": connection_id
         })
         return ApiResponse(status="ok", data={"message": result})
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return ApiResponse(status="error", detail=str(e))
 
 
@@ -134,5 +134,5 @@ async def delete_nat_rule(rule_uuid: str, connection_id: str = "") -> ApiRespons
             "connection_id": connection_id
         })
         return ApiResponse(status="ok", data={"message": result})
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return ApiResponse(status="error", detail=str(e))

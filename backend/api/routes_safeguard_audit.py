@@ -44,7 +44,7 @@ async def get_audit_log(
     for raw in raw_entries:
         try:
             entry = json.loads(raw)
-        except Exception:
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError):
             continue
 
         if category and entry.get("category", "").upper() != category.upper():
@@ -92,7 +92,7 @@ async def clear_audit_log(request: Request) -> dict:
                 rationale="manual clear",
                 profile_id=sg.get_active_profile_id(),
             )
-    except Exception:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError):
         pass
 
     redis = get_redis()

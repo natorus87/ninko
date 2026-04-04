@@ -45,7 +45,7 @@ class DownloadRequest(BaseModel):
 
 # ─── Hilfsfunktionen ──────────────────────────────────────────────────────────
 
-def _get_voice_manager():
+def _get_voice_manager() -> object:
     from core.tts.voice_manager import VoiceManager
     cfg = get_settings()
     return VoiceManager(voices_dir=cfg.VOICES_DIR)
@@ -159,7 +159,7 @@ async def delete_voice(lang: str, voice: str) -> dict:
     try:
         shutil.rmtree(voice_dir)
         logger.info("Stimme gelöscht: %s/%s", lang, voice)
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as exc:
         raise HTTPException(status_code=500, detail=f"Löschen fehlgeschlagen: {exc}")
 
     return {"status": "deleted", "lang": lang, "voice": voice}

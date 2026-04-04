@@ -6,14 +6,14 @@ from .tools import send_email, read_emails, move_email, delete_email
 
 logger = logging.getLogger("ninko.modules.email.agent")
 
-def _get_email_tools():
+def _get_email_tools() -> object:
     # perform_web_search is NOT loaded — the Email module only sends.
     # Compound tasks (research + email) are sequenced deterministically
     # by run_pipeline in the Orchestrator. The Email Agent focuses on SMTP/IMAP.
     return [send_email, read_emails, move_email, delete_email]
 
 class EmailAgent(BaseAgent):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             name="email",
             system_prompt=_t(

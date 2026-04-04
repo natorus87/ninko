@@ -231,7 +231,7 @@ async def transcribe_audio(file: UploadFile = File(...)) -> TranscriptionRespons
         raise
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         logger.error("Transkriptionsfehler: %s", exc)
         raise HTTPException(status_code=500, detail=f"Transkription fehlgeschlagen: {exc}")
     finally:
@@ -315,6 +315,6 @@ async def _llm_spellcheck(text: str) -> str:
         if corrected:
             logger.debug("STT Spellcheck: '%s' → '%s'", text[:60], corrected[:60])
             return corrected
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         logger.warning("STT Spellcheck fehlgeschlagen: %s", exc)
     return text

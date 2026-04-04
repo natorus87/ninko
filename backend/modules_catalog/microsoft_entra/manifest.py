@@ -71,7 +71,7 @@ async def check_microsoft_entra_health() -> dict:
 
     except aiohttp.ClientResponseError as e:
         return {"status": "error", "detail": f"HTTP {e.status}: {e.message}"}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": str(e)}
 
 

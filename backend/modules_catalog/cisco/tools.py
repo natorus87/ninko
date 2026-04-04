@@ -157,7 +157,7 @@ async def get_cisco_device_info(connection_id: str = "") -> str:
             lines.append(f"  Serial: {data.get('serial')}")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("get_cisco_device_info failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -241,7 +241,7 @@ async def list_cisco_interfaces(connection_id: str = "") -> str:
         )
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_cisco_interfaces failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -295,7 +295,7 @@ async def get_cisco_interface_details(interface: str, connection_id: str = "") -
             lines.append(f"  Out: {stats.get('outOctets', 0)} bytes")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("get_cisco_interface_details failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -374,7 +374,7 @@ async def list_cisco_vlans(connection_id: str = "") -> str:
         )
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_cisco_vlans failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -455,7 +455,7 @@ async def list_cisco_routes(connection_id: str = "") -> str:
         )
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_cisco_routes failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -535,7 +535,7 @@ async def list_cisco_mac_addresses(connection_id: str = "") -> str:
         )
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_cisco_mac_addresses failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -598,7 +598,7 @@ async def get_cisco_poe_status(connection_id: str = "") -> str:
             lines.append(f"  {name}: {status} ({power}W)")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("get_cisco_poe_status failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -645,7 +645,7 @@ async def enable_cisco_interface(interface: str, connection_id: str = "") -> str
             ja=f"✅ インターフェース有効: {interface}",
             zh=f"✅ 接口已启用: {interface}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("enable_cisco_interface failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -687,7 +687,7 @@ async def disable_cisco_interface(interface: str, connection_id: str = "") -> st
             ja=f"✅ インターフェース無効: {interface}",
             zh=f"✅ 接口已禁用: {interface}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("disable_cisco_interface failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -731,7 +731,7 @@ async def create_cisco_vlan(
             ja=f"✅ VLAN作成: {vlan_id} ({vlan_name})",
             zh=f"✅ VLAN已创建: {vlan_id} ({vlan_name})",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("create_cisco_vlan failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -775,7 +775,7 @@ async def set_cisco_interface_vlan(
             ja=f"✅ インターフェース {interface} → VLAN {vlan_id}",
             zh=f"✅ 接口 {interface} → VLAN {vlan_id}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("set_cisco_interface_vlan failed: %s", e)
         return _t(
             de=f"Fehler: {e}",

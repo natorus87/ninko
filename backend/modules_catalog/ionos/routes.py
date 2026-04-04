@@ -7,7 +7,7 @@ logger = logging.getLogger("ninko.modules.ionos.routes")
 router = APIRouter()
 
 @router.get("/status")
-async def get_status(connection_id: str = ""):
+async def get_status(connection_id: str = "") -> object:
     """
     Health check and status for the IONOS DNS module.
     Tests the API connection.
@@ -16,6 +16,6 @@ async def get_status(connection_id: str = ""):
         zones = await _ionos_request("GET", "zones", connection_id=connection_id)
         zone_count = len(zones) if isinstance(zones, list) else 0
         return {"status": "ok", "message": f"Connected. {zone_count} zones found."}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         logger.warning("IONOS API error: %s", str(e))
         return {"status": "error", "message": str(e)}

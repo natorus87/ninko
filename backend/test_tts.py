@@ -66,17 +66,17 @@ def _create_mock_voices_dir(tmp_path: Path) -> Path:
 
 class TestVoiceManager(unittest.TestCase):
 
-    def setUp(self):
+    def setUp(self) -> object:
         self.tmp = tempfile.mkdtemp()
         self.voices_dir = _create_mock_voices_dir(Path(self.tmp))
 
-    def test_list_languages(self):
+    def test_list_languages(self) -> object:
         from core.tts.voice_manager import VoiceManager
         vm = VoiceManager(voices_dir=self.voices_dir)
         langs = vm.list_languages()
         self.assertIn("de", langs)
 
-    def test_list_voices(self):
+    def test_list_voices(self) -> object:
         from core.tts.voice_manager import VoiceManager
         vm = VoiceManager(voices_dir=self.voices_dir)
         voices = vm.list_voices("de")
@@ -84,31 +84,31 @@ class TestVoiceManager(unittest.TestCase):
         self.assertEqual(voices[0].name, "thorsten-medium")
         self.assertEqual(voices[0].lang, "de")
 
-    def test_get_voice_path_success(self):
+    def test_get_voice_path_success(self) -> object:
         from core.tts.voice_manager import VoiceManager
         vm = VoiceManager(voices_dir=self.voices_dir)
         path = vm.get_voice_path("de", "thorsten-medium")
         self.assertTrue(path.exists())
         self.assertTrue(str(path).endswith(".onnx"))
 
-    def test_get_voice_path_missing_lang(self):
+    def test_get_voice_path_missing_lang(self) -> object:
         from core.tts.voice_manager import VoiceManager
         vm = VoiceManager(voices_dir=self.voices_dir)
         with self.assertRaises(FileNotFoundError):
             vm.get_voice_path("en", "some-voice")
 
-    def test_get_voice_path_missing_voice(self):
+    def test_get_voice_path_missing_voice(self) -> object:
         from core.tts.voice_manager import VoiceManager
         vm = VoiceManager(voices_dir=self.voices_dir)
         with self.assertRaises(FileNotFoundError):
             vm.get_voice_path("de", "nonexistent-voice")
 
-    def test_empty_voices_dir(self):
+    def test_empty_voices_dir(self) -> object:
         from core.tts.voice_manager import VoiceManager
         vm = VoiceManager(voices_dir="/nonexistent/path")
         self.assertEqual(vm.list_languages(), [])
 
-    def test_no_config_json_skipped(self):
+    def test_no_config_json_skipped(self) -> object:
         """Stimmen ohne .onnx.json werden nicht gelistet."""
         from core.tts.voice_manager import VoiceManager
         # Erstelle .onnx ohne .onnx.json
@@ -126,13 +126,13 @@ class TestVoiceManager(unittest.TestCase):
 
 class TestPiperService(unittest.TestCase):
 
-    def test_binary_not_found_raises(self):
+    def test_binary_not_found_raises(self) -> object:
         """Wenn Piper-Binary nicht gefunden wird, muss PiperError geworfen werden."""
         from core.tts.piper_service import PiperError, PiperService
         with self.assertRaises(PiperError):
             PiperService(piper_binary="/nonexistent/piper")
 
-    def test_synthesize_success(self):
+    def test_synthesize_success(self) -> object:
         """Erfolgreiche Synthese: gemockter Subprocess, echte WAV-Ausgabe."""
         from core.tts.piper_service import PiperService
 
@@ -142,7 +142,7 @@ class TestPiperService(unittest.TestCase):
         with patch("core.tts.piper_service.shutil.which", return_value="/usr/local/bin/piper"):
             service = PiperService(piper_binary="piper")
 
-        async def run():
+        async def run() -> object:
             with tempfile.NamedTemporaryFile(suffix=".onnx", delete=False) as f:
                 model_path = Path(f.name)
                 f.write(b"mock model")
@@ -153,7 +153,7 @@ class TestPiperService(unittest.TestCase):
                 mock_proc.returncode = 0
                 mock_proc.communicate = AsyncMock(return_value=(b"", b""))
 
-                async def mock_exec(*args, **kwargs):
+                async def mock_exec(*args, **kwargs) -> object:
                     # Temp output file schreiben
                     output_file = next(
                         (args[i + 1] for i, a in enumerate(args) if a == "--output_file"),
@@ -173,27 +173,27 @@ class TestPiperService(unittest.TestCase):
 
         asyncio.run(run())
 
-    def test_synthesize_model_not_found(self):
+    def test_synthesize_model_not_found(self) -> object:
         """Fehler wenn Modell-Datei nicht existiert."""
         from core.tts.piper_service import PiperError, PiperService
 
         with patch("core.tts.piper_service.shutil.which", return_value="/usr/bin/piper"):
             service = PiperService(piper_binary="piper")
 
-        async def run():
+        async def run() -> object:
             with self.assertRaises(PiperError):
                 await service.synthesize("Test", Path("/nonexistent/model.onnx"))
 
         asyncio.run(run())
 
-    def test_synthesize_piper_error_exit(self):
+    def test_synthesize_piper_error_exit(self) -> object:
         """PiperError wenn Piper mit Fehler-Exit beendet."""
         from core.tts.piper_service import PiperError, PiperService
 
         with patch("core.tts.piper_service.shutil.which", return_value="/usr/bin/piper"):
             service = PiperService(piper_binary="piper")
 
-        async def run():
+        async def run() -> object:
             with tempfile.NamedTemporaryFile(suffix=".onnx", delete=False) as f:
                 model_path = Path(f.name)
             try:
@@ -214,17 +214,17 @@ class TestPiperService(unittest.TestCase):
 
 class TestAudioUtils(unittest.TestCase):
 
-    def _mock_ffmpeg(self, output_bytes: bytes):
+    def _mock_ffmpeg(self, output_bytes: bytes) -> object:
         """Gibt einen Mock-Kontext zurück, der ffmpeg simuliert."""
         mock_proc = AsyncMock()
         mock_proc.returncode = 0
 
-        async def _communicate():
+        async def _communicate() -> object:
             return b"", b""
 
         mock_proc.communicate = _communicate
 
-        async def mock_exec(*args, **kwargs):
+        async def mock_exec(*args, **kwargs) -> object:
             # Ausgabedatei schreiben (letztes Argument)
             out_path = args[-1]
             with open(out_path, "wb") as f:
@@ -233,12 +233,12 @@ class TestAudioUtils(unittest.TestCase):
 
         return patch("asyncio.create_subprocess_exec", side_effect=mock_exec)
 
-    def test_wav_to_ogg(self):
+    def test_wav_to_ogg(self) -> object:
         from core.tts.audio_utils import wav_to_ogg
         wav = _make_minimal_wav()
         fake_ogg = b"OggS\x00" + b"\x00" * 100
 
-        async def run():
+        async def run() -> object:
             with patch("core.tts.audio_utils.shutil.which", return_value="/usr/bin/ffmpeg"):
                 with self._mock_ffmpeg(fake_ogg):
                     result = await wav_to_ogg(wav)
@@ -246,12 +246,12 @@ class TestAudioUtils(unittest.TestCase):
 
         asyncio.run(run())
 
-    def test_wav_to_mp3(self):
+    def test_wav_to_mp3(self) -> object:
         from core.tts.audio_utils import wav_to_mp3
         wav = _make_minimal_wav()
         fake_mp3 = b"\xff\xfb" + b"\x00" * 100  # MP3-Magic-Bytes
 
-        async def run():
+        async def run() -> object:
             with patch("core.tts.audio_utils.shutil.which", return_value="/usr/bin/ffmpeg"):
                 with self._mock_ffmpeg(fake_mp3):
                     result = await wav_to_mp3(wav)
@@ -259,12 +259,12 @@ class TestAudioUtils(unittest.TestCase):
 
         asyncio.run(run())
 
-    def test_ogg_to_wav(self):
+    def test_ogg_to_wav(self) -> object:
         from core.tts.audio_utils import ogg_to_wav
         fake_ogg = b"OggS\x00" + b"\x00" * 50
         expected_wav = _make_minimal_wav(16000)
 
-        async def run():
+        async def run() -> object:
             with patch("core.tts.audio_utils.shutil.which", return_value="/usr/bin/ffmpeg"):
                 with self._mock_ffmpeg(expected_wav):
                     result = await ogg_to_wav(fake_ogg)
@@ -272,10 +272,10 @@ class TestAudioUtils(unittest.TestCase):
 
         asyncio.run(run())
 
-    def test_ffmpeg_not_found(self):
+    def test_ffmpeg_not_found(self) -> object:
         from core.tts.audio_utils import wav_to_ogg
 
-        async def run():
+        async def run() -> object:
             with patch("core.tts.audio_utils.shutil.which", return_value=None):
                 with self.assertRaises(RuntimeError):
                     await wav_to_ogg(b"data")
@@ -287,7 +287,7 @@ class TestAudioUtils(unittest.TestCase):
 
 class TestTelegramVoiceReply(unittest.IsolatedAsyncioTestCase):
 
-    async def _make_bot(self):
+    async def _make_bot(self) -> object:
         """Erstellt TelegramBot mit gemockter FastAPI-App."""
         app = MagicMock()
         app.state.orchestrator = AsyncMock()
@@ -297,7 +297,7 @@ class TestTelegramVoiceReply(unittest.IsolatedAsyncioTestCase):
         from modules.telegram.bot import TelegramBot
         return TelegramBot(app)
 
-    async def test_voice_message_sets_is_voice_flag(self):
+    async def test_voice_message_sets_is_voice_flag(self) -> object:
         """Eingehende Voice-Nachricht setzt is_voice=True."""
         bot = await self._make_bot()
 
@@ -336,7 +336,7 @@ class TestTelegramVoiceReply(unittest.IsolatedAsyncioTestCase):
                 # Transkription wurde aufgerufen
                 mock_trans.assert_called_once_with("ABC123", "test_token")
 
-    async def test_text_message_no_voice_reply(self):
+    async def test_text_message_no_voice_reply(self) -> object:
         """Textnachrichten lösen keinen Voice-Reply aus."""
         bot = await self._make_bot()
 
@@ -367,7 +367,7 @@ class TestTelegramVoiceReply(unittest.IsolatedAsyncioTestCase):
                 # Kein Voice-Reply bei Textnachricht
                 mock_voice_reply.assert_not_called()
 
-    async def test_send_voice_reply_tts_error_does_not_crash(self):
+    async def test_send_voice_reply_tts_error_does_not_crash(self) -> object:
         """TTS-Fehler beim Voice-Reply propagiert nicht nach oben."""
         bot = await self._make_bot()
 
@@ -380,7 +380,7 @@ class TestTelegramVoiceReply(unittest.IsolatedAsyncioTestCase):
 
 class TestTeamsVoiceReply(unittest.IsolatedAsyncioTestCase):
 
-    async def test_audio_attachment_sets_is_voice(self):
+    async def test_audio_attachment_sets_is_voice(self) -> object:
         """Audio-Anhang in Teams-Activity setzt is_voice=True."""
         from fastapi import FastAPI
         app = MagicMock(spec=FastAPI)
@@ -431,7 +431,7 @@ class TestTeamsVoiceReply(unittest.IsolatedAsyncioTestCase):
 
             mock_voice.assert_called_once()
 
-    async def test_send_teams_voice_reply_tts_error(self):
+    async def test_send_teams_voice_reply_tts_error(self) -> object:
         """TTS-Fehler beim Teams Voice-Reply propagiert nicht nach oben."""
         with patch("modules.teams.bot.synthesize_reply", side_effect=Exception("Piper fehlt")):
             from modules.teams.bot import _send_teams_voice_reply
@@ -443,7 +443,7 @@ class TestTeamsVoiceReply(unittest.IsolatedAsyncioTestCase):
 
 class TestTtsAvailability(unittest.TestCase):
 
-    def test_tts_disabled_returns_false(self):
+    def test_tts_disabled_returns_false(self) -> object:
         """is_tts_available() gibt False zurück wenn TTS_ENABLED=false."""
         with patch("core.tts.get_settings") as mock_settings:
             mock_cfg = MagicMock()
@@ -458,7 +458,7 @@ class TestTtsAvailability(unittest.TestCase):
             result = is_tts_available()
             self.assertFalse(result)
 
-    def test_tts_enabled_no_binary(self):
+    def test_tts_enabled_no_binary(self) -> object:
         """is_tts_available() gibt False zurück wenn Binary fehlt."""
         import core.tts as tts_module
         tts_module._service = None

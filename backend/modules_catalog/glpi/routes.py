@@ -23,13 +23,13 @@ router = APIRouter()
 
 
 @router.get("/stats")
-async def ticket_stats():
+async def ticket_stats() -> object:
     """Ticket statistics."""
     return await get_ticket_stats.ainvoke({})
 
 
 @router.get("/tickets")
-async def tickets(status: int = 0, priority: int = 0, keyword: str = "", limit: int = 10):
+async def tickets(status: int = 0, priority: int = 0, keyword: str = "", limit: int = 10) -> object:
     """Search tickets."""
     return await search_tickets.ainvoke({
         "status": status,
@@ -40,7 +40,7 @@ async def tickets(status: int = 0, priority: int = 0, keyword: str = "", limit: 
 
 
 @router.get("/tickets/{ticket_id}")
-async def ticket_detail(ticket_id: int):
+async def ticket_detail(ticket_id: int) -> object:
     """Ticket details."""
     return await get_ticket.ainvoke({"ticket_id": ticket_id})
 
@@ -64,7 +64,7 @@ async def create_ticket_api(
 
 
 @router.post("/tickets/{ticket_id}/close")
-async def close_ticket_api(ticket_id: int, solution: str):
+async def close_ticket_api(ticket_id: int, solution: str) -> object:
     """Close a ticket."""
     return await close_ticket_tool.ainvoke({
         "ticket_id": ticket_id,
@@ -73,7 +73,7 @@ async def close_ticket_api(ticket_id: int, solution: str):
 
 
 @router.post("/tickets/{ticket_id}/followup")
-async def add_followup_api(ticket_id: int, content: str, is_private: bool = False):
+async def add_followup_api(ticket_id: int, content: str, is_private: bool = False) -> object:
     """Add a follow-up."""
     return await add_followup_tool.ainvoke({
         "ticket_id": ticket_id,
@@ -83,6 +83,6 @@ async def add_followup_api(ticket_id: int, content: str, is_private: bool = Fals
 
 
 @router.get("/base-url")
-async def get_base_url():
+async def get_base_url() -> object:
     """GLPI base URL for direct links."""
     return {"base_url": os.environ.get("GLPI_BASE_URL", "")}

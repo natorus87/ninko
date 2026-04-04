@@ -29,7 +29,7 @@ class PiperService:
     Prüft beim Erstellen ob das Binary vorhanden ist.
     """
 
-    def __init__(self, piper_binary: str = "piper"):
+    def __init__(self, piper_binary: str = "piper") -> None:
         self.piper_binary = piper_binary
         self._check_binary()
 

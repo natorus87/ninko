@@ -68,7 +68,7 @@ async def _get_k8s_client(
     try:
         config_dict = yaml.safe_load(kubeconfig_str)
         config.load_kube_config_from_dict(config_dict)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         logger.error("Failed to parse kubeconfig: %s", e)
         raise ValueError(f"Invalid kubeconfig for connection '{conn.name}'. Please check the file.")
 
@@ -496,7 +496,7 @@ async def apply_manifest(yaml_content: str, namespace: str = "default", connecti
                 "status": "applied",
                 "resource_version": resp.metadata.resourceVersion,
             })
-        except Exception as e:
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
             results.append({
                 "kind": kind,
                 "name": name,
@@ -538,7 +538,7 @@ async def delete_resource(
             "namespace": namespace,
             "status": "deleted",
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return {
             "action": "delete",
             "kind": kind,
@@ -579,7 +579,7 @@ async def get_resource_yaml(
         obj_dict = obj.to_dict()
         obj_dict.get("metadata", {}).pop("managedFields", None)
         return _yaml.dump(obj_dict, default_flow_style=False, allow_unicode=True)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return f"Error: {e}"
 
 

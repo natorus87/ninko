@@ -22,7 +22,7 @@ async def check_teams_health(connection_id: str = "") -> dict:
             return {"status": "ok", "detail": "Successfully authenticated with Microsoft Bot Framework."}
         else:
             return {"status": "warning", "detail": "No valid token received or configured."}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": f"Authentication failed: {e}"}
 
 

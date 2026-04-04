@@ -55,14 +55,14 @@ class ClassifierPolicyRequest(BaseModel):
     policy: str
 
 
-def _get_safeguard(request: Request):
+def _get_safeguard(request: Request) -> object:
     sg = getattr(request.app.state, "safeguard", None)
     if sg is None:
         raise HTTPException(status_code=503, detail="Safeguard nicht initialisiert.")
     return sg
 
 
-def _get_profile_store(request: Request):
+def _get_profile_store(request: Request) -> object:
     sg = _get_safeguard(request)
     if sg.profile_store is None:
         raise HTTPException(status_code=503, detail="SafeguardProfileStore nicht verfügbar.")
@@ -90,7 +90,7 @@ async def _audit_admin_change(
             rationale=rationale[:300],
             profile_id=sg.get_active_profile_id(),
         )
-    except Exception:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError):
         pass
 
 

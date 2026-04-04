@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/nextcloud", tags=["nextcloud"])
 
 
 @router.get("/health")
-async def health_check():
+async def health_check() -> object:
     """Health check endpoint."""
     from .manifest import check_nextcloud_health
 
@@ -22,7 +22,7 @@ async def health_check():
 
 
 @router.get("/status")
-async def get_status(connection_id: str = ""):
+async def get_status(connection_id: str = "") -> object:
     """Get Nextcloud status for dashboard."""
     try:
         from .tools import _get_api_client, _ocs_request
@@ -43,5 +43,5 @@ async def get_status(connection_id: str = ""):
             "shares_count": len(share_list),
             "storage_used": used,
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"error": str(e)}

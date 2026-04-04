@@ -18,7 +18,7 @@ from .tools import (
 class FritzBoxAgent(BaseAgent):
     """FritzBox specialist managing networks, WLAN, smart home and diagnostics."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             name="fritzbox",
             system_prompt=_t(

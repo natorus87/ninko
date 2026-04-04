@@ -23,7 +23,7 @@ logger = logging.getLogger("ninko.core.tts")
 _service: object | None = None
 
 
-def _get_service():
+def _get_service() -> object:
     """Gibt den PiperService zurück (lazy init, cached)."""
     global _service
     if _service is None:

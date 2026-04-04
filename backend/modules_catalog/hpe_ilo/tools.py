@@ -125,7 +125,7 @@ async def get_ilo_info(connection_id: str = "") -> str:
             ja=f"iLO情報: {hp.get('ManagerType', '?')}, ファームウェア {hp.get('ManagerVersion', {}).get('Version', '?')}, ライセンス: {hp.get('License', '?')}",
             zh=f"iLO信息: {hp.get('ManagerType', '?')}, 固件 {hp.get('ManagerVersion', {}).get('Version', '?')}, 许可证: {hp.get('License', '?')}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("get_ilo_info failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -182,7 +182,7 @@ async def get_server_info(connection_id: str = "") -> str:
             ja=f"サーバー: {system.get('Model', '?')} ({system.get('Manufacturer', '?')}), S/N: {system.get('SerialNumber', '?')}, ステータス: {system.get('PowerState', '?')}, ヘルス: {hp.get('Health', '?')}",
             zh=f"服务器: {system.get('Model', '?')} 来自 {system.get('Manufacturer', '?')}, S/N: {system.get('SerialNumber', '?')}, 状态: {system.get('PowerState', '?')}, 健康状况: {hp.get('Health', '?')}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("get_server_info failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -254,7 +254,7 @@ async def get_server_thermal(connection_id: str = "") -> str:
                 lines.append(f"  {name}: {reading}°C ({status})")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("get_server_thermal failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -327,7 +327,7 @@ async def get_server_power(connection_id: str = "") -> str:
             lines.append(line)
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("get_server_power failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -390,7 +390,7 @@ async def get_ilo_nics(connection_id: str = "") -> str:
             lines.append(f"  {name}: {ip or 'DHCP'} ({mac}) - {status}")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("get_ilo_nics failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -452,7 +452,7 @@ async def get_ilo_eventlog(connection_id: str = "") -> str:
             lines.append(f"  [{severity}] {created}: {msg[:80]}")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("get_ilo_eventlog failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -515,7 +515,7 @@ async def server_power_on(connection_id: str = "") -> str:
             ja="✅ サーバーをオンにしています",
             zh="✅ 服务器正在开机",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("server_power_on failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -573,7 +573,7 @@ async def server_power_off(connection_id: str = "") -> str:
             ja="✅ サーバーをオフにしています",
             zh="✅ 服务器正在关机",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("server_power_off failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -615,7 +615,7 @@ async def server_reset_ilo(connection_id: str = "") -> str:
             ja="✅ iLOをリセットしています",
             zh="✅ iLO正在重置",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("server_reset_ilo failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -678,7 +678,7 @@ async def server_press_boot_button(
             ja=f"✅ bootボタン押しました: {boot_target}",
             zh=f"✅ 已按下启动按钮: {boot_target}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("server_press_boot_button failed: %s", e)
         return _t(
             de=f"Fehler: {e}",

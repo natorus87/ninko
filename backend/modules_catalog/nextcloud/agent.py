@@ -31,7 +31,7 @@ Capabilities:
 When asked to perform an action, always confirm first unless the user explicitly confirms.
 """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
 

@@ -46,7 +46,7 @@ class ConnectionManager:
         for ws in self._connections:
             try:
                 await ws.send_json(message)
-            except Exception:
+            except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError, WebSocketDisconnect):
                 disconnected.append(ws)
 
         for ws in disconnected:
@@ -104,7 +104,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket)
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError, WebSocketDisconnect) as exc:
         logger.error("WebSocket Fehler: %s", exc)
         ws_manager.disconnect(websocket)
     finally:
@@ -123,7 +123,7 @@ async def _listen_redis_events(
             try:
                 data = json.loads(message["data"])
                 await websocket.send_json(data)
-            except (json.JSONDecodeError, Exception) as exc:
+            except (json.JSONDecodeError, TypeError, ValueError, RuntimeError) as exc:
                 logger.debug("Redis-Event Parse-Fehler: %s", exc)
 
         await asyncio.sleep(0.1)
@@ -144,5 +144,5 @@ async def _listen_websocket_messages(websocket: WebSocket) -> None:
                 )
         except WebSocketDisconnect:
             raise
-        except Exception:
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError, WebSocketDisconnect):
             await asyncio.sleep(1)

@@ -60,7 +60,7 @@ async def _get_pihole_config(connection_id: str = "") -> dict:
                 overrides = json.loads(raw)
                 conn_data = overrides.get("pihole", {}).get("connection", {})
                 fallback_url = conn_data.get("PIHOLE_URL", "").rstrip("/")
-        except Exception:
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError):
             pass
 
     if fallback_url:
@@ -118,7 +118,7 @@ async def _authenticate(base_url: str, password: str) -> str:
                         )
                         _session_cache.pop(cache_key, None)
                         cached = None
-                    except Exception:
+                    except (RuntimeError, ValueError, TypeError, KeyError, OSError):
                         pass
 
                 await asyncio.sleep(2 * (attempt + 1))
@@ -539,12 +539,12 @@ async def get_pihole_system(connection_id: str = "") -> dict:
     # System
     try:
         system_data = await _pihole_request("GET", "/info/system", connection_id=connection_id)
-    except Exception:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError):
         system_data = {}
     # Gravity
     try:
         gravity_data = await _pihole_request("GET", "/info/gravity", connection_id=connection_id)
-    except Exception:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError):
         gravity_data = {}
 
     return {

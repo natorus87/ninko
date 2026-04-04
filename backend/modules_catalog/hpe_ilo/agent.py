@@ -36,7 +36,7 @@ When asked to perform an action, always confirm first unless the user explicitly
 When there is uncertainty, ask the user to confirm the action before proceeding.
 """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
 

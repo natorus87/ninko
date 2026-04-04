@@ -74,7 +74,7 @@ class ProfileUpdateRequest(BaseModel):
         return v
 
 
-def _get_profile_store(request: Request):
+def _get_profile_store(request: Request) -> object:
     sg = getattr(request.app.state, "safeguard", None)
     if sg is None:
         raise HTTPException(status_code=503, detail="Safeguard nicht initialisiert.")

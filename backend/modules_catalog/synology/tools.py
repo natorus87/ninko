@@ -229,7 +229,7 @@ async def get_synology_system_info(connection_id: str = "") -> dict:
                     },
                 )
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("get_synology_system_info failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -299,7 +299,7 @@ async def get_synology_storage(connection_id: str = "") -> dict:
                     },
                 )
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("get_synology_storage failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -359,7 +359,7 @@ async def get_synology_packages(connection_id: str = "") -> dict:
                     },
                 )
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("get_synology_packages failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -419,7 +419,7 @@ async def get_synology_services(connection_id: str = "") -> dict:
                     },
                 )
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("get_synology_services failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -480,7 +480,7 @@ async def restart_synology_service(service_name: str, connection_id: str = "") -
                     },
                 )
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("restart_synology_service failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -540,7 +540,7 @@ async def get_synology_tasks(connection_id: str = "") -> dict:
                     },
                 )
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("get_synology_tasks failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -603,7 +603,7 @@ async def check_synology_updates(connection_id: str = "") -> dict:
                     },
                 )
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("check_synology_updates failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -673,7 +673,7 @@ async def install_synology_update(
                     },
                 )
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("install_synology_update failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -743,7 +743,7 @@ async def install_synology_package(
                     },
                 )
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("install_synology_package failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -813,7 +813,7 @@ async def uninstall_synology_package(
                     },
                 )
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("uninstall_synology_package failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -873,7 +873,7 @@ async def get_synology_network_info(connection_id: str = "") -> dict:
                     },
                 )
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("get_synology_network_info failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -933,7 +933,7 @@ async def get_synology_users(connection_id: str = "") -> dict:
                     },
                 )
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("get_synology_users failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -993,7 +993,7 @@ async def shutdown_synologyNAS(confirm: bool = False, connection_id: str = "") -
             finally:
                 pass
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("shutdown_synologyNAS failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -1052,7 +1052,7 @@ async def reboot_synologyNAS(confirm: bool = False, connection_id: str = "") -> 
             finally:
                 pass
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("reboot_synologyNAS failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -1122,7 +1122,7 @@ async def create_synology_user(
                     },
                 )
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("create_synology_user failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -1191,7 +1191,7 @@ async def delete_synology_user(
                     },
                 )
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("delete_synology_user failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -1255,7 +1255,7 @@ async def change_synology_user_password(
                     },
                 )
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("change_synology_user_password failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -1315,7 +1315,7 @@ async def get_synology_groups(connection_id: str = "") -> dict:
                     },
                 )
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("get_synology_groups failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -1380,7 +1380,7 @@ async def create_synology_group(
                     },
                 )
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("create_synology_group failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -1445,7 +1445,7 @@ async def add_user_to_group(
                     },
                 )
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("add_user_to_group failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -1509,6 +1509,6 @@ async def remove_user_from_group(
                     },
                 )
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("remove_user_from_group failed: %s", e)
         return {"error": "Request failed. Check server logs."}

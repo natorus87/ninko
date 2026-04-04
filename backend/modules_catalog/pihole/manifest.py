@@ -27,7 +27,7 @@ async def check_pihole_health() -> dict:
             "status": "ok",
             "detail": f"Pi-hole {status}, {blocked:,} domains blocked",
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": f"Pi-hole unreachable: {e}"}
 
 

@@ -32,11 +32,11 @@ async def get_homeassistant_status(connection_id: str = "") -> Dict[str, Any]:
                 "version": data.get("version"),
                 "location_name": data.get("location_name")
             }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/action")
-async def trigger_action(req: ActionRequest):
+async def trigger_action(req: ActionRequest) -> object:
     """
     REST endpoint for frontend buttons.
     """
@@ -55,7 +55,7 @@ async def trigger_action(req: ActionRequest):
                 # Filter logic for lights
                 lights = [item for item in data if item.get("entity_id", "").startswith("light.")]
                 return {"message": f"Data fetched successfully. {len(lights)} lights found.", "lights": lights[:10]}
-        except Exception as e:
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
              raise HTTPException(status_code=500, detail=str(e))
 
     return {"message": "Unknown action"}

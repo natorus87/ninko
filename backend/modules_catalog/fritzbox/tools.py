@@ -47,10 +47,10 @@ async def _get_fc(connection_id: str = "") -> Any:
         user = os.getenv("FRITZBOX_USER", "")
         pwd = os.getenv("FRITZBOX_PASSWORD", "")
 
-    def _create():
+    def _create() -> object:
         try:
             return FritzConnection(address=host, user=user, password=pwd, timeout=5)
-        except Exception as e:
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError, ValidationError) as e:
             raise ValueError(
                 _t(
                     de=f"FritzBox nicht erreichbar ({host}): {e}",
@@ -76,7 +76,7 @@ async def _get_fc(connection_id: str = "") -> Any:
 async def get_fritz_devices(connection_id: str = "") -> List[Dict]:
     """Retrieve the list of all known devices (host, IP, MAC, online status)."""
 
-    def _fetch(fc):
+    def _fetch(fc) -> object:
         from fritzconnection.lib.fritzhosts import FritzHosts
 
         fh = FritzHosts(fc)
@@ -97,7 +97,7 @@ async def get_fritz_devices(connection_id: str = "") -> List[Dict]:
     try:
         fc = await _get_fc(connection_id)
         return await asyncio.to_thread(_fetch, fc)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ValidationError) as e:
         logger.error("FritzBox (get_fritz_devices) error: %s", e)
         return [{"error": str(e)}]
 
@@ -106,7 +106,7 @@ async def get_fritz_devices(connection_id: str = "") -> List[Dict]:
 async def get_fritz_wan_status(connection_id: str = "") -> Dict:
     """Check WAN (internet) connection status and public IP."""
 
-    def _fetch(fc):
+    def _fetch(fc) -> object:
         from fritzconnection.lib.fritzstatus import FritzStatus
 
         fs = FritzStatus(fc)
@@ -119,7 +119,7 @@ async def get_fritz_wan_status(connection_id: str = "") -> Dict:
     try:
         fc = await _get_fc(connection_id)
         return await asyncio.to_thread(_fetch, fc)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ValidationError) as e:
         logger.error("FritzBox (get_fritz_wan_status) error: %s", e)
         return {"error": str(e)}
 
@@ -128,7 +128,7 @@ async def get_fritz_wan_status(connection_id: str = "") -> Dict:
 async def get_fritz_bandwidth(connection_id: str = "") -> Dict:
     """Determine current bandwidth usage in bit/s."""
 
-    def _fetch(fc):
+    def _fetch(fc) -> object:
         # Try to get transmission rate first, if available on newer fritzconnection
         # WANCommonInterfaceConfig1 / GetAddonInfos is often deprecated or blocked
         try:
@@ -140,7 +140,7 @@ async def get_fritz_bandwidth(connection_id: str = "") -> Dict:
                     ds_current=fs.transmission_rate[1] if fs.transmission_rate else 0,
                     us_current=fs.transmission_rate[0] if fs.transmission_rate else 0,
                 ).model_dump()
-        except:
+        except (ImportError, AttributeError, RuntimeError, ValueError, TypeError, OSError):
             pass
 
         try:
@@ -149,13 +149,13 @@ async def get_fritz_bandwidth(connection_id: str = "") -> Dict:
                 ds_current=result.get("NewByteReceiveRate", 0) * 8,  # byte/s to bit/s
                 us_current=result.get("NewByteSendRate", 0) * 8,
             ).model_dump()
-        except Exception:
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError, ValidationError):
             return FritzBandwidth(ds_current=0, us_current=0).model_dump()
 
     try:
         fc = await _get_fc(connection_id)
         return await asyncio.to_thread(_fetch, fc)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ValidationError) as e:
         logger.error("FritzBox (get_fritz_bandwidth) error: %s", e)
         return {"error": str(e)}
 
@@ -167,7 +167,7 @@ async def get_fritz_bandwidth(connection_id: str = "") -> Dict:
 async def get_fritz_wlan_status(connection_id: str = "") -> List[Dict]:
     """Determine status of all WLAN networks (2.4GHz, 5GHz, guest)."""
 
-    def _fetch(fc):
+    def _fetch(fc) -> object:
         from fritzconnection.lib.fritzwlan import FritzWLAN
 
         networks = []
@@ -181,14 +181,14 @@ async def get_fritz_wlan_status(connection_id: str = "") -> List[Dict]:
                         enabled=fw.is_enabled, ssid=ssid, channel=fw.channel
                     ).model_dump()
                 )
-            except Exception:
+            except (RuntimeError, ValueError, TypeError, KeyError, OSError, ValidationError):
                 pass  # Service 3 (guest) may not be supported by the model
         return networks
 
     try:
         fc = await _get_fc(connection_id)
         return await asyncio.to_thread(_fetch, fc)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ValidationError) as e:
         logger.error("FritzBox (get_fritz_wlan_status) error: %s", e)
         return [{"error": str(e)}]
 
@@ -199,7 +199,7 @@ async def set_fritz_wlan_state(
 ) -> str:
     """Enable or disable WLAN. service=1 (2.4GHz), service=2 (5GHz), service=3 (guest)."""
 
-    def _exec(fc):
+    def _exec(fc) -> object:
         fc.call_action(f"WLANConfiguration:{service}", "SetEnable", Enable=int(state))
         return _t(
             de=f"WLAN Service {service} wurde {'aktiviert' if state else 'deaktiviert'}.",
@@ -217,7 +217,7 @@ async def set_fritz_wlan_state(
     try:
         fc = await _get_fc(connection_id)
         return await asyncio.to_thread(_exec, fc)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ValidationError) as e:
         logger.error("FritzBox (set_fritz_wlan_state) error: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -273,7 +273,7 @@ async def _get_fh(connection_id: str = "") -> Any:
         user = os.getenv("FRITZBOX_USER", "")
         pwd = os.getenv("FRITZBOX_PASSWORD", "")
 
-    def _init():
+    def _init() -> object:
         fh = Fritzhome(host, user, pwd)
         fh.login()
         return fh
@@ -285,7 +285,7 @@ async def _get_fh(connection_id: str = "") -> Any:
 async def get_fritz_smarthome_devices(connection_id: str = "") -> List[Dict]:
     """List all known smart home devices (DECT switches, thermostats)."""
 
-    def _fetch(fh):
+    def _fetch(fh) -> object:
         devs = fh.get_devices()
         results = []
         for d in devs:
@@ -312,7 +312,7 @@ async def get_fritz_smarthome_devices(connection_id: str = "") -> List[Dict]:
     try:
         fh = await _get_fh(connection_id)
         return await asyncio.to_thread(_fetch, fh)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ValidationError) as e:
         logger.error("FritzBox (get_fritz_smarthome_devices) error: %s", e)
         return [{"error": str(e)}]
 
@@ -323,7 +323,7 @@ async def set_fritz_smarthome_switch(
 ) -> str:
     """Switch a smart home device on or off by its AIN."""
 
-    def _exec(fh):
+    def _exec(fh) -> object:
         dev = fh.get_device_by_ain(ain)
         if state:
             dev.set_switch_state_on()
@@ -346,7 +346,7 @@ async def set_fritz_smarthome_switch(
     try:
         fh = await _get_fh(connection_id)
         return await asyncio.to_thread(_exec, fh)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ValidationError) as e:
         logger.error("FritzBox (set_fritz_smarthome_switch) error: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -368,7 +368,7 @@ async def set_fritz_smarthome_temperature(
 ) -> str:
     """Set the target temperature (in °C) of a radiator controller by its AIN."""
 
-    def _exec(fh):
+    def _exec(fh) -> object:
         dev = fh.get_device_by_ain(ain)
         dev.set_target_temperature(temperature)
         fh.logout()
@@ -388,7 +388,7 @@ async def set_fritz_smarthome_temperature(
     try:
         fh = await _get_fh(connection_id)
         return await asyncio.to_thread(_exec, fh)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ValidationError) as e:
         logger.error("FritzBox (set_fritz_smarthome_temperature) error: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -411,7 +411,7 @@ async def set_fritz_smarthome_temperature(
 async def get_fritz_call_list(connection_id: str = "") -> List[Dict]:
     """Retrieve the FritzBox call log."""
 
-    def _fetch(fc):
+    def _fetch(fc) -> object:
         from fritzconnection.lib.fritzcall import FritzCall
 
         fcall = FritzCall(fc)
@@ -442,7 +442,7 @@ async def get_fritz_call_list(connection_id: str = "") -> List[Dict]:
     try:
         fc = await _get_fc(connection_id)
         return await asyncio.to_thread(_fetch, fc)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ValidationError) as e:
         logger.error("FritzBox (get_fritz_call_list) error: %s", e)
         return [{"error": str(e)}]
 
@@ -451,7 +451,7 @@ async def get_fritz_call_list(connection_id: str = "") -> List[Dict]:
 async def get_fritz_system_info(connection_id: str = "") -> Dict:
     """Retrieve the FritzBox model, firmware version and uptime."""
 
-    def _fetch(fc):
+    def _fetch(fc) -> object:
         dev_info = fc.call_action("DeviceInfo1", "GetInfo")
         # Extract Uptime from GetInfo if possible, else fall back to SystemTime
         up_info = fc.call_action(
@@ -468,7 +468,7 @@ async def get_fritz_system_info(connection_id: str = "") -> Dict:
     try:
         fc = await _get_fc(connection_id)
         return await asyncio.to_thread(_fetch, fc)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ValidationError) as e:
         logger.error("FritzBox (get_fritz_system_info) error: %s", e)
         return {"error": str(e)}
 
@@ -477,7 +477,7 @@ async def get_fritz_system_info(connection_id: str = "") -> Dict:
 async def reboot_fritzbox(connection_id: str = "") -> str:
     """Trigger a complete reboot of the FritzBox."""
 
-    def _exec(fc):
+    def _exec(fc) -> object:
         fc.call_action("DeviceConfig1", "Reboot")
         return _t(
             de="FritzBox Neustart initiiert. Router ist für ca. 3 Minuten offline.",
@@ -495,7 +495,7 @@ async def reboot_fritzbox(connection_id: str = "") -> str:
     try:
         fc = await _get_fc(connection_id)
         return await asyncio.to_thread(_exec, fc)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ValidationError) as e:
         logger.error("FritzBox (reboot_fritzbox) error: %s", e)
         return _t(
             de=f"Fehler beim Neustart: {e}",

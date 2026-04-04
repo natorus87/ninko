@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/microsoft_intune", tags=["microsoft_intune"])
 
 
 @router.get("/health")
-async def health_check():
+async def health_check() -> object:
     """Health check endpoint."""
     from .manifest import check_microsoft_intune_health
 
@@ -22,7 +22,7 @@ async def health_check():
 
 
 @router.get("/status")
-async def get_status(connection_id: str = ""):
+async def get_status(connection_id: str = "") -> object:
     """Get Intune status for dashboard."""
     try:
         from .tools import _get_token, _graph_request
@@ -43,5 +43,5 @@ async def get_status(connection_id: str = ""):
             "policies_count": len(policies.get("value", [])),
             "apps_count": len(apps.get("value", [])),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"error": str(e)}

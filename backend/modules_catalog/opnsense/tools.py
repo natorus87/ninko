@@ -144,7 +144,7 @@ async def get_opnsense_system_status(connection_id: str = "") -> Dict:
             "disk": disk_pct,
             "host": host,
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("Failed to retrieve OPNsense system status: %s", e)
         return {"error": str(e)}
 
@@ -177,7 +177,7 @@ async def get_opnsense_interfaces(connection_id: str = "") -> List[Dict]:
             }
             for iface in interfaces
         ]
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("Failed to retrieve OPNsense interfaces: %s", e)
         return [{"error": str(e)}]
 
@@ -202,7 +202,7 @@ async def get_opnsense_gateways(connection_id: str = "") -> List[Dict]:
             }
             for gw in gateways
         ]
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("Failed to retrieve OPNsense gateways: %s", e)
         return [{"error": str(e)}]
 
@@ -240,7 +240,7 @@ async def get_opnsense_firewall_rules(
             }
             for r in rules[:50]
         ]
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("Failed to retrieve OPNsense firewall rules: %s", e)
         return [{"error": str(e)}]
 
@@ -272,7 +272,7 @@ async def get_opnsense_nat_rules(connection_id: str = "") -> List[Dict]:
             }
             for r in rules[:50]
         ]
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("Failed to retrieve OPNsense NAT rules: %s", e)
         return [{"error": str(e)}]
 
@@ -296,7 +296,7 @@ async def get_opnsense_services(connection_id: str = "") -> List[Dict]:
             }
             for s in services
         ]
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("Failed to retrieve OPNsense services: %s", e)
         return [{"error": str(e)}]
 
@@ -324,7 +324,7 @@ async def get_opnsense_dhcp_leases(connection_id: str = "") -> List[Dict]:
             }
             for lease in leases
         ]
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("Failed to retrieve OPNsense DHCP leases: %s", e)
         return [{"error": str(e)}]
 
@@ -386,7 +386,7 @@ async def create_opnsense_firewall_rule(
             ja=f"ルール作成エラー: {result}",
             zh=f"创建规则错误: {result}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("Failed to create OPNsense firewall rule: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -436,7 +436,7 @@ async def delete_opnsense_firewall_rule(rule_uuid: str, connection_id: str = "")
             ja=f"ルール削除エラー: {result}",
             zh=f"删除规则错误: {result}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("Failed to delete OPNsense firewall rule: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -511,7 +511,7 @@ async def create_opnsense_nat_rule(
             ja=f"NATルール作成エラー: {result}",
             zh=f"创建NAT规则错误: {result}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("Failed to create OPNsense NAT rule: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -561,7 +561,7 @@ async def delete_opnsense_nat_rule(rule_uuid: str, connection_id: str = "") -> s
             ja=f"NATルール削除エラー: {result}",
             zh=f"删除NAT规则错误: {result}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("Failed to delete OPNsense NAT rule: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -613,7 +613,7 @@ async def restart_opnsense_service(service_name: str, connection_id: str = "") -
             ja=f"再起動に失敗しました: {result}",
             zh=f"重启失败: {result}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("Failed to restart OPNsense service: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -654,6 +654,6 @@ async def get_opnsense_logs(lines: int = 50, connection_id: str = "") -> List[Di
             }
             for e in entries[:lines]
         ]
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("Failed to retrieve OPNsense logs: %s", e)
         return [{"error": str(e)}]

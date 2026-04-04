@@ -8,7 +8,6 @@ from __future__ import annotations
 import asyncio
 import json as _json
 import logging
-import os
 import re
 from typing import Any, Sequence, TYPE_CHECKING
 
@@ -491,34 +490,35 @@ def _get_agent_timeout_seconds() -> int:
 
 
 def _get_jit_threshold() -> int:
-    """JIT-Schwelle aus Env laden (Fallback auf Default)."""
+    """JIT-Schwelle aus zentraler Config laden (Fallback auf Default)."""
     try:
-        value = int(os.getenv("NINKO_AGENT_JIT_THRESHOLD", str(_DEFAULT_JIT_THRESHOLD)))
+        from core.config import get_settings
+
+        value = int(get_settings().AGENT_JIT_THRESHOLD)
         return max(1, value)
-    except ValueError:
+    except (ImportError, AttributeError, TypeError, ValueError):
         return _DEFAULT_JIT_THRESHOLD
 
 
 def _get_jit_max_tools() -> int:
-    """Maximale Anzahl JIT-Tools aus Env laden (Fallback auf Default)."""
+    """Maximale Anzahl JIT-Tools aus zentraler Config laden (Fallback auf Default)."""
     try:
-        value = int(os.getenv("NINKO_AGENT_JIT_MAX_TOOLS", str(_DEFAULT_JIT_MAX_TOOLS)))
+        from core.config import get_settings
+
+        value = int(get_settings().AGENT_JIT_MAX_TOOLS)
         return max(1, value)
-    except ValueError:
+    except (ImportError, AttributeError, TypeError, ValueError):
         return _DEFAULT_JIT_MAX_TOOLS
 
 
 def _get_memorize_cooldown_secs() -> float:
-    """Auto-Memorize-Cooldown aus Env laden (Fallback auf Default)."""
+    """Auto-Memorize-Cooldown aus zentraler Config laden (Fallback auf Default)."""
     try:
-        value = float(
-            os.getenv(
-                "NINKO_AGENT_MEMORIZE_COOLDOWN_SECS",
-                str(_DEFAULT_MEMORIZE_COOLDOWN_SECS),
-            )
-        )
+        from core.config import get_settings
+
+        value = float(get_settings().AGENT_MEMORIZE_COOLDOWN_SECS)
         return max(0.0, value)
-    except ValueError:
+    except (ImportError, AttributeError, TypeError, ValueError):
         return _DEFAULT_MEMORIZE_COOLDOWN_SECS
 
 

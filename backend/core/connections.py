@@ -50,7 +50,7 @@ class ConnectionManager:
         for d in data_list:
             try:
                 connections.append(ConnectionRead(**d))
-            except Exception as e:
+            except (RuntimeError, ValueError, TypeError, KeyError) as e:
                 logger.error("Fehler beim Parsen von Connection %s: %s", d.get("id"), e)
                 
         # Sortiere so, dass default ganz oben steht

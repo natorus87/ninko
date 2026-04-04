@@ -78,7 +78,7 @@ async def get_agent(agent_id: str) -> dict:
         soul = get_soul_manager().get_soul(agent.get("name", ""))
         if soul:
             agent["soul_md"] = soul
-    except Exception:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError):
         pass
 
     return agent
@@ -125,7 +125,7 @@ async def delete_agent(agent_id: str) -> dict:
         agent_name = deleted_agent.get("name", "")
         if agent_name:
             await get_soul_manager().delete_soul(agent_name)
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as exc:
         logger.warning("Soul-Cleanup für Agent '%s' fehlgeschlagen: %s", agent_id, exc)
 
     logger.info("Agent gelöscht: %s", agent_id)
@@ -163,7 +163,7 @@ async def generate_agent_spec(body: AgentGenerateRequest) -> dict:
                 if m.enabled_by_default
             ]
             module_context = ", ".join(all_modules[:12]) if all_modules else "kubernetes, linux_server, docker, pihole, homeassistant"
-        except Exception:
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError):
             module_context = "kubernetes, linux_server, docker, pihole, homeassistant, opnsense, glpi, telegram"
 
         allowed_hint = ""
@@ -217,7 +217,7 @@ Antworte AUSSCHLIESSLICH mit einem JSON-Objekt ohne Markdown-Umrahmung:
             "suggested_modules": spec.get("suggested_modules", []),
         }
 
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as exc:
         logger.warning("Agent-Generierung fehlgeschlagen: %s", exc)
         raise HTTPException(status_code=500, detail=f"Generierung fehlgeschlagen: {exc}")
 

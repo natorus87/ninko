@@ -16,7 +16,7 @@ async def check_linux_server_health() -> dict:
     """Health check: verify an SSH connection is configured."""
     try:
         return {"status": "ok", "detail": "Linux Server Modul bereit (SSH)"}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": str(e)}
 
 

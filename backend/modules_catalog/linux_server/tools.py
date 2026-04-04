@@ -164,11 +164,11 @@ async def _run_ssh_command(
         try:
             pkey = paramiko.RSAKey.from_private_key(io.StringIO(cfg["ssh_key"]))
             connect_kwargs["pkey"] = pkey
-        except Exception:
+        except (paramiko.SSHException, ValueError, TypeError):
             try:
                 pkey = paramiko.Ed25519Key.from_private_key(io.StringIO(cfg["ssh_key"]))
                 connect_kwargs["pkey"] = pkey
-            except Exception as e:
+            except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as e:
                 logger.warning("Failed to load SSH key: %s", e)
                 if cfg["password"]:
                     connect_kwargs["password"] = cfg["password"]
@@ -247,7 +247,7 @@ async def run_command(cmd: str, connection_id: str = "") -> dict:
             )
         result["output"] = _truncate_output(result["output"])
         return result
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as e:
         return {"exit_code": -1, "output": "", "error": str(e), "host": ""}
 
 
@@ -280,7 +280,7 @@ async def get_system_info(connection_id: str = "") -> dict:
             results[key] = r["output"] if r["exit_code"] == 0 else "N/A"
 
         return {"host": results.get("hostname", ""), **results}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as e:
         return {"error": str(e)}
 
 
@@ -293,7 +293,7 @@ async def get_disk_usage(connection_id: str = "") -> str:
             connection_id,
         )
         return _truncate_output(result["output"])
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as e:
         return _error_message(e)
 
 
@@ -311,7 +311,7 @@ async def get_top_processes(
         cmd = f"ps aux --sort={sort_flag} | head -{count + 1}"
         result = await _run_ssh_command(cmd, connection_id)
         return _truncate_output(result["output"])
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as e:
         return _error_message(e)
 
 
@@ -337,7 +337,7 @@ async def list_services(status_filter: str = "all", connection_id: str = "") -> 
         cmd = f"systemctl list-units --type=service --no-pager --no-legend {flag} | head -50"
         result = await _run_ssh_command(cmd, connection_id)
         return _truncate_output(result["output"], max_lines=50)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as e:
         return _error_message(e)
 
 
@@ -367,7 +367,7 @@ async def service_action(service: str, action: str, connection_id: str = "") -> 
             "output": _truncate_output(result["output"] or result["error"]),
             "success": result["exit_code"] == 0,
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as e:
         logger.error("service_action failed: %s", e)
         return {"service": service, "action": action, "error": str(e), "success": False}
 
@@ -391,7 +391,7 @@ async def get_journal(
         cmd = f"journalctl {unit_flag} --no-pager -n {lines} --output=short-iso"
         result = await _run_ssh_command(cmd, connection_id)
         return _truncate_output(result["output"], max_lines=lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as e:
         return _error_message(e)
 
 
@@ -410,7 +410,7 @@ async def get_logfile(path: str, lines: int = 50, connection_id: str = "") -> st
                 en=f"Error: File '{path}' is not readable or does not exist.",
             )
         return _truncate_output(result["output"], max_lines=lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as e:
         return _error_message(e)
 
 
@@ -432,7 +432,7 @@ async def apt_update(connection_id: str = "") -> dict:
             "output": _truncate_output(result["output"], max_lines=30),
             "success": result["exit_code"] == 0,
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as e:
         return {"error": str(e), "success": False}
 
 
@@ -454,7 +454,7 @@ async def apt_upgrade(packages: str = "", connection_id: str = "") -> dict:
             "output": _truncate_output(result["output"], max_lines=30),
             "success": result["exit_code"] == 0,
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as e:
         return {"error": str(e), "success": False}
 
 
@@ -475,7 +475,7 @@ async def apt_install(packages: str, connection_id: str = "") -> dict:
             "output": _truncate_output(result["output"], max_lines=30),
             "success": result["exit_code"] == 0,
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as e:
         return {"packages": packages, "error": str(e), "success": False}
 
 
@@ -507,7 +507,7 @@ async def read_file(path: str, max_lines: int = 200, connection_id: str = "") ->
                 zh=f"错误：文件 '{path}' 不可读或不存在。",
             )
         return _truncate_output(result["output"], max_lines=max_lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as e:
         return _error_message(e)
 
 
@@ -534,7 +534,7 @@ async def list_directory(path: str = "/var/log", connection_id: str = "") -> str
                 zh=f"错误：文件 '{path}' 不可读或不存在。",
             )
         return _truncate_output(result["output"])
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as e:
         return _error_message(e)
 
 
@@ -550,7 +550,7 @@ async def get_network_info(connection_id: str = "") -> str:
         cmd = "ip -4 addr show | grep inet; echo '---'; ss -tlnp 2>/dev/null | head -20; echo '---'; cat /etc/resolv.conf | grep nameserver"
         result = await _run_ssh_command(cmd, connection_id)
         return _truncate_output(result["output"])
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as e:
         return _error_message(e)
 
 
@@ -565,7 +565,7 @@ async def check_port(host: str, port: int, connection_id: str = "") -> dict:
             "port": port,
             "status": "open" if "OPEN" in result["output"] else "closed",
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as e:
         return {"host": host, "port": port, "error": str(e)}
 
 
@@ -581,7 +581,7 @@ async def list_users(connection_id: str = "") -> str:
         cmd = "grep -v '/nologin\\|/false' /etc/passwd | cut -d: -f1,3,6,7 | column -t -s:"
         result = await _run_ssh_command(cmd, connection_id)
         return _truncate_output(result["output"])
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as e:
         return _error_message(e)
 
 
@@ -592,7 +592,7 @@ async def check_last_logins(count: int = 10, connection_id: str = "") -> str:
         cmd = f"last -n {count} --time-format iso 2>/dev/null || last -n {count}"
         result = await _run_ssh_command(cmd, connection_id)
         return _truncate_output(result["output"], max_lines=count)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as e:
         return _error_message(e)
 
 
@@ -627,7 +627,7 @@ async def confirm_reboot(connection_id: str = "") -> dict:
                 en="Reboot initiated.",
             ),
         }
-    except Exception:
+    except (OSError, RuntimeError, ValueError, asyncio.TimeoutError):
         return {
             "action": "reboot",
             "status": "success",

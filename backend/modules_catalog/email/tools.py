@@ -142,13 +142,13 @@ async def check_connection(connection_id: str) -> dict:
     try:
         ctx = await _get_auth_context(connection_id)
 
-        def _test_imap():
+        def _test_imap() -> object:
             mail = _create_imap_connection(ctx)
             mail.logout()
 
         await asyncio.to_thread(_test_imap)
 
-        def _test_smtp():
+        def _test_smtp() -> object:
             if ctx["smtp_port"] == 465:
                 server = smtplib.SMTP_SSL(ctx["smtp_server"], ctx["smtp_port"])
             else:
@@ -165,7 +165,7 @@ async def check_connection(connection_id: str) -> dict:
         await asyncio.to_thread(_test_smtp)
 
         return {"status": "ok", "message": "IMAP & SMTP connected successfully."}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         logger.error("Email connection check failed: %s", e, exc_info=True)
         return {"status": "error", "message": str(e)}
 
@@ -278,7 +278,7 @@ async def send_email(
         else:
             msg.set_content(body)
 
-    def _send():
+    def _send() -> object:
         if ctx["smtp_port"] == 465:
             server = smtplib.SMTP_SSL(ctx["smtp_server"], ctx["smtp_port"])
         else:
@@ -333,7 +333,7 @@ async def read_emails(
     """Read the inbox (IMAP) based on a search query."""
     ctx = await _get_auth_context(connection_id)
 
-    def _fetch():
+    def _fetch() -> object:
         mail = _create_imap_connection(ctx)
         mail.select(folder)
 
@@ -373,14 +373,14 @@ async def read_emails(
                                         part.get_content_charset() or "utf-8", "ignore"
                                     )
                                     break
-                                except:
+                                except (UnicodeDecodeError, AttributeError, ValueError, TypeError):
                                     pass
                     else:
                         try:
                             body_text = msg.get_payload(decode=True).decode(
                                 msg.get_content_charset() or "utf-8", "ignore"
                             )
-                        except:
+                        except (UnicodeDecodeError, AttributeError, ValueError, TypeError):
                             pass
 
                     result_list.append(
@@ -407,7 +407,7 @@ async def move_email(
     """Move an email between IMAP folders."""
     ctx = await _get_auth_context(connection_id)
 
-    def _move():
+    def _move() -> object:
         mail = _create_imap_connection(ctx)
         mail.select(source_folder)
         res, data = mail.uid("COPY", uid, dest_folder)
@@ -451,7 +451,7 @@ async def delete_email(
         )
     else:
 
-        def _delete():
+        def _delete() -> object:
             mail = _create_imap_connection(ctx)
             mail.select(folder)
             mail.uid("STORE", uid, "+FLAGS", "(\\Deleted)")

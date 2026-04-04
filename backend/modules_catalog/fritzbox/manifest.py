@@ -27,7 +27,7 @@ async def check_fritzbox_health(connection_id: str = "") -> dict:
         pwd_key = conn_data.vault_keys.get("password") or conn_data.vault_keys.get("FRITZBOX_PASSWORD")
         pwd = await vault.get_secret(pwd_key) if pwd_key else ""
 
-        def _check():
+        def _check() -> object:
             fc = FritzConnection(address=host, user=user, password=pwd, timeout=5)
             # Only connect and try a generic call to verify authentication
             return fc.call_action("DeviceInfo1", "GetInfo")
@@ -35,7 +35,7 @@ async def check_fritzbox_health(connection_id: str = "") -> dict:
         await asyncio.to_thread(_check)
         return {"status": "ok", "detail": f"Connected to FritzBox {host}"}
         
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         logger.error("FritzBox health check failed: %s", e)
         return {"status": "error", "detail": str(e)}
 

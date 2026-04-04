@@ -28,7 +28,7 @@ async def check_web_search_health() -> dict:
                     "status": "error",
                     "detail": f"SearXNG nicht erreichbar. Status Code: {response.status_code}"
                 }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return {"status": "error", "detail": f"SearXNG nicht erreichbar: {e}"}
 
 module_manifest = ModuleManifest(

@@ -42,7 +42,7 @@ async def get_logs(
     for raw in raw_entries:
         try:
             entry = json.loads(raw)
-        except Exception:
+        except (json.JSONDecodeError, ValueError, TypeError, KeyError):
             continue
 
         # Level-Filter

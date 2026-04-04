@@ -58,7 +58,7 @@ def _parse_github_url(url: str) -> tuple[str, str] | None:
 def _version_tuple(v: str) -> tuple[int, ...]:
     try:
         return tuple(int(x) for x in v.strip().lstrip("v").split("."))
-    except Exception:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError):
         return (0,)
 
 
@@ -218,7 +218,7 @@ async def install_requirements_if_exist(plugin_dir: Path) -> bool:
             
         logger.info("Abhängigkeiten erfolgreich installiert:\n%s", stdout.decode())
         return True
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as e:
         logger.error("Ausnahme bei der Installation der Abhängigkeiten: %s", e)
         return False
 
@@ -305,7 +305,7 @@ async def upload_plugin(request: Request, file: UploadFile = File(...)) -> JSONR
         
     except HTTPException:
         raise
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as e:
         logger.error("Fehler beim Plugin Upload: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Unerwarteter Fehler: {str(e)}")
     finally:
@@ -429,7 +429,7 @@ async def list_repo_modules(request: Request, repo_id: str) -> JSONResponse:
                     all_modules = cat_resp.json().get("modules", [])
                     _marketplace_cache[cache_key] = {"ts": time.time(), "modules": all_modules}
                     return JSONResponse(content=_build_module_list(all_modules, registry, plugins_dir))
-                except Exception:
+                except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError):
                     pass  # fall through to API
 
             # 2. Fallback: GitHub API (subject to rate limit)
@@ -463,7 +463,7 @@ async def list_repo_modules(request: Request, repo_id: str) -> JSONResponse:
                     m_resp = await client.get(raw_url, timeout=10.0)
                     if m_resp.status_code == 200:
                         return _extract_manifest_info(m_resp.text)
-                except Exception:
+                except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError):
                     pass
                 return {"display_name": mod_name, "description": "", "version": "", "author": ""}
 
@@ -482,7 +482,7 @@ async def list_repo_modules(request: Request, repo_id: str) -> JSONResponse:
 
     except httpx.TimeoutException:
         return JSONResponse(content={"modules": [], "updates": [], "error": "Timeout beim Abruf."})
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as e:
         logger.error("Marketplace fetch Fehler [%s]: %s", repo_id, e, exc_info=True)
         return JSONResponse(content={"modules": [], "updates": [], "error": f"Fehler: {e}"})
 
@@ -592,7 +592,7 @@ async def install_from_repo(
         raise
     except httpx.TimeoutException:
         raise HTTPException(status_code=408, detail="Timeout beim Download vom Repository.")
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as e:
         logger.error("install_from_repo Fehler [%s/%s]: %s", repo_id, module_name, e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Fehler: {e}")
     finally:
@@ -619,6 +619,6 @@ async def delete_plugin(request: Request, plugin_name: str) -> JSONResponse:
         shutil.rmtree(target_dir)
         registry.remove_plugin(plugin_name)
         return JSONResponse(content={"message": f"Plugin '{plugin_name}' deinstalliert. Die Änderungen werden beim nächsten Neustart vollständig aktiv."})
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as e:
         logger.error("Fehler beim Löschen des Plugins %s: %s", plugin_name, e)
         raise HTTPException(status_code=500, detail="Fehler beim Löschen der Plugin-Dateien.")

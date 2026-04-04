@@ -24,7 +24,7 @@ async def check_opnsense_health(connection_id: str = "") -> dict:
             return {"status": "error", "detail": f"HTTP {resp.status_code}"}
     except ValueError as e:
         return {"status": "error", "detail": str(e)}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": str(e)}
 
 

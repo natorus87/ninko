@@ -44,20 +44,67 @@ _CORE_TOOL_EXCEPTIONS = (
 _CORE_IMPORT_EXCEPTIONS = (ImportError, AttributeError, RuntimeError)
 
 
-def _t(de: str, en: str) -> str:
-    """Gibt DE oder EN zurück abhängig von der LANGUAGE-Einstellung."""
+def _t(
+    de: str,
+    en: str,
+    fr: str = "",
+    es: str = "",
+    it: str = "",
+    nl: str = "",
+    pl: str = "",
+    pt: str = "",
+    ja: str = "",
+    zh: str = "",
+) -> str:
+    """Gibt die entsprechende Übersetzung zurück basierend auf der LANGUAGE-Einstellung."""
     try:
         from core.config import get_settings
-        return de if get_settings().LANGUAGE == "de" else en
+
+        lang = get_settings().LANGUAGE
+        trans = {
+            "de": de,
+            "en": en,
+            "fr": fr or en,
+            "es": es or en,
+            "it": it or en,
+            "nl": nl or en,
+            "pl": pl or en,
+            "pt": pt or en,
+            "ja": ja or en,
+            "zh": zh or en,
+        }
+        return trans.get(lang, en)
     except _CORE_IMPORT_EXCEPTIONS:
         return de
 
+
 # Whitelist of allowed executables for execute_cli_command
 _ALLOWED_COMMANDS = {
-    "uptime", "ping", "df", "free", "ps", "uname", "hostname",
-    "netstat", "ss", "ip", "dig", "nslookup", "traceroute",
-    "cat", "ls", "echo", "date", "who", "w",
-    "systemctl", "journalctl", "dmesg", "curl", "wget", "nmap",
+    "uptime",
+    "ping",
+    "df",
+    "free",
+    "ps",
+    "uname",
+    "hostname",
+    "netstat",
+    "ss",
+    "ip",
+    "dig",
+    "nslookup",
+    "traceroute",
+    "cat",
+    "ls",
+    "echo",
+    "date",
+    "who",
+    "w",
+    "systemctl",
+    "journalctl",
+    "dmesg",
+    "curl",
+    "wget",
+    "nmap",
 }
 
 logger = logging.getLogger("ninko.agents.core_tools")
@@ -67,7 +114,9 @@ _MAX_OUTPUT_CHARS = 4000
 _MAX_OUTPUT_LINES = 200
 
 
-def _truncate_output(text: str, max_chars: int = _MAX_OUTPUT_CHARS, max_lines: int = _MAX_OUTPUT_LINES) -> str:
+def _truncate_output(
+    text: str, max_chars: int = _MAX_OUTPUT_CHARS, max_lines: int = _MAX_OUTPUT_LINES
+) -> str:
     """
     Kürzt Tool-Output auf max_lines Zeilen ODER max_chars Zeichen (was zuerst greift).
     Fügt am Ende einen Hinweis ein dass mehr Daten vorhanden sind.
@@ -102,12 +151,9 @@ def _truncate_output(text: str, max_chars: int = _MAX_OUTPUT_CHARS, max_lines: i
         hint_parts.append(_t(f"{removed_chars} Zeichen", f"{removed_chars} chars"))
     hint = _t(" und ", " and ").join(hint_parts) if hint_parts else _t("Daten", "data")
 
-    return (
-        f"{preview}\n\n"
-        + _t(
-            f"[…{hint} gekürzt – frage nach einem spezifischen Teil wenn du mehr benötigst]",
-            f"[…{hint} truncated – ask for a specific part if you need more]",
-        )
+    return f"{preview}\n\n" + _t(
+        f"[…{hint} gekürzt – frage nach einem spezifischen Teil wenn du mehr benötigst]",
+        f"[…{hint} truncated – ask for a specific part if you need more]",
     )
 
 
@@ -124,10 +170,32 @@ async def execute_cli_command(command: str) -> str:
         try:
             args = shlex.split(command)
         except ValueError as e:
-            return _t(f"Fehler: Ungültige Befehlssyntax: {e}", f"Error: Invalid command syntax: {e}")
+            return _t(
+                f"Fehler: Ungültige Befehlssyntax: {e}",
+                f"Error: Invalid command syntax: {e}",
+                f"Erreur : syntaxe de commande invalide : {e}",
+                f"Error: Sintaxis de comando inválida: {e}",
+                f"Errore: Sintassi del comando non valida: {e}",
+                f"Fout: Ongeldige opdrachtsyntaxis: {e}",
+                f"Błąd: Nieprawidłowa składnia polecenia: {e}",
+                f"Erro: Sintaxe de comando inválida: {e}",
+                f"エラー: 無効なコマンド構文: {e}",
+                f"错误: 无效的命令语法: {e}",
+            )
 
         if not args:
-            return _t("Fehler: Leerer Befehl.", "Error: Empty command.")
+            return _t(
+                "Fehler: Leerer Befehl.",
+                "Error: Empty command.",
+                "Erreur : Commande vide.",
+                "Error: Comando vacío.",
+                "Errore: Comando vuoto.",
+                "Fout: Lege opdracht.",
+                "Błąd: Puste polecenie.",
+                "Erro: Comando vazio.",
+                "エラー: 空のコマンド",
+                "错误: 空命令",
+            )
 
         cmd_name = Path(args[0]).name
         if cmd_name not in _ALLOWED_COMMANDS:
@@ -136,14 +204,28 @@ async def execute_cli_command(command: str) -> str:
                 f"Erlaubte Befehle: {', '.join(sorted(_ALLOWED_COMMANDS))}",
                 f"Error: Command '{cmd_name}' is not allowed. "
                 f"Allowed commands: {', '.join(sorted(_ALLOWED_COMMANDS))}",
+                f"Erreur : Le commande '{cmd_name}' n'est pas autorisée. "
+                f"Commandes autorisées: {', '.join(sorted(_ALLOWED_COMMANDS))}",
+                f"Error: El comando '{cmd_name}' no está permitido. "
+                f"Comandos permitidos: {', '.join(sorted(_ALLOWED_COMMANDS))}",
+                f"Errore: Il comando '{cmd_name}' non è autorizzato. "
+                f"Comandi consentiti: {', '.join(sorted(_ALLOWED_COMMANDS))}",
+                f"Fout: Opdracht '{cmd_name}' is niet toegestaan. "
+                f"Toegestane opdrachten: {', '.join(sorted(_ALLOWED_COMMANDS))}",
+                f"Błąd: Polecenie '{cmd_name}' jest niedozwolone. "
+                f"Dozwolone polecenia: {', '.join(sorted(_ALLOWED_COMMANDS))}",
+                f"Erro: O comando '{cmd_name}' não é permitido. "
+                f"Comandos permitidos: {', '.join(sorted(_ALLOWED_COMMANDS))}",
+                f"エラー: コマンド '{cmd_name}' は許可されていません。 "
+                f"許可されたコマンド: {', '.join(sorted(_ALLOWED_COMMANDS))}",
+                f"错误: 命令 '{cmd_name}' 不被允许。 "
+                f"允许的命令: {', '.join(sorted(_ALLOWED_COMMANDS))}",
             )
 
         process = await asyncio.create_subprocess_exec(
-            *args,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
-        
+
         try:
             # 30 seconds timeout to prevent hanging commands
             stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=30.0)
@@ -153,10 +235,18 @@ async def execute_cli_command(command: str) -> str:
             return _t(
                 f"Fehler: Das Kommando '{args[0]}' hat ein Timeout nach 30 Sekunden verursacht und wurde abgebrochen.",
                 f"Error: Command '{args[0]}' timed out after 30 seconds and was aborted.",
+                f"Erreur : Le commande '{args[0]}' a expiré après 30 secondes et a été abandonnée.",
+                f"Error: El comando '{args[0]}' agotó el tiempo después de 30 segundos y fue abortado.",
+                f"Errore: Il comando '{args[0]}' ha superato il timeout dopo 30 secondi ed è stato interrotto.",
+                f"Fout: Opdracht '{args[0]}' heeft een time-out van 30 seconden overschreden en is afgebroken.",
+                f"Błąd: Polecenie '{args[0]}' przekroczyło limit czasu 30 sekund i zostało przerwane.",
+                f"Erro: O comando '{args[0]}' expirou após 30 segundos e foi abortado.",
+                f"エラー: コマンド '{args[0]}' は30秒後にタイムアウトし、中断されました。",
+                f"错误: 命令 '{args[0]}' 在30秒后超时并被中止。",
             )
 
-        out_str = stdout.decode('utf-8', errors='replace').strip() if stdout else ""
-        err_str = stderr.decode('utf-8', errors='replace').strip() if stderr else ""
+        out_str = stdout.decode("utf-8", errors="replace").strip() if stdout else ""
+        err_str = stderr.decode("utf-8", errors="replace").strip() if stderr else ""
 
         result = []
         if out_str:
@@ -180,8 +270,11 @@ async def execute_cli_command(command: str) -> str:
             f"Error executing '{command}': {exc}",
         )
 
+
 @tool
-async def create_custom_agent(name: str, system_prompt: str, description: str = "") -> str:
+async def create_custom_agent(
+    name: str, system_prompt: str, description: str = ""
+) -> str:
     """
     Erstellt einen neuen spezialisierten Agenten im Ninko Agent-Pool.
 
@@ -207,8 +300,14 @@ async def create_custom_agent(name: str, system_prompt: str, description: str = 
     from core.agent_pool import get_agent_pool
 
     pool = get_agent_pool()
-    agent_id, _ = await pool.register(name=name, system_prompt=system_prompt, description=description)
-    logger.info("Custom Agent via Tool erstellt und im Pool registriert: %s (%s)", name, agent_id)
+    agent_id, _ = await pool.register(
+        name=name, system_prompt=system_prompt, description=description
+    )
+    logger.info(
+        "Custom Agent via Tool erstellt und im Pool registriert: %s (%s)",
+        name,
+        agent_id,
+    )
 
     return _t(
         f"Agent '{name}' (ID: {agent_id}) wurde erfolgreich erstellt und ist sofort im Agenten-Pool verfügbar.",
@@ -217,7 +316,9 @@ async def create_custom_agent(name: str, system_prompt: str, description: str = 
 
 
 @tool
-async def update_custom_agent(agent_id: str, system_prompt: str = "", description: str = "") -> str:
+async def update_custom_agent(
+    agent_id: str, system_prompt: str = "", description: str = ""
+) -> str:
     """
     Aktualisiert einen bestehenden Custom-Agenten im Agenten-Pool.
 
@@ -250,11 +351,21 @@ async def update_custom_agent(agent_id: str, system_prompt: str = "", descriptio
     return _t(
         f"Fehler: Agent mit ID '{agent_id}' nicht gefunden.",
         f"Error: Agent with ID '{agent_id}' not found.",
+        f"Erreur : Agent avec l'ID '{agent_id}' non trouvé.",
+        f"Error: Agente con ID '{agent_id}' no encontrado.",
+        f"Errore: Agente con ID '{agent_id}' non trovato.",
+        f"Fout: Agent met ID '{agent_id}' niet gevonden.",
+        f"Błąd: Agent o ID '{agent_id}' nie został znaleziony.",
+        f"Erro: Agente com ID '{agent_id}' não encontrado.",
+        f"エラー: ID '{agent_id}' のエージェントが見つかりません。",
+        f"错误: 找不到ID为 '{agent_id}' 的代理。",
     )
 
 
 @tool
-async def create_dag_workflow(name: str, description: str, nodes: list[dict], edges: list[dict]) -> str:
+async def create_dag_workflow(
+    name: str, description: str, nodes: list[dict], edges: list[dict]
+) -> str:
     """
     Erstellt einen Workflow mit beliebiger DAG-Struktur — inkl. Conditions, Loops und Branching.
     Nutze dieses Tool wenn der Workflow mehr als lineare Schritte benötigt (Bedingungen, Schleifen, Fehler-Handler).
@@ -300,7 +411,18 @@ async def create_dag_workflow(name: str, description: str, nodes: list[dict], ed
     from core.redis_client import get_redis
 
     if not nodes:
-        return _t("Fehler: Keine Nodes angegeben.", "Error: No nodes provided.")
+        return _t(
+            "Fehler: Keine Nodes angegeben.",
+            "Error: No nodes provided.",
+            "Erreur : Aucun nœud spécifié.",
+            "Error: No se proporcionaron nodos.",
+            "Errore: Nessun nodo specificato.",
+            "Fout: Geen knooppunten opgegeven.",
+            "Błąd: Nie podano węzłów.",
+            "Erro: Nenhum nó especificado.",
+            "エラー: ノードが指定されていません。",
+            "错误: 未指定节点。",
+        )
 
     # UUIDs vergeben und Positionen auto-berechnen (einfaches Layer-Layout)
     id_map: dict[str, str] = {}
@@ -317,13 +439,15 @@ async def create_dag_workflow(name: str, description: str, nodes: list[dict], ed
     for i, n in enumerate(nodes):
         short_id = str(n.get("id", "")).strip()
         full_id = id_map.get(short_id, str(uuid.uuid4())[:8])
-        built_nodes.append({
-            "id": full_id,
-            "type": n.get("type", "agent"),
-            "label": n.get("label", n.get("type", "Node")),
-            "config": n.get("config", {}),
-            "position": {"x": x_base, "y": y_base + i * y_step},
-        })
+        built_nodes.append(
+            {
+                "id": full_id,
+                "type": n.get("type", "agent"),
+                "label": n.get("label", n.get("type", "Node")),
+                "config": n.get("config", {}),
+                "position": {"x": x_base, "y": y_base + i * y_step},
+            }
+        )
 
     # Edges mit gemappten IDs aufbauen
     built_edges = []
@@ -331,12 +455,14 @@ async def create_dag_workflow(name: str, description: str, nodes: list[dict], ed
         src = id_map.get(str(e.get("source_id", "")), "")
         tgt = id_map.get(str(e.get("target_id", "")), "")
         if src and tgt:
-            built_edges.append({
-                "id": str(uuid.uuid4())[:8],
-                "source_id": src,
-                "target_id": tgt,
-                "label": e.get("label", ""),
-            })
+            built_edges.append(
+                {
+                    "id": str(uuid.uuid4())[:8],
+                    "source_id": src,
+                    "target_id": tgt,
+                    "label": e.get("label", ""),
+                }
+            )
 
     redis = get_redis()
     raw = await redis.connection.get("ninko:workflows")
@@ -359,7 +485,13 @@ async def create_dag_workflow(name: str, description: str, nodes: list[dict], ed
 
     workflows.append(new_wf)
     await redis.connection.set("ninko:workflows", json.dumps(workflows))
-    logger.info("DAG-Workflow via Tool erstellt: %s (%s, %d nodes, %d edges)", name, wf_id, len(built_nodes), len(built_edges))
+    logger.info(
+        "DAG-Workflow via Tool erstellt: %s (%s, %d nodes, %d edges)",
+        name,
+        wf_id,
+        len(built_nodes),
+        len(built_edges),
+    )
 
     return _t(
         f"Workflow '{name}' (ID: {wf_id}) mit {len(built_nodes)} Nodes und {len(built_edges)} Edges wurde erfolgreich erstellt.",
@@ -380,46 +512,52 @@ async def create_linear_workflow(name: str, description: str, steps: list[str]) 
     import uuid
     from datetime import datetime, timezone
     from core.redis_client import get_redis
-    
+
     # 1. Trigger Node (Start)
     trigger_id = str(uuid.uuid4())[:8]
-    nodes = [{
-        "id": trigger_id,
-        "type": "trigger",
-        "label": "Start",
-        "config": {"mode": "manual"},
-        "position": {"x": 100, "y": 100}
-    }]
+    nodes = [
+        {
+            "id": trigger_id,
+            "type": "trigger",
+            "label": "Start",
+            "config": {"mode": "manual"},
+            "position": {"x": 100, "y": 100},
+        }
+    ]
     edges = []
-    
+
     # 2. Agent Nodes & Edges
     prev_id = trigger_id
     y_pos = 250
     for i, step_prompt in enumerate(steps):
         node_id = str(uuid.uuid4())[:8]
-        nodes.append({
-            "id": node_id,
-            "type": "agent",
-            "label": f"Step {i+1}",
-            "config": {"agent_id": "orchestrator", "prompt": step_prompt},
-            "position": {"x": 100, "y": y_pos}
-        })
-        edges.append({
-            "id": str(uuid.uuid4())[:8],
-            "source_id": prev_id,
-            "target_id": node_id,
-            "label": ""
-        })
+        nodes.append(
+            {
+                "id": node_id,
+                "type": "agent",
+                "label": f"Step {i + 1}",
+                "config": {"agent_id": "orchestrator", "prompt": step_prompt},
+                "position": {"x": 100, "y": y_pos},
+            }
+        )
+        edges.append(
+            {
+                "id": str(uuid.uuid4())[:8],
+                "source_id": prev_id,
+                "target_id": node_id,
+                "label": "",
+            }
+        )
         prev_id = node_id
         y_pos += 150
-            
+
     redis = get_redis()
     raw = await redis.connection.get("ninko:workflows")
     workflows = json.loads(raw) if raw else []
-    
+
     wf_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
-    
+
     new_wf = {
         "id": wf_id,
         "name": name,
@@ -429,9 +567,9 @@ async def create_linear_workflow(name: str, description: str, steps: list[str]) 
         "variables": [],
         "enabled": True,
         "created_at": now,
-        "updated_at": now
+        "updated_at": now,
     }
-    
+
     workflows.append(new_wf)
     await redis.connection.set("ninko:workflows", json.dumps(workflows))
     logger.info("Linearer Workflow via Tool erstellt: %s (%s)", name, wf_id)
@@ -454,23 +592,40 @@ async def execute_workflow(workflow_name_or_id: str) -> str:
     import asyncio
     from datetime import datetime, timezone
     from core.redis_client import get_redis
-    
+
     redis = get_redis()
     raw = await redis.connection.get("ninko:workflows")
     workflows = json.loads(raw) if raw else []
-    
-    wf = next((w for w in workflows if w["id"] == workflow_name_or_id or w["name"].lower() == workflow_name_or_id.lower()), None)
+
+    wf = next(
+        (
+            w
+            for w in workflows
+            if w["id"] == workflow_name_or_id
+            or w["name"].lower() == workflow_name_or_id.lower()
+        ),
+        None,
+    )
     if not wf:
         return _t(
             f"Fehler: Workflow '{workflow_name_or_id}' nicht gefunden.",
             f"Error: Workflow '{workflow_name_or_id}' not found.",
+            f"Erreur : Workflow '{workflow_name_or_id}' non trouvé.",
+            f"Error: Flujo de trabajo '{workflow_name_or_id}' no encontrado.",
+            f"Errore: Flusso di lavoro '{workflow_name_or_id}' non trovato.",
+            f"Fout: Werkstroom '{workflow_name_or_id}' niet gevonden.",
+            f"Błąd: Przepływ pracy '{workflow_name_or_id}' nie został znaleziony.",
+            f"Erro: Fluxo de trabalho '{workflow_name_or_id}' não encontrado.",
+            f"エラー: ワークフロー '{workflow_name_or_id}' が見つかりません。",
+            f"错误: 找不到工作流 '{workflow_name_or_id}'。",
         )
-        
+
     wf_id = wf["id"]
     run_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
-    
+
     from schemas.workflows import WorkflowRun
+
     run_obj = WorkflowRun(
         id=run_id,
         workflow_id=wf_id,
@@ -478,9 +633,9 @@ async def execute_workflow(workflow_name_or_id: str) -> str:
         status="running",
         started_at=now,
         steps=[],
-        triggered_by="AI_Agent"
+        triggered_by="AI_Agent",
     )
-    
+
     runs_key = f"ninko:workflow:runs:{wf_id}"
     runs_raw = await redis.connection.get(runs_key)
     runs = json.loads(runs_raw) if runs_raw else []
@@ -488,7 +643,7 @@ async def execute_workflow(workflow_name_or_id: str) -> str:
     if len(runs) > 50:
         runs = runs[-50:]
     await redis.connection.set(runs_key, json.dumps(runs))
-    
+
     # Engine asynchron im Hintergrund starten
     try:
         from core.workflow_engine import WorkflowEngine
@@ -496,26 +651,48 @@ async def execute_workflow(workflow_name_or_id: str) -> str:
 
         orchestrator = get_orchestrator()
         if orchestrator is None:
-            return "Fehler: Orchestrator noch nicht initialisiert."
+            return _t(
+                "Fehler: Orchestrator noch nicht initialisiert.",
+                "Error: Orchestrator not yet initialized.",
+                "Erreur : Orchestrateur pas encore initialisé.",
+                "Error: Orquestador aún no inicializado.",
+                "Errore: Orchestrator non ancora inizializzato.",
+                "Fout: Orchestrator nog niet geïnitialiseerd.",
+                "Błąd: Orchestrator jeszcze nie został zainicjowany.",
+                "Erro: Orquestrador ainda não inicializado.",
+                "エラー: オーケストレーターがまだ初期化されていません。",
+                "错误: 编排器尚未初始化。",
+            )
         engine = WorkflowEngine(redis, orchestrator)
         _task = asyncio.create_task(engine.execute(wf, run_id))
         _background_tasks.add(_task)
         _task.add_done_callback(_background_tasks.discard)
     except _CORE_IMPORT_EXCEPTIONS as exc:
-        return f"Kritischer Fehler beim Starten des Workflows: {exc}"
-        
+        return _t(
+            f"Kritischer Fehler beim Starten des Workflows: {exc}",
+            f"Critical error starting workflow: {exc}",
+            f"Erreur critique lors du démarrage du workflow : {exc}",
+            f"Error crítico al iniciar el flujo de trabajo: {exc}",
+            f"Errore critico nell'avvio del flusso di lavoro: {exc}",
+            f"Kritieke fout bij het starten van de werkstroom: {exc}",
+            f"Krytyczny błąd podczas uruchamiania przepływu pracy: {exc}",
+            f"Erro crítico ao iniciar o fluxo de trabalho: {exc}",
+            f"ワークフローの開始中に重大なエラーが発生しました: {exc}",
+            f"启动工作流时发生严重错误: {exc}",
+        )
+
     # Poll variables
-    max_retries = 120 # 2 Minutes timeout
-    
+    max_retries = 120  # 2 Minutes timeout
+
     for _ in range(max_retries):
         await asyncio.sleep(1.0)
         current_runs_raw = await redis.connection.get(runs_key)
         if not current_runs_raw:
             continue
-            
+
         current_runs = json.loads(current_runs_raw)
         current_run = next((r for r in current_runs if r["id"] == run_id), None)
-        
+
         if current_run and current_run.get("status") in ("succeeded", "failed"):
             # Build execution trace
             trace = f"<details>\n  <summary>🧠 Workflow Execution Trace: {wf.get('name')} ({current_run.get('status')})</summary>\n\n"
@@ -523,7 +700,7 @@ async def execute_workflow(workflow_name_or_id: str) -> str:
                 f"- **Dauer gesamt:** {current_run.get('duration_ms', 'unbekannt')} ms\n",
                 f"- **Total duration:** {current_run.get('duration_ms', 'unknown')} ms\n",
             )
-            if current_run.get('error'):
+            if current_run.get("error"):
                 trace += _t(
                     f"- **Fehler:** {current_run.get('error')}\n",
                     f"- **Error:** {current_run.get('error')}\n",
@@ -531,16 +708,24 @@ async def execute_workflow(workflow_name_or_id: str) -> str:
             trace += _t("### Details pro Schritt:\n", "### Step details:\n")
 
             for step in current_run.get("steps", []):
-                sym = "✅" if step.get("status") == "succeeded" else "❌" if step.get("status") == "failed" else "⏳" if step.get("status") == "pending" else "⏭️"
+                sym = (
+                    "✅"
+                    if step.get("status") == "succeeded"
+                    else "❌"
+                    if step.get("status") == "failed"
+                    else "⏳"
+                    if step.get("status") == "pending"
+                    else "⏭️"
+                )
                 trace += _t(
                     f"\n- {sym} **{step.get('node_label')}** ({step.get('node_type')}) [Dauer: {step.get('duration_ms', 0)} ms]\n",
                     f"\n- {sym} **{step.get('node_label')}** ({step.get('node_type')}) [Duration: {step.get('duration_ms', 0)} ms]\n",
                 )
 
-                output = step.get('output')
+                output = step.get("output")
                 if output:
                     # Prevent breaking details tag formatting
-                    safe_out = output.replace('\n', '\n> ')
+                    safe_out = output.replace("\n", "\n> ")
                     trace += f"> Output:\n> {safe_out}\n"
 
             trace += "\n</details>"
@@ -571,7 +756,18 @@ async def call_module_agent(module_name: str, task: str) -> str:
 
     orchestrator = get_orchestrator()
     if orchestrator is None:
-        return _t("Fehler: Orchestrator noch nicht initialisiert.", "Error: Orchestrator not yet initialized.")
+        return _t(
+            "Fehler: Orchestrator noch nicht initialisiert.",
+            "Error: Orchestrator not yet initialized.",
+            "Erreur : Orchestrateur pas encore initialisé.",
+            "Error: Orquestador aún no inicializado.",
+            "Errore: Orchestrator non ancora inizializzato.",
+            "Fout: Orchestrator nog niet geïnitialiseerd.",
+            "Błąd: Orchestrator jeszcze nie został zainicjowany.",
+            "Erro: Orquestrador ainda não inicializado.",
+            "エラー: オーケストレーターがまだ初期化されていません。",
+            "错误: 编排器尚未初始化。",
+        )
 
     agent = orchestrator.registry.get_agent(module_name)
     if agent is None:
@@ -581,18 +777,44 @@ async def call_module_agent(module_name: str, task: str) -> str:
             f"Verfügbare Module: {', '.join(available)}",
             f"Error: Module '{module_name}' not found or not active. "
             f"Available modules: {', '.join(available)}",
+            f"Erreur : Module '{module_name}' non trouvé ou pas actif. "
+            f"Modules disponibles : {', '.join(available)}",
+            f"Error: Módulo '{module_name}' no encontrado o no activo. "
+            f"Módulos disponibles : {', '.join(available)}",
+            f"Errore: Modulo '{module_name}' non trovato o non attivo. "
+            f"Moduli disponibili : {', '.join(available)}",
+            f"Fout: Module '{module_name}' niet gevonden of niet actief. "
+            f"Beschikbare modules : {', '.join(available)}",
+            f"Błąd: Moduł '{module_name}' nie został znaleziony lub nie jest aktywny. "
+            f"Dostępne moduły : {', '.join(available)}",
+            f"Erro: Módulo '{module_name}' não encontrado ou não ativo. "
+            f"Módulos disponíveis : {', '.join(available)}",
+            f"エラー: モジュール '{module_name}' が見つからないかアクティブではありません。 "
+            f"利用可能なモジュール: {', '.join(available)}",
+            f"错误: 找不到模块 '{module_name}' 或模块未激活。 "
+            f"可用模块: {', '.join(available)}",
         )
 
     session_id = status_bus.get_session_id()
     logger.info("call_module_agent: delegiere an '%s': %s…", module_name, task[:80])
     try:
-        result, _ = await agent.invoke(message=task, chat_history=None, session_id=session_id)
+        result, _ = await agent.invoke(
+            message=task, chat_history=None, session_id=session_id
+        )
         return result
     except _CORE_TOOL_EXCEPTIONS as exc:
         logger.error("call_module_agent Fehler bei '%s': %s", module_name, exc)
         return _t(
             f"Fehler im Modul '{module_name}': {exc}",
             f"Error in module '{module_name}': {exc}",
+            f"Erreur dans le module '{module_name}': {exc}",
+            f"Error en el módulo '{module_name}': {exc}",
+            f"Errore nel modulo '{module_name}': {exc}",
+            f"Fout in module '{module_name}': {exc}",
+            f"Błąd w module '{module_name}': {exc}",
+            f"Erro no módulo '{module_name}': {exc}",
+            f"モジュール '{module_name}' でエラーが発生しました: {exc}",
+            f"模块 '{module_name}' 发生错误: {exc}",
         )
 
 
@@ -623,10 +845,32 @@ async def run_pipeline(steps: list[dict]) -> str:
 
     orchestrator = get_orchestrator()
     if orchestrator is None:
-        return _t("Fehler: Orchestrator noch nicht initialisiert.", "Error: Orchestrator not yet initialized.")
+        return _t(
+            "Fehler: Orchestrator noch nicht initialisiert.",
+            "Error: Orchestrator not yet initialized.",
+            "Erreur : Orchestrateur pas encore initialisé.",
+            "Error: Orquestador aún no inicializado.",
+            "Errore: Orchestrator non ancora inizializzato.",
+            "Fout: Orchestrator nog niet geïnitialiseerd.",
+            "Błąd: Orchestrator jeszcze nie został zainicjowany.",
+            "Erro: Orquestrador ainda não inicializado.",
+            "エラー: オーケストレーターがまだ初期化されていません。",
+            "错误: 编排器尚未初始化。",
+        )
 
     if not steps:
-        return _t("Fehler: Keine Schritte angegeben.", "Error: No steps provided.")
+        return _t(
+            "Fehler: Keine Schritte angegeben.",
+            "Error: No steps provided.",
+            "Erreur : Aucune étape spécifiée.",
+            "Error: No se proporcionaron pasos.",
+            "Errore: Nessun passaggio specificato.",
+            "Fout: Geen stappen opgegeven.",
+            "Błąd: Nie podano kroków.",
+            "Erro: Nenhuma etapa especificada.",
+            "エラー: ステップが指定されていません。",
+            "错误: 未指定步骤。",
+        )
 
     session_id = status_bus.get_session_id()
     results: list[str] = []
@@ -640,19 +884,27 @@ async def run_pipeline(steps: list[dict]) -> str:
         task = step.get("task", "").strip()
 
         if not module or not task:
-            results.append(_t(
-                f"⚠️ Schritt {i + 1}: Übersprungen (module oder task fehlt).",
-                f"⚠️ Step {i + 1}: Skipped (module or task missing).",
-            ))
+            results.append(
+                _t(
+                    f"⚠️ Schritt {i + 1}: Übersprungen (module oder task fehlt).",
+                    f"⚠️ Step {i + 1}: Skipped (module or task missing).",
+                )
+            )
             continue
 
         # Kontext aus vorherigem Schritt einfügen
         full_task = task
         if context:
-            prev_module = steps[i - 1].get("module", _t("vorheriger Schritt", "previous step"))
-            full_task = task + "\n\n" + _t(
-                f"Verwende folgende Ergebnisse aus '{prev_module}' als Inhalt:\n{context}",
-                f"Use the following results from '{prev_module}' as content:\n{context}",
+            prev_module = steps[i - 1].get(
+                "module", _t("vorheriger Schritt", "previous step")
+            )
+            full_task = (
+                task
+                + "\n\n"
+                + _t(
+                    f"Verwende folgende Ergebnisse aus '{prev_module}' als Inhalt:\n{context}",
+                    f"Use the following results from '{prev_module}' as content:\n{context}",
+                )
             )
 
         agent = orchestrator.registry.get_agent(module)
@@ -663,33 +915,68 @@ async def run_pipeline(steps: list[dict]) -> str:
                 f"Verfügbar: {', '.join(available)}",
                 f"Error: Module '{module}' not found. "
                 f"Available: {', '.join(available)}",
+                f"Erreur : Module '{module}' non trouvé. "
+                f"Disponible : {', '.join(available)}",
+                f"Error: Módulo '{module}' no encontrado. "
+                f"Disponible : {', '.join(available)}",
+                f"Errore: Modulo '{module}' non trovato. "
+                f"Disponibile : {', '.join(available)}",
+                f"Fout: Module '{module}' niet gevonden. "
+                f"Beschikbaar : {', '.join(available)}",
+                f"Błąd: Moduł '{module}' nie został znaleziony. "
+                f"Dostępne : {', '.join(available)}",
+                f"Erro: Módulo '{module}' não encontrado. "
+                f"Disponível : {', '.join(available)}",
+                f"エラー: モジュール '{module}' が見つかりません。 "
+                f"利用可能: {', '.join(available)}",
+                f"错误: 找不到模块 '{module}'。 可用: {', '.join(available)}",
             )
         else:
             # Status-Update für diesen Schritt emittieren
             display = manifests[module].display_name if module in manifests else module
             await status_bus.emit(
                 session_id,
-                _t(f"Rufe {display} auf… ({i + 1}/{len(steps)})", f"Calling {display}… ({i + 1}/{len(steps)})"),
+                _t(
+                    f"Rufe {display} auf… ({i + 1}/{len(steps)})",
+                    f"Calling {display}… ({i + 1}/{len(steps)})",
+                ),
             )
 
             logger.info(
                 "Pipeline Schritt %d/%d – delegiere an '%s': %s…",
-                i + 1, len(steps), module, task[:80],
+                i + 1,
+                len(steps),
+                module,
+                task[:80],
             )
             try:
-                result, _ = await agent.invoke(message=full_task, chat_history=None, session_id=session_id)
+                result, _ = await agent.invoke(
+                    message=full_task, chat_history=None, session_id=session_id
+                )
             except _CORE_TOOL_EXCEPTIONS as exc:
-                logger.error("Pipeline Schritt %d ('%s') Fehler: %s", i + 1, module, exc)
+                logger.error(
+                    "Pipeline Schritt %d ('%s') Fehler: %s", i + 1, module, exc
+                )
                 result = _t(
                     f"Fehler in Modul '{module}': {exc}",
                     f"Error in module '{module}': {exc}",
+                    f"Erreur dans le module '{module}': {exc}",
+                    f"Error en el módulo '{module}': {exc}",
+                    f"Errore nel modulo '{module}': {exc}",
+                    f"Fout in module '{module}': {exc}",
+                    f"Błąd w module '{module}': {exc}",
+                    f"Erro no módulo '{module}': {exc}",
+                    f"モジュール '{module}' でエラーが発生しました: {exc}",
+                    f"模块 '{module}' 发生错误: {exc}",
                 )
 
         context = result
-        results.append(_t(
-            f"**Schritt {i + 1} – {module}:**\n{result}",
-            f"**Step {i + 1} – {module}:**\n{result}",
-        ))
+        results.append(
+            _t(
+                f"**Schritt {i + 1} – {module}:**\n{result}",
+                f"**Step {i + 1} – {module}:**\n{result}",
+            )
+        )
 
         # Abbruch bei Fehler oder Timeout – Folgeschritte überspringen (DE + EN)
         _err_prefixes = (
@@ -703,12 +990,29 @@ async def run_pipeline(steps: list[dict]) -> str:
         if any(result.startswith(p) for p in _err_prefixes):
             skipped = len(steps) - i - 1
             if skipped > 0:
-                results.append(_t(
-                    f"⚠️ Pipeline abgebrochen nach Schritt {i + 1} – "
-                    f"{skipped} weiterer Schritt(e) übersprungen.",
-                    f"⚠️ Pipeline aborted after step {i + 1} – "
-                    f"{skipped} remaining step(s) skipped.",
-                ))
+                results.append(
+                    _t(
+                        f"⚠️ Pipeline abgebrochen nach Schritt {i + 1} – "
+                        f"{skipped} weiterer Schritt(e) übersprungen.",
+                        f"⚠️ Pipeline aborted after step {i + 1} – "
+                        f"{skipped} remaining step(s) skipped.",
+                        f"⚠️ Pipeline interrompu après l'étape {i + 1} – "
+                        f"{skipped} autre(s) étape(s) ignorée(s).",
+                        f"⚠️ Pipeline abortado después del paso {i + 1} – "
+                        f"{skipped} paso(s) restante(s) omitido(s).",
+                        f"⚠️ Pipeline interrotto dopo il passo {i + 1} – "
+                        f"{skipped} altro/i passo/i saltato/i.",
+                        f"⚠️ Pipeline afgebroken na stap {i + 1} – "
+                        f"{skipped} overige stap(len) overgeslagen.",
+                        f"⚠️ Pipeline przerwany po kroku {i + 1} – "
+                        f"{skipped} pozostały/e krok/i pominięty/e.",
+                        f"⚠️ Pipeline abortado após a etapa {i + 1} – "
+                        f"{skipped} etapa(s) restante(s) omitida(s).",
+                        f"⚠️ パイプラインはステップ {i + 1} で中止されました – "
+                        f"{skipped} つのステップがスキップされました。",
+                        f"⚠️ 管道在步骤 {i + 1} 后中止 - 跳过了 {skipped} 个剩余步骤。",
+                    )
+                )
             break
 
     return "\n\n".join(results)
@@ -754,17 +1058,25 @@ async def install_skill(
             f"✅ Skill '{name}' erfolgreich installiert{module_info}.\n"
             f"Pfad: {skill_path}\n"
             f"Er wird ab sofort automatisch injiziert wenn eine Anfrage zur Beschreibung passt:\n"
-            f"→ \"{description}\"",
+            f'→ "{description}"',
             f"✅ Skill '{name}' successfully installed{module_info}.\n"
             f"Path: {skill_path}\n"
             f"It will be automatically injected whenever a request matches the description:\n"
-            f"→ \"{description}\"",
+            f'→ "{description}"',
         )
     except _CORE_TOOL_EXCEPTIONS as exc:
         logger.error("Fehler beim Installieren von Skill '%s': %s", name, exc)
         return _t(
             f"Fehler beim Installieren des Skills: {exc}",
             f"Error installing skill: {exc}",
+            f"Erreur lors de l'installation du skill : {exc}",
+            f"Error al instalar la skill: {exc}",
+            f"Errore durante l'installazione della skill: {exc}",
+            f"Fout bij het installeren van de skill: {exc}",
+            f"Błąd podczas instalacji skillu: {exc}",
+            f"Erro ao instalar a skill: {exc}",
+            f"スキルのインストール中にエラーが発生しました: {exc}",
+            f"安装技能时发生错误: {exc}",
         )
 
 
@@ -779,6 +1091,7 @@ async def remember_fact(fact: str) -> str:
     """
     try:
         from core.memory import get_memory
+
         memory = get_memory()
         doc_id = await memory.store(
             content=fact,
@@ -802,18 +1115,38 @@ async def recall_memory(query: str) -> str:
     """
     try:
         from core.memory import get_memory
+
         memory = get_memory()
         hits = await memory.search(query=query, top_k=5, category="agent_memory")
         if not hits:
             return _t(
                 "Keine relevanten Erinnerungen zu dieser Anfrage gefunden.",
                 "No relevant memories found for this query.",
+                "Aucune mémoire pertinente trouvée pour cette requête.",
+                "No se encontraron memorias relevantes para esta consulta.",
+                "Nessun ricordo pertinente trovato per questa query.",
+                "Geen relevante herinneringen gevonden voor deze query.",
+                "Nie znaleziono odpowiednich wspomnień dla tego zapytania.",
+                "Nenhuma memória relevante encontrada para esta consulta.",
+                "このクエリに関連するメモリが見つかりません。",
+                "未找到与此查询相关的记忆。",
             )
         lines = [f"- {h['content']}" for h in hits]
         return _t("Gefundene Erinnerungen:\n", "Found memories:\n") + "\n".join(lines)
     except _CORE_TOOL_EXCEPTIONS as exc:
         logger.error("Fehler beim Abrufen aus Memory: %s", exc)
-        return _t(f"Fehler beim Abrufen: {exc}", f"Error retrieving: {exc}")
+        return _t(
+            f"Fehler beim Abrufen: {exc}",
+            f"Error retrieving: {exc}",
+            f"Erreur lors de la récupération : {exc}",
+            f"Error al recuperar: {exc}",
+            f"Errore durante il recupero: {exc}",
+            f"Fout bij het ophalen: {exc}",
+            f"Błąd podczas pobierania: {exc}",
+            f"Erro ao recuperar: {exc}",
+            f"取得中にエラーが発生しました: {exc}",
+            f"检索时发生错误: {exc}",
+        )
 
 
 @tool
@@ -826,21 +1159,32 @@ async def forget_fact(fact: str) -> str:
     """
     try:
         from core.memory import get_memory
+
         memory = get_memory()
         hits = await memory.search(query=fact, top_k=5, category="agent_memory")
         if not hits:
             return _t(
                 "Keine passenden Erinnerungen zu diesem Thema gefunden.",
                 "No matching memories found for this topic.",
+                "Aucune mémoire correspondante trouvée pour ce sujet.",
+                "No se encontraron memorias coincidentes para este tema.",
+                "Nessun ricordo corrispondente trovato per questo argomento.",
+                "Geen overeenkomende herinneringen gevonden voor dit onderwerp.",
+                "Nie znaleziono odpowiednich wspomnień dla tego tematu.",
+                "Nenhuma memória correspondente encontrada para este tópico.",
+                "このトピックに関連するメモリが見つかりません。",
+                "未找到与此主题相关的记忆。",
             )
         lines = []
         for h in hits:
-            dist = h.get('distance', '?')
+            dist = h.get("distance", "?")
             dist_str = f"{dist:.3f}" if isinstance(dist, float) else str(dist)
-            lines.append(_t(
-                f"- ID: `{h['id']}` | Ähnlichkeit: {dist_str} | Inhalt: {h['content']}",
-                f"- ID: `{h['id']}` | Similarity: {dist_str} | Content: {h['content']}",
-            ))
+            lines.append(
+                _t(
+                    f"- ID: `{h['id']}` | Ähnlichkeit: {dist_str} | Inhalt: {h['content']}",
+                    f"- ID: `{h['id']}` | Similarity: {dist_str} | Content: {h['content']}",
+                )
+            )
         preview = "\n".join(lines)
         return _t(
             f"🔍 Folgende Erinnerungen wurden gefunden (noch NICHT gelöscht):\n{preview}\n\n"
@@ -864,6 +1208,7 @@ async def confirm_forget(doc_ids: list[str]) -> str:
     """
     try:
         from core.memory import get_memory
+
         memory = get_memory()
         for doc_id in doc_ids:
             await memory.delete(doc_id)
@@ -908,7 +1253,9 @@ async def speak(text: str, lang: str = "", voice: str = "") -> str:
             voice=voice or None,
         )
         kb = len(wav_bytes) // 1024
-        logger.info("speak-Tool: %d Bytes WAV synthetisiert (%d KB)", len(wav_bytes), kb)
+        logger.info(
+            "speak-Tool: %d Bytes WAV synthetisiert (%d KB)", len(wav_bytes), kb
+        )
 
         # Audio als Data-URL zurückgeben, damit der Chat-Client es abspielen kann
         b64 = base64.b64encode(wav_bytes).decode("ascii")
@@ -922,10 +1269,22 @@ async def speak(text: str, lang: str = "", voice: str = "") -> str:
         )
     except _CORE_TOOL_EXCEPTIONS as exc:
         logger.error("speak-Tool Fehler: %s", exc)
-        return _t(f"TTS-Fehler: {exc}", f"TTS error: {exc}")
+        return _t(
+            f"TTS-Fehler: {exc}",
+            f"TTS error: {exc}",
+            f"Erreur TTS : {exc}",
+            f"Error de TTS: {exc}",
+            f"Errore TTS: {exc}",
+            f"TTS-fout: {exc}",
+            f"Błąd TTS: {exc}",
+            f"Erro de TTS: {exc}",
+            f"TTSエラー: {exc}",
+            f"TTS错误: {exc}",
+        )
 
 
 # ── Self-Adaptive Routing Tools ───────────────────────────────────────────────
+
 
 @tool
 async def configure_routing(
@@ -953,8 +1312,12 @@ async def configure_routing(
     Preset-Kurzformen: 'default' (reset), 'fast' (kein Tier 4), 'module-only'
     """
     from agents.orchestrator import (
-        get_orchestrator, RoutingConfig, ROUTING_PRESETS,
-        get_session_routing_config, set_session_routing_config, clear_session_routing_config,
+        get_orchestrator,
+        RoutingConfig,
+        ROUTING_PRESETS,
+        get_session_routing_config,
+        set_session_routing_config,
+        clear_session_routing_config,
     )
 
     get_orchestrator()  # Validierung: Orchestrator muss initialisiert sein
@@ -975,14 +1338,18 @@ async def configure_routing(
                 f"Unbekanntes Preset '{preset}'. Verfügbar: {', '.join(ROUTING_PRESETS.keys())}",
                 f"Unknown preset '{preset}'. Available: {', '.join(ROUTING_PRESETS.keys())}",
             )
-        current = RoutingConfig.from_dict({**RoutingConfig().to_dict(), **ROUTING_PRESETS[preset]})
+        current = RoutingConfig.from_dict(
+            {**RoutingConfig().to_dict(), **ROUTING_PRESETS[preset]}
+        )
 
     updates = {
-        k: v for k, v in {
+        k: v
+        for k, v in {
             "tier1_enabled": tier1_enabled,
             "tier2_enabled": tier2_enabled,
             "tier4_enabled": tier4_enabled,
-        }.items() if v is not None
+        }.items()
+        if v is not None
     }
     if updates:
         current = RoutingConfig.from_dict({**current.to_dict(), **updates})
@@ -1009,7 +1376,11 @@ async def get_routing_info() -> str:
     Nützlich um zu prüfen welche Routing-Einstellungen aktiv sind — z.B. bevor
     configure_routing aufgerufen wird oder um die Routing-Performance zu beurteilen.
     """
-    from agents.orchestrator import get_orchestrator, RoutingConfig, get_session_routing_config
+    from agents.orchestrator import (
+        get_orchestrator,
+        RoutingConfig,
+        get_session_routing_config,
+    )
 
     orch = get_orchestrator()
     session_id = status_bus.get_session_id()
@@ -1033,15 +1404,15 @@ async def wait(seconds: int, reason: str = "") -> str:
     """
     Wartet für eine bestimmte Anzahl von Sekunden, bevor mit der nächsten Aktion fortgefahren wird.
     Nutze dieses Tool, wenn eine Aufgabe etwas Zeit benötigt oder du bewusst eine Pause einlegen möchtest.
-    
+
     WICHTIG: Dieses Tool blockiert den aktuellen Agenten-Thread für die angegebene Zeit.
     Verwende es nur für kurze Wartezeiten (< 30 Sekunden) oder wenn du sicher bist,
     dass der User auf das Ergebnis wartet.
-    
+
     Args:
         seconds: Anzahl der Sekunden zum Warten (1-60)
         reason: Optionaler Grund für die Wartezeit (wird im Log protokolliert)
-    
+
     Beispiele:
     - "Warte 5 Sekunden, bis die Datenbank synchronisiert ist"
     - "Warte 10 Sekunden, bevor du die nächste Abfrage startest"
@@ -1050,13 +1421,21 @@ async def wait(seconds: int, reason: str = "") -> str:
         return _t(
             f"Fehler: Ungültige Wartezeit. Erlaubt sind 1-60 Sekunden (angefordert: {seconds}).",
             f"Error: Invalid wait time. Allowed range is 1-60 seconds (requested: {seconds}).",
+            f"Erreur : Temps d'attente invalide. La plage autorisée est de 1-60 secondes (demandé : {seconds}).",
+            f"Error: Tiempo de espera no válido. El rango permitido es de 1-60 segundos (solicitado: {seconds}).",
+            f"Errore: Tempo di attesa non valido. L'intervallo consentito è 1-60 secondi (richiesto: {seconds}).",
+            f"Fout: Ongeldige wachttijd. Toegestaan bereik is 1-60 seconden (aangevraagd: {seconds}).",
+            f"Błąd: Nieprawidłowy czas oczekiwania. Dozwolony zakres to 1-60 sekund (żądane: {seconds}).",
+            f"Erro: Tempo de espera inválido. O intervalo permitido é 1-60 segundos (solicitado: {seconds}).",
+            f"エラー: 無効な待機時間。許可範囲は1〜60秒です（要求: {seconds}秒）。",
+            f"错误: 无效的等待时间。允许范围为1-60秒（请求: {seconds}秒）。",
         )
-    
+
     if reason:
         logger.info("Warte %d Sekunden auf Grund: %s", seconds, reason)
     else:
         logger.info("Warte %d Sekunden (kein Grund angegeben)", seconds)
-    
+
     try:
         await asyncio.sleep(seconds)
         return _t(

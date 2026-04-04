@@ -74,7 +74,7 @@ def _build_sandbox_env(tmp_dir: str) -> dict[str, str]:
     }
 
 
-def _make_preexec(timeout: int):
+def _make_preexec(timeout: int) -> object:
     """
     Setzt harte Ressourcenlimits pro Ausführung.
     Hinweis: gilt nur auf POSIX-Systemen.
@@ -171,7 +171,7 @@ async def execute_code(code: str, language: str = "python", timeout: int = 15) -
             if os.name == "posix":
                 try:
                     os.killpg(proc.pid, signal.SIGKILL)
-                except Exception:
+                except (ProcessLookupError, OSError, RuntimeError):
                     proc.kill()
             else:
                 proc.kill()

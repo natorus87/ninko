@@ -151,7 +151,7 @@ async def list_openproject_projects(connection_id: str = "") -> str:
         lines.append(f"\n✓ {total} Projekte")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_openproject_projects failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -226,7 +226,7 @@ async def get_openproject_project(project_name: str, connection_id: str = "") ->
             lines.append(f"  Erstellt: {details.get('createdAt', '')[:10]}")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("get_openproject_project failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -336,7 +336,7 @@ async def list_openproject_work_packages(
         lines.append(f"\n✓ {total} Work Packages")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_openproject_work_packages failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -397,7 +397,7 @@ async def get_openproject_work_package(
             lines.append(f"  📝 {desc}")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("get_openproject_work_package failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -464,7 +464,7 @@ async def list_openproject_users(connection_id: str = "") -> str:
         lines.append(f"\n✓ {total} Benutzer")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_openproject_users failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -561,7 +561,7 @@ async def list_openproject_time_entries(
             lines.append(f"  {date}: {hours}h ({activity})")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_openproject_time_entries failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -641,7 +641,7 @@ async def create_openproject_work_package(
             ja=f"✅ Work Packageを作成しました: #{result.get('id')} - {subject}",
             zh=f"✅ 已创建工作包: #{result.get('id')} - {subject}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("create_openproject_work_package failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -695,7 +695,7 @@ async def update_openproject_work_package(
             ja=f"✅ Work Packageを更新しました: #{work_package_id}",
             zh=f"✅ 已更新工作包: #{work_package_id}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("update_openproject_work_package failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -779,7 +779,7 @@ async def log_openproject_time(
             ja=f"✅ {hours}hを{project_name}に記録しました",
             zh=f"✅ 已记录 {hours}h 用于 {project_name}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("log_openproject_time failed: %s", e)
         return _t(
             de=f"Fehler: {e}",

@@ -11,7 +11,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 MAX_UPLOAD_SIZE = 25 * 1024 * 1024  # 25 MB
 
 @router.get("/status")
-async def get_email_status(connection_id: str = ""):
+async def get_email_status(connection_id: str = "") -> object:
     """Return the API status for the dashboard."""
     if not connection_id:
         return {"status": "error", "message": "No connection ID provided"}

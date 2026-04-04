@@ -25,54 +25,54 @@ router = APIRouter()
 
 
 @router.get("/nodes")
-async def nodes():
+async def nodes() -> object:
     """All Proxmox nodes."""
     return await get_nodes.ainvoke({})
 
 
 @router.get("/nodes/{node}")
-async def node_status(node: str):
+async def node_status(node: str) -> object:
     """Status of a single node."""
     return await get_node_status.ainvoke({"node": node})
 
 
 @router.get("/vms")
-async def all_vms():
+async def all_vms() -> object:
     """All VMs across all nodes."""
     return await list_all_vms.ainvoke({})
 
 
 @router.get("/vms/{node}")
-async def vms_on_node(node: str):
+async def vms_on_node(node: str) -> object:
     """VMs on a specific node."""
     return await list_vms.ainvoke({"node": node})
 
 
 @router.get("/vm/{node}/{vmid}")
-async def vm_status(node: str, vmid: int):
+async def vm_status(node: str, vmid: int) -> object:
     """Status of a single VM."""
     return await get_vm_status.ainvoke({"node": node, "vmid": vmid})
 
 
 @router.post("/vm/{node}/{vmid}/start")
-async def start_vm_api(node: str, vmid: int):
+async def start_vm_api(node: str, vmid: int) -> object:
     """Start a VM."""
     return await start_vm_tool.ainvoke({"node": node, "vmid": vmid})
 
 
 @router.post("/vm/{node}/{vmid}/stop")
-async def stop_vm_api(node: str, vmid: int):
+async def stop_vm_api(node: str, vmid: int) -> object:
     """Stop a VM."""
     return await stop_vm_tool.ainvoke({"node": node, "vmid": vmid})
 
 
 @router.post("/vm/{node}/{vmid}/reboot")
-async def reboot_vm_api(node: str, vmid: int):
+async def reboot_vm_api(node: str, vmid: int) -> object:
     """Restart a VM."""
     return await reboot_vm_tool.ainvoke({"node": node, "vmid": vmid})
 
 
 @router.get("/containers/{node}")
-async def containers_on_node(node: str):
+async def containers_on_node(node: str) -> object:
     """LXC containers on a node."""
     return await list_containers.ainvoke({"node": node})

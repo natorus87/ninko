@@ -6,6 +6,7 @@ Lädt Module dynamisch, registriert Routen, startet Monitor.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -71,7 +72,7 @@ if not any(isinstance(h, _RedisLogHandler) for h in root_logger.handlers):
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> object:
     """Application Lifespan – Startup und Shutdown."""
     logger.info("═" * 60)
     logger.info("  Ninko – IT-Operations AI-Agent wird gestartet…")
@@ -125,7 +126,7 @@ async def lifespan(app: FastAPI):
             _embed_model = _embed_raw if isinstance(_embed_raw, str) else _embed_raw.decode()
             _os.environ["EMBED_MODEL"] = _embed_model
             logger.info("Embedding-Modell aus Redis wiederhergestellt: %s", _embed_model)
-    except Exception as _exc:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as _exc:
         logger.warning("LLM-Startup-Config konnte nicht geladen werden: %s", _exc)
 
     # ── STT + TTS Settings aus Redis wiederherstellen ─────────────────────────
@@ -148,7 +149,7 @@ async def lifespan(app: FastAPI):
             for _k, _v in _json2.loads(_tts_raw).items():
                 _os2.environ[_k] = str(_v).lower() if isinstance(_v, bool) else str(_v)
             logger.info("TTS-Settings aus Redis wiederhergestellt.")
-    except Exception as _exc2:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as _exc2:
         logger.warning("STT/TTS-Startup-Config konnte nicht geladen werden: %s", _exc2)
 
     # ── Module Discovery ──────────────────────────────
@@ -216,7 +217,7 @@ async def lifespan(app: FastAPI):
             "Safeguard-Middleware initialisiert (Modell: %s, Profil: %s, Timeout: %.1fs).",
             _sg_model, _sg_profile_id, settings.SAFEGUARD_TIMEOUT_SECONDS,
         )
-    except Exception as _sg_exc:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as _sg_exc:
         logger.warning("Safeguard-Middleware konnte nicht initialisiert werden: %s", _sg_exc)
         app.state.safeguard = None
 
@@ -244,12 +245,12 @@ async def lifespan(app: FastAPI):
     # ── Safeguard paused-agent cleanup (Background) ───
     safeguard = app.state.safeguard
     if safeguard:
-        async def _sg_cleanup_loop():
+        async def _sg_cleanup_loop() -> object:
             while True:
                 await asyncio.sleep(60)
                 try:
                     await safeguard.cleanup_paused_agents()
-                except Exception:
+                except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError):
                     pass
         sg_cleanup_task = asyncio.create_task(_sg_cleanup_loop())
         logger.info("Safeguard paused-agent cleanup task started.")
@@ -283,7 +284,7 @@ async def lifespan(app: FastAPI):
             _frontend_dir = _fdir
 
             @app.get("/", include_in_schema=False)
-            async def serve_index(request: Request):
+            async def serve_index(request: Request) -> object:
                 if settings.API_AUTH_ENABLED and resolve_request_role(request) is None:
                     return RedirectResponse(url="/login", status_code=302)
                 response = FileResponse(str(_frontend_dir / "index.html"))
@@ -293,7 +294,7 @@ async def lifespan(app: FastAPI):
                 return response
 
             @app.get("/login", include_in_schema=False)
-            async def serve_login(request: Request):
+            async def serve_login(request: Request) -> object:
                 if not settings.API_AUTH_ENABLED:
                     return RedirectResponse(url="/", status_code=302)
                 if resolve_request_role(request) is not None:
@@ -431,7 +432,7 @@ def _required_role_for_request(path: str, method: str) -> str | None:
 
 
 @app.middleware("http")
-async def api_security_middleware(request: Request, call_next):
+async def api_security_middleware(request: Request, call_next) -> object:
     path = request.url.path
 
     # API-only security/rate limiting
@@ -465,7 +466,7 @@ async def api_security_middleware(request: Request, call_next):
 
 # ── Cache Prevention Middleware ───────────────────────
 @app.middleware("http")
-async def add_no_cache_header(request: Request, call_next):
+async def add_no_cache_header(request: Request, call_next) -> object:
     response = await call_next(request)
     if request.url.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
@@ -498,7 +499,7 @@ app.include_router(safeguard_audit_router)
 # ── Health Endpoint ──────────────────────────────────
 # NOTE: Must be registered BEFORE the catch-all static mount
 @app.get("/health")
-async def health():
+async def health() -> object:
     """Basis Health-Check."""
     return {
         "status": "ok",

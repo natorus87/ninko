@@ -50,7 +50,7 @@ class RedisLogHandler(logging.Handler):
     Verhindert Blockaden und Probleme mit verschiedenen Event-Loops.
     """
 
-    def __init__(self, level=logging.INFO):
+    def __init__(self, level: int = logging.INFO) -> None:
         super().__init__(level)
         self._queue = queue.Queue(maxsize=2000)
         self._stop_event = threading.Event()
@@ -104,13 +104,13 @@ class RedisLogHandler(logging.Handler):
                 pass
             self.handleError(record)
 
-    def _worker(self):
+    def _worker(self) -> None:
         """Hintergrund-Thread für den Redis-Upload."""
         # Da aioredis async ist, brauchen wir hier einen eigenen Loop
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         
-        async def _upload_loop():
+        async def _upload_loop() -> None:
             import redis.asyncio as aioredis
             from core.config import get_settings
             
@@ -170,6 +170,6 @@ class RedisLogHandler(logging.Handler):
 
         loop.run_until_complete(_upload_loop())
 
-    def close(self):
+    def close(self) -> None:
         self._stop_event.set()
         super().close()

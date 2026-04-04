@@ -20,7 +20,7 @@ logger = logging.getLogger("ninko.api.scheduler")
 router = APIRouter(prefix="/api/scheduler", tags=["Scheduler"])
 
 
-def _get_scheduler(request: Request):
+def _get_scheduler(request: Request) -> object:
     """Holt den SchedulerAgent aus dem App-State."""
     scheduler = getattr(request.app.state, "scheduler", None)
     if not scheduler:

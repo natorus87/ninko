@@ -147,7 +147,7 @@ async def list_slack_channels(connection_id: str = "") -> str:
         lines.append(f"\n✓ {total} Channels")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_slack_channels failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -215,7 +215,7 @@ async def list_slack_users(connection_id: str = "") -> str:
         lines.append(f"\n✓ {count} Benutzer")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_slack_users failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -306,7 +306,7 @@ async def get_slack_channel_history(channel_name: str, connection_id: str = "") 
             lines.append(f"  [{ts}] {user}: {text}")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("get_slack_channel_history failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -371,7 +371,7 @@ async def search_slack_messages(query: str, connection_id: str = "") -> str:
             lines.append(f"  #{ch} ({user}): {text}")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("search_slack_messages failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -454,7 +454,7 @@ async def send_slack_message(
             ja=f"チャンネルが見つかりません: {channel}",
             zh=f"未找到频道: {channel}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("send_slack_message failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -529,7 +529,7 @@ async def send_slack_dm(user_name: str, text: str, connection_id: str = "") -> s
             ja=f"✅ {user_name}にDMを送信しました",
             zh=f"✅ 已发送私信给 {user_name}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("send_slack_dm failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -622,7 +622,7 @@ async def upload_slack_file(
             ja=f"✅ ファイルを #{channel} にアップロードしました",
             zh=f"✅ 文件已上传到 #{channel}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("upload_slack_file failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -669,7 +669,7 @@ async def create_slack_channel(
             ja=f"✅ {priv}チャンネルを作成: #{channel_name}",
             zh=f"✅ {priv}频道已创建: #{channel_name}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("create_slack_channel failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -753,7 +753,7 @@ async def invite_user_to_channel(
             ja=f"✅ {user_name}を #{channel_name}に招待しました",
             zh=f"✅ 已邀请 {user_name} 到 #{channel_name}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("invite_user_to_channel failed: %s", e)
         return _t(
             de=f"Fehler: {e}",

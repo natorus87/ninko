@@ -12,7 +12,7 @@ class TeamsAgent(BaseAgent):
     to the last known conversation (e.g. on request from another agent).
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         system_prompt = _t(
             "Du bist der Microsoft Teams Spezialist von Ninko. "
             "Nutze send_teams_message um proaktive Nachrichten in Teams zu senden. "

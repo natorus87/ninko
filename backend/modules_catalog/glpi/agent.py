@@ -142,7 +142,7 @@ class GlpiAgent(BaseAgent):
 
                 await asyncio.sleep(0.5)
 
-            except Exception as exc:
+            except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
                 logger.error("GLPI event listener error: %s", exc)
                 await asyncio.sleep(5)
 
@@ -179,5 +179,5 @@ class GlpiAgent(BaseAgent):
                     title,
                     result.get("ticket_id", "?"),
                 )
-            except Exception as exc:
+            except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
                 logger.error("Auto-ticket creation failed: %s", exc)

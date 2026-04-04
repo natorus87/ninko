@@ -13,7 +13,7 @@ from langchain_core.tools import tool
 logger = logging.getLogger("ninko.modules.proxmox.tools")
 
 
-async def _get_proxmox_client(connection_id: str = ""):
+async def _get_proxmox_client(connection_id: str = "") -> object:
     """Creates an authenticated Proxmox API connection via ConnectionManager."""
     from proxmoxer import ProxmoxAPI
     from core.vault import get_vault
@@ -64,7 +64,7 @@ async def _get_proxmox_client(connection_id: str = ""):
         if verify_ssl:
             try:
                 px.version.get()
-            except Exception as e:
+            except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
                 err_str = str(e).lower()
                 if "ssl" in err_str or "certificate" in err_str:
                     logger.warning("SSL verification failed, retrying without verify_ssl")
@@ -121,7 +121,7 @@ async def get_nodes(connection_id: str = "") -> list[dict]:
             mem_total = mem_info.get("total", 0)
             mem_used = mem_info.get("used", 0)
             mem_usage = round(mem_used / max(mem_total, 1) * 100, 1)
-        except Exception:
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError):
             cpu_usage = 0
             mem_total = 0
             mem_used = 0
@@ -183,7 +183,7 @@ async def list_all_vms(connection_id: str = "") -> list[dict]:
                     "mem_used": vm.get("mem", 0),
                     "uptime": vm.get("uptime", 0),
                 })
-        except Exception as e:
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
             logger.warning("Failed to read VMs on %s: %s", node, e)
 
         # LXC Container
@@ -201,7 +201,7 @@ async def list_all_vms(connection_id: str = "") -> list[dict]:
                     "mem_used": ct.get("mem", 0),
                     "uptime": ct.get("uptime", 0),
                 })
-        except Exception as e:
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
             logger.warning("Failed to read containers on %s: %s", node, e)
 
     return sorted(all_vms, key=lambda x: x["vmid"])
@@ -248,7 +248,7 @@ async def get_vm_status(node: str, vmid: int, connection_id: str = "") -> dict:
             "net_out": status.get("netout", 0),
             "uptime": status.get("uptime", 0),
         }
-    except Exception:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError):
         # Maybe it's an LXC container
         status = proxmox.nodes(node).lxc(vmid).status.current.get()
         return {
@@ -277,7 +277,7 @@ async def start_vm(node: str, vmid: int, connection_id: str = "") -> dict:
             "status": "success",
             "detail": f"VM {vmid} on node '{node}' is being started.",
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return {"action": "start", "target": f"VM {vmid}", "node": node, "status": "error", "detail": str(e)}
 
 
@@ -298,7 +298,7 @@ async def stop_vm(node: str, vmid: int, connection_id: str = "") -> dict:
     try:
         proxmox.nodes(node).qemu(vmid).status.stop.post()
         return {"action": "stop", "target": f"VM {vmid}", "node": node, "status": "success", "detail": f"VM {vmid} is being stopped."}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return {"action": "stop", "target": f"VM {vmid}", "node": node, "status": "error", "detail": str(e)}
 
 
@@ -309,7 +309,7 @@ async def reboot_vm(node: str, vmid: int, connection_id: str = "") -> dict:
     try:
         proxmox.nodes(node).qemu(vmid).status.reboot.post()
         return {"action": "reboot", "target": f"VM {vmid}", "node": node, "status": "success", "detail": f"VM {vmid} is being restarted."}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return {"action": "reboot", "target": f"VM {vmid}", "node": node, "status": "error", "detail": str(e)}
 
 
@@ -330,7 +330,7 @@ async def reset_vm(node: str, vmid: int, connection_id: str = "") -> dict:
     try:
         proxmox.nodes(node).qemu(vmid).status.reset.post()
         return {"action": "reset", "target": f"VM {vmid}", "node": node, "status": "success", "detail": f"VM {vmid} is being reset."}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return {"action": "reset", "target": f"VM {vmid}", "node": node, "status": "error", "detail": str(e)}
 
 
@@ -341,7 +341,7 @@ async def suspend_vm(node: str, vmid: int, connection_id: str = "") -> dict:
     try:
         proxmox.nodes(node).qemu(vmid).status.suspend.post()
         return {"action": "suspend", "target": f"VM {vmid}", "node": node, "status": "success", "detail": f"VM {vmid} has been suspended."}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return {"action": "suspend", "target": f"VM {vmid}", "node": node, "status": "error", "detail": str(e)}
 
 
@@ -352,7 +352,7 @@ async def resume_vm(node: str, vmid: int, connection_id: str = "") -> dict:
     try:
         proxmox.nodes(node).qemu(vmid).status.resume.post()
         return {"action": "resume", "target": f"VM {vmid}", "node": node, "status": "success", "detail": f"VM {vmid} has been resumed."}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return {"action": "resume", "target": f"VM {vmid}", "node": node, "status": "error", "detail": str(e)}
 
 
@@ -383,7 +383,7 @@ async def start_container(node: str, vmid: int, connection_id: str = "") -> dict
     try:
         proxmox.nodes(node).lxc(vmid).status.start.post()
         return {"action": "start", "target": f"CT {vmid}", "node": node, "status": "success", "detail": f"Container {vmid} is being started."}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return {"action": "start", "target": f"CT {vmid}", "node": node, "status": "error", "detail": str(e)}
 
 
@@ -404,7 +404,7 @@ async def stop_container(node: str, vmid: int, connection_id: str = "") -> dict:
     try:
         proxmox.nodes(node).lxc(vmid).status.stop.post()
         return {"action": "stop", "target": f"CT {vmid}", "node": node, "status": "success", "detail": f"Container {vmid} is being stopped."}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return {"action": "stop", "target": f"CT {vmid}", "node": node, "status": "error", "detail": str(e)}
 
 
@@ -415,7 +415,7 @@ async def reboot_container(node: str, vmid: int, connection_id: str = "") -> dic
     try:
         proxmox.nodes(node).lxc(vmid).status.reboot.post()
         return {"action": "reboot", "target": f"CT {vmid}", "node": node, "status": "success", "detail": f"Container {vmid} is being restarted."}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return {"action": "reboot", "target": f"CT {vmid}", "node": node, "status": "error", "detail": str(e)}
 
 
@@ -457,7 +457,7 @@ async def get_vm_config(node: str, vmid: int, connection_id: str = "") -> dict:
             "scsihw": config.get("scsihw", ""),
             "net0": config.get("net0", ""),
         }
-    except Exception:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError):
         config = proxmox.nodes(node).lxc(vmid).config.get()
         return {
             "vmid": vmid,

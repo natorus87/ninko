@@ -2,7 +2,7 @@ import asyncio
 from agents.orchestrator import OrchestratorAgent
 from core.module_registry import ModuleRegistry
 
-async def main():
+async def main() -> object:
     registry = ModuleRegistry()
     registry.discover_and_load()
     agent = OrchestratorAgent(registry)

@@ -78,13 +78,13 @@ async def _get_api_client(connection_id: str = "") -> dict:
 
 
 class MikroTikSession:
-    def __init__(self, client: dict):
+    def __init__(self, client: dict) -> None:
         self.host = client["host"]
         self.user = client["user"]
         self.password = client["password"]
         self.session = None
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> object:
         self.session = aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=30),
         )
@@ -96,7 +96,7 @@ class MikroTikSession:
         resp.raise_for_status()
         return self
 
-    async def __aexit__(self, *args):
+    async def __aexit__(self, *args) -> object:
         if self.session:
             await self.session.close()
 
@@ -137,7 +137,7 @@ async def get_mikrotik_identity(connection_id: str = "") -> str:
         )
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("get_mikrotik_identity failed: %s", e)
         return _t(de=f"Fehler: {e}", en=f"Error: {e}", fr=f"Erreur: {e}", es=f"Error: {e}", it=f"Errore: {e}", nl=f"Fout: {e}", pl=f"Błąd: {e}", pt=f"Erro: {e}", ja=f"エラー: {e}", zh=f"错误: {e}")
 
@@ -165,7 +165,7 @@ async def list_mikrotik_interfaces(connection_id: str = "") -> str:
         lines.append(f"\n✓ {total} " + _t(de="Interfaces", en="Interfaces", fr="Interfaces", es="Interfaces", it="Interfacce", nl="Interfaces", pl="Interfejsy", pt="Interfaces", ja="インターフェース", zh="接口"))
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_mikrotik_interfaces failed: %s", e)
         return _t(de=f"Fehler: {e}", en=f"Error: {e}", fr=f"Erreur: {e}", es=f"Error: {e}", it=f"Errore: {e}", nl=f"Fout: {e}", pl=f"Błąd: {e}", pt=f"Erro: {e}", ja=f"エラー: {e}", zh=f"错误: {e}")
 
@@ -205,7 +205,7 @@ async def get_mikrotik_interface_stats(interface: str, connection_id: str = "") 
         lines.append(f"  TX Packets: {s.get('tx-packet', '-')}")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("get_mikrotik_interface_stats failed: %s", e)
         return _t(de=f"Fehler: {e}", en=f"Error: {e}", fr=f"Erreur: {e}", es=f"Error: {e}", it=f"Errore: {e}", nl=f"Fout: {e}", pl=f"Błąd: {e}", pt=f"Erro: {e}", ja=f"エラー: {e}", zh=f"错误: {e}")
 
@@ -232,7 +232,7 @@ async def list_mikrotik_routes(connection_id: str = "") -> str:
         lines.append(f"\n✓ {total} " + _t(de="Routen", en="Routes", fr="Routes", es="Rutas", it="Route", nl="Routes", pl="Trasy", pt="Routes", ja="ルート", zh="路由"))
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_mikrotik_routes failed: %s", e)
         return _t(de=f"Fehler: {e}", en=f"Error: {e}", fr=f"Erreur: {e}", es=f"Error: {e}", it=f"Errore: {e}", nl=f"Fout: {e}", pl=f"Błąd: {e}", pt=f"Erro: {e}", ja=f"エラー: {e}", zh=f"错误: {e}")
 
@@ -263,7 +263,7 @@ async def list_mikrotik_dhcp_leases(connection_id: str = "") -> str:
         lines.append(f"\n✓ {total} " + _t(de="Leases", en="Leases", fr="Baux", es="Concesiones", it="Lease", nl="Leases", pl="Dzierżawy", pt="Leases", ja="リース", zh="租约"))
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_mikrotik_dhcp_leases failed: %s", e)
         return _t(de=f"Fehler: {e}", en=f"Error: {e}", fr=f"Erreur: {e}", es=f"Error: {e}", it=f"Errore: {e}", nl=f"Fout: {e}", pl=f"Błąd: {e}", pt=f"Erro: {e}", ja=f"エラー: {e}", zh=f"错误: {e}")
 
@@ -291,7 +291,7 @@ async def list_mikrotik_firewall_rules(connection_id: str = "") -> str:
         lines.append(f"\n✓ {total} " + _t(de="Regeln", en="Rules", fr="Règles", es="Reglas", it="Regole", nl="Regels", pl="Reguły", pt="Regras", ja="ルール", zh="规则"))
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_mikrotik_firewall_rules failed: %s", e)
         return _t(de=f"Fehler: {e}", en=f"Error: {e}", fr=f"Erreur: {e}", es=f"Error: {e}", it=f"Errore: {e}", nl=f"Fout: {e}", pl=f"Błąd: {e}", pt=f"Erro: {e}", ja=f"エラー: {e}", zh=f"错误: {e}")
 
@@ -318,7 +318,7 @@ async def list_mikrotik_queues(connection_id: str = "") -> str:
         lines.append(f"\n✓ {total} " + _t(de="Queues", en="Queues", fr="Queues", es="Colas", it="Code", nl="Queues", pl="Kolejki", pt="Filas", ja="キュー", zh="队列"))
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_mikrotik_queues failed: %s", e)
         return _t(de=f"Fehler: {e}", en=f"Error: {e}", fr=f"Erreur: {e}", es=f"Error: {e}", it=f"Errore: {e}", nl=f"Fout: {e}", pl=f"Błąd: {e}", pt=f"Erro: {e}", ja=f"エラー: {e}", zh=f"错误: {e}")
 
@@ -345,7 +345,7 @@ async def list_mikrotik_wireless_clients(connection_id: str = "") -> str:
         lines.append(f"\n✓ {total} " + _t(de="Clients", en="Clients", fr="Clients", es="Clientes", it="Clienti", nl="Clients", pl="Klienci", pt="Clientes", ja="クライアント", zh="客户端"))
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_mikrotik_wireless_clients failed: %s", e)
         return _t(de=f"Fehler: {e}", en=f"Error: {e}", fr=f"Erreur: {e}", es=f"Error: {e}", it=f"Errore: {e}", nl=f"Fout: {e}", pl=f"Błąd: {e}", pt=f"Erro: {e}", ja=f"エラー: {e}", zh=f"错误: {e}")
 
@@ -377,7 +377,7 @@ async def enable_mikrotik_interface(interface: str, connection_id: str = "") -> 
             ja=f"✅ インターフェース有効: {interface}",
             zh=f"✅ 接口已启用: {interface}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("enable_mikrotik_interface failed: %s", e)
         return _t(de=f"Fehler: {e}", en=f"Error: {e}", fr=f"Erreur: {e}", es=f"Error: {e}", it=f"Errore: {e}", nl=f"Fout: {e}", pl=f"Błąd: {e}", pt=f"Erro: {e}", ja=f"エラー: {e}", zh=f"错误: {e}")
 
@@ -404,7 +404,7 @@ async def disable_mikrotik_interface(interface: str, connection_id: str = "") ->
             ja=f"✅ インターフェース無効: {interface}",
             zh=f"✅ 接口已禁用: {interface}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("disable_mikrotik_interface failed: %s", e)
         return _t(de=f"Fehler: {e}", en=f"Error: {e}", fr=f"Erreur: {e}", es=f"Error: {e}", it=f"Errore: {e}", nl=f"Fout: {e}", pl=f"Błąd: {e}", pt=f"Erro: {e}", ja=f"エラー: {e}", zh=f"错误: {e}")
 
@@ -431,7 +431,7 @@ async def reboot_mikrotik(connection_id: str = "") -> str:
             ja="✅ ルーターを再起動中",
             zh="✅ 路由器正在重启",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("reboot_mikrotik failed: %s", e)
         return _t(de=f"Fehler: {e}", en=f"Error: {e}", fr=f"Erreur: {e}", es=f"Error: {e}", it=f"Errore: {e}", nl=f"Fout: {e}", pl=f"Błąd: {e}", pt=f"Erro: {e}", ja=f"エラー: {e}", zh=f"错误: {e}")
 
@@ -472,7 +472,7 @@ async def create_mikrotik_firewall_rule(
             ja=f"✅ ファイアウォールルール作成: {chain} → {action}",
             zh=f"✅ 防火墙规则已创建: {chain} → {action}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("create_mikrotik_firewall_rule failed: %s", e)
         return _t(de=f"Fehler: {e}", en=f"Error: {e}", fr=f"Erreur: {e}", es=f"Error: {e}", it=f"Errore: {e}", nl=f"Fout: {e}", pl=f"Błąd: {e}", pt=f"Erro: {e}", ja=f"エラー: {e}", zh=f"错误: {e}")
 
@@ -505,6 +505,6 @@ async def add_mikrotik_ip_address(
             ja=f"✅ IPアドレス追加: {address} on {interface}",
             zh=f"✅ IP地址已添加: {address} 在 {interface}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("add_mikrotik_ip_address failed: %s", e)
         return _t(de=f"Fehler: {e}", en=f"Error: {e}", fr=f"Erreur: {e}", es=f"Error: {e}", it=f"Errore: {e}", nl=f"Fout: {e}", pl=f"Błąd: {e}", pt=f"Erro: {e}", ja=f"エラー: {e}", zh=f"错误: {e}")

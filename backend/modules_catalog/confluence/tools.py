@@ -175,7 +175,7 @@ async def get_confluence_spaces(connection_id: str = "") -> dict:
             "spaces": result.get("results", []),
             "total": result.get("totalSize", 0),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError, OSError) as e:
         logger.error("get_confluence_spaces failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -200,7 +200,7 @@ async def get_confluence_space(space_id: str, connection_id: str = "") -> dict:
             "status": "success",
             "space": result,
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError, OSError) as e:
         logger.error("get_confluence_space failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -236,7 +236,7 @@ async def get_confluence_pages(
             "pages": result.get("results", []),
             "total": result.get("totalSize", 0),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError, OSError) as e:
         logger.error("get_confluence_pages failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -262,7 +262,7 @@ async def get_confluence_page(page_id: str, connection_id: str = "") -> dict:
             "status": "success",
             "page": result,
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError, OSError) as e:
         logger.error("get_confluence_page failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -302,7 +302,7 @@ async def create_confluence_page(
             "message": f"Page created: {result.get('id')}",
             "page": result,
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError, OSError) as e:
         logger.error("create_confluence_page failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -340,7 +340,7 @@ async def update_confluence_page(
             "message": f"Page {page_id} updated.",
             "page": result,
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError, OSError) as e:
         logger.error("update_confluence_page failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -375,7 +375,7 @@ async def get_confluence_blog_posts(
             "posts": result.get("results", []),
             "total": result.get("totalSize", 0),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError, OSError) as e:
         logger.error("get_confluence_blog_posts failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -415,7 +415,7 @@ async def create_confluence_blog_post(
             "message": f"Blog post created: {result.get('id')}",
             "post": result,
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError, OSError) as e:
         logger.error("create_confluence_blog_post failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -455,7 +455,7 @@ async def search_confluence(
             "results": result.get("results", []),
             "total": result.get("totalSize", 0),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError, OSError) as e:
         logger.error("search_confluence failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -482,7 +482,7 @@ async def get_confluence_labels(connection_id: str = "") -> dict:
             "labels": result.get("results", []),
             "total": result.get("totalSize", 0),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError, OSError) as e:
         logger.error("get_confluence_labels failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -509,6 +509,6 @@ async def get_confluence_page_history(page_id: str, connection_id: str = "") -> 
             "versions": result.get("results", []),
             "total": result.get("totalSize", 0),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError, OSError) as e:
         logger.error("get_confluence_page_history failed: %s", e)
         return {"error": "Request failed. Check server logs."}

@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/microsoft_entra", tags=["microsoft_entra"])
 
 
 @router.get("/health")
-async def health_check():
+async def health_check() -> object:
     """Health check endpoint."""
     from .manifest import check_microsoft_entra_health
 
@@ -22,7 +22,7 @@ async def health_check():
 
 
 @router.get("/status")
-async def get_status(connection_id: str = ""):
+async def get_status(connection_id: str = "") -> object:
     """Get Entra ID status for dashboard."""
     try:
         from .tools import _get_token, _graph_request
@@ -37,5 +37,5 @@ async def get_status(connection_id: str = ""):
             "groups_count": len(groups.get("value", [])),
             "devices_count": len(devices.get("value", [])),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"error": str(e)}

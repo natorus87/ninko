@@ -32,7 +32,7 @@ async def check_tasmota_health(connection_id: str = "") -> dict:
             if resp.status_code == 200:
                 return {"status": "ok", "detail": f"Tasmota at {host} reachable"}
             return {"status": "error", "detail": f"HTTP {resp.status_code}"}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": str(e)}
 
 

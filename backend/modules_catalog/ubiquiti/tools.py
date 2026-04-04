@@ -78,14 +78,14 @@ async def _get_api_client(connection_id: str = "") -> dict:
 
 
 class UnifiSession:
-    def __init__(self, client: dict):
+    def __init__(self, client: dict) -> None:
         self.host = client["host"]
         self.user = client["user"]
         self.password = client["password"]
         self.session = None
         self.cookies = None
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> object:
         self.session = aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=30),
         )
@@ -98,7 +98,7 @@ class UnifiSession:
         self.cookies = login.cookies
         return self
 
-    async def __aexit__(self, *args):
+    async def __aexit__(self, *args) -> object:
         if self.session:
             await self.session.close()
 
@@ -166,7 +166,7 @@ async def list_ubiquiti_devices(connection_id: str = "") -> str:
         lines.append(f"\n✓ {total} Geräte")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_ubiquiti_devices failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -234,7 +234,7 @@ async def list_ubiquiti_clients(connection_id: str = "") -> str:
         lines.append(f"\n✓ {total} Clients")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_ubiquiti_clients failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -306,7 +306,7 @@ async def get_ubiquiti_device(device_name: str, connection_id: str = "") -> str:
         lines.append(f"  State: {device.get('state', 0)}")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("get_ubiquiti_device failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -372,7 +372,7 @@ async def list_ubiquiti_wlans(connection_id: str = "") -> str:
         lines.append(f"\n✓ {total} WLANs")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_ubiquiti_wlans failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -425,7 +425,7 @@ async def list_ubiquiti_switch_ports(connection_id: str = "") -> str:
                 lines.append(f"      {pname} {poe}")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_ubiquiti_switch_ports failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -474,7 +474,7 @@ async def get_ubiquiti_network_stats(connection_id: str = "") -> str:
         lines.append(f"  TX: {total_tx / 1024 / 1024 / 1024:.2f} GB")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("get_ubiquiti_network_stats failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -540,7 +540,7 @@ async def list_ubiquiti_firewall_rules(connection_id: str = "") -> str:
         lines.append(f"\n✓ {total} Regeln")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_ubiquiti_firewall_rules failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -609,7 +609,7 @@ async def restart_ubiquiti_device(device_name: str, connection_id: str = "") -> 
             ja=f"✅ デバイスを再起動中: {device_name}",
             zh=f"✅ 设备正在重启: {device_name}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("restart_ubiquiti_device failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -673,7 +673,7 @@ async def enable_ubiquiti_wlan(wlan_name: str, connection_id: str = "") -> str:
             ja=f"✅ WLANを有効にしました: {wlan_name}",
             zh=f"✅ WLAN已启用: {wlan_name}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("enable_ubiquiti_wlan failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -737,7 +737,7 @@ async def disable_ubiquiti_wlan(wlan_name: str, connection_id: str = "") -> str:
             ja=f"✅ WLANを無効にしました: {wlan_name}",
             zh=f"✅ WLAN已禁用: {wlan_name}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("disable_ubiquiti_wlan failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -777,7 +777,7 @@ async def kick_ubiquiti_client(mac_address: str, connection_id: str = "") -> str
             ja=f"✅ クライアントを切断: {mac_address}",
             zh=f"✅ 客户端已断开: {mac_address}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("kick_ubiquiti_client failed: %s", e)
         return _t(
             de=f"Fehler: {e}",

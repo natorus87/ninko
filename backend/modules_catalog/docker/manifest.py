@@ -34,7 +34,7 @@ async def check_docker_health() -> dict:
                     "detail": f"Docker {version.get('Version', '?')} erreichbar ({host}:{port})",
                 }
             return {"status": "error", "detail": f"Docker API antwortete mit HTTP {resp.status_code}"}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": f"Docker nicht erreichbar: {e}"}
 
 

@@ -90,11 +90,11 @@ async def _netgear_request(client: dict, path: str) -> dict:
     ) as session:
         async with session.get(url) as resp:
             if resp.status == 401:
-                raise Exception("Authentication failed")
+                raise RuntimeError("Authentication failed")
             resp.raise_for_status()
             try:
                 return await resp.json()
-            except Exception:
+            except (aiohttp.ContentTypeError, ValueError, TypeError):
                 text = await resp.text()
                 return {"raw": text}
 
@@ -150,7 +150,7 @@ async def get_netgear_sysinfo(connection_id: str = "") -> str:
         lines.append(f"  Uptime: {data.get('uptime', '-')}")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("get_netgear_sysinfo failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -221,7 +221,7 @@ async def list_netgear_ports(connection_id: str = "") -> str:
         lines.append(f"\n✓ {total} Ports")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_netgear_ports failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -289,7 +289,7 @@ async def list_netgear_vlans(connection_id: str = "") -> str:
         lines.append(f"\n✓ {total} VLANs")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_netgear_vlans failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -353,7 +353,7 @@ async def get_netgear_port_stats(port: str, connection_id: str = "") -> str:
         lines.append(f"  TX Packets: {data.get('tx_packets', '-')}")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("get_netgear_port_stats failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -433,7 +433,7 @@ async def list_netgear_arp(connection_id: str = "") -> str:
         )
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_netgear_arp failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -496,7 +496,7 @@ async def list_netgear_lldp(connection_id: str = "") -> str:
             lines.append(f"  Port {local} → {name} ({remote})")
 
         return "\n".join(lines)
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("list_netgear_lldp failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -538,7 +538,7 @@ async def enable_netgear_port(port: str, connection_id: str = "") -> str:
             ja=f"✅ ポート有効: {port}",
             zh=f"✅ 端口已启用: {port}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("enable_netgear_port failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -575,7 +575,7 @@ async def disable_netgear_port(port: str, connection_id: str = "") -> str:
             ja=f"✅ ポート無効: {port}",
             zh=f"✅ 端口已禁用: {port}",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("disable_netgear_port failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -612,7 +612,7 @@ async def reboot_netgear(connection_id: str = "") -> str:
             ja="✅ デバイスを再起動中",
             zh="✅ 设备正在重启",
         )
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
         logger.error("reboot_netgear failed: %s", e)
         return _t(
             de=f"Fehler: {e}",

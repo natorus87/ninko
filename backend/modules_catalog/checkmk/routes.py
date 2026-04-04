@@ -35,7 +35,7 @@ async def get_status(connection_id: str = "") -> dict:
             "services": services_result,
             "alerts": alerts_result,
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return {"status": "error", "detail": str(e)}
 
 
@@ -45,7 +45,7 @@ async def get_hosts(connection_id: str = "") -> dict:
     try:
         result = await checkmk_get_hosts.ainvoke({"connection_id": connection_id})
         return {"status": "ok", "data": result}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return {"status": "error", "detail": str(e)}
 
 
@@ -55,7 +55,7 @@ async def get_services(connection_id: str = "", host_name: str = "") -> dict:
     try:
         result = await checkmk_get_services.ainvoke({"connection_id": connection_id, "host_name": host_name})
         return {"status": "ok", "data": result}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return {"status": "error", "detail": str(e)}
 
 
@@ -65,7 +65,7 @@ async def get_alerts(connection_id: str = "", max_results: int = 20) -> dict:
     try:
         result = await checkmk_get_alerts.ainvoke({"connection_id": connection_id, "max_results": max_results})
         return {"status": "ok", "data": result}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return {"status": "error", "detail": str(e)}
 
 
@@ -75,5 +75,5 @@ async def health_check(connection_id: str = "") -> dict:
     try:
         await checkmk_get_hosts.ainvoke({"connection_id": connection_id})
         return {"status": "ok", "detail": "Checkmk erreichbar"}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return {"status": "error", "detail": str(e)}

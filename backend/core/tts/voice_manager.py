@@ -48,7 +48,7 @@ class VoiceManager:
     Verwaltet lokale Piper-Stimmen und kann neue Stimmen von HuggingFace laden.
     """
 
-    def __init__(self, voices_dir: str | Path = "./voices"):
+    def __init__(self, voices_dir: str | Path = "./voices") -> None:
         self.voices_dir = Path(voices_dir)
 
     def list_languages(self) -> list[str]:

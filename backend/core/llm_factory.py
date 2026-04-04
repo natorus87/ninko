@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 import httpx
 from langchain_core.language_models import BaseChatModel
@@ -134,13 +134,13 @@ class _NormalizingChatOpenAI(ChatOpenAI):
     Content (Liste statt String). Gilt für alle OpenAI-kompatiblen Anbieter.
     """
 
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> Any:
         return super()._generate(
             [_normalize_msg_content(m) for m in messages],
             stop=stop, run_manager=run_manager, **kwargs,
         )
 
-    async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs):
+    async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs) -> Any:
         return await super()._agenerate(
             [_normalize_msg_content(m) for m in messages],
             stop=stop, run_manager=run_manager, **kwargs,
@@ -166,13 +166,13 @@ class _LMStudioChatOpenAI(_NormalizingChatOpenAI):
         injected = _inject_tools_into_system(converted, tools)
         return [_normalize_msg_content(m) for m in injected]
 
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> Any:
         prepared = self._prepare(messages, kwargs.get("tools", []))
         # Basis-Klasse (ChatOpenAI) direkt aufrufen, nicht _NormalizingChatOpenAI
         # (die würde nochmal normalisieren — _prepare macht das bereits)
         return ChatOpenAI._generate(self, prepared, stop=stop, run_manager=run_manager, **kwargs)
 
-    async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs):
+    async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs) -> Any:
         prepared = self._prepare(messages, kwargs.get("tools", []))
         return await ChatOpenAI._agenerate(self, prepared, stop=stop, run_manager=run_manager, **kwargs)
 
@@ -412,7 +412,7 @@ def get_embeddings() -> Embeddings:
         )
 
 
-def get_safeguard_openai_client():
+def get_safeguard_openai_client() -> tuple[Any, str]:
     """
     Gibt einen (AsyncOpenAI, model_name)-Tuple für den Safeguard-Classifier zurück.
     Nutzt denselben LLM-Provider wie der Rest der App — kein separater Endpoint nötig.

@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/netgear", tags=["netgear"])
 
 
 @router.get("/health")
-async def health_check():
+async def health_check() -> object:
     """Health check endpoint."""
     from .manifest import check_netgear_health
 
@@ -22,7 +22,7 @@ async def health_check():
 
 
 @router.get("/status")
-async def get_status(connection_id: str = ""):
+async def get_status(connection_id: str = "") -> object:
     """Get Netgear device status for dashboard."""
     try:
         from .tools import _get_api_client, _netgear_request
@@ -39,5 +39,5 @@ async def get_status(connection_id: str = ""):
             "firmware": sysinfo.get("firmware_version", ""),
             "ports_count": len(port_list),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"error": str(e)}

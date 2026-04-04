@@ -20,7 +20,7 @@ async def check_image_gen_health() -> dict:
         if config.get("backend") and config.get("api_key"):
             return {"status": "ok", "detail": f"Image Gen bereit ({config['backend']})"}
         return {"status": "warning", "detail": "Kein Provider konfiguriert"}
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         return {"status": "error", "detail": str(e)}
 
 

@@ -51,7 +51,7 @@ def _compare(a, op: str, b) -> bool:
 class WorkflowEngine:
     """Asynchrone Workflow-Ausführungsmaschine."""
 
-    def __init__(self, redis, orchestrator):
+    def __init__(self, redis, orchestrator) -> None:
         self.redis = redis
         self.orchestrator = orchestrator
 

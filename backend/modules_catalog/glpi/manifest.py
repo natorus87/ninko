@@ -57,7 +57,7 @@ async def check_glpi_health() -> dict:
             else:
                 return {"status": "error", "detail": f"HTTP {resp.status_code}: {resp.text[:100]}"}
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": f"GLPI unreachable: {e}"}
 
 

@@ -26,7 +26,7 @@ router = APIRouter(tags=["Image Generation"])
 # ── Image Serving ────────────────────────────────────────────────────────────
 
 @router.get("/api/images/{filename}")
-async def serve_image(filename: str):
+async def serve_image(filename: str) -> FileResponse:
     """Liefert ein generiertes Bild aus."""
     # Sicherheitscheck: kein Path Traversal
     if ".." in filename or "/" in filename:
@@ -63,7 +63,7 @@ class ImageProviderConfig(BaseModel):
 
 
 @router.get("/api/settings/image-provider")
-async def get_image_provider():
+async def get_image_provider() -> dict:
     """Holt die aktuelle Image-Provider-Konfiguration."""
     config = await get_image_provider_config()
     # API-Key maskieren
@@ -75,7 +75,7 @@ async def get_image_provider():
 
 
 @router.put("/api/settings/image-provider")
-async def update_image_provider(data: ImageProviderConfig):
+async def update_image_provider(data: ImageProviderConfig) -> dict[str, str]:
     """Aktualisiert die Image-Provider-Konfiguration."""
     current = await get_image_provider_config()
 

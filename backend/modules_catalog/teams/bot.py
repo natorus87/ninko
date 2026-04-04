@@ -205,7 +205,7 @@ async def _transcribe_teams_attachment(
 
         text, confidence, detected_lang = await transcribe_bytes_extended(audio_bytes, name)
         return (text or None), confidence, detected_lang
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as exc:
         logger.warning("Teams audio attachment transcription failed: %s", exc)
         return None, -2.0, os.getenv("WHISPER_LANGUAGE", "de")
 
@@ -394,7 +394,7 @@ async def handle_teams_turn(app: FastAPI, activity: dict[str, Any]) -> None:
 
         await send_teams_message(service_url, conv_id, activity_id, final_text)
 
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         logger.exception("Internal error in handle_teams_turn: %s", e)
         err_type = type(e).__name__
         await send_teams_message(
@@ -430,5 +430,5 @@ async def _send_teams_voice_reply(
             mp3_bytes,
             caption="🔊 Sprachantwort",
         )
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as exc:
         logger.error("Teams voice reply error: %s", exc)

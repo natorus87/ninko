@@ -28,7 +28,7 @@ async def get_bot_status() -> dict[str, Any]:
                     me = resp.json().get("result", {})
                     result["username"] = me.get("username")
                     result["first_name"] = me.get("first_name")
-    except Exception:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError):
         pass
 
     # Default chat ID and allowlist from connection config for the dashboard
@@ -39,7 +39,7 @@ async def get_bot_status() -> dict[str, Any]:
             result["default_chat_id"] = conn.config.get("default_chat_id", "")
             raw = conn.config.get("allowed_chat_ids", "")
             result["allowed_ids"] = [s.strip() for s in str(raw).split(",") if s.strip()] if raw else []
-    except Exception:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError):
         result["allowed_ids"] = []
 
     return result
@@ -217,7 +217,7 @@ async def send_message(body: SendMessageRequest) -> dict[str, Any]:
             conn = await ConnectionManager.get_default_connection("telegram")
             if conn:
                 chat_id = conn.config.get("default_chat_id", "")
-        except Exception:
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError):
             pass
 
     if not chat_id:

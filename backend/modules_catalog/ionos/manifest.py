@@ -26,7 +26,7 @@ async def check_ionos_health() -> dict:
             "status": "ok",
             "detail": f"IONOS verbunden, {zone_count} Zonen gefunden",
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": f"IONOS API nicht erreichbar: {e}"}
 
 

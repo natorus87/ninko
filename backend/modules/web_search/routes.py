@@ -13,12 +13,12 @@ router = APIRouter()
 
 
 @router.get("")
-async def plugin_root():
+async def plugin_root() -> object:
     return {"status": "ok", "module": "web_search"}
 
 
 @router.get("/status")
-async def get_status():
+async def get_status() -> object:
     """Gibt SearXNG-Status und aktive Engines zurück."""
     searxng_url = os.getenv("SEARXNG_URL", "http://localhost:8080").rstrip("/")
 
@@ -33,7 +33,7 @@ async def get_status():
             data = resp.json()
     except httpx.TimeoutException:
         return {"connected": False, "error": "Timeout", "engines": []}
-    except Exception as exc:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as exc:
         logger.exception("Web-Search Statusprüfung fehlgeschlagen: %s", exc)
         return {"connected": False, "error": "SearXNG derzeit nicht erreichbar.", "engines": []}
 

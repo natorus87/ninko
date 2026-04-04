@@ -136,7 +136,15 @@ async def update_llm_settings(body: LlmSettings) -> LlmSettingsResponse:
                 existing = json.loads(existing_raw)
                 if existing.get("api_key"):
                     payload["api_key"] = existing["api_key"]
-            except Exception:
+            except (
+                RuntimeError,
+                ValueError,
+                TypeError,
+                KeyError,
+                OSError,
+                ImportError,
+                json.JSONDecodeError,
+            ):
                 pass
 
     await redis.connection.set(REDIS_KEY_LLM, json.dumps(payload))
@@ -173,7 +181,21 @@ async def set_embed_model(body: dict) -> dict:
     """Globales Embedding-Modell setzen. Achtung: Vorhandene ChromaDB-Einträge wurden mit dem alten Modell erzeugt."""
     model = body.get("embed_model", "").strip()
     if not model:
-        raise HTTPException(status_code=400, detail="embed_model darf nicht leer sein.")
+        raise HTTPException(
+            status_code=400,
+            detail=_t(
+                de="embed_model darf nicht leer sein.",
+                en="embed_model cannot be empty.",
+                fr="embed_model ne peut pas être vide.",
+                es="embed_model no puede estar vacío.",
+                it="embed_model non può essere vuoto.",
+                nl="embed_model mag niet leeg zijn.",
+                pl="embed_model nie może być pusty.",
+                pt="embed_model não pode estar vazio.",
+                ja="embed_modelは空にできません。",
+                zh="embed_model不能为空。",
+            ),
+        )
 
     redis = get_redis()
     await redis.connection.set(REDIS_KEY_EMBED_MODEL, model)
@@ -239,7 +261,15 @@ async def get_branding_settings() -> BrandingSettingsResponse:
             data = json.loads(raw)
             merged = {**defaults, **(data or {})}
             return BrandingSettingsResponse(**merged, source="redis")
-        except Exception:
+        except (
+            RuntimeError,
+            ValueError,
+            TypeError,
+            KeyError,
+            OSError,
+            ImportError,
+            json.JSONDecodeError,
+        ):
             pass
     return BrandingSettingsResponse(**defaults, source="default")
 
@@ -353,15 +383,43 @@ async def upload_branding_asset(file: UploadFile = File(...)) -> dict:
 
 
 @router.get("/branding/assets/{filename}")
-async def get_branding_asset(filename: str):
+async def get_branding_asset(filename: str) -> "FileResponse":
     """Branding-Asset aus persistentem Storage ausliefern."""
     from fastapi.responses import FileResponse
 
     if ".." in filename or "/" in filename:
-        raise HTTPException(status_code=400, detail="Ungültiger Dateiname")
+        raise HTTPException(
+            status_code=400,
+            detail=_t(
+                de="Ungültiger Dateiname",
+                en="Invalid filename",
+                fr="Nom de fichier invalide",
+                es="Nombre de archivo inválido",
+                it="Nome file non valido",
+                nl="Ongeldige bestandsnaam",
+                pl="Nieprawidłowa nazwa pliku",
+                pt="Nome de arquivo inválido",
+                ja="無効なファイル名",
+                zh="无效的文件名",
+            ),
+        )
     path = _BRANDING_DIR / filename
     if not path.is_file():
-        raise HTTPException(status_code=404, detail="Datei nicht gefunden")
+        raise HTTPException(
+            status_code=404,
+            detail=_t(
+                de="Datei nicht gefunden",
+                en="File not found",
+                fr="Fichier non trouvé",
+                es="Archivo no encontrado",
+                it="File non trovato",
+                nl="Bestand niet gevonden",
+                pl="Plik nie znaleziono",
+                pt="Arquivo não encontrado",
+                ja="ファイルが見つかりません",
+                zh="文件未找到",
+            ),
+        )
 
     media_type = {
         ".png": "image/png",
@@ -378,16 +436,56 @@ async def get_branding_asset(filename: str):
 async def delete_branding_asset(filename: str) -> dict:
     """Branding-Asset löschen und ggf. referenzierte URLs im Branding leeren."""
     if ".." in filename or "/" in filename:
-        raise HTTPException(status_code=400, detail="Ungültiger Dateiname")
+        raise HTTPException(
+            status_code=400,
+            detail=_t(
+                de="Ungültiger Dateiname",
+                en="Invalid filename",
+                fr="Nom de fichier invalide",
+                es="Nombre de archivo inválido",
+                it="Nome file non valido",
+                nl="Ongeldige bestandsnaam",
+                pl="Nieprawidłowa nazwa pliku",
+                pt="Nome de arquivo inválido",
+                ja="無効なファイル名",
+                zh="无效的文件名",
+            ),
+        )
     path = _BRANDING_DIR / filename
     if not path.is_file():
-        raise HTTPException(status_code=404, detail="Datei nicht gefunden")
+        raise HTTPException(
+            status_code=404,
+            detail=_t(
+                de="Datei nicht gefunden",
+                en="File not found",
+                fr="Fichier non trouvé",
+                es="Archivo no encontrado",
+                it="File non trovato",
+                nl="Bestand niet gevonden",
+                pl="Plik nie znaleziono",
+                pt="Arquivo não encontrado",
+                ja="ファイルが見つかりません",
+                zh="文件未找到",
+            ),
+        )
 
     try:
         path.unlink()
     except OSError:
         raise HTTPException(
-            status_code=500, detail="Datei konnte nicht gelöscht werden"
+            status_code=500,
+            detail=_t(
+                de="Datei konnte nicht gelöscht werden",
+                en="File could not be deleted",
+                fr="Le fichier n'a pas pu être supprimé",
+                es="El archivo no pudo ser eliminado",
+                it="Il file non poteva essere eliminato",
+                nl="Bestand kon niet worden verwijderd",
+                pl="Plik nie mógł zostać usunięty",
+                pt="O arquivo não pôde ser excluído",
+                ja="ファイルを削除できませんでした",
+                zh="无法删除文件",
+            ),
         )
 
     # Falls URL im Branding verwendet wurde, zurück auf Defaults/Fallback setzen
@@ -406,7 +504,15 @@ async def delete_branding_asset(filename: str) -> dict:
                 changed = True
             if changed:
                 await redis.connection.set(REDIS_KEY_BRANDING, json.dumps(data))
-        except Exception:
+        except (
+            RuntimeError,
+            ValueError,
+            TypeError,
+            KeyError,
+            OSError,
+            ImportError,
+            json.JSONDecodeError,
+        ):
             pass
 
     return {"deleted": True, "filename": filename}
@@ -742,7 +848,19 @@ async def update_llm_provider(provider_id: str, body: LLMProviderCreate) -> dict
     idx = next((i for i, p in enumerate(providers) if p["id"] == provider_id), None)
     if idx is None:
         raise HTTPException(
-            status_code=404, detail=f"Provider '{provider_id}' nicht gefunden"
+            status_code=404,
+            detail=_t(
+                de=f"Provider '{provider_id}' nicht gefunden",
+                en=f"Provider '{provider_id}' not found",
+                fr=f"Provider '{provider_id}' non trouvé",
+                es=f"Provider '{provider_id}' no encontrado",
+                it=f"Provider '{provider_id}' non trovato",
+                nl=f"Provider '{provider_id}' niet gevonden",
+                pl=f"Provider '{provider_id}' nie znaleziono",
+                pt=f"Provider '{provider_id}' não encontrado",
+                ja=f"Provider '{provider_id}' が見つかりません",
+                zh=f"未找到 Provider '{provider_id}'",
+            ),
         )
 
     if body.is_default:
@@ -772,7 +890,19 @@ async def delete_llm_provider(provider_id: str) -> dict:
     providers = [p for p in providers if p["id"] != provider_id]
     if len(providers) == original_len:
         raise HTTPException(
-            status_code=404, detail=f"Provider '{provider_id}' nicht gefunden"
+            status_code=404,
+            detail=_t(
+                de=f"Provider '{provider_id}' nicht gefunden",
+                en=f"Provider '{provider_id}' not found",
+                fr=f"Provider '{provider_id}' non trouvé",
+                es=f"Provider '{provider_id}' no encontrado",
+                it=f"Provider '{provider_id}' non trovato",
+                nl=f"Provider '{provider_id}' niet gevonden",
+                pl=f"Provider '{provider_id}' nie znaleziono",
+                pt=f"Provider '{provider_id}' não encontrado",
+                ja=f"Provider '{provider_id}' が見つかりません",
+                zh=f"未找到 Provider '{provider_id}'",
+            ),
         )
 
     # Neuen Standard setzen falls gelöschter Standard war
@@ -796,7 +926,19 @@ async def test_llm_provider(provider_id: str) -> dict:
     provider = next((p for p in providers if p["id"] == provider_id), None)
     if not provider:
         raise HTTPException(
-            status_code=404, detail=f"Provider '{provider_id}' nicht gefunden"
+            status_code=404,
+            detail=_t(
+                de=f"Provider '{provider_id}' nicht gefunden",
+                en=f"Provider '{provider_id}' not found",
+                fr=f"Provider '{provider_id}' non trouvé",
+                es=f"Provider '{provider_id}' no encontrado",
+                it=f"Provider '{provider_id}' non trovato",
+                nl=f"Provider '{provider_id}' niet gevonden",
+                pl=f"Provider '{provider_id}' nie znaleziono",
+                pt=f"Provider '{provider_id}' não encontrado",
+                ja=f"Provider '{provider_id}' が見つかりません",
+                zh=f"未找到 Provider '{provider_id}'",
+            ),
         )
 
     base_url = provider.get("base_url", "")
@@ -832,7 +974,15 @@ async def test_llm_provider(provider_id: str) -> dict:
             resp = await client.get(test_url, headers=headers)
             if resp.status_code < 500:
                 status = "connected"
-    except Exception as exc:
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        json.JSONDecodeError,
+    ) as exc:
         error = str(exc)[:200]
 
     # Status in Redis aktualisieren
@@ -889,7 +1039,19 @@ async def set_default_llm_provider(body: dict) -> dict:
             p["is_default"] = False
     if not found:
         raise HTTPException(
-            status_code=404, detail=f"Provider '{provider_id}' nicht gefunden"
+            status_code=404,
+            detail=_t(
+                de=f"Provider '{provider_id}' nicht gefunden",
+                en=f"Provider '{provider_id}' not found",
+                fr=f"Provider '{provider_id}' non trouvé",
+                es=f"Provider '{provider_id}' no encontrado",
+                it=f"Provider '{provider_id}' non trovato",
+                nl=f"Provider '{provider_id}' niet gevonden",
+                pl=f"Provider '{provider_id}' nie znaleziono",
+                pt=f"Provider '{provider_id}' não encontrado",
+                ja=f"Provider '{provider_id}' が見つかりません",
+                zh=f"未找到 Provider '{provider_id}'",
+            ),
         )
     await _save_providers(redis, providers)
     # LLM-Factory auf neuen Standard umstellen
@@ -933,7 +1095,15 @@ async def list_k8s_clusters() -> K8sClusterListResponse:
                     has_kubeconfig=True,
                 )
             ]
-        except Exception:
+        except (
+            RuntimeError,
+            ValueError,
+            TypeError,
+            KeyError,
+            OSError,
+            ImportError,
+            json.JSONDecodeError,
+        ):
             pass
 
     return K8sClusterListResponse(clusters=clusters, total=len(clusters))
@@ -950,8 +1120,30 @@ async def add_k8s_cluster(body: K8sClusterCreate) -> dict:
         kubeconfig_str = kubeconfig_bytes.decode("utf-8")
         if "apiVersion" not in kubeconfig_str:
             raise ValueError("Ungültige Kubeconfig")
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Ungültige Kubeconfig: {exc}")
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        json.JSONDecodeError,
+    ) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=_t(
+                de=f"Ungültige Kubeconfig: {exc}",
+                en=f"Invalid kubeconfig: {exc}",
+                fr=f"Kubeconfig invalide: {exc}",
+                es=f"Kubeconfig inválida: {exc}",
+                it=f"Kubeconfig non valida: {exc}",
+                nl=f"Ongeldige kubeconfig: {exc}",
+                pl=f"Nieprawidłowy kubeconfig: {exc}",
+                pt=f"Kubeconfig inválido: {exc}",
+                ja=f"無効な kubeconfig: {exc}",
+                zh=f"无效的 kubeconfig: {exc}",
+            ),
+        )
 
     # In Vault speichern
     from core.vault import get_vault
@@ -968,7 +1160,19 @@ async def add_k8s_cluster(body: K8sClusterCreate) -> dict:
     # Duplikat-Check
     if any(c["name"] == body.name for c in clusters):
         raise HTTPException(
-            status_code=409, detail=f"Cluster '{body.name}' existiert bereits"
+            status_code=409,
+            detail=_t(
+                de=f"Cluster '{body.name}' existiert bereits",
+                en=f"Cluster '{body.name}' already exists",
+                fr=f"Cluster '{body.name}' existe déjà",
+                es=f"Cluster '{body.name}' ya existe",
+                it=f"Cluster '{body.name}' già esistente",
+                nl=f"Cluster '{body.name}' bestaat al",
+                pl=f"Klaster '{body.name}' już istnieje",
+                pt=f"Cluster '{body.name}' já existe",
+                ja=f"クラスター '{body.name}' は既に存在します",
+                zh=f"集群 '{body.name}' 已存在",
+            ),
         )
 
     # is_default: alle anderen auf False setzen
@@ -1003,7 +1207,19 @@ async def delete_k8s_cluster(cluster_name: str) -> dict:
 
     if len(clusters) == original_len:
         raise HTTPException(
-            status_code=404, detail=f"Cluster '{cluster_name}' nicht gefunden"
+            status_code=404,
+            detail=_t(
+                de=f"Cluster '{cluster_name}' nicht gefunden",
+                en=f"Cluster '{cluster_name}' not found",
+                fr=f"Cluster '{cluster_name}' non trouvé",
+                es=f"Cluster '{cluster_name}' no encontrado",
+                it=f"Cluster '{cluster_name}' non trovato",
+                nl=f"Cluster '{cluster_name}' niet gevonden",
+                pl=f"Klaster '{cluster_name}' nie znaleziono",
+                pt=f"Cluster '{cluster_name}' não encontrado",
+                ja=f"クラスター '{cluster_name}' が見つかりません",
+                zh=f"未找到集群 '{cluster_name}'",
+            ),
         )
 
     # Secret löschen
@@ -1076,7 +1292,15 @@ async def update_tts_settings(body: dict) -> dict:
         import core.tts as _tts_mod
 
         _tts_mod._service = None
-    except Exception:
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        json.JSONDecodeError,
+    ):
         pass
 
     logger.info("TTS-Settings aktualisiert: %s", data)
@@ -1160,7 +1384,15 @@ async def update_stt_settings(body: dict) -> dict:
             from api.routes_transcription import invalidate_whisper_cache
 
             invalidate_whisper_cache()
-        except Exception:
+        except (
+            RuntimeError,
+            ValueError,
+            TypeError,
+            KeyError,
+            OSError,
+            ImportError,
+            json.JSONDecodeError,
+        ):
             pass
 
     logger.info(
@@ -1188,7 +1420,19 @@ async def set_default_k8s_cluster(cluster_name: str) -> dict:
 
     if not found:
         raise HTTPException(
-            status_code=404, detail=f"Cluster '{cluster_name}' nicht gefunden"
+            status_code=404,
+            detail=_t(
+                de=f"Cluster '{cluster_name}' nicht gefunden",
+                en=f"Cluster '{cluster_name}' not found",
+                fr=f"Cluster '{cluster_name}' non trouvé",
+                es=f"Cluster '{cluster_name}' no encontrado",
+                it=f"Cluster '{cluster_name}' non trovato",
+                nl=f"Cluster '{cluster_name}' niet gevonden",
+                pl=f"Klaster '{cluster_name}' nie znaleziono",
+                pt=f"Cluster '{cluster_name}' não encontrado",
+                ja=f"クラスター '{cluster_name}' が見つかりません",
+                zh=f"未找到集群 '{cluster_name}'",
+            ),
         )
 
     await redis.connection.set(REDIS_KEY_K8S_CLUSTERS, json.dumps(clusters))

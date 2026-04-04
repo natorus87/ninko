@@ -174,7 +174,7 @@ async def get_jira_projects(connection_id: str = "") -> dict:
             "status": "success",
             "projects": result.get("values", result),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("get_jira_projects failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -199,7 +199,7 @@ async def get_jira_project(project_key: str, connection_id: str = "") -> dict:
             "status": "success",
             "project": result,
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("get_jira_project failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -243,7 +243,7 @@ async def get_jira_issues(
             "issues": result.get("issues", []),
             "total": result.get("total", 0),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("get_jira_issues failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -271,7 +271,7 @@ async def get_jira_issue(issue_key: str, connection_id: str = "") -> dict:
             "status": "success",
             "issue": result,
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("get_jira_issue failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -329,7 +329,7 @@ async def create_jira_issue(
             "message": f"Issue created: {result.get('key')}",
             "issue": result,
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("create_jira_issue failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -387,7 +387,7 @@ async def update_jira_issue(
             "status": "success",
             "message": f"Issue {issue_key} updated.",
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("update_jira_issue failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -417,7 +417,7 @@ async def get_jira_boards(project_key: str = "", connection_id: str = "") -> dic
             "status": "success",
             "boards": result.get("values", result),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("get_jira_boards failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -443,7 +443,7 @@ async def get_jira_sprints(board_id: str, connection_id: str = "") -> dict:
             "status": "success",
             "sprints": result.get("values", result),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("get_jira_sprints failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -468,7 +468,7 @@ async def get_jira_sprint(sprint_id: str, connection_id: str = "") -> dict:
             "status": "success",
             "sprint": result,
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("get_jira_sprint failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -495,7 +495,7 @@ async def search_jira(jql: str, max_results: int = 25, connection_id: str = "") 
             "issues": result.get("issues", []),
             "total": result.get("total", 0),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("search_jira failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -520,7 +520,7 @@ async def get_jira_issue_transitions(issue_key: str, connection_id: str = "") ->
             "status": "success",
             "transitions": result.get("transitions", []),
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("get_jira_issue_transitions failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -550,7 +550,7 @@ async def transition_jira_issue(
             "status": "success",
             "message": f"Issue {issue_key} transitioned.",
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("transition_jira_issue failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -575,7 +575,7 @@ async def get_jira_priorities(connection_id: str = "") -> dict:
             "status": "success",
             "priorities": result,
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("get_jira_priorities failed: %s", e)
         return {"error": "Request failed. Check server logs."}
 
@@ -612,6 +612,6 @@ async def get_jira_issue_counts(
             "status": "success",
             "total": total,
         }
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("get_jira_issue_counts failed: %s", e)
         return {"error": "Request failed. Check server logs."}
