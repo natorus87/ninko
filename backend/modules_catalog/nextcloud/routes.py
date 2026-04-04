@@ -10,7 +10,7 @@ from fastapi import APIRouter
 
 logger = logging.getLogger("ninko.modules.nextcloud.routes")
 
-router = APIRouter(prefix="/api/nextcloud", tags=["nextcloud"])
+router = APIRouter(tags=["nextcloud"])
 
 
 @router.get("/health")

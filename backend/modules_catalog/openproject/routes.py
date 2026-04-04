@@ -10,7 +10,7 @@ from fastapi import APIRouter
 
 logger = logging.getLogger("ninko.modules.openproject.routes")
 
-router = APIRouter(prefix="/api/openproject", tags=["openproject"])
+router = APIRouter(tags=["openproject"])
 
 
 @router.get("/health")

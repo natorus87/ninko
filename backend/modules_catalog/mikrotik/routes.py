@@ -10,7 +10,7 @@ from fastapi import APIRouter
 
 logger = logging.getLogger("ninko.modules.mikrotik.routes")
 
-router = APIRouter(prefix="/api/mikrotik", tags=["mikrotik"])
+router = APIRouter(tags=["mikrotik"])
 
 
 @router.get("/health")

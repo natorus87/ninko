@@ -10,7 +10,7 @@ from fastapi import APIRouter
 
 logger = logging.getLogger("ninko.modules.netgear.routes")
 
-router = APIRouter(prefix="/api/netgear", tags=["netgear"])
+router = APIRouter(tags=["netgear"])
 
 
 @router.get("/health")

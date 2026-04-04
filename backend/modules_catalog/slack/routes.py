@@ -10,7 +10,7 @@ from fastapi import APIRouter
 
 logger = logging.getLogger("ninko.modules.slack.routes")
 
-router = APIRouter(prefix="/api/slack", tags=["slack"])
+router = APIRouter(tags=["slack"])
 
 
 @router.get("/health")

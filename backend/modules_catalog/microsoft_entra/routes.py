@@ -10,7 +10,7 @@ from fastapi import APIRouter
 
 logger = logging.getLogger("ninko.modules.microsoft_entra.routes")
 
-router = APIRouter(prefix="/api/microsoft_entra", tags=["microsoft_entra"])
+router = APIRouter(tags=["microsoft_entra"])
 
 
 @router.get("/health")

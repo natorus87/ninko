@@ -10,7 +10,7 @@ from fastapi import APIRouter
 
 logger = logging.getLogger("ninko.modules.hpe_ilo.routes")
 
-router = APIRouter(prefix="/api/hpe_ilo", tags=["hpe_ilo"])
+router = APIRouter(tags=["hpe_ilo"])
 
 
 @router.get("/health")

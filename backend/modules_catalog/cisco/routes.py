@@ -10,7 +10,7 @@ from fastapi import APIRouter
 
 logger = logging.getLogger("ninko.modules.cisco.routes")
 
-router = APIRouter(prefix="/api/cisco", tags=["cisco"])
+router = APIRouter(tags=["cisco"])
 
 
 @router.get("/health")

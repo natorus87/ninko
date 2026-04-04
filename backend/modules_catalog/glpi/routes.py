@@ -24,26 +24,37 @@ router = APIRouter()
 
 
 @router.get("/stats")
-async def ticket_stats() -> object:
+async def ticket_stats(connection_id: str = "") -> object:
     """Ticket statistics."""
-    return await get_ticket_stats.ainvoke({})
+    return await get_ticket_stats.ainvoke({"connection_id": connection_id})
 
 
 @router.get("/tickets")
-async def tickets(status: int = 0, priority: int = 0, keyword: str = "", limit: int = 10) -> object:
+async def tickets(
+    status: int = 0,
+    priority: int = 0,
+    keyword: str = "",
+    limit: int = 10,
+    connection_id: str = "",
+) -> object:
     """Search tickets."""
-    return await search_tickets.ainvoke({
-        "status": status,
-        "priority": priority,
-        "keyword": keyword,
-        "limit": limit,
-    })
+    return await search_tickets.ainvoke(
+        {
+            "status": status,
+            "priority": priority,
+            "keyword": keyword,
+            "limit": limit,
+            "connection_id": connection_id,
+        }
+    )
 
 
 @router.get("/tickets/{ticket_id}")
-async def ticket_detail(ticket_id: int) -> object:
+async def ticket_detail(ticket_id: int, connection_id: str = "") -> object:
     """Ticket details."""
-    return await get_ticket.ainvoke({"ticket_id": ticket_id})
+    return await get_ticket.ainvoke(
+        {"ticket_id": ticket_id, "connection_id": connection_id}
+    )
 
 
 @router.post("/tickets")
@@ -53,34 +64,51 @@ async def create_ticket_api(
     priority: int = 3,
     category_id: int = 0,
     ticket_type: int = 1,
-):
+    connection_id: str = "",
+) -> object:
     """Create a new ticket."""
-    return await create_ticket_tool.ainvoke({
-        "title": title,
-        "description": description,
-        "priority": priority,
-        "category_id": category_id,
-        "ticket_type": ticket_type,
-    })
+    return await create_ticket_tool.ainvoke(
+        {
+            "title": title,
+            "description": description,
+            "priority": priority,
+            "category_id": category_id,
+            "ticket_type": ticket_type,
+            "connection_id": connection_id,
+        }
+    )
 
 
 @router.post("/tickets/{ticket_id}/close")
-async def close_ticket_api(ticket_id: int, solution: str) -> object:
+async def close_ticket_api(
+    ticket_id: int, solution: str, connection_id: str = ""
+) -> object:
     """Close a ticket."""
-    return await close_ticket_tool.ainvoke({
-        "ticket_id": ticket_id,
-        "solution": solution,
-    })
+    return await close_ticket_tool.ainvoke(
+        {
+            "ticket_id": ticket_id,
+            "solution": solution,
+            "connection_id": connection_id,
+        }
+    )
 
 
 @router.post("/tickets/{ticket_id}/followup")
-async def add_followup_api(ticket_id: int, content: str, is_private: bool = False) -> object:
+async def add_followup_api(
+    ticket_id: int,
+    content: str,
+    is_private: bool = False,
+    connection_id: str = "",
+) -> object:
     """Add a follow-up."""
-    return await add_followup_tool.ainvoke({
-        "ticket_id": ticket_id,
-        "content": content,
-        "is_private": is_private,
-    })
+    return await add_followup_tool.ainvoke(
+        {
+            "ticket_id": ticket_id,
+            "content": content,
+            "is_private": is_private,
+            "connection_id": connection_id,
+        }
+    )
 
 
 @router.get("/tickets/{ticket_id}/attachments/{attachment_id}/ocr")

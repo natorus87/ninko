@@ -885,7 +885,7 @@ class BaseAgent:
                 "Saturday",
                 "Sunday",
             ]
-            lang = _gs().LANGUAGE if "lang" in dir() else "de"
+            lang = _gs2().LANGUAGE
             if lang == "de":
                 dt_str = (
                     f"Aktuelles Datum: {weekdays_de[now.weekday()]}, "

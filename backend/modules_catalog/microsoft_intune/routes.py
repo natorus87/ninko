@@ -10,7 +10,7 @@ from fastapi import APIRouter
 
 logger = logging.getLogger("ninko.modules.microsoft_intune.routes")
 
-router = APIRouter(prefix="/api/microsoft_intune", tags=["microsoft_intune"])
+router = APIRouter(tags=["microsoft_intune"])
 
 
 @router.get("/health")

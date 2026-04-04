@@ -10,7 +10,7 @@ from fastapi import APIRouter
 
 logger = logging.getLogger("ninko.modules.ubiquiti.routes")
 
-router = APIRouter(prefix="/api/ubiquiti", tags=["ubiquiti"])
+router = APIRouter(tags=["ubiquiti"])
 
 
 @router.get("/health")
