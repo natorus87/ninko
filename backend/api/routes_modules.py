@@ -102,16 +102,22 @@ async def get_module_frontend(
         return HTMLResponse(content="Zugriff verweigert.", status_code=403)
 
     if not file_path.is_file():
-        # Fallback auf plugins/ Verzeichnis
-        plugins_dir = Path(__file__).resolve().parent.parent / "plugins"
-        file_path = (plugins_dir / module_name / "frontend" / filename).resolve()
-        if not file_path.is_relative_to(plugins_dir):
-            return HTMLResponse(content="Zugriff verweigert.", status_code=403)
-        if not file_path.is_file():
-            return HTMLResponse(
-                content="Datei nicht gefunden.",
-                status_code=404,
-            )
+        # Fallback 1: modules_catalog/ (frontend assets baked into image, always up-to-date)
+        catalog_dir = Path(__file__).resolve().parent.parent / "modules_catalog"
+        catalog_path = (catalog_dir / module_name / "frontend" / filename).resolve()
+        if catalog_path.is_relative_to(catalog_dir) and catalog_path.is_file():
+            file_path = catalog_path
+        else:
+            # Fallback 2: plugins/ (runtime-installed modules, may have older frontend files)
+            plugins_dir = Path(__file__).resolve().parent.parent / "plugins"
+            file_path = (plugins_dir / module_name / "frontend" / filename).resolve()
+            if not file_path.is_relative_to(plugins_dir):
+                return HTMLResponse(content="Zugriff verweigert.", status_code=403)
+            if not file_path.is_file():
+                return HTMLResponse(
+                    content="Datei nicht gefunden.",
+                    status_code=404,
+                )
 
     content = file_path.read_text(encoding="utf-8")
 
