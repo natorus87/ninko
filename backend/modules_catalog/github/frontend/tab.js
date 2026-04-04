@@ -5,10 +5,10 @@
 
   async function loadConnections() {
     try {
-      const resp = await fetch('/api/connections?module=github');
+      const resp = await fetch('/api/connections/github');
       const data = await resp.json();
       const select = document.getElementById('github-connection-select');
-      select.innerHTML = '<option value="">-- ' + I18n.t('discord.selectConnection') + ' --</option>';
+      select.innerHTML = '<option value="">-- ' + I18n.t('modules.github.selectConnection') + ' --</option>';
       if (data.connections) {
         data.connections.forEach(conn => {
           const opt = document.createElement('option');
@@ -49,7 +49,7 @@
   function setLoading(loading) {
     const els = document.querySelectorAll('#github-runs-list, #github-prs-list');
     els.forEach(el => {
-      if (loading) el.innerHTML = '<div class="loading">' + I18n.t('discord.loading') + '</div>';
+      if (loading) el.innerHTML = '<div class="loading">' + I18n.t('modules.github.loading') + '</div>';
     });
   }
 

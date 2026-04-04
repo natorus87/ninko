@@ -16,7 +16,7 @@
 
         async _loadConnections() {
             try {
-                const res = await fetch('/api/connections?module=discord');
+                const res = await fetch('/api/connections/discord');
                 const data = await res.json();
                 const select = document.getElementById('discord-conn-select');
                 if (!select) return;

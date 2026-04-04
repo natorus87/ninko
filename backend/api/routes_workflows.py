@@ -26,7 +26,9 @@ router = APIRouter(prefix="/api/workflows", tags=["Workflows"])
 REDIS_KEY_WORKFLOWS = "ninko:workflows"
 REDIS_KEY_RUNS_PREFIX = "ninko:workflow:runs:"
 REDIS_KEY_RUN_INDEX = "ninko:workflow:run_index"
+REDIS_KEY_WORKFLOW_VERSIONS = "ninko:workflow:versions"
 MAX_RUNS_PER_WORKFLOW = 50
+MAX_VERSIONS_PER_WORKFLOW = 25
 
 
 def _tenant_key(base: str, tenant_id: str) -> str:
@@ -40,6 +42,10 @@ def _tenant_workflow_id(tenant_id: str, workflow_id: str) -> str:
 
 def _public_workflow_id(tenant_scoped_workflow_id: str) -> str:
     return tenant_scoped_workflow_id.split("::", 1)[1] if "::" in tenant_scoped_workflow_id else tenant_scoped_workflow_id
+
+
+def _versions_key(tenant_id: str, scoped_workflow_id: str) -> str:
+    return f"{_tenant_key(REDIS_KEY_WORKFLOW_VERSIONS, tenant_id)}:{scoped_workflow_id}"
 
 
 async def _load_workflows(redis, tenant_id: str) -> list[dict]:
@@ -86,7 +92,12 @@ async def create_workflow(body: WorkflowCreate, request: Request) -> dict:
     scoped_id = _tenant_workflow_id(tenant_id, body.id)
     if any(w.get("id") == scoped_id for w in workflows):
         raise HTTPException(status_code=409, detail=f"Workflow '{body.id}' existiert bereits")
-    new_wf = WorkflowDefinition(**{**body.model_dump(), "id": scoped_id}, created_at=now, updated_at=now)
+    new_wf = WorkflowDefinition(
+        **{**body.model_dump(), "id": scoped_id},
+        version=1,
+        created_at=now,
+        updated_at=now,
+    )
     workflows.append(new_wf.model_dump())
     await _save_workflows(redis, tenant_id, workflows)
     logger.info("Workflow erstellt: %s (%s)", new_wf.name, scoped_id)
@@ -118,10 +129,34 @@ async def update_workflow(workflow_id: str, body: WorkflowCreate, request: Reque
     if idx is None:
         raise HTTPException(status_code=404, detail=f"Workflow '{workflow_id}' nicht gefunden")
     now = datetime.now(timezone.utc).isoformat()
-    workflows[idx] = {**workflows[idx], **body.model_dump(), "id": scoped_id, "updated_at": now}
+
+    # Alte Version in Historie sichern
+    versions_key = _versions_key(tenant_id, scoped_id)
+    versions_raw = await redis.connection.get(versions_key)
+    versions = json.loads(versions_raw) if versions_raw else []
+    previous = workflows[idx]
+    versions.append(
+        {
+            "version": int(previous.get("version", 1) or 1),
+            "saved_at": now,
+            "workflow": previous,
+        }
+    )
+    if len(versions) > MAX_VERSIONS_PER_WORKFLOW:
+        versions = versions[-MAX_VERSIONS_PER_WORKFLOW:]
+    await redis.connection.set(versions_key, json.dumps(versions))
+
+    next_version = int(previous.get("version", 1) or 1) + 1
+    workflows[idx] = {
+        **workflows[idx],
+        **body.model_dump(),
+        "id": scoped_id,
+        "version": next_version,
+        "updated_at": now,
+    }
     await _save_workflows(redis, tenant_id, workflows)
     logger.info("Workflow aktualisiert: %s", workflow_id)
-    return {"id": workflow_id, "status": "updated"}
+    return {"id": workflow_id, "status": "updated", "version": next_version}
 
 
 @router.delete("/{workflow_id}")
@@ -137,6 +172,7 @@ async def delete_workflow(workflow_id: str, request: Request) -> dict:
         raise HTTPException(status_code=404, detail=f"Workflow '{workflow_id}' nicht gefunden")
     await _save_workflows(redis, tenant_id, workflows)
     await redis.connection.delete(f"{_tenant_key(REDIS_KEY_RUNS_PREFIX, tenant_id)}{scoped_id}")
+    await redis.connection.delete(_versions_key(tenant_id, scoped_id))
     # Veraltete Run-Index-Einträge für diesen Workflow bereinigen
     run_index_key = _tenant_key(REDIS_KEY_RUN_INDEX, tenant_id)
     index_raw = await redis.connection.get(run_index_key)
@@ -167,6 +203,7 @@ async def run_workflow(workflow_id: str, request: Request) -> dict:
         id=run_id,
         workflow_id=workflow_id,
         workflow_name=wf.get("name", ""),
+        workflow_version=int(wf.get("version", 1) or 1),
         status="running",
         started_at=now,
         steps=[],
@@ -199,6 +236,60 @@ async def run_workflow(workflow_id: str, request: Request) -> dict:
         logger.warning("Workflow-Engine konnte nicht gestartet werden: %s", exc)
 
     return {"run_id": run_id, "status": "running"}
+
+
+@router.get("/{workflow_id}/versions")
+async def list_workflow_versions(workflow_id: str, request: Request) -> dict:
+    """Versionen eines Workflows auflisten (neueste zuerst)."""
+    redis = get_redis()
+    tenant_id = auth_tenant_id(resolve_request_auth(request))
+    scoped_id = _tenant_workflow_id(tenant_id, workflow_id)
+    versions_raw = await redis.connection.get(_versions_key(tenant_id, scoped_id))
+    versions = json.loads(versions_raw) if versions_raw else []
+    versions = list(reversed(versions))
+    return {"workflow_id": workflow_id, "versions": versions, "total": len(versions)}
+
+
+@router.post("/{workflow_id}/versions/{version}/restore")
+async def restore_workflow_version(workflow_id: str, version: int, request: Request) -> dict:
+    """Stellt eine ältere Version als neue aktuelle Version wieder her."""
+    redis = get_redis()
+    tenant_id = auth_tenant_id(resolve_request_auth(request))
+    scoped_id = _tenant_workflow_id(tenant_id, workflow_id)
+
+    workflows = await _load_workflows(redis, tenant_id)
+    idx = next((i for i, w in enumerate(workflows) if w["id"] == scoped_id), None)
+    if idx is None:
+        raise HTTPException(status_code=404, detail=f"Workflow '{workflow_id}' nicht gefunden")
+
+    versions_key = _versions_key(tenant_id, scoped_id)
+    versions_raw = await redis.connection.get(versions_key)
+    versions = json.loads(versions_raw) if versions_raw else []
+    target = next((v for v in versions if int(v.get("version", 0)) == version), None)
+    if not target:
+        raise HTTPException(status_code=404, detail=f"Version '{version}' nicht gefunden")
+
+    now = datetime.now(timezone.utc).isoformat()
+    current = workflows[idx]
+    versions.append(
+        {
+            "version": int(current.get("version", 1) or 1),
+            "saved_at": now,
+            "workflow": current,
+        }
+    )
+    if len(versions) > MAX_VERSIONS_PER_WORKFLOW:
+        versions = versions[-MAX_VERSIONS_PER_WORKFLOW:]
+
+    restored = dict(target.get("workflow", {}))
+    restored["id"] = scoped_id
+    restored["version"] = int(current.get("version", 1) or 1) + 1
+    restored["updated_at"] = now
+    workflows[idx] = restored
+
+    await _save_workflows(redis, tenant_id, workflows)
+    await redis.connection.set(versions_key, json.dumps(versions))
+    return {"id": workflow_id, "status": "restored", "version": restored["version"]}
 
 
 

@@ -5,10 +5,10 @@
 
   async function loadConnections() {
     try {
-      const resp = await fetch('/api/connections?module=netbox');
+      const resp = await fetch('/api/connections/netbox');
       const data = await resp.json();
       const select = document.getElementById('netbox-connection-select');
-      select.innerHTML = '<option value="">-- ' + I18n.t('discord.selectConnection') + ' --</option>';
+      select.innerHTML = '<option value="">-- ' + I18n.t('modules.netbox.selectConnection') + ' --</option>';
       if (data.connections) {
         data.connections.forEach(conn => {
           const opt = document.createElement('option');
@@ -56,7 +56,7 @@
     const container = document.getElementById('netbox-sites-list');
     if (!container) return;
     if (!sites.length) {
-      container.innerHTML = '<div class="empty">' + I18n.t('discord.noMembers') + '</div>';
+      container.innerHTML = '<div class="empty">' + I18n.t('modules.netbox.sitesList') + '</div>';
       return;
     }
     container.innerHTML = sites.map(s => `<div class="item-row">
@@ -69,7 +69,7 @@
     const container = document.getElementById('netbox-devices-list');
     if (!container) return;
     if (!devices.length) {
-      container.innerHTML = '<div class="empty">' + I18n.t('discord.noMembers') + '</div>';
+      container.innerHTML = '<div class="empty">' + I18n.t('modules.netbox.devicesList') + '</div>';
       return;
     }
     container.innerHTML = devices.slice(0, 20).map(d => {
@@ -84,7 +84,7 @@
   function setLoading(loading) {
     const els = document.querySelectorAll('#netbox-sites-list, #netbox-devices-list');
     els.forEach(el => {
-      if (loading) el.innerHTML = '<div class="loading">' + I18n.t('discord.loading') + '</div>';
+      if (loading) el.innerHTML = '<div class="loading">' + I18n.t('modules.netbox.loading') + '</div>';
     });
   }
 

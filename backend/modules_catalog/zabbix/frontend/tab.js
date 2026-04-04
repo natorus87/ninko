@@ -5,10 +5,10 @@
 
   async function loadConnections() {
     try {
-      const resp = await fetch('/api/connections?module=zabbix');
+      const resp = await fetch('/api/connections/zabbix');
       const data = await resp.json();
       const select = document.getElementById('zabbix-connection-select');
-      select.innerHTML = '<option value="">-- ' + I18n.t('discord.selectConnection') + ' --</option>';
+      select.innerHTML = '<option value="">-- ' + I18n.t('modules.zabbix.selectConnection') + ' --</option>';
       if (data.connections) {
         data.connections.forEach(conn => {
           const opt = document.createElement('option');
@@ -56,7 +56,7 @@
     const container = document.getElementById('zabbix-problems-list');
     if (!container) return;
     if (!problems.length) {
-      container.innerHTML = '<div class="empty">' + I18n.t('discord.noMessages') + '</div>';
+      container.innerHTML = '<div class="empty">' + I18n.t('modules.zabbix.noProblems') + '</div>';
       return;
     }
     container.innerHTML = problems.map(p => {
@@ -72,7 +72,7 @@
     const container = document.getElementById('zabbix-hosts-list');
     if (!container) return;
     if (!hosts.length) {
-      container.innerHTML = '<div class="empty">' + I18n.t('discord.noMembers') + '</div>';
+      container.innerHTML = '<div class="empty">' + I18n.t('modules.zabbix.hostsList') + '</div>';
       return;
     }
     container.innerHTML = hosts.map(h => {
@@ -87,7 +87,7 @@
   function setLoading(loading) {
     const els = document.querySelectorAll('#zabbix-hosts-list, #zabbix-problems-list');
     els.forEach(el => {
-      if (loading) el.innerHTML = '<div class="loading">' + I18n.t('discord.loading') + '</div>';
+      if (loading) el.innerHTML = '<div class="loading">' + I18n.t('modules.zabbix.loading') + '</div>';
     });
   }
 

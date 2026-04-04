@@ -5,10 +5,10 @@
 
   async function loadConnections() {
     try {
-      const resp = await fetch('/api/connections?module=gitlab');
+      const resp = await fetch('/api/connections/gitlab');
       const data = await resp.json();
       const select = document.getElementById('gitlab-connection-select');
-      select.innerHTML = '<option value="">-- ' + I18n.t('discord.selectConnection') + ' --</option>';
+      select.innerHTML = '<option value="">-- ' + I18n.t('modules.gitlab.selectConnection') + ' --</option>';
       if (data.connections) {
         data.connections.forEach(conn => {
           const opt = document.createElement('option');
@@ -61,7 +61,7 @@
     const container = document.getElementById('gitlab-pipelines-list');
     if (!container) return;
     if (!pipelines.length) {
-      container.innerHTML = '<div class="empty">' + I18n.t('discord.noMessages') + '</div>';
+      container.innerHTML = '<div class="empty">' + I18n.t('modules.gitlab.pipelinesList') + '</div>';
       return;
     }
     container.innerHTML = pipelines.slice(0, 10).map(p => `<div class="pipeline-row">
@@ -75,7 +75,7 @@
     const container = document.getElementById('gitlab-mrs-list');
     if (!container) return;
     if (!mrs.length) {
-      container.innerHTML = '<div class="empty">' + I18n.t('discord.noMessages') + '</div>';
+      container.innerHTML = '<div class="empty">' + I18n.t('modules.gitlab.mergeRequestsList') + '</div>';
       return;
     }
     container.innerHTML = mrs.slice(0, 10).map(mr => `<div class="mr-row">
@@ -87,7 +87,7 @@
   function setLoading(loading) {
     const els = document.querySelectorAll('#gitlab-pipelines-list, #gitlab-mrs-list');
     els.forEach(el => {
-      if (loading) el.innerHTML = '<div class="loading">' + I18n.t('discord.loading') + '</div>';
+      if (loading) el.innerHTML = '<div class="loading">' + I18n.t('modules.gitlab.loading') + '</div>';
     });
   }
 

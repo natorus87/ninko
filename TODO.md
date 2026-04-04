@@ -230,7 +230,14 @@ Stand: 2026-04-04
   - Plugin-Metadaten in Redis ergänzt (`ninko:plugins:metadata`): `source`, `repo_id`, `repo_url`, `repo_version`, `installed_at`, `updated_at`
   - Neuer Endpoint: `GET /api/plugins/installed` (inkl. Versions-/Herkunftsinfos)
   - Marketplace-Update-Liste erweitert um `installed_source`/`installed_updated_at`
-- [ ] **Advanced Workflow-Engine** (Parallel Execution, Retries, Sub-Workflows, Versionierung)
+- [x] **Advanced Workflow-Engine** (Parallel Execution, Retries, Sub-Workflows, Versionierung)
+  - Status 2026-04-04:
+    - Workflow-Node-Typen erweitert: `parallel`, `subflow`
+    - Retry-Mechanik pro Node (`retries`, `retry_delay_ms`) in Engine umgesetzt
+    - Parallel-Batch-Execution für gleichzeitig anstehende Nodes aktiviert
+    - Sub-Workflow-Ausführung inkl. separatem Run-Tracking umgesetzt
+    - Workflow-Versionierung ergänzt (`version`, Versionshistorie + Restore-Endpoint)
+    - Tenant-Scoping in `workflow_engine.py` auf Run-Index/Run-Updates vereinheitlicht
 - [ ] **Knowledge Graph & RAG-Optimierung**
 - [ ] **Mobile App (PWA)**
 

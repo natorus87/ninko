@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 logger = logging.getLogger("ninko.modules.nextcloud.routes")
 
@@ -44,4 +44,4 @@ async def get_status(connection_id: str = "") -> object:
             "storage_used": used,
         }
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"error": str(exc)}
+        raise HTTPException(status_code=502, detail=str(exc))

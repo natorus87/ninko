@@ -19,7 +19,7 @@ class NodePosition(BaseModel):
 class WorkflowNode(BaseModel):
     """Ein Node im Workflow-DAG."""
     id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
-    type: Literal["trigger", "agent", "condition", "loop", "variable", "end"] = "agent"
+    type: Literal["trigger", "agent", "condition", "loop", "variable", "parallel", "subflow", "end"] = "agent"
     label: str = ""
     config: dict = Field(default_factory=dict)
     # config examples:
@@ -58,12 +58,14 @@ class WorkflowDefinition(BaseModel):
     edges: list[WorkflowEdge] = Field(default_factory=list)
     variables: list[WorkflowVariable] = Field(default_factory=list)
     enabled: bool = True
+    version: int = 1
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
 
 class WorkflowCreate(BaseModel):
     """Payload zum Erstellen/Aktualisieren eines Workflows."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = Field(..., min_length=1, max_length=128)
     description: str = ""
     nodes: list[WorkflowNode] = Field(default_factory=list)
@@ -85,6 +87,7 @@ class WorkflowRunStep(BaseModel):
     duration_ms: Optional[int] = None
     output: Optional[str] = None
     error: Optional[str] = None
+    attempts: Optional[int] = None
 
 
 class WorkflowRun(BaseModel):
@@ -92,6 +95,7 @@ class WorkflowRun(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     workflow_id: str
     workflow_name: str = ""
+    workflow_version: Optional[int] = None
     status: Literal["idle", "running", "succeeded", "failed"] = "idle"
     started_at: Optional[str] = None
     finished_at: Optional[str] = None
