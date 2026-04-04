@@ -686,6 +686,19 @@
       "devicesList": "设备",
       "loadError": "加载错误。",
       "error": "错误: "
+    },
+    "gitlab": {
+      "noConnections": "无GitLab连接",
+      "selectConnection": "请选择连接。",
+      "loading": "加载中…",
+      "projects": "项目",
+      "pipelines": "流水线",
+      "mergeRequests": "合并请求",
+      "jobs": "任务",
+      "pipelinesList": "最新流水线",
+      "mergeRequestsList": "打开的合并请求",
+      "loadError": "加载错误。",
+      "error": "错误: "
     }
   }
 }

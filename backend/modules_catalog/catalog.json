@@ -204,6 +204,13 @@
       "author": "Ninko"
     },
     {
+      "name": "gitlab",
+      "display_name": "GitLab",
+      "description": "GitLab CI/CD – Repositories, Pipelines, Jobs, Merge Requests und Releases.",
+      "version": "1.0.0",
+      "author": "Ninko"
+    },
+    {
       "name": "wordpress",
       "display_name": "WordPress",
       "description": "WordPress-Verwaltung – Plugins, Seiten, Beiträge, Benutzer, Einstellungen",

@@ -156,6 +156,7 @@ Stand: 2026-04-04
 - [x] **Discord-Modul**
 - [x] **Zabbix-Modul**
 - [x] **Netbox-Modul**
+- [x] **GitLab-Modul**
 - [ ] **Multi-Tenancy**
   - Status 2026-04-04: **RBAC-Basis umgesetzt** (Backend)
   - Umgesetzt:

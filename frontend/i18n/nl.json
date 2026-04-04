@@ -686,6 +686,19 @@
       "devicesList": "Apparaten",
       "loadError": "Fout bij laden.",
       "error": "Fout: "
+    },
+    "gitlab": {
+      "noConnections": "Geen GitLab-verbindingen",
+      "selectConnection": "Selecteer een verbinding.",
+      "loading": "Laden…",
+      "projects": "Projecten",
+      "pipelines": "Pipelines",
+      "mergeRequests": "Merge Requests",
+      "jobs": "Jobs",
+      "pipelinesList": "Laatste Pipelines",
+      "mergeRequestsList": "Open Merge Requests",
+      "loadError": "Fout bij laden.",
+      "error": "Fout: "
     }
   }
 }

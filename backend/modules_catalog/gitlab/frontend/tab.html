@@ -1,0 +1,182 @@
+<div class="tab-content" id="tab-gitlab">
+  <div class="gitlab-header">
+    <h3>🔨 GitLab CI/CD</h3>
+    <select id="gitlab-connection-select" class="connection-select">
+      <option value="">Verbindung wählen...</option>
+    </select>
+  </div>
+
+  <div class="gitlab-dashboard">
+    <div class="stats-grid">
+      <div class="stat-card" id="gitlab-projects-stat">
+        <div class="stat-label" data-i18n="projects">Projekte</div>
+        <div class="stat-value">-</div>
+      </div>
+      <div class="stat-card" id="gitlab-pipelines-stat">
+        <div class="stat-label" data-i18n="pipelines">Pipelines</div>
+        <div class="stat-value">-</div>
+      </div>
+      <div class="stat-card" id="gitlab-mrs-stat">
+        <div class="stat-label" data-i18n="mergeRequests">Merge Requests</div>
+        <div class="stat-value">-</div>
+      </div>
+      <div class="stat-card" id="gitlab-jobs-stat">
+        <div class="stat-label" data-i18n="jobs">Jobs</div>
+        <div class="stat-value">-</div>
+      </div>
+    </div>
+
+    <div class="gitlab-sections">
+      <div class="section">
+        <h4 data-i18n="pipelinesList">Letzte Pipelines</h4>
+        <div id="gitlab-pipelines-list" class="items-list">
+          <div class="loading" data-i18n="loading">Lade...</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h4 data-i18n="mergeRequestsList">Offene Merge Requests</h4>
+        <div id="gitlab-mrs-list" class="items-list">
+          <div class="loading" data-i18n="loading">Lade...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+#tab-gitlab {
+  padding: 1rem;
+}
+
+.gitlab-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.gitlab-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.connection-select {
+  padding: 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.stat-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem;
+  text-align: center;
+}
+
+.stat-card.success {
+  border-color: var(--color-success);
+}
+
+.stat-card.error {
+  border-color: var(--color-error);
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.gitlab-sections {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.section {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.section h4 {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+}
+
+.items-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.item-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.item-row:last-child {
+  border-bottom: none;
+}
+
+.pipeline-row {
+  padding: 0.5rem;
+  margin-bottom: 0.5rem;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  font-size: 0.875rem;
+}
+
+.pipeline-row .status {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  margin-right: 0.5rem;
+}
+
+.pipeline-row .status.success { background: var(--color-success); color: white; }
+.pipeline-row .status.failed { background: var(--color-error); color: white; }
+.pipeline-row .status.running { background: var(--color-info); color: white; }
+.pipeline-row .status.pending { background: var(--text-secondary); color: white; }
+
+.mr-row {
+  padding: 0.5rem;
+  margin-bottom: 0.5rem;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  font-size: 0.875rem;
+}
+
+.loading {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 2rem;
+}
+
+.empty {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 1rem;
+  font-style: italic;
+}
+</style>

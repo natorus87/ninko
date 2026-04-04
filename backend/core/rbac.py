@@ -175,7 +175,7 @@ class RbacStore:
         }
         await self.save(state)
 
-    async def bootstrap_admin_if_needed(self, username: str, password: str) -> None:
+    async def bootstrap_admin_if_needed(self, username: str, password: str, *, force_password: bool = False) -> None:
         if not username.strip() or not password:
             return
         state = await self.load()
@@ -201,6 +201,8 @@ class RbacStore:
         else:
             user = users[uname]
             user["tenant_id"] = _normalize_tenant_id(str(user.get("tenant_id", "default")))
+            if force_password:
+                user["password_hash"] = hash_password(password)
             role_ids = set(user.get("roles") or [])
             role_ids.add("role_admin")
             user["roles"] = sorted(role_ids)

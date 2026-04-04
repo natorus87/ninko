@@ -142,6 +142,7 @@ async def lifespan(app: FastAPI) -> object:
                 await rbac_store.bootstrap_admin_if_needed(
                     settings.ADMIN_USERNAME or "admin",
                     bootstrap_password,
+                    force_password=bool(settings.ADMIN_PASSWORD),
                 )
                 if not settings.ADMIN_PASSWORD:
                     logger.warning(

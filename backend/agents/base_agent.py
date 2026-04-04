@@ -429,6 +429,35 @@ _TOOL_LABELS: dict[str, str] = {
     "list_netbox_cables": _t(de="Lade Kabel", en="Loading cables"),
     "list_netbox_clusters": _t(de="Lade Cluster", en="Loading clusters"),
     "get_netbox_device_interfaces": _t(de="Lade Interfaces", en="Loading interfaces"),
+    # GitLab
+    "get_gitlab_status": _t(de="Lade Status", en="Loading status"),
+    "list_gitlab_projects": _t(de="Lade Projekte", en="Loading projects"),
+    "get_gitlab_project": _t(de="Lade Projekt", en="Loading project"),
+    "list_gitlab_pipelines": _t(de="Lade Pipelines", en="Loading pipelines"),
+    "get_gitlab_pipeline": _t(de="Lade Pipeline", en="Loading pipeline"),
+    "trigger_gitlab_pipeline": _t(de="Starte Pipeline", en="Triggering pipeline"),
+    "cancel_gitlab_pipeline": _t(de="Breche Pipeline ab", en="Canceling pipeline"),
+    "retry_gitlab_pipeline": _t(de="Wiederhole Pipeline", en="Retrying pipeline"),
+    "list_gitlab_jobs": _t(de="Lade Jobs", en="Loading jobs"),
+    "get_gitlab_job_log": _t(de="Lade Job-Log", en="Loading job log"),
+    "list_gitlab_merge_requests": _t(de="Lade MRs", en="Loading merge requests"),
+    "get_gitlab_merge_request": _t(de="Lade MR", en="Loading merge request"),
+    "create_gitlab_merge_request": _t(de="Erstelle MR", en="Creating merge request"),
+    "accept_gitlab_merge_request": _t(de="Akzeptiere MR", en="Accepting merge request"),
+    "list_gitlab_branches": _t(de="Lade Branches", en="Loading branches"),
+    "list_gitlab_commits": _t(de="Lade Commits", en="Loading commits"),
+    "list_gitlab_tags": _t(de="Lade Tags", en="Loading tags"),
+    "create_gitlab_release": _t(de="Erstelle Release", en="Creating release"),
+    "list_gitlab_variables": _t(de="Lade Variablen", en="Loading variables"),
+    "create_gitlab_variable": _t(de="Erstelle Variable", en="Creating variable"),
+    "delete_gitlab_variable": _t(de="Lösche Variable", en="Deleting variable"),
+    "get_gitlab_pipeline_schedules": _t(de="Lade Schedules", en="Loading schedules"),
+    "create_gitlab_pipeline_schedule": _t(
+        de="Erstelle Schedule", en="Creating schedule"
+    ),
+    "trigger_gitlab_pipeline_schedule": _t(
+        de="Starte Schedule", en="Triggering schedule"
+    ),
 }
 
 

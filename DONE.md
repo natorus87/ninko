@@ -4,6 +4,59 @@ Stand: 2026-04-04
 
 ---
 
+## GitLab-Modul ✅ *2026-04-04*
+
+### Implementierte Funktionen
+- [x] `get_gitlab_status` — Server-Status und Version
+- [x] `list_gitlab_projects` — Projekt-Liste
+- [x] `get_gitlab_project` — Projekt-Details
+- [x] `list_gitlab_pipelines` — Pipeline-Liste
+- [x] `get_gitlab_pipeline` — Pipeline-Details
+- [x] `trigger_gitlab_pipeline` — Pipeline starten
+- [x] `cancel_gitlab_pipeline` — Pipeline abbrechen
+- [x] `retry_gitlab_pipeline` — Pipeline wiederholen
+- [x] `list_gitlab_jobs` — Job-Liste
+- [x] `get_gitlab_job_log` — Job-Log abrufen
+- [x] `list_gitlab_merge_requests` — MR-Liste
+- [x] `get_gitlab_merge_request` — MR-Details
+- [x] `create_gitlab_merge_request` — MR erstellen
+- [x] `accept_gitlab_merge_request` — MR akzeptieren
+- [x] `list_gitlab_branches` — Branch-Liste
+- [x] `list_gitlab_commits` — Commit-Liste
+- [x] `list_gitlab_tags` — Tag-Liste
+- [x] `create_gitlab_release` — Release erstellen
+- [x] `list_gitlab_variables` — Variablen-Liste
+- [x] `create_gitlab_variable` — Variable erstellen
+- [x] `delete_gitlab_variable` — Variable löschen
+- [x] `get_gitlab_pipeline_schedules` — Schedule-Liste
+- [x] `create_gitlab_pipeline_schedule` — Schedule erstellen
+- [x] `trigger_gitlab_pipeline_schedule` — Schedule triggern
+
+### Technische Umsetzung
+- **Tools**: 24 LangGraph-Tools in `backend/modules_catalog/gitlab/tools.py`
+- **Agent**: System-Prompt mit allen 10 Sprachen
+- **Routing**: Keywords `gitlab`, `ci`, `cd`, `pipeline`, `merge request`, `repository`, `commit`
+- **Frontend**: Dashboard-Tab mit Pipelines und Merge Requests
+
+### Dateien erstellt
+- `backend/modules_catalog/gitlab/manifest.py`
+- `backend/modules_catalog/gitlab/schemas.py`
+- `backend/modules_catalog/gitlab/tools.py`
+- `backend/modules_catalog/gitlab/agent.py`
+- `backend/modules_catalog/gitlab/routes.py`
+- `backend/modules_catalog/gitlab/__init__.py`
+- `backend/modules_catalog/gitlab/frontend/tab.html`
+- `backend/modules_catalog/gitlab/frontend/tab.js`
+- `backend/modules_catalog/gitlab/README.md`
+
+### Dateien geändert
+- `backend/modules_catalog/catalog.json`
+- `backend/agents/base_agent.py` (Tool-Labels)
+- `backend/api/routes_settings.py` (Env-Vars + Secrets)
+- `frontend/i18n/*.json` (GitLab-Sektion)
+
+---
+
 ## Netbox-Modul ✅ *2026-04-04*
 
 ### Implementierte Funktionen

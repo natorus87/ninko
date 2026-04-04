@@ -686,6 +686,19 @@
       "devicesList": "Appareils",
       "loadError": "Erreur de chargement.",
       "error": "Erreur : "
+    },
+    "gitlab": {
+      "noConnections": "Aucune connexion GitLab",
+      "selectConnection": "Veuillez sélectionner une connexion.",
+      "loading": "Chargement…",
+      "projects": "Projets",
+      "pipelines": "Pipelines",
+      "mergeRequests": "Merge Requests",
+      "jobs": "Jobs",
+      "pipelinesList": "Derniers Pipelines",
+      "mergeRequestsList": "Merge Requests ouverts",
+      "loadError": "Erreur de chargement.",
+      "error": "Erreur : "
     }
   }
 }
