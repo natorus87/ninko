@@ -1,10 +1,10 @@
 """GitLab module API routes."""
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter
 
 from core.schemas import ApiResponse
 
-router = APIRouter(prefix="/gitlab", tags=["gitlab"])
+router = APIRouter(tags=["gitlab"])
 
 
 @router.get("/status")
@@ -15,8 +15,8 @@ async def get_status(connection_id: str = "") -> ApiResponse:
     try:
         result = await get_gitlab_status(connection_id)
         return ApiResponse(data=result)
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.get("/projects")
@@ -27,8 +27,8 @@ async def get_projects(membership: bool = True, connection_id: str = "") -> ApiR
     try:
         result = await list_gitlab_projects(membership, connection_id)
         return ApiResponse(data={"projects": result})
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.get("/projects/{project_id}")
@@ -39,8 +39,8 @@ async def get_project(project_id: int, connection_id: str = "") -> ApiResponse:
     try:
         result = await get_gitlab_project(project_id, connection_id)
         return ApiResponse(data=result)
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.get("/projects/{project_id}/pipelines")
@@ -53,8 +53,8 @@ async def get_pipelines(
     try:
         result = await list_gitlab_pipelines(project_id, status, connection_id)
         return ApiResponse(data={"pipelines": result})
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.get("/projects/{project_id}/pipelines/{pipeline_id}")
@@ -67,8 +67,8 @@ async def get_pipeline(
     try:
         result = await get_gitlab_pipeline(project_id, pipeline_id, connection_id)
         return ApiResponse(data=result)
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.post("/projects/{project_id}/pipelines")
@@ -81,8 +81,8 @@ async def trigger_pipeline(
     try:
         result = await trigger_gitlab_pipeline(project_id, ref, None, connection_id)
         return ApiResponse(data=result)
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.post("/projects/{project_id}/pipelines/{pipeline_id}/cancel")
@@ -95,8 +95,8 @@ async def cancel_pipeline(
     try:
         result = await cancel_gitlab_pipeline(project_id, pipeline_id, connection_id)
         return ApiResponse(data=result)
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.post("/projects/{project_id}/pipelines/{pipeline_id}/retry")
@@ -109,8 +109,8 @@ async def retry_pipeline(
     try:
         result = await retry_gitlab_pipeline(project_id, pipeline_id, connection_id)
         return ApiResponse(data=result)
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.get("/projects/{project_id}/jobs")
@@ -123,8 +123,8 @@ async def get_jobs(
     try:
         result = await list_gitlab_jobs(project_id, pipeline_id, connection_id)
         return ApiResponse(data={"jobs": result})
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.get("/projects/{project_id}/jobs/{job_id}/trace")
@@ -137,8 +137,8 @@ async def get_job_trace(
     try:
         result = await get_gitlab_job_log(project_id, job_id, connection_id)
         return ApiResponse(data={"trace": result})
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.get("/projects/{project_id}/merge-requests")
@@ -151,8 +151,8 @@ async def get_merge_requests(
     try:
         result = await list_gitlab_merge_requests(project_id, state, connection_id)
         return ApiResponse(data={"merge_requests": result})
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.get("/projects/{project_id}/merge-requests/{mr_iid}")
@@ -165,8 +165,8 @@ async def get_merge_request(
     try:
         result = await get_gitlab_merge_request(project_id, mr_iid, connection_id)
         return ApiResponse(data=result)
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.post("/projects/{project_id}/merge-requests")
@@ -186,8 +186,8 @@ async def create_merge_request(
             project_id, title, source_branch, target_branch, description, connection_id
         )
         return ApiResponse(data=result)
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.put("/projects/{project_id}/merge-requests/{mr_iid}/merge")
@@ -202,8 +202,8 @@ async def accept_merge_request(
             project_id, mr_iid, False, connection_id
         )
         return ApiResponse(data=result)
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.get("/projects/{project_id}/branches")
@@ -214,8 +214,8 @@ async def get_branches(project_id: int, connection_id: str = "") -> ApiResponse:
     try:
         result = await list_gitlab_branches(project_id, connection_id)
         return ApiResponse(data={"branches": result})
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.get("/projects/{project_id}/commits")
@@ -228,8 +228,8 @@ async def get_commits(
     try:
         result = await list_gitlab_commits(project_id, ref_name, connection_id)
         return ApiResponse(data={"commits": result})
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.get("/projects/{project_id}/tags")
@@ -240,8 +240,8 @@ async def get_tags(project_id: int, connection_id: str = "") -> ApiResponse:
     try:
         result = await list_gitlab_tags(project_id, connection_id)
         return ApiResponse(data={"tags": result})
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.post("/projects/{project_id}/releases")
@@ -260,8 +260,8 @@ async def create_release(
             project_id, tag_name, name, description, connection_id
         )
         return ApiResponse(data=result)
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.get("/projects/{project_id}/variables")
@@ -272,8 +272,8 @@ async def get_variables(project_id: int, connection_id: str = "") -> ApiResponse
     try:
         result = await list_gitlab_variables(project_id, connection_id)
         return ApiResponse(data={"variables": result})
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.post("/projects/{project_id}/variables")
@@ -288,8 +288,8 @@ async def create_variable(
             project_id, key, value, "env_var", False, connection_id
         )
         return ApiResponse(data=result)
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.delete("/projects/{project_id}/variables/{key}")
@@ -302,8 +302,8 @@ async def delete_variable(
     try:
         result = await delete_gitlab_variable(project_id, key, connection_id)
         return ApiResponse(data=result)
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.get("/projects/{project_id}/pipeline-schedules")
@@ -314,8 +314,8 @@ async def get_schedules(project_id: int, connection_id: str = "") -> ApiResponse
     try:
         result = await get_gitlab_pipeline_schedules(project_id, connection_id)
         return ApiResponse(data={"schedules": result})
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.post("/projects/{project_id}/pipeline-schedules")
@@ -330,5 +330,5 @@ async def create_schedule(
             project_id, description, ref, cron, connection_id
         )
         return ApiResponse(data=result)
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)

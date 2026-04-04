@@ -1,10 +1,10 @@
 """Netbox module API routes."""
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter
 
 from core.schemas import ApiResponse
 
-router = APIRouter(prefix="/netbox", tags=["netbox"])
+router = APIRouter(tags=["netbox"])
 
 
 @router.get("/status")
@@ -15,8 +15,8 @@ async def get_status(connection_id: str = "") -> ApiResponse:
     try:
         result = await get_netbox_status(connection_id)
         return ApiResponse(data=result)
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.get("/sites")
@@ -27,8 +27,8 @@ async def get_sites(connection_id: str = "") -> ApiResponse:
     try:
         result = await list_netbox_sites(connection_id)
         return ApiResponse(data={"sites": result})
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.get("/sites/{site_id}")
@@ -39,8 +39,8 @@ async def get_site(site_id: int, connection_id: str = "") -> ApiResponse:
     try:
         result = await get_netbox_site(site_id, connection_id)
         return ApiResponse(data=result)
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.get("/devices")
@@ -53,8 +53,8 @@ async def get_devices(
     try:
         result = await list_netbox_devices(site_id, role, connection_id)
         return ApiResponse(data={"devices": result})
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.get("/devices/{device_id}")
@@ -65,8 +65,8 @@ async def get_device(device_id: int, connection_id: str = "") -> ApiResponse:
     try:
         result = await get_netbox_device(device_id, connection_id)
         return ApiResponse(data=result)
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.get("/devices/{device_id}/interfaces")
@@ -77,8 +77,8 @@ async def get_device_interfaces(device_id: int, connection_id: str = "") -> ApiR
     try:
         result = await get_netbox_device_interfaces(device_id, connection_id)
         return ApiResponse(data={"interfaces": result})
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.get("/racks")
@@ -89,8 +89,8 @@ async def get_racks(site_id: int = None, connection_id: str = "") -> ApiResponse
     try:
         result = await list_netbox_racks(site_id, connection_id)
         return ApiResponse(data={"racks": result})
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.get("/racks/{rack_id}")
@@ -101,8 +101,8 @@ async def get_rack(rack_id: int, connection_id: str = "") -> ApiResponse:
     try:
         result = await get_netbox_rack(rack_id, connection_id)
         return ApiResponse(data=result)
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.get("/vlans")
@@ -115,8 +115,8 @@ async def get_vlans(
     try:
         result = await list_netbox_vlans(site_id, group, connection_id)
         return ApiResponse(data={"vlans": result})
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.get("/prefixes")
@@ -129,8 +129,8 @@ async def get_prefixes(
     try:
         result = await list_netbox_prefixes(site_id, vlan_id, connection_id)
         return ApiResponse(data={"prefixes": result})
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.get("/ip-addresses")
@@ -143,8 +143,8 @@ async def get_ip_addresses(
     try:
         result = await list_netbox_ip_addresses(device_id, interface, connection_id)
         return ApiResponse(data={"ip_addresses": result})
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.get("/circuits")
@@ -155,8 +155,8 @@ async def get_circuits(provider: str = "", connection_id: str = "") -> ApiRespon
     try:
         result = await list_netbox_circuits(provider, connection_id)
         return ApiResponse(data={"circuits": result})
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.get("/cables")
@@ -167,8 +167,8 @@ async def get_cables(connection_id: str = "") -> ApiResponse:
     try:
         result = await list_netbox_cables(connection_id)
         return ApiResponse(data={"cables": result})
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)
 
 
 @router.get("/clusters")
@@ -179,5 +179,5 @@ async def get_clusters(site_id: int = None, connection_id: str = "") -> ApiRespo
     try:
         result = await list_netbox_clusters(site_id, connection_id)
         return ApiResponse(data={"clusters": result})
-    except Exception as e:
-        return ApiResponse(error=str(e), success=False)
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return ApiResponse(error=str(exc), success=False)

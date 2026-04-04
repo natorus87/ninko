@@ -17,15 +17,22 @@ Stand: 2026-04-04
     - API-Sperre bis Passwortwechsel (nur `/api/auth/me`, `/api/auth/change-password`, `/api/auth/logout` erlaubt)
     - Login-Flow in `frontend/login.html` erzwingt Passwortwechsel vor Dashboard-Zugriff
 
-- [ ] **Catalog-Module auf konsistente Exception-Strategie umstellen**
+- [x] **Catalog-Module auf konsistente Exception-Strategie umstellen**
   - Dateien: `backend/modules_catalog/netbox/*`, `backend/modules_catalog/zabbix/*`, `backend/modules_catalog/gitlab/*`, `backend/modules_catalog/discord/routes.py`
   - Problem: Breite `except Exception`-Blöcke verbergen Fehlerursachen und erschweren sichere Fehlerbehandlung.
   - Ziel: spezifische Exception-Gruppen + standardisierte API-Fehlerantworten.
+  - Status 2026-04-04:
+    - Catch-Alls (`except Exception`) in den betroffenen Routen/Health-Checks entfernt
+    - Fehlerbehandlung auf spezifische Exception-Gruppen vereinheitlicht
 
-- [ ] **Catalog-Manifeste standardisieren (Core `ModuleManifest` statt Custom-Stub)**
+- [x] **Catalog-Manifeste standardisieren (Core `ModuleManifest` statt Custom-Stub)**
   - Dateien: `backend/modules_catalog/netbox/manifest.py`, `backend/modules_catalog/zabbix/manifest.py`, `backend/modules_catalog/gitlab/manifest.py`
   - Problem: Inkonsistente Manifest-Struktur (`api_prefix`, `dashboard_tab`, Health-Check-Referenzen) gegenüber Template/Core.
   - Ziel: 1:1 auf `core.module_registry.ModuleManifest` migrieren.
+  - Status 2026-04-04:
+    - Manifeste auf `core.module_registry.ModuleManifest` migriert
+    - konsistente Felder (`display_name`, `env_prefix`, `required_secrets`, `api_prefix`, `dashboard_tab`) ergänzt
+    - gemeinsames Antwortschema für diese Modul-Routen über `backend/core/schemas.py:ApiResponse` bereitgestellt
 
 - [ ] **Legacy-Testskripte reparieren (aktuell nicht lauffähig)**
   - Dateien: `backend/test_services.py`, `backend/test_monitor.py`, `test_pihole.py`
