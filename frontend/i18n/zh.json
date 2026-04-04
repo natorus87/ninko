@@ -673,6 +673,19 @@
       "noProblems": "无当前问题。",
       "loadError": "加载错误。",
       "error": "错误: "
+    },
+    "netbox": {
+      "noConnections": "无Netbox连接",
+      "selectConnection": "请选择连接。",
+      "loading": "加载中…",
+      "sites": "站点",
+      "devices": "设备",
+      "racks": "机柜",
+      "vlans": "VLAN",
+      "sitesList": "站点",
+      "devicesList": "设备",
+      "loadError": "加载错误。",
+      "error": "错误: "
     }
   }
 }

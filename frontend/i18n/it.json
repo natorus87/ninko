@@ -673,6 +673,19 @@
       "noProblems": "Nessun problema attuale.",
       "loadError": "Errore nel caricamento.",
       "error": "Errore: "
+    },
+    "netbox": {
+      "noConnections": "Nessuna connessione Netbox",
+      "selectConnection": "Per favore seleziona una connessione.",
+      "loading": "Caricamento…",
+      "sites": "Siti",
+      "devices": "Dispositivi",
+      "racks": "Rack",
+      "vlans": "VLAN",
+      "sitesList": "Siti",
+      "devicesList": "Dispositivi",
+      "loadError": "Errore nel caricamento.",
+      "error": "Errore: "
     }
   }
 }

@@ -673,6 +673,19 @@
       "noProblems": "Geen actuele problemen.",
       "loadError": "Fout bij laden.",
       "error": "Fout: "
+    },
+    "netbox": {
+      "noConnections": "Geen Netbox-verbindingen",
+      "selectConnection": "Selecteer een verbinding.",
+      "loading": "Laden…",
+      "sites": "Sites",
+      "devices": "Apparaten",
+      "racks": "Racks",
+      "vlans": "VLANs",
+      "sitesList": "Sites",
+      "devicesList": "Apparaten",
+      "loadError": "Fout bij laden.",
+      "error": "Fout: "
     }
   }
 }

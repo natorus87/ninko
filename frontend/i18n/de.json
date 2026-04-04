@@ -681,6 +681,19 @@
       "noProblems": "Keine aktuellen Probleme.",
       "loadError": "Fehler beim Laden.",
       "error": "Fehler: "
+    },
+    "netbox": {
+      "noConnections": "Keine Netbox-Verbindungen",
+      "selectConnection": "Bitte Verbindung auswählen.",
+      "loading": "Lade…",
+      "sites": "Sites",
+      "devices": "Devices",
+      "racks": "Racks",
+      "vlans": "VLANs",
+      "sitesList": "Sites",
+      "devicesList": "Devices",
+      "loadError": "Fehler beim Laden.",
+      "error": "Fehler: "
     }
   }
 }

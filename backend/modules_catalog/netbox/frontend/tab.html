@@ -1,0 +1,144 @@
+<div class="tab-content" id="tab-netbox">
+  <div class="netbox-header">
+    <h3>🔌 NetBox DCIM & IPAM</h3>
+    <select id="netbox-connection-select" class="connection-select">
+      <option value="">Verbindung wählen...</option>
+    </select>
+  </div>
+
+  <div class="netbox-dashboard">
+    <div class="stats-grid">
+      <div class="stat-card" id="netbox-sites-stat">
+        <div class="stat-label" data-i18n="sites">Sites</div>
+        <div class="stat-value">-</div>
+      </div>
+      <div class="stat-card" id="netbox-devices-stat">
+        <div class="stat-label" data-i18n="devices">Devices</div>
+        <div class="stat-value">-</div>
+      </div>
+      <div class="stat-card" id="netbox-racks-stat">
+        <div class="stat-label" data-i18n="racks">Racks</div>
+        <div class="stat-value">-</div>
+      </div>
+      <div class="stat-card" id="netbox-vlans-stat">
+        <div class="stat-label" data-i18n="vlans">VLANs</div>
+        <div class="stat-value">-</div>
+      </div>
+    </div>
+
+    <div class="netbox-sections">
+      <div class="section">
+        <h4 data-i18n="sitesList">Sites</h4>
+        <div id="netbox-sites-list" class="items-list">
+          <div class="loading" data-i18n="loading">Lade...</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h4 data-i18n="devicesList">Devices</h4>
+        <div id="netbox-devices-list" class="items-list">
+          <div class="loading" data-i18n="loading">Lade...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+#tab-netbox {
+  padding: 1rem;
+}
+
+.netbox-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.netbox-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.connection-select {
+  padding: 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.stat-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem;
+  text-align: center;
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.netbox-sections {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.section {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.section h4 {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+}
+
+.items-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.item-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.item-row:last-child {
+  border-bottom: none;
+}
+
+.loading {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 2rem;
+}
+
+.empty {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 1rem;
+  font-style: italic;
+}
+</style>

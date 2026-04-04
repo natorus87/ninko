@@ -4,6 +4,49 @@ Stand: 2026-04-04
 
 ---
 
+## Netbox-Modul ✅ *2026-04-04*
+
+### Implementierte Funktionen
+- [x] `get_netbox_status` — Server-Status und Version
+- [x] `list_netbox_sites` — Site-Liste
+- [x] `get_netbox_site` — Site-Details
+- [x] `list_netbox_devices` — Device-Liste
+- [x] `get_netbox_device` — Device-Details
+- [x] `list_netbox_racks` — Rack-Liste
+- [x] `get_netbox_rack` — Rack-Details
+- [x] `list_netbox_vlans` — VLAN-Liste
+- [x] `list_netbox_prefixes` — Prefix-Liste
+- [x] `list_netbox_ip_addresses` — IP-Adressen
+- [x] `list_netbox_circuits` — Circuits
+- [x] `list_netbox_cables` — Kabel
+- [x] `list_netbox_clusters` — Cluster
+- [x] `get_netbox_device_interfaces` — Device-Interfaces
+
+### Technische Umsetzung
+- **Tools**: 14 LangGraph-Tools in `backend/modules_catalog/netbox/tools.py`
+- **Agent**: System-Prompt mit allen 10 Sprachen
+- **Routing**: Keywords `netbox`, `dcim`, `ipam`, `device`, `rack`, `vlan`, `ipaddress`, `circuit`
+- **Frontend**: Dashboard-Tab mit Sites und Devices
+
+### Dateien erstellt
+- `backend/modules_catalog/netbox/manifest.py`
+- `backend/modules_catalog/netbox/schemas.py`
+- `backend/modules_catalog/netbox/tools.py`
+- `backend/modules_catalog/netbox/agent.py`
+- `backend/modules_catalog/netbox/routes.py`
+- `backend/modules_catalog/netbox/__init__.py`
+- `backend/modules_catalog/netbox/frontend/tab.html`
+- `backend/modules_catalog/netbox/frontend/tab.js`
+- `backend/modules_catalog/netbox/README.md`
+
+### Dateien geändert
+- `backend/modules_catalog/catalog.json`
+- `backend/agents/base_agent.py` (Tool-Labels)
+- `backend/api/routes_settings.py` (Env-Vars + Secrets)
+- `frontend/i18n/*.json` (Netbox-Sektion)
+
+---
+
 ## Zabbix-Modul ✅ *2026-04-04*
 
 ### Implementierte Funktionen

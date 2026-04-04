@@ -699,6 +699,7 @@ def _get_env_connection(module_name: str, prefix: str) -> dict:
         "confluence": ["CONFLUENCE_URL", "CONFLUENCE_EMAIL"],
         "jira": ["JIRA_URL", "JIRA_EMAIL"],
         "zabbix": ["ZABBIX_URL", "ZABBIX_USER"],
+        "netbox": ["NETBOX_URL"],
     }
     for key in mappings.get(module_name, []):
         val = os.environ.get(key, "")
@@ -726,6 +727,7 @@ def _get_secret_keys(module_name: str) -> list[str]:
         "confluence": ["CONFLUENCE_API_KEY"],
         "jira": ["JIRA_API_KEY"],
         "zabbix": ["ZABBIX_PASSWORD"],
+        "netbox": ["NETBOX_TOKEN"],
     }.get(module_name, [])
 
 

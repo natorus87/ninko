@@ -414,6 +414,21 @@ _TOOL_LABELS: dict[str, str] = {
     "list_zabbix_templates": _t(de="Lade Templates", en="Loading templates"),
     "create_zabbix_host": _t(de="Erstelle Host", en="Creating host"),
     "delete_zabbix_host": _t(de="Lösche Host", en="Deleting host"),
+    # Netbox
+    "get_netbox_status": _t(de="Lade Status", en="Loading status"),
+    "list_netbox_sites": _t(de="Lade Sites", en="Loading sites"),
+    "get_netbox_site": _t(de="Lade Site", en="Loading site"),
+    "list_netbox_devices": _t(de="Lade Devices", en="Loading devices"),
+    "get_netbox_device": _t(de="Lade Device", en="Loading device"),
+    "list_netbox_racks": _t(de="Lade Racks", en="Loading racks"),
+    "get_netbox_rack": _t(de="Lade Rack", en="Loading rack"),
+    "list_netbox_vlans": _t(de="Lade VLANs", en="Loading VLANs"),
+    "list_netbox_prefixes": _t(de="Lade Prefixes", en="Loading prefixes"),
+    "list_netbox_ip_addresses": _t(de="Lade IPs", en="Loading IPs"),
+    "list_netbox_circuits": _t(de="Lade Circuits", en="Loading circuits"),
+    "list_netbox_cables": _t(de="Lade Kabel", en="Loading cables"),
+    "list_netbox_clusters": _t(de="Lade Cluster", en="Loading clusters"),
+    "get_netbox_device_interfaces": _t(de="Lade Interfaces", en="Loading interfaces"),
 }
 
 

@@ -155,7 +155,7 @@ Stand: 2026-04-04
 - [x] **Slack-Modul**
 - [x] **Discord-Modul**
 - [x] **Zabbix-Modul**
-- [ ] **Netbox-Modul**
+- [x] **Netbox-Modul**
 - [ ] **Multi-Tenancy**
   - Status 2026-04-04: **RBAC-Basis umgesetzt** (Backend)
   - Umgesetzt:

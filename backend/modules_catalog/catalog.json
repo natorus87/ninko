@@ -197,6 +197,13 @@
       "author": "Ninko"
     },
     {
+      "name": "netbox",
+      "display_name": "NetBox",
+      "description": "NetBox DCIM & IPAM – Devices, Circuits, IP-Adresses, VLANs, Rack-Management.",
+      "version": "1.0.0",
+      "author": "Ninko"
+    },
+    {
       "name": "wordpress",
       "display_name": "WordPress",
       "description": "WordPress-Verwaltung – Plugins, Seiten, Beiträge, Benutzer, Einstellungen",
