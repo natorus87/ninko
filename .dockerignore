@@ -1,5 +1,4 @@
 backend/modules_catalog/
-!backend/modules_catalog/*/frontend/
 __pycache__
 *.pyc
 *.pyo

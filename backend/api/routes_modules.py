@@ -5,6 +5,7 @@ Ninko Module API – Modul-Verwaltung und Tab-Informationen.
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, Request
@@ -19,6 +20,21 @@ from schemas.module import (
 
 logger = logging.getLogger("ninko.api.modules")
 router = APIRouter(prefix="/api/modules", tags=["Module"])
+
+# Patterns used to detect the exported tab object in legacy tab.js files.
+_TAB_OBJ_PATTERNS = [
+    re.compile(r"window\.(\w+(?:Tab|Module|App))\s*="),       # window.FooTab = ...
+    re.compile(r"(?:^|\n)\s*(?:const|var|let)\s+(\w+(?:Tab|Module|App))\s*="),  # const FooTab = ...
+]
+
+
+def _detect_tab_object(js_content: str) -> str | None:
+    """Return the name of the main tab object from a tab.js file, or None."""
+    last: str | None = None
+    for pattern in _TAB_OBJ_PATTERNS:
+        for match in pattern.finditer(js_content):
+            last = match.group(1)
+    return last
 
 
 @router.get("", response_model=list[ModuleInfo])
@@ -102,24 +118,29 @@ async def get_module_frontend(
         return HTMLResponse(content="Zugriff verweigert.", status_code=403)
 
     if not file_path.is_file():
-        # Fallback 1: modules_catalog/ (frontend assets baked into image, always up-to-date)
-        catalog_dir = Path(__file__).resolve().parent.parent / "modules_catalog"
-        catalog_path = (catalog_dir / module_name / "frontend" / filename).resolve()
-        if catalog_path.is_relative_to(catalog_dir) and catalog_path.is_file():
-            file_path = catalog_path
-        else:
-            # Fallback 2: plugins/ (runtime-installed modules, may have older frontend files)
-            plugins_dir = Path(__file__).resolve().parent.parent / "plugins"
-            file_path = (plugins_dir / module_name / "frontend" / filename).resolve()
-            if not file_path.is_relative_to(plugins_dir):
-                return HTMLResponse(content="Zugriff verweigert.", status_code=403)
-            if not file_path.is_file():
-                return HTMLResponse(
-                    content="Datei nicht gefunden.",
-                    status_code=404,
-                )
+        # Fallback: plugins/ (runtime-installed catalog modules)
+        plugins_dir = Path(__file__).resolve().parent.parent / "plugins"
+        file_path = (plugins_dir / module_name / "frontend" / filename).resolve()
+        if not file_path.is_relative_to(plugins_dir):
+            return HTMLResponse(content="Zugriff verweigert.", status_code=403)
+        if not file_path.is_file():
+            return HTMLResponse(
+                content="Datei nicht gefunden.",
+                status_code=404,
+            )
 
     content = file_path.read_text(encoding="utf-8")
+
+    # Auto-patch legacy tab.js files that predate the _pluginTabs registration pattern.
+    # Older plugin installations lack the registration line — inject it on-the-fly so
+    # switchModuleTab() can initialize the tab without requiring a module reinstall.
+    if filename == "tab.js" and "Ninko._pluginTabs" not in content:
+        obj_name = _detect_tab_object(content)
+        if obj_name:
+            content += (
+                f'\nif (typeof Ninko !== "undefined") '
+                f'Ninko._pluginTabs["{module_name}"] = {obj_name};\n'
+            )
 
     content_type = "text/html" if filename.endswith(".html") else "application/javascript"
     return HTMLResponse(content=content, media_type=content_type)
