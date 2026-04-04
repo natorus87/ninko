@@ -7,6 +7,24 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.9.7] – 2026-04-04
+
+### Added
+
+- **GitLab-Modul** (Catalog):
+  - Pipeline-Management: trigger, cancel, retry, schedules
+  - MR-Management: create, accept, list, details
+  - Repository: projects, branches, commits, tags, releases
+  - CI/CD Variables: create, list, delete
+  - 24 Tools total für vollständige CI/CD-Steuerung
+
+### Changed
+
+- **i18n**: GitLab Übersetzungen für alle 10 Sprachen ergänzt
+- **Tool-Labels**: GitLab Tool-Labels in base_agent.py
+
+---
+
 ## [0.9.6] – 2026-04-04
 
 ### Added
