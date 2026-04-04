@@ -659,6 +659,20 @@
       "createChannel": "Kanaal maken",
       "deleteChannel": "Kanaal verwijderen",
       "sendMessage": "Bericht verzenden"
+    },
+    "zabbix": {
+      "noConnections": "Geen Zabbix-verbindingen",
+      "selectConnection": "Selecteer een verbinding.",
+      "loading": "Laden…",
+      "hosts": "Hosts",
+      "items": "Items",
+      "triggers": "Triggers",
+      "problems": "Problemen",
+      "currentProblems": "Huidige problemen",
+      "hostsList": "Hosts",
+      "noProblems": "Geen actuele problemen.",
+      "loadError": "Fout bij laden.",
+      "error": "Fout: "
     }
   }
 }

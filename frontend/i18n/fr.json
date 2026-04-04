@@ -659,6 +659,20 @@
       "createChannel": "Créer un canal",
       "deleteChannel": "Supprimer le canal",
       "sendMessage": "Envoyer un message"
+    },
+    "zabbix": {
+      "noConnections": "Aucune connexion Zabbix",
+      "selectConnection": "Veuillez sélectionner une connexion.",
+      "loading": "Chargement…",
+      "hosts": "Hôtes",
+      "items": "Items",
+      "triggers": "Déclencheurs",
+      "problems": "Problèmes",
+      "currentProblems": "Problèmes actuels",
+      "hostsList": "Hôtes",
+      "noProblems": "Aucun problème actuel.",
+      "loadError": "Erreur de chargement.",
+      "error": "Erreur : "
     }
   }
 }

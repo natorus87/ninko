@@ -400,6 +400,20 @@ _TOOL_LABELS: dict[str, str] = {
     "get_discord_channel_messages": _t(de="Lade Nachrichten", en="Loading messages"),
     "search_discord_messages": _t(de="Suche Nachrichten", en="Searching messages"),
     "delete_discord_channel": _t(de="Lösche Kanal", en="Deleting channel"),
+    # Zabbix
+    "get_zabbix_status": _t(de="Lade Status", en="Loading status"),
+    "list_zabbix_hosts": _t(de="Lade Hosts", en="Loading hosts"),
+    "get_zabbix_host": _t(de="Lade Host", en="Loading host"),
+    "list_zabbix_items": _t(de="Lade Items", en="Loading items"),
+    "list_zabbix_triggers": _t(de="Lade Trigger", en="Loading triggers"),
+    "get_zabbix_problems": _t(de="Lade Probleme", en="Loading problems"),
+    "list_zabbix_graphs": _t(de="Lade Graphen", en="Loading graphs"),
+    "list_zabbix_actions": _t(de="Lade Actions", en="Loading actions"),
+    "get_zabbix_history": _t(de="Lade History", en="Loading history"),
+    "get_zabbix_host_group": _t(de="Lade Gruppen", en="Loading groups"),
+    "list_zabbix_templates": _t(de="Lade Templates", en="Loading templates"),
+    "create_zabbix_host": _t(de="Erstelle Host", en="Creating host"),
+    "delete_zabbix_host": _t(de="Lösche Host", en="Deleting host"),
 }
 
 

@@ -190,6 +190,13 @@
       "author": "Ninko"
     },
     {
+      "name": "zabbix",
+      "display_name": "Zabbix",
+      "description": "Zabbix Enterprise Monitoring – Hosts, Items, Triggers, Graphs und Alerts.",
+      "version": "1.0.0",
+      "author": "Ninko"
+    },
+    {
       "name": "wordpress",
       "display_name": "WordPress",
       "description": "WordPress-Verwaltung – Plugins, Seiten, Beiträge, Benutzer, Einstellungen",

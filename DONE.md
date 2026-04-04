@@ -4,6 +4,48 @@ Stand: 2026-04-04
 
 ---
 
+## Zabbix-Modul ✅ *2026-04-04*
+
+### Implementierte Funktionen
+- [x] `get_zabbix_status` — Server-Status und Version
+- [x] `list_zabbix_hosts` — Host-Liste
+- [x] `get_zabbix_host` — Host-Details
+- [x] `list_zabbix_items` — Monitoring-Items
+- [x] `list_zabbix_triggers` — Trigger-Liste
+- [x] `get_zabbix_problems` — Aktuelle Probleme
+- [x] `list_zabbix_graphs` — Graphen-Liste
+- [x] `list_zabbix_actions` — Actions/Alerts
+- [x] `get_zabbix_history` — Historische Daten
+- [x] `get_zabbix_host_group` — Host-Gruppen
+- [x] `list_zabbix_templates` — Templates
+- [x] `create_zabbix_host` — Host erstellen
+- [x] `delete_zabbix_host` — Host löschen
+
+### Technische Umsetzung
+- **Tools**: 13 LangGraph-Tools in `backend/modules_catalog/zabbix/tools.py`
+- **Agent**: System-Prompt mit allen 10 Sprachen
+- **Routing**: Keywords `zabbix`, `monitoring`, `host`, `item`, `trigger`, `alert`, `graph`
+- **Frontend**: Dashboard-Tab mit Stats und Problemen-Liste
+
+### Dateien erstellt
+- `backend/modules_catalog/zabbix/manifest.py`
+- `backend/modules_catalog/zabbix/schemas.py`
+- `backend/modules_catalog/zabbix/tools.py`
+- `backend/modules_catalog/zabbix/agent.py`
+- `backend/modules_catalog/zabbix/routes.py`
+- `backend/modules_catalog/zabbix/__init__.py`
+- `backend/modules_catalog/zabbix/frontend/tab.html`
+- `backend/modules_catalog/zabbix/frontend/tab.js`
+- `backend/modules_catalog/zabbix/README.md`
+
+### Dateien geändert
+- `backend/modules_catalog/catalog.json`
+- `backend/agents/base_agent.py` (Tool-Labels)
+- `backend/api/routes_settings.py` (Env-Vars + Secrets)
+- `frontend/i18n/*.json` (Zabbix-Sektion)
+
+---
+
 ## Discord-Modul ✅ *2026-04-04*
 
 ### Implementierte Funktionen

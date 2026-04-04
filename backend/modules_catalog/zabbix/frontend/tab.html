@@ -1,0 +1,167 @@
+<div class="tab-content" id="tab-zabbix">
+  <div class="zabbix-header">
+    <h3>📊 Zabbix Monitoring</h3>
+    <select id="zabbix-connection-select" class="connection-select">
+      <option value="">Verbindung wählen...</option>
+    </select>
+  </div>
+
+  <div class="zabbix-dashboard">
+    <div class="stats-grid">
+      <div class="stat-card" id="zabbix-hosts-stat">
+        <div class="stat-label" data-i18n="hosts">Hosts</div>
+        <div class="stat-value">-</div>
+      </div>
+      <div class="stat-card" id="zabbix-items-stat">
+        <div class="stat-label" data-i18n="items">Items</div>
+        <div class="stat-value">-</div>
+      </div>
+      <div class="stat-card" id="zabbix-triggers-stat">
+        <div class="stat-label" data-i18n="triggers">Triggers</div>
+        <div class="stat-value">-</div>
+      </div>
+      <div class="stat-card warning" id="zabbix-problems-stat">
+        <div class="stat-label" data-i18n="problems">Probleme</div>
+        <div class="stat-value">-</div>
+      </div>
+    </div>
+
+    <div class="zabbix-sections">
+      <div class="section">
+        <h4 data-i18n="currentProblems">Aktuelle Probleme</h4>
+        <div id="zabbix-problems-list" class="items-list">
+          <div class="loading" data-i18n="loading">Lade...</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h4 data-i18n="hostsList">Hosts</h4>
+        <div id="zabbix-hosts-list" class="items-list">
+          <div class="loading" data-i18n="loading">Lade...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+#tab-zabbix {
+  padding: 1rem;
+}
+
+.zabbix-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.zabbix-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.connection-select {
+  padding: 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.stat-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem;
+  text-align: center;
+}
+
+.stat-card.warning {
+  border-color: var(--color-warning);
+  background: rgba(255, 152, 0, 0.1);
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.zabbix-sections {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.section {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.section h4 {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+}
+
+.items-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.item-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.item-row:last-child {
+  border-bottom: none;
+}
+
+.problem-row {
+  padding: 0.5rem;
+  margin-bottom: 0.5rem;
+  border-radius: 4px;
+  background: rgba(244, 67, 54, 0.1);
+  border-left: 3px solid var(--color-error);
+}
+
+.problem-row.warning {
+  background: rgba(255, 152, 0, 0.1);
+  border-left-color: var(--color-warning);
+}
+
+.problem-row.info {
+  background: rgba(33, 150, 243, 0.1);
+  border-left-color: var(--color-info);
+}
+
+.loading {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 2rem;
+}
+
+.empty {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 1rem;
+  font-style: italic;
+}
+</style>

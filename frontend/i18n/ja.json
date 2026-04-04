@@ -659,6 +659,20 @@
       "createChannel": "チャンネル作成",
       "deleteChannel": "チャンネル削除",
       "sendMessage": "メッセージ送信"
+    },
+    "zabbix": {
+      "noConnections": "Zabbix接続なし",
+      "selectConnection": "接続を選択してください。",
+      "loading": "読み込み中…",
+      "hosts": "ホスト",
+      "items": "アイテム",
+      "triggers": "トリガー",
+      "problems": "問題",
+      "currentProblems": "現在の問題",
+      "hostsList": "ホスト",
+      "noProblems": "現在の問題はありません。",
+      "loadError": "読み込みエラー。",
+      "error": "エラー: "
     }
   }
 }

@@ -659,6 +659,20 @@
       "createChannel": "创建频道",
       "deleteChannel": "删除频道",
       "sendMessage": "发送消息"
+    },
+    "zabbix": {
+      "noConnections": "无Zabbix连接",
+      "selectConnection": "请选择连接。",
+      "loading": "加载中…",
+      "hosts": "主机",
+      "items": "监控项",
+      "triggers": "触发器",
+      "problems": "问题",
+      "currentProblems": "当前问题",
+      "hostsList": "主机",
+      "noProblems": "无当前问题。",
+      "loadError": "加载错误。",
+      "error": "错误: "
     }
   }
 }
