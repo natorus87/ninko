@@ -699,6 +699,19 @@
       "mergeRequestsList": "オープンマージリクエスト",
       "loadError": "読み込みエラー。",
       "error": "エラー: "
+    },
+    "github": {
+      "noConnections": "GitHub接続なし",
+      "selectConnection": "接続を選択してください。",
+      "loading": "読み込み中…",
+      "repositories": "リポジトリ",
+      "workflowRuns": "Workflow Runs",
+      "pullRequests": "プルリクエスト",
+      "issues": "イシュー",
+      "recentRuns": "最近のWorkflow Runs",
+      "openPRs": "オープンプルリクエスト",
+      "loadError": "読み込みエラー。",
+      "error": "エラー: "
     }
   }
 }

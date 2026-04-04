@@ -699,6 +699,19 @@
       "mergeRequestsList": "Merge Requests ouverts",
       "loadError": "Erreur de chargement.",
       "error": "Erreur : "
+    },
+    "github": {
+      "noConnections": "Aucune connexion GitHub",
+      "selectConnection": "Veuillez sélectionner une connexion.",
+      "loading": "Chargement…",
+      "repositories": "Dépôts",
+      "workflowRuns": "Workflow Runs",
+      "pullRequests": "Pull Requests",
+      "issues": "Issues",
+      "recentRuns": "Derniers Workflow Runs",
+      "openPRs": "Pull Requests ouvertes",
+      "loadError": "Erreur de chargement.",
+      "error": "Erreur : "
     }
   }
 }

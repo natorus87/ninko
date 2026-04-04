@@ -699,6 +699,19 @@
       "mergeRequestsList": "打开的合并请求",
       "loadError": "加载错误。",
       "error": "错误: "
+    },
+    "github": {
+      "noConnections": "无GitHub连接",
+      "selectConnection": "请选择连接。",
+      "loading": "加载中…",
+      "repositories": "仓库",
+      "workflowRuns": "Workflow运行",
+      "pullRequests": "拉取请求",
+      "issues": "问题",
+      "recentRuns": "最近的Workflow运行",
+      "openPRs": "打开的拉取请求",
+      "loadError": "加载错误。",
+      "error": "错误: "
     }
   }
 }

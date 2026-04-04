@@ -1,0 +1,172 @@
+<div class="tab-content" id="tab-github">
+  <div class="github-header">
+    <h3>🐙 GitHub Actions</h3>
+    <select id="github-connection-select" class="connection-select">
+      <option value="">Verbindung wählen...</option>
+    </select>
+  </div>
+
+  <div class="github-dashboard">
+    <div class="stats-grid">
+      <div class="stat-card" id="github-repos-stat">
+        <div class="stat-label" data-i18n="repositories">Repositories</div>
+        <div class="stat-value">-</div>
+      </div>
+      <div class="stat-card" id="github-runs-stat">
+        <div class="stat-label" data-i18n="workflowRuns">Workflow Runs</div>
+        <div class="stat-value">-</div>
+      </div>
+      <div class="stat-card" id="github-prs-stat">
+        <div class="stat-label" data-i18n="pullRequests">Pull Requests</div>
+        <div class="stat-value">-</div>
+      </div>
+      <div class="stat-card" id="github-issues-stat">
+        <div class="stat-label" data-i18n="issues">Issues</div>
+        <div class="stat-value">-</div>
+      </div>
+    </div>
+
+    <div class="github-sections">
+      <div class="section">
+        <h4 data-i18n="recentRuns">Letzte Workflow Runs</h4>
+        <div id="github-runs-list" class="items-list">
+          <div class="loading" data-i18n="loading">Lade...</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h4 data-i18n="openPRs">Offene Pull Requests</h4>
+        <div id="github-prs-list" class="items-list">
+          <div class="loading" data-i18n="loading">Lade...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+#tab-github {
+  padding: 1rem;
+}
+
+.github-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.github-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.connection-select {
+  padding: 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.stat-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem;
+  text-align: center;
+}
+
+.stat-card.success { border-color: var(--color-success); }
+.stat-card.error { border-color: var(--color-error); }
+
+.stat-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.github-sections {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.section {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.section h4 {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+}
+
+.items-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.item-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.run-row {
+  padding: 0.5rem;
+  margin-bottom: 0.5rem;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  font-size: 0.875rem;
+}
+
+.run-row .status {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  margin-right: 0.5rem;
+}
+
+.run-row .status.success { background: var(--color-success); color: white; }
+.run-row .status.failure { background: var(--color-error); color: white; }
+.run-row .status.in_progress { background: var(--color-info); color: white; }
+
+.pr-row {
+  padding: 0.5rem;
+  margin-bottom: 0.5rem;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  font-size: 0.875rem;
+}
+
+.loading {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 2rem;
+}
+
+.empty {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 1rem;
+  font-style: italic;
+}
+</style>

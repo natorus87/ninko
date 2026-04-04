@@ -707,6 +707,19 @@
       "mergeRequestsList": "Offene Merge Requests",
       "loadError": "Fehler beim Laden.",
       "error": "Fehler: "
+    },
+    "github": {
+      "noConnections": "Keine GitHub-Verbindungen",
+      "selectConnection": "Bitte Verbindung auswählen.",
+      "loading": "Lade…",
+      "repositories": "Repositories",
+      "workflowRuns": "Workflow Runs",
+      "pullRequests": "Pull Requests",
+      "issues": "Issues",
+      "recentRuns": "Letzte Workflow Runs",
+      "openPRs": "Offene Pull Requests",
+      "loadError": "Fehler beim Laden.",
+      "error": "Fehler: "
     }
   }
 }

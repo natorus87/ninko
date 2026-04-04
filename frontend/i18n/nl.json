@@ -699,6 +699,19 @@
       "mergeRequestsList": "Open Merge Requests",
       "loadError": "Fout bij laden.",
       "error": "Fout: "
+    },
+    "github": {
+      "noConnections": "Geen GitHub-verbindingen",
+      "selectConnection": "Selecteer een verbinding.",
+      "loading": "Laden…",
+      "repositories": "Repositories",
+      "workflowRuns": "Workflow Runs",
+      "pullRequests": "Pull Requests",
+      "issues": "Issues",
+      "recentRuns": "Laatste Workflow Runs",
+      "openPRs": "Open Pull Requests",
+      "loadError": "Fout bij laden.",
+      "error": "Fout: "
     }
   }
 }

@@ -4,6 +4,64 @@ Stand: 2026-04-04
 
 ---
 
+## GitHub-Modul ✅ *2026-04-04*
+
+### Implementierte Funktionen
+- [x] `get_github_status` — User-Status und Rate-Limit
+- [x] `list_github_repos` — Repository-Liste
+- [x] `get_github_repo` — Repository-Details
+- [x] `list_github_workflows` — Workflow-Liste
+- [x] `list_github_workflow_runs` — Workflow-Run-Liste
+- [x] `get_github_workflow_run` — Run-Details
+- [x] `trigger_github_workflow` — Workflow starten
+- [x] `cancel_github_workflow_run` — Run abbrechen
+- [x] `rerun_github_workflow` — Run wiederholen
+- [x] `list_github_jobs` — Job-Liste
+- [x] `get_github_job_logs` — Job-Logs abrufen
+- [x] `list_github_pull_requests` — PR-Liste
+- [x] `get_github_pull_request` — PR-Details
+- [x] `create_github_pull_request` — PR erstellen
+- [x] `merge_github_pull_request` — PR mergen
+- [x] `list_github_issues` — Issue-Liste
+- [x] `create_github_issue` — Issue erstellen
+- [x] `list_github_branches` — Branch-Liste
+- [x] `list_github_commits` — Commit-Liste
+- [x] `list_github_tags` — Tag-Liste
+- [x] `list_github_releases` — Release-Liste
+- [x] `create_github_release` — Release erstellen
+- [x] `list_github_variables` — Variablen-Liste
+- [x] `create_github_variable` — Variable erstellen
+- [x] `delete_github_variable` — Variable löschen
+- [x] `list_github_secrets` — Secrets-Liste
+- [x] `get_github_repo_content` — Inhalt abrufen
+- [x] `search_github_code` — Code-Suche
+- [x] `search_github_issues` — Issue-Suche
+
+### Technische Umsetzung
+- **Tools**: 30 LangGraph-Tools in `backend/modules_catalog/github/tools.py`
+- **Agent**: System-Prompt mit allen 10 Sprachen
+- **Routing**: Keywords `github`, `repository`, `repo`, `actions`, `workflow`, `pull request`, `issue`
+- **Frontend**: Dashboard-Tab mit Repositories und Runs
+
+### Dateien erstellt
+- `backend/modules_catalog/github/manifest.py`
+- `backend/modules_catalog/github/schemas.py`
+- `backend/modules_catalog/github/tools.py`
+- `backend/modules_catalog/github/agent.py`
+- `backend/modules_catalog/github/routes.py`
+- `backend/modules_catalog/github/__init__.py`
+- `backend/modules_catalog/github/frontend/tab.html`
+- `backend/modules_catalog/github/frontend/tab.js`
+- `backend/modules_catalog/github/README.md`
+
+### Dateien geändert
+- `backend/modules_catalog/catalog.json`
+- `backend/agents/base_agent.py` (Tool-Labels)
+- `backend/api/routes_settings.py` (GITHUB_TOKEN)
+- `frontend/i18n/*.json` (GitHub-Sektion)
+
+---
+
 ## GitLab-Modul ✅ *2026-04-04*
 
 ### Implementierte Funktionen

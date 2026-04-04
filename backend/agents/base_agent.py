@@ -458,6 +458,36 @@ _TOOL_LABELS: dict[str, str] = {
     "trigger_gitlab_pipeline_schedule": _t(
         de="Starte Schedule", en="Triggering schedule"
     ),
+    # GitHub
+    "get_github_status": _t(de="Lade Status", en="Loading status"),
+    "list_github_repos": _t(de="Lade Repos", en="Loading repos"),
+    "get_github_repo": _t(de="Lade Repo", en="Loading repo"),
+    "list_github_workflows": _t(de="Lade Workflows", en="Loading workflows"),
+    "list_github_workflow_runs": _t(de="Lade Runs", en="Loading runs"),
+    "get_github_workflow_run": _t(de="Lade Run", en="Loading run"),
+    "trigger_github_workflow": _t(de="Starte Workflow", en="Triggering workflow"),
+    "cancel_github_workflow_run": _t(de="Breche Run ab", en="Canceling run"),
+    "rerun_github_workflow": _t(de="Starte Run neu", en="Re-running workflow"),
+    "list_github_jobs": _t(de="Lade Jobs", en="Loading jobs"),
+    "get_github_job_logs": _t(de="Lade Logs", en="Loading logs"),
+    "list_github_pull_requests": _t(de="Lade PRs", en="Loading PRs"),
+    "get_github_pull_request": _t(de="Lade PR", en="Loading PR"),
+    "create_github_pull_request": _t(de="Erstelle PR", en="Creating PR"),
+    "merge_github_pull_request": _t(de="Merged PR", en="Merging PR"),
+    "list_github_issues": _t(de="Lade Issues", en="Loading issues"),
+    "create_github_issue": _t(de="Erstelle Issue", en="Creating issue"),
+    "list_github_branches": _t(de="Lade Branches", en="Loading branches"),
+    "list_github_commits": _t(de="Lade Commits", en="Loading commits"),
+    "list_github_tags": _t(de="Lade Tags", en="Loading tags"),
+    "list_github_releases": _t(de="Lade Releases", en="Loading releases"),
+    "create_github_release": _t(de="Erstelle Release", en="Creating release"),
+    "list_github_variables": _t(de="Lade Variablen", en="Loading variables"),
+    "create_github_variable": _t(de="Erstelle Variable", en="Creating variable"),
+    "delete_github_variable": _t(de="Lösche Variable", en="Deleting variable"),
+    "list_github_secrets": _t(de="Lade Secrets", en="Loading secrets"),
+    "get_github_repo_content": _t(de="Lade Inhalt", en="Loading content"),
+    "search_github_code": _t(de="Suche Code", en="Searching code"),
+    "search_github_issues": _t(de="Suche Issues", en="Searching issues"),
 }
 
 
