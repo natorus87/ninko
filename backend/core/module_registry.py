@@ -24,6 +24,7 @@ logger = logging.getLogger("ninko.registry")
 _REGISTRY_EXCEPTIONS = (
     ImportError,
     AttributeError,
+    NameError,
     TypeError,
     ValueError,
     KeyError,

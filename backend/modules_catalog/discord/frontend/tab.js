@@ -132,6 +132,7 @@
     };
 
     window.DiscordTab = DiscordTab;
+    if (typeof Ninko !== 'undefined') Ninko._pluginTabs['discord'] = DiscordTab;
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => DiscordTab.load?.());

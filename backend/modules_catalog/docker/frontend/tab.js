@@ -292,3 +292,5 @@ const DockerTab = {
         this.stopPolling();
     }
 };
+
+if (typeof Ninko !== 'undefined') Ninko._pluginTabs['docker'] = DockerTab;

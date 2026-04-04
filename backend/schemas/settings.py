@@ -116,6 +116,14 @@ class BrandingSettings(BaseModel):
     welcome_image_url: str = "/static/images/logo_dashboard_new.png?v=3"
     welcome_show_eyes: bool = True
     show_quick_actions: bool = True
+    login_title: str = "Ninko Login"
+    login_subtitle: str = "Please sign in with your admin account."
+    login_help_url: str = "https://github.com/natorus87/ninko/blob/main/DOCS.md"
+    login_head_mode: Literal["image", "text", "off"] = "image"
+    login_image_url: str = "/static/images/logo_dashboard_new.png?v=3"
+    login_show_eyes: bool = True
+    login_background_style: Literal["aurora", "gradient", "minimal"] = "aurora"
+    login_card_style: Literal["glass", "solid"] = "glass"
 
 
 class BrandingSettingsResponse(BrandingSettings):

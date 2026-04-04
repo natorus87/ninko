@@ -76,6 +76,30 @@ def create_admin_session_token(username: str) -> str:
     )
 
 
+def create_api_access_token(
+    username: str,
+    *,
+    role: str,
+    tenant_id: str = "default",
+    module_permissions: dict[str, dict[str, bool]] | None = None,
+    expires_hours: int = 24 * 30,
+) -> str:
+    cfg = get_settings()
+    now = int(time.time())
+    payload = {
+        "typ": "api",
+        "sub": username,
+        "role": role,
+        "tid": tenant_id or "default",
+        "mods": module_permissions or {},
+        "iat": now,
+        "exp": now + max(1, int(expires_hours)) * 3600,
+    }
+    payload_b64 = _b64url_encode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+    sig = _sign(payload_b64, cfg.SESSION_SECRET)
+    return f"{payload_b64}.{sig}"
+
+
 def _parse_session_token(token: str) -> dict | None:
     cfg = get_settings()
     try:
@@ -101,6 +125,15 @@ def _parse_session_token(token: str) -> dict | None:
 
     exp = int(payload.get("exp", 0))
     if exp <= int(time.time()):
+        return None
+    return payload
+
+
+def _parse_api_access_token(token: str) -> dict | None:
+    payload = _parse_session_token(token)
+    if not payload:
+        return None
+    if str(payload.get("typ", "")) != "api":
         return None
     return payload
 
@@ -173,6 +206,18 @@ def _api_key_context(key: str) -> dict[str, Any] | None:
             "module_permissions": {"*": {"read": True, "write": False}},
             "tenant_id": "default",
             "auth_source": "api_key",
+        }
+    payload = _parse_api_access_token(key)
+    if payload:
+        role = str(payload.get("role", ROLE_READ))
+        mods = payload.get("mods", {})
+        module_permissions = mods if isinstance(mods, dict) else {}
+        return {
+            "username": str(payload.get("sub", "")).strip() or "api_token_user",
+            "role": role,
+            "module_permissions": module_permissions,
+            "tenant_id": str(payload.get("tid", "default")).strip() or "default",
+            "auth_source": "api_token",
         }
     return None
 

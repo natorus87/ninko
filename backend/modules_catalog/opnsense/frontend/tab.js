@@ -246,3 +246,5 @@ const OPNsenseTab = {
         this.stopPolling();
     },
 };
+
+if (typeof Ninko !== 'undefined') Ninko._pluginTabs['opnsense'] = OPNsenseTab;

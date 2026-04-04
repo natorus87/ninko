@@ -5,89 +5,575 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ninko Login</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #0f1720;
-            --panel: #162433;
-            --text: #e7edf5;
-            --muted: #98a6b8;
-            --border: #2a3c52;
-            --accent: #2ea7ff;
-            --accent-2: #1682d6;
+            --bg-primary: #0b0f19;
+            --bg-secondary: #151c2c;
+            --bg-tertiary: #1a243d;
+            --text-primary: #ffffff;
+            --text-secondary: #aabbd1;
+            --border-color: #2a3447;
+            --primary-color: #3b8ee8;
+            --primary-color-rgb: 59, 142, 232;
+            --accent-blue: #5c9eeb;
             --danger: #ff7676;
         }
+
         * { box-sizing: border-box; }
+
         body {
             margin: 0;
             min-height: 100vh;
             display: grid;
             place-items: center;
-            background: radial-gradient(1000px 600px at 20% 10%, #163047 0%, var(--bg) 60%);
-            color: var(--text);
-            font-family: Manrope, Segoe UI, sans-serif;
+            font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            color: var(--text-primary);
+            background: radial-gradient(1200px 720px at 18% 8%, #19304a 0%, var(--bg-primary) 58%);
+            transition: background 180ms ease;
+            padding: 1rem;
+            position: relative;
+            overflow: hidden;
         }
+
+        body.bg-aurora {
+            background:
+                radial-gradient(880px 560px at 14% 10%, color-mix(in srgb, var(--primary-color) 26%, transparent), transparent 66%),
+                radial-gradient(820px 480px at 90% 82%, rgba(60, 100, 190, 0.2), transparent 64%),
+                var(--bg-primary);
+        }
+
+        body.bg-gradient {
+            background: linear-gradient(135deg, color-mix(in srgb, var(--primary-color) 18%, var(--bg-primary) 82%) 0%, var(--bg-primary) 68%);
+        }
+
+        body.bg-minimal {
+            background: var(--bg-primary);
+        }
+
+        body::before,
+        body::after {
+            content: '';
+            position: fixed;
+            inset: -25%;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.72;
+        }
+
+        body::before {
+            background:
+                radial-gradient(40% 28% at 22% 18%, color-mix(in srgb, var(--accent-blue) 24%, transparent), transparent 80%),
+                radial-gradient(34% 24% at 82% 86%, color-mix(in srgb, var(--primary-color) 20%, transparent), transparent 80%);
+            filter: blur(22px);
+            animation: drift 22s ease-in-out infinite alternate;
+        }
+
+        body::after {
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 26px 26px;
+            opacity: 0.11;
+            animation: drift-reverse 28s linear infinite;
+        }
+
+        @keyframes drift {
+            0% { transform: translate3d(-1.5%, -0.8%, 0) scale(1); }
+            100% { transform: translate3d(1.5%, 0.8%, 0) scale(1.04); }
+        }
+
+        @keyframes drift-reverse {
+            0% { transform: translate3d(0, 0, 0); }
+            100% { transform: translate3d(-36px, -22px, 0); }
+        }
+
+        .login-shell {
+            width: min(96vw, 460px);
+            position: relative;
+            z-index: 1;
+            animation: shell-in 380ms ease-out both;
+        }
+
+        @keyframes shell-in {
+            from {
+                opacity: 0;
+                transform: translateY(10px) scale(0.985);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
         .card {
-            width: min(92vw, 420px);
-            background: linear-gradient(180deg, #1a2b3d 0%, var(--panel) 100%);
-            border: 1px solid var(--border);
-            border-radius: 14px;
+            width: 100%;
+            background: linear-gradient(180deg, color-mix(in srgb, var(--bg-secondary) 92%, white 8%) 0%, var(--bg-secondary) 100%);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
             padding: 26px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+            box-shadow:
+                0 22px 62px rgba(0, 0, 0, 0.45),
+                inset 0 1px 0 rgba(255, 255, 255, 0.06),
+                0 0 0 1px rgba(var(--primary-color-rgb), 0.06);
+            backdrop-filter: blur(12px);
         }
-        .title { margin: 0 0 6px; font-size: 1.45rem; font-weight: 700; }
-        .subtitle { margin: 0 0 18px; color: var(--muted); font-size: 0.92rem; }
+
+        .card.solid {
+            backdrop-filter: none;
+            background: var(--bg-secondary);
+        }
+
+        .head-wrap {
+            margin: 0 auto 0.95rem;
+            max-width: 320px;
+            text-align: center;
+        }
+
+        .logo-wrapper {
+            position: relative;
+            display: block;
+            width: 100%;
+            max-width: 260px;
+            margin: 0 auto;
+        }
+
+        .logo-wrapper img {
+            display: block;
+            width: 100%;
+            height: auto;
+            pointer-events: none;
+            user-select: none;
+            filter: drop-shadow(0 0 20px rgba(92, 158, 235, 0.1));
+        }
+
+        .eye {
+            position: absolute;
+            border-radius: 50%;
+            background: radial-gradient(circle, #ffffff 0%, #00e5ff 40%, transparent 70%);
+            pointer-events: none;
+            mix-blend-mode: screen;
+        }
+
+        .eye-left {
+            width: 5.5%;
+            height: 8%;
+            left: 42.5%;
+            top: 59.5%;
+            translate: -50% -50%;
+            rotate: -15deg;
+            animation: glow-pulse 2.5s ease-in-out infinite, blink 6s ease-in-out infinite;
+        }
+
+        .eye-right {
+            width: 5.5%;
+            height: 8%;
+            left: 57.8%;
+            top: 59.5%;
+            translate: -50% -50%;
+            rotate: 15deg;
+            animation: glow-pulse 2.5s ease-in-out infinite 0.3s, blink 6s ease-in-out infinite 0.15s;
+        }
+
+        .eye::before {
+            content: '';
+            position: absolute;
+            inset: -60%;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(0, 229, 255, 0.2) 0%, transparent 70%);
+            animation: glow-ring 2.5s ease-in-out infinite;
+        }
+
+        @keyframes glow-pulse {
+            0%, 100% {
+                opacity: 0.6;
+                transform: scale(1);
+                filter: drop-shadow(0 0 4px #00e5ff) drop-shadow(0 0 10px #00e5ff);
+            }
+            50% {
+                opacity: 1;
+                transform: scale(1.14);
+                filter: drop-shadow(0 0 8px #00e5ff) drop-shadow(0 0 16px #00e5ff);
+            }
+        }
+
+        @keyframes glow-ring {
+            0%, 100% { opacity: 0.4; transform: scale(1); }
+            50% { opacity: 0.9; transform: scale(1.2); }
+        }
+
+        @keyframes blink {
+            0%, 42%, 48%, 100% { transform: scaleY(1); }
+            45% { transform: scaleY(0.2); }
+        }
+
+        .head-text {
+            display: none;
+            font-weight: 800;
+            letter-spacing: 0.03em;
+            font-size: 1.08rem;
+            color: var(--accent-blue);
+            padding: 0.35rem 0.75rem;
+            border-radius: 999px;
+            border: 1px solid var(--border-color);
+            background: color-mix(in srgb, var(--bg-tertiary) 75%, transparent);
+            width: fit-content;
+            margin: 0 auto;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+
+        .title {
+            margin: 0 0 6px;
+            font-size: 1.52rem;
+            font-weight: 760;
+            text-align: center;
+            letter-spacing: 0.01em;
+        }
+
+        .subtitle {
+            margin: 0 0 18px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            text-align: center;
+            line-height: 1.45;
+        }
+
         .row { margin-bottom: 12px; }
-        label { display: block; margin-bottom: 6px; font-size: 0.9rem; color: var(--muted); }
+
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
         input {
             width: 100%;
-            border-radius: 9px;
-            border: 1px solid var(--border);
-            background: #0f1d2b;
-            color: var(--text);
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+            background: color-mix(in srgb, var(--bg-primary) 70%, black 30%);
+            color: var(--text-primary);
             padding: 10px 12px;
             font-size: 0.95rem;
             outline: none;
+            transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
         }
-        input:focus { border-color: var(--accent); }
+
+        input:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb), 0.22);
+            background: color-mix(in srgb, var(--bg-primary) 60%, black 40%);
+        }
+
         button {
             width: 100%;
             border: 0;
             border-radius: 10px;
             padding: 11px 14px;
             font-size: 0.95rem;
-            font-weight: 600;
+            font-weight: 650;
             color: white;
-            background: linear-gradient(180deg, var(--accent), var(--accent-2));
+            background: linear-gradient(180deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 76%, black 24%));
             cursor: pointer;
+            transition: transform 100ms ease, filter 120ms ease, box-shadow 120ms ease;
+            box-shadow: 0 8px 18px rgba(var(--primary-color-rgb), 0.28);
         }
+
+        button:hover {
+            filter: brightness(1.06);
+        }
+
+        button:active {
+            transform: translateY(1px);
+        }
+
         button:disabled { opacity: 0.6; cursor: not-allowed; }
-        .msg { margin-top: 10px; min-height: 18px; font-size: 0.86rem; color: var(--muted); }
+
+        .msg {
+            margin-top: 10px;
+            min-height: 18px;
+            font-size: 0.86rem;
+            color: var(--text-secondary);
+            text-align: center;
+        }
+
         .msg.err { color: var(--danger); }
+
+        .help-link {
+            margin-top: 0.9rem;
+            text-align: center;
+        }
+
+        .help-link a {
+            color: var(--accent-blue);
+            text-decoration: none;
+            font-size: 0.88rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.35rem;
+            padding: 0.28rem 0.62rem;
+            border-radius: 999px;
+            border: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
+            background: color-mix(in srgb, var(--bg-tertiary) 40%, transparent);
+        }
+
+        .help-link a:hover { text-decoration: underline; }
+
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(6, 10, 16, 0.72);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 14px;
+            z-index: 1000;
+        }
+
+        .modal-backdrop.open { display: flex; }
+
+        .modal-card {
+            width: min(92vw, 420px);
+            background: linear-gradient(180deg, color-mix(in srgb, var(--bg-secondary) 92%, white 8%) 0%, var(--bg-secondary) 100%);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.42);
+        }
+
+        .modal-title { margin: 0 0 8px; font-size: 1.05rem; font-weight: 700; }
+        .modal-subtitle { margin: 0 0 14px; color: var(--text-secondary); font-size: 0.88rem; }
+
+        .modal-actions {
+            margin-top: 14px;
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .modal-actions button {
+            width: auto;
+            min-width: 130px;
+        }
+
+        .btn-secondary {
+            background: color-mix(in srgb, var(--bg-tertiary) 68%, transparent);
+            border: 1px solid var(--border-color);
+        }
+
+        .modal-err {
+            margin-top: 6px;
+            min-height: 18px;
+            font-size: 0.84rem;
+            color: var(--danger);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
+        }
     </style>
 </head>
 <body>
-    <form class="card" id="login-form">
-        <h1 class="title">Ninko Login</h1>
-        <p class="subtitle">Bitte mit dem Admin-Account anmelden.</p>
+    <div class="login-shell">
+        <form class="card" id="login-form">
+            <div class="head-wrap" id="login-head-wrap">
+                <div class="logo-wrapper" id="login-head-image-wrap">
+                    <img id="login-head-image" src="/static/images/logo_dashboard_new.png?v=3" alt="Ninko">
+                    <div class="eye eye-left" id="login-eye-left"></div>
+                    <div class="eye eye-right" id="login-eye-right"></div>
+                </div>
+                <div class="head-text" id="login-head-text">NINKO</div>
+            </div>
 
-        <div class="row">
-            <label for="username">Benutzername</label>
-            <input id="username" name="username" type="text" value="admin" autocomplete="username" required>
+            <h1 class="title" id="login-title">Ninko Login</h1>
+            <p class="subtitle" id="login-subtitle">Bitte mit dem Admin-Account anmelden.</p>
+
+            <div class="row">
+                <label for="username">Benutzername</label>
+                <input id="username" name="username" type="text" value="admin" autocomplete="username" required>
+            </div>
+
+            <div class="row">
+                <label for="password">Passwort</label>
+                <input id="password" name="password" type="password" autocomplete="current-password" required>
+            </div>
+
+            <button id="submit-btn" type="submit">Anmelden</button>
+            <div id="msg" class="msg"></div>
+            <div class="help-link"><a id="login-help-link" href="https://github.com/natorus87/ninko/blob/main/DOCS.md" target="_blank" rel="noopener noreferrer">Hilfe / Dokumentation</a></div>
+        </form>
+    </div>
+
+    <div id="pw-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="pw-modal-title">
+        <div class="modal-card">
+            <h2 id="pw-modal-title" class="modal-title">Passwort ändern</h2>
+            <p class="modal-subtitle">Beim ersten Login musst du ein neues Passwort setzen (mindestens 8 Zeichen).</p>
+
+            <div class="row">
+                <label for="new-password">Neues Passwort</label>
+                <input id="new-password" type="password" autocomplete="new-password" minlength="8">
+            </div>
+
+            <div class="row">
+                <label for="new-password-repeat">Neues Passwort wiederholen</label>
+                <input id="new-password-repeat" type="password" autocomplete="new-password" minlength="8">
+            </div>
+
+            <div id="pw-modal-msg" class="modal-err"></div>
+            <div class="modal-actions">
+                <button id="pw-cancel-btn" class="btn-secondary" type="button">Abbrechen</button>
+                <button id="pw-save-btn" type="button">Passwort speichern</button>
+            </div>
         </div>
-
-        <div class="row">
-            <label for="password">Passwort</label>
-            <input id="password" name="password" type="password" autocomplete="current-password" required>
-        </div>
-
-        <button id="submit-btn" type="submit">Anmelden</button>
-        <div id="msg" class="msg"></div>
-    </form>
+    </div>
 
     <script>
+        const DEFAULT_BRANDING = {
+            brand_name: 'Ninko',
+            login_title: 'Ninko Login',
+            login_subtitle: 'Please sign in with your admin account.',
+            login_help_url: 'https://github.com/natorus87/ninko/blob/main/DOCS.md',
+            login_head_mode: 'image',
+            login_image_url: '/static/images/logo_dashboard_new.png?v=3',
+            login_show_eyes: true,
+            login_background_style: 'aurora',
+            login_card_style: 'glass',
+        };
+
         const form = document.getElementById('login-form');
         const msg = document.getElementById('msg');
         const btn = document.getElementById('submit-btn');
+        const pwModal = document.getElementById('pw-modal');
+        const pwModalMsg = document.getElementById('pw-modal-msg');
+        const pwSaveBtn = document.getElementById('pw-save-btn');
+        const pwCancelBtn = document.getElementById('pw-cancel-btn');
+        const pwInput = document.getElementById('new-password');
+        const pwInputRepeat = document.getElementById('new-password-repeat');
+
+        function applyThemeTokens(themePayload) {
+            const mode = localStorage.getItem('ninko_theme') === 'light' ? 'light' : 'dark';
+            const theme = themePayload?.theme || {};
+            const tokens = mode === 'light' ? (theme.tokens_light || {}) : (theme.tokens_dark || {});
+            for (const [k, v] of Object.entries(tokens)) {
+                if (typeof k !== 'string' || !k.startsWith('--')) continue;
+                document.documentElement.style.setProperty(k, String(v));
+            }
+        }
+
+        function applyBrandingUi(data) {
+            const b = { ...DEFAULT_BRANDING, ...(data || {}) };
+            document.title = (b.login_title || b.brand_name || 'Ninko Login').trim() || 'Ninko Login';
+            document.getElementById('login-title').textContent = b.login_title || 'Ninko Login';
+            document.getElementById('login-subtitle').textContent = b.login_subtitle || '';
+
+            const help = document.getElementById('login-help-link');
+            if (b.login_help_url) {
+                help.href = b.login_help_url;
+                help.style.display = '';
+            } else {
+                help.style.display = 'none';
+            }
+
+            const body = document.body;
+            body.classList.remove('bg-aurora', 'bg-gradient', 'bg-minimal');
+            body.classList.add(`bg-${b.login_background_style || 'aurora'}`);
+
+            const card = document.getElementById('login-form');
+            card.classList.toggle('solid', (b.login_card_style || 'glass') === 'solid');
+
+            const headMode = b.login_head_mode || 'image';
+            const headWrap = document.getElementById('login-head-wrap');
+            const headImgWrap = document.getElementById('login-head-image-wrap');
+            const headText = document.getElementById('login-head-text');
+            const headImg = document.getElementById('login-head-image');
+            const eyeLeft = document.getElementById('login-eye-left');
+            const eyeRight = document.getElementById('login-eye-right');
+
+            if (headMode === 'off') {
+                headWrap.style.display = 'none';
+            } else if (headMode === 'text') {
+                headWrap.style.display = '';
+                headImgWrap.style.display = 'none';
+                headText.style.display = 'inline-flex';
+                headText.textContent = (b.brand_name || 'Ninko').toUpperCase();
+            } else {
+                headWrap.style.display = '';
+                headImgWrap.style.display = 'block';
+                headText.style.display = 'none';
+                headImg.src = b.login_image_url || '/static/images/logo_dashboard_new.png?v=3';
+                const eyesVisible = b.login_show_eyes !== false;
+                eyeLeft.style.display = eyesVisible ? '' : 'none';
+                eyeRight.style.display = eyesVisible ? '' : 'none';
+            }
+        }
+
+        async function loadUiConfig() {
+            try {
+                const [brandingRes, themeRes] = await Promise.all([
+                    fetch('/api/settings/branding', { cache: 'no-store' }),
+                    fetch('/api/themes/active', { cache: 'no-store' }),
+                ]);
+                if (themeRes.ok) {
+                    const themeData = await themeRes.json();
+                    applyThemeTokens(themeData);
+                }
+                if (brandingRes.ok) {
+                    const branding = await brandingRes.json();
+                    applyBrandingUi(branding);
+                } else {
+                    applyBrandingUi(DEFAULT_BRANDING);
+                }
+            } catch {
+                applyBrandingUi(DEFAULT_BRANDING);
+            }
+        }
+
+        function askForNewPassword() {
+            return new Promise((resolve, reject) => {
+                pwModal.classList.add('open');
+                pwModalMsg.textContent = '';
+                pwInput.value = '';
+                pwInputRepeat.value = '';
+                pwInput.focus();
+
+                const cleanup = () => {
+                    pwSaveBtn.removeEventListener('click', onSave);
+                    pwCancelBtn.removeEventListener('click', onCancel);
+                    pwModal.classList.remove('open');
+                };
+
+                const onCancel = () => {
+                    cleanup();
+                    reject(new Error('Passwortwechsel wurde abgebrochen.'));
+                };
+
+                const onSave = () => {
+                    const newPassword = pwInput.value || '';
+                    const repeatPassword = pwInputRepeat.value || '';
+                    if (newPassword.length < 8) {
+                        pwModalMsg.textContent = 'Das neue Passwort muss mindestens 8 Zeichen haben.';
+                        return;
+                    }
+                    if (newPassword !== repeatPassword) {
+                        pwModalMsg.textContent = 'Die beiden Passwörter stimmen nicht überein.';
+                        return;
+                    }
+                    cleanup();
+                    resolve(newPassword);
+                };
+
+                pwSaveBtn.addEventListener('click', onSave);
+                pwCancelBtn.addEventListener('click', onCancel);
+            });
+        }
 
         async function checkAlreadyLoggedIn() {
             try {
@@ -121,10 +607,7 @@
                     throw new Error(data.detail || 'Login fehlgeschlagen');
                 }
                 if (data.password_change_required) {
-                    const newPassword = window.prompt('Bitte neues Passwort setzen (mind. 8 Zeichen):');
-                    if (!newPassword || newPassword.length < 8) {
-                        throw new Error('Passwortwechsel erforderlich: Neues Passwort ungültig.');
-                    }
+                    const newPassword = await askForNewPassword();
                     const pwRes = await fetch('/api/auth/change-password', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -148,6 +631,7 @@
             }
         });
 
+        loadUiConfig();
         checkAlreadyLoggedIn();
     </script>
 </body>

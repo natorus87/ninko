@@ -93,7 +93,7 @@ async def get_module_frontend(
             status_code=403,
         )
 
-    # Dateipfad konstruieren
+    # Dateipfad konstruieren (core modules)
     base_dir = Path(__file__).resolve().parent.parent / "modules"
     file_path = (base_dir / module_name / "frontend" / filename).resolve()
 

@@ -97,6 +97,14 @@ const Ninko = {
         welcome_image_url: '/static/images/logo_dashboard_new.png?v=3',
         welcome_show_eyes: true,
         show_quick_actions: true,
+        login_title: 'Ninko Login',
+        login_subtitle: 'Please sign in with your admin account.',
+        login_help_url: 'https://github.com/natorus87/ninko/blob/main/DOCS.md',
+        login_head_mode: 'image',
+        login_image_url: '/static/images/logo_dashboard_new.png?v=3',
+        login_show_eyes: true,
+        login_background_style: 'aurora',
+        login_card_style: 'glass',
     },
     _themes: [],
     _activeThemeId: 'default',
@@ -107,6 +115,8 @@ const Ninko = {
     _rbacRoles: [],
     _rbacGroups: [],
     _rbacUsers: [],
+    _me: null,
+    _sidebarAccountMenuOpen: false,
     t: tf,
 
     // ─── SVG Icon Library (Lucide-style, currentColor) ───
@@ -201,6 +211,7 @@ const Ninko = {
         this._checkTtsAvailable();
         this.initSafeguard();
         this._initCtxIndicator();
+        this.initSidebarAccountMenu();
         document.documentElement.classList.remove('light-mode-pre');
         document.body.style.opacity = '1';
     },
@@ -211,6 +222,7 @@ const Ninko = {
             if (!res.ok) return true; // API nicht erreichbar: App normal laden, damit Fehler sichtbar bleibt
             const me = await res.json();
             if (me.auth_enabled === false) {
+                this._me = me;
                 this._updateAuthUi(false);
                 return true;
             }
@@ -219,9 +231,11 @@ const Ninko = {
                     window.location.replace('/login');
                     return false;
                 }
+                this._me = me;
                 this._updateAuthUi(true);
                 return true;
             }
+            this._me = null;
             this._updateAuthUi(false);
             window.location.replace('/login');
             return false;
@@ -233,15 +247,81 @@ const Ninko = {
     _updateAuthUi(authenticated) {
         const btn = document.getElementById('btn-logout');
         if (btn) btn.style.display = authenticated ? 'inline-flex' : 'none';
+        this._renderSidebarAccountInfo();
     },
 
     async logout() {
+        this.closeSidebarUserMenu();
         try {
             await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
         } catch {
             // ignore network errors and force redirect anyway
         }
         window.location.replace('/login');
+    },
+
+    initSidebarAccountMenu() {
+        if (this._sidebarAccountMenuInitialized) return;
+        this._sidebarAccountMenuInitialized = true;
+        document.addEventListener('click', (e) => {
+            const wrap = document.getElementById('sidebar-account-wrap');
+            if (!wrap) return;
+            if (!this._sidebarAccountMenuOpen) return;
+            if (!wrap.contains(e.target)) {
+                this.closeSidebarUserMenu();
+            }
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') this.closeSidebarUserMenu();
+        });
+        this._renderSidebarAccountInfo();
+    },
+
+    _renderSidebarAccountInfo() {
+        const me = this._me || {};
+        const usernameRaw = (me.username || 'admin').toString().trim();
+        const username = usernameRaw || 'admin';
+        const role = (me.role || 'admin').toString().trim().toLowerCase();
+        const roleLabel = role === 'admin' ? 'Administrator' : (role === 'write' ? 'Operator' : 'Viewer');
+
+        const avatar = document.getElementById('sidebar-account-avatar');
+        const nameEl = document.getElementById('sidebar-account-name');
+        const roleEl = document.getElementById('sidebar-account-plan');
+        if (avatar) avatar.textContent = username.charAt(0).toUpperCase();
+        if (nameEl) nameEl.textContent = username;
+        if (roleEl) roleEl.textContent = roleLabel;
+    },
+
+    toggleSidebarUserMenu(event) {
+        event?.stopPropagation();
+        if (this._sidebarAccountMenuOpen) {
+            this.closeSidebarUserMenu();
+            return;
+        }
+        this._sidebarAccountMenuOpen = true;
+        const wrap = document.getElementById('sidebar-account-wrap');
+        const menu = document.getElementById('sidebar-account-menu');
+        if (wrap) wrap.classList.add('menu-open');
+        if (menu) menu.style.display = '';
+    },
+
+    closeSidebarUserMenu() {
+        this._sidebarAccountMenuOpen = false;
+        const wrap = document.getElementById('sidebar-account-wrap');
+        const menu = document.getElementById('sidebar-account-menu');
+        if (wrap) wrap.classList.remove('menu-open');
+        if (menu) menu.style.display = 'none';
+    },
+
+    openSettingsFromMenu() {
+        this.closeSidebarUserMenu();
+        this.switchTab('settings');
+    },
+
+    openLanguageFromMenu() {
+        this.closeSidebarUserMenu();
+        this.switchTab('settings');
+        this.switchSettingsTab('language');
     },
 
     /** Custom Confirm Promise */
@@ -2066,8 +2146,17 @@ const Ninko = {
         setVal('branding-welcome-title', b.welcome_title || '');
         setVal('branding-welcome-text', b.welcome_text || '');
         setVal('branding-welcome-image-url', b.welcome_image_url || '');
+        setVal('branding-login-title', b.login_title || 'Ninko Login');
+        setVal('branding-login-subtitle', b.login_subtitle || 'Please sign in with your admin account.');
+        setVal('branding-login-help-url', b.login_help_url || 'https://github.com/natorus87/ninko/blob/main/DOCS.md');
+        setVal('branding-login-head-mode', b.login_head_mode || 'image');
+        setVal('branding-login-image-url', b.login_image_url || '/static/images/logo_dashboard_new.png?v=3');
+        setVal('branding-login-background-style', b.login_background_style || 'aurora');
+        setVal('branding-login-card-style', b.login_card_style || 'glass');
+        setVal('branding-login-gen-prompt', 'Futuristic AI guardian head, glowing cyan eyes, dark navy background, clean composition, high detail');
         const logoInput = document.getElementById('branding-logo-url');
         const welcomeInput = document.getElementById('branding-welcome-image-url');
+        const loginInput = document.getElementById('branding-login-image-url');
         if (logoInput && !logoInput.dataset.boundPreview) {
             logoInput.addEventListener('input', () => this.refreshBrandingPreviews());
             logoInput.dataset.boundPreview = '1';
@@ -2076,12 +2165,21 @@ const Ninko = {
             welcomeInput.addEventListener('input', () => this.refreshBrandingPreviews());
             welcomeInput.dataset.boundPreview = '1';
         }
+        if (loginInput && !loginInput.dataset.boundPreview) {
+            loginInput.addEventListener('input', () => this.refreshBrandingPreviews());
+            loginInput.dataset.boundPreview = '1';
+        }
         const eyes = document.getElementById('branding-welcome-eyes');
         if (eyes) eyes.checked = b.welcome_show_eyes !== false;
+        const loginEyes = document.getElementById('branding-login-show-eyes');
+        if (loginEyes) loginEyes.checked = b.login_show_eyes !== false;
         const quick = document.getElementById('branding-quick-actions');
         if (quick) quick.checked = b.show_quick_actions !== false;
+        this._bindBrandingLivePreviewInputs();
         this.onBrandingModeChange();
+        this.onLoginHeadModeChange();
         this.refreshBrandingPreviews();
+        this.renderLoginLivePreview();
     },
 
     onBrandingModeChange() {
@@ -2091,15 +2189,117 @@ const Ninko = {
         if (imgRow) imgRow.style.display = mode === 'image' ? '' : 'none';
         if (eyeRow) eyeRow.style.display = mode === 'image' ? '' : 'none';
         this.refreshBrandingPreviews();
+        this.renderLoginLivePreview();
+    },
+
+    onLoginHeadModeChange() {
+        const mode = document.getElementById('branding-login-head-mode')?.value || 'image';
+        const imgRow = document.getElementById('branding-login-image-row');
+        const eyeRow = document.getElementById('branding-login-eyes-row');
+        if (imgRow) imgRow.style.display = mode === 'image' ? '' : 'none';
+        if (eyeRow) eyeRow.style.display = mode === 'image' ? '' : 'none';
+        this.refreshBrandingPreviews();
+        this.renderLoginLivePreview();
     },
 
     refreshBrandingPreviews() {
         const logoUrl = document.getElementById('branding-logo-url')?.value?.trim() || '/static/images/logo_icon.png';
         const welcomeUrl = document.getElementById('branding-welcome-image-url')?.value?.trim() || '/static/images/logo_dashboard_new.png?v=3';
+        const loginUrl = document.getElementById('branding-login-image-url')?.value?.trim() || '/static/images/logo_dashboard_new.png?v=3';
         const logoPreview = document.getElementById('branding-logo-preview');
         const welcomePreview = document.getElementById('branding-welcome-preview');
+        const loginPreview = document.getElementById('branding-login-preview');
         if (logoPreview) logoPreview.src = logoUrl;
         if (welcomePreview) welcomePreview.src = welcomeUrl;
+        if (loginPreview) loginPreview.src = loginUrl;
+        this.renderLoginLivePreview();
+    },
+
+    _bindBrandingLivePreviewInputs() {
+        const ids = [
+            'branding-login-title',
+            'branding-login-subtitle',
+            'branding-login-help-url',
+            'branding-login-head-mode',
+            'branding-login-image-url',
+            'branding-login-show-eyes',
+            'branding-login-background-style',
+            'branding-login-card-style',
+            'branding-brand-name',
+        ];
+        for (const id of ids) {
+            const el = document.getElementById(id);
+            if (!el || el.dataset.liveBound === '1') continue;
+            const eventName = el.type === 'checkbox' || el.tagName === 'SELECT' ? 'change' : 'input';
+            el.addEventListener(eventName, () => this.renderLoginLivePreview());
+            el.dataset.liveBound = '1';
+        }
+    },
+
+    renderLoginLivePreview() {
+        const shell = document.getElementById('branding-login-live-preview');
+        if (!shell) return;
+
+        const title = document.getElementById('branding-login-title')?.value?.trim() || 'Ninko Login';
+        const subtitle = document.getElementById('branding-login-subtitle')?.value || 'Please sign in with your admin account.';
+        const helpUrl = document.getElementById('branding-login-help-url')?.value?.trim() || 'https://github.com/natorus87/ninko/blob/main/DOCS.md';
+        const headMode = document.getElementById('branding-login-head-mode')?.value || 'image';
+        const imageUrl = document.getElementById('branding-login-image-url')?.value?.trim() || '/static/images/logo_dashboard_new.png?v=3';
+        const showEyes = !!document.getElementById('branding-login-show-eyes')?.checked;
+        const bgStyle = document.getElementById('branding-login-background-style')?.value || 'aurora';
+        const cardStyle = document.getElementById('branding-login-card-style')?.value || 'glass';
+        const brandName = document.getElementById('branding-brand-name')?.value?.trim() || 'Ninko';
+
+        const previewShell = document.getElementById('branding-login-preview-shell');
+        const headWrap = document.getElementById('branding-login-preview-head-wrap');
+        const imageWrap = document.getElementById('branding-login-preview-image-wrap');
+        const imageEl = document.getElementById('branding-login-preview-image');
+        const textEl = document.getElementById('branding-login-preview-text');
+        const eyeL = document.getElementById('branding-login-preview-eye-left');
+        const eyeR = document.getElementById('branding-login-preview-eye-right');
+        const titleEl = document.getElementById('branding-login-preview-title');
+        const subtitleEl = document.getElementById('branding-login-preview-subtitle');
+        const helpWrap = document.getElementById('branding-login-preview-help-wrap');
+        const helpEl = document.getElementById('branding-login-preview-help');
+
+        if (titleEl) titleEl.textContent = title;
+        if (subtitleEl) subtitleEl.textContent = subtitle;
+        if (helpEl) {
+            helpEl.href = helpUrl || '#';
+            helpEl.style.display = helpUrl ? '' : 'none';
+        }
+        if (helpWrap) helpWrap.style.display = helpUrl ? '' : 'none';
+        if (imageEl) imageEl.src = imageUrl;
+
+        shell.style.background = bgStyle === 'minimal'
+            ? 'var(--bg-primary)'
+            : (bgStyle === 'gradient'
+                ? 'linear-gradient(135deg, color-mix(in srgb, var(--primary-color) 18%, var(--bg-primary) 82%) 0%, var(--bg-primary) 68%)'
+                : 'radial-gradient(900px 520px at 18% 10%, color-mix(in srgb, var(--primary-color) 22%, transparent), transparent 66%), var(--bg-primary)');
+
+        if (previewShell) {
+            previewShell.style.backdropFilter = cardStyle === 'solid' ? 'none' : 'blur(10px)';
+            previewShell.style.background = cardStyle === 'solid'
+                ? 'var(--bg-secondary)'
+                : 'linear-gradient(180deg, color-mix(in srgb, var(--bg-secondary) 92%, white 8%) 0%, var(--bg-secondary) 100%)';
+        }
+
+        if (headMode === 'off') {
+            if (headWrap) headWrap.style.display = 'none';
+        } else if (headMode === 'text') {
+            if (headWrap) headWrap.style.display = '';
+            if (imageWrap) imageWrap.style.display = 'none';
+            if (textEl) {
+                textEl.style.display = 'inline-flex';
+                textEl.textContent = brandName.toUpperCase();
+            }
+        } else {
+            if (headWrap) headWrap.style.display = '';
+            if (imageWrap) imageWrap.style.display = '';
+            if (textEl) textEl.style.display = 'none';
+            if (eyeL) eyeL.style.display = showEyes ? '' : 'none';
+            if (eyeR) eyeR.style.display = showEyes ? '' : 'none';
+        }
     },
 
     _brandingAssetFilenameFromUrl(url) {
@@ -2122,6 +2322,14 @@ const Ninko = {
                 welcome_image_url: document.getElementById('branding-welcome-image-url')?.value.trim() || '/static/images/logo_dashboard_new.png?v=3',
                 welcome_show_eyes: !!document.getElementById('branding-welcome-eyes')?.checked,
                 show_quick_actions: !!document.getElementById('branding-quick-actions')?.checked,
+                login_title: document.getElementById('branding-login-title')?.value.trim() || 'Ninko Login',
+                login_subtitle: document.getElementById('branding-login-subtitle')?.value.trim() || 'Please sign in with your admin account.',
+                login_help_url: document.getElementById('branding-login-help-url')?.value.trim() || 'https://github.com/natorus87/ninko/blob/main/DOCS.md',
+                login_head_mode: document.getElementById('branding-login-head-mode')?.value || 'image',
+                login_image_url: document.getElementById('branding-login-image-url')?.value.trim() || '/static/images/logo_dashboard_new.png?v=3',
+                login_show_eyes: !!document.getElementById('branding-login-show-eyes')?.checked,
+                login_background_style: document.getElementById('branding-login-background-style')?.value || 'aurora',
+                login_card_style: document.getElementById('branding-login-card-style')?.value || 'glass',
             };
             const res = await fetch('/api/settings/branding', {
                 method: 'PUT',
@@ -2136,6 +2344,7 @@ const Ninko = {
             this._branding = { ...this._branding, ...(data || {}) };
             this.applyBranding();
             this.refreshBrandingPreviews();
+            this.renderLoginLivePreview();
             if (status) status.textContent = 'Gespeichert';
             showNotification('Branding gespeichert', 'success');
         } catch (e) {
@@ -2157,6 +2366,7 @@ const Ninko = {
             this._branding = { ...this._branding, ...(data || {}) };
             await this.loadBrandingForm();
             this.applyBranding();
+            this.renderLoginLivePreview();
             if (status) status.textContent = 'Defaults geladen';
             showNotification('Branding auf Defaults gesetzt', 'info');
         } catch (e) {
@@ -2167,8 +2377,13 @@ const Ninko = {
 
     async uploadBrandingAsset(kind) {
         const isLogo = kind === 'logo';
-        const fileInput = document.getElementById(isLogo ? 'branding-logo-file' : 'branding-welcome-file');
-        const targetInput = document.getElementById(isLogo ? 'branding-logo-url' : 'branding-welcome-image-url');
+        const isLogin = kind === 'login';
+        const fileInput = document.getElementById(
+            isLogo ? 'branding-logo-file' : (isLogin ? 'branding-login-file' : 'branding-welcome-file')
+        );
+        const targetInput = document.getElementById(
+            isLogo ? 'branding-logo-url' : (isLogin ? 'branding-login-image-url' : 'branding-welcome-image-url')
+        );
         const status = document.getElementById('branding-save-status');
         if (!fileInput || !targetInput || !fileInput.files || fileInput.files.length === 0) {
             showNotification('Bitte zuerst eine Datei auswählen.', 'error');
@@ -2189,6 +2404,7 @@ const Ninko = {
             }
             targetInput.value = data.url || '';
             this.refreshBrandingPreviews();
+            this.renderLoginLivePreview();
             if (status) status.textContent = 'Upload OK';
             showNotification('Bild hochgeladen', 'success');
         } catch (e) {
@@ -2199,7 +2415,10 @@ const Ninko = {
 
     async deleteBrandingAsset(kind) {
         const isLogo = kind === 'logo';
-        const targetInput = document.getElementById(isLogo ? 'branding-logo-url' : 'branding-welcome-image-url');
+        const isLogin = kind === 'login';
+        const targetInput = document.getElementById(
+            isLogo ? 'branding-logo-url' : (isLogin ? 'branding-login-image-url' : 'branding-welcome-image-url')
+        );
         const status = document.getElementById('branding-save-status');
         if (!targetInput) return;
         const url = targetInput.value.trim();
@@ -2216,13 +2435,44 @@ const Ninko = {
             if (!res.ok) {
                 throw new Error(data.detail || 'Löschen fehlgeschlagen');
             }
-            targetInput.value = isLogo ? '/static/images/logo_icon.png' : '/static/images/logo_dashboard_new.png?v=3';
+            targetInput.value = isLogo
+                ? '/static/images/logo_icon.png'
+                : (isLogin ? '/static/images/logo_dashboard_new.png?v=3' : '/static/images/logo_dashboard_new.png?v=3');
             this.refreshBrandingPreviews();
+            this.renderLoginLivePreview();
             if (status) status.textContent = 'Asset gelöscht';
             showNotification('Branding-Asset gelöscht', 'success');
         } catch (e) {
             if (status) status.textContent = 'Fehler';
             showNotification(e.message || 'Löschen fehlgeschlagen', 'error');
+        }
+    },
+
+    async generateBrandingLoginImage() {
+        const prompt = document.getElementById('branding-login-gen-prompt')?.value?.trim() || '';
+        const status = document.getElementById('branding-login-gen-status');
+        const targetInput = document.getElementById('branding-login-image-url');
+        if (!prompt) {
+            if (status) status.textContent = 'Bitte Prompt eingeben';
+            return;
+        }
+        if (status) status.textContent = 'Generiere…';
+        try {
+            const res = await fetch('/api/images/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt, size: '1024x1024' }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || 'Bildgenerierung fehlgeschlagen');
+            if (targetInput && data.url) targetInput.value = data.url;
+            this.refreshBrandingPreviews();
+            this.renderLoginLivePreview();
+            if (status) status.textContent = 'Bild generiert';
+            showNotification('Login-Bild generiert', 'success');
+        } catch (e) {
+            if (status) status.textContent = 'Fehler';
+            showNotification(e.message || 'Bildgenerierung fehlgeschlagen', 'error');
         }
     },
 
@@ -3162,6 +3412,8 @@ const Ninko = {
             'together_ai': 'black-forest-labs/FLUX.1-schnell-Free',
             'openai': 'dall-e-3',
             'google': 'imagen-3.0-generate-002',
+            'stability_ai': 'stable-image-core',
+            'huggingface': 'black-forest-labs/FLUX.1-schnell',
         };
         modelInput.placeholder = placeholders[backend] || 'Leer = Standard-Modell';
     },
@@ -3192,11 +3444,23 @@ const Ninko = {
             this._rbacRoles = roles.roles || [];
             this._rbacGroups = groups.groups || [];
             this._rbacUsers = users.users || [];
+            if (!this._rbacSelectedUser && this._rbacUsers.length) {
+                this._rbacSelectedUser = this._rbacUsers[0].username;
+            }
+            if (!this._rbacTokenSelectedUser && this._rbacUsers.length) {
+                this._rbacTokenSelectedUser = this._rbacUsers[0].username;
+            }
 
             this.renderRbacSettings();
         } catch (e) {
             root.innerHTML = `<p class="empty-state">${this._escapeHtml(e.message || 'Fehler beim Laden der Benutzerverwaltung.')}</p>`;
         }
+    },
+
+    _rbacUserOptions(selectedUsername = '') {
+        return this._rbacUsers
+            .map(u => `<option value="${this._escapeHtml(u.username)}" ${u.username === selectedUsername ? 'selected' : ''}>${this._escapeHtml(u.username)}</option>`)
+            .join('');
     },
 
     renderRbacSettings() {
@@ -3239,6 +3503,40 @@ const Ninko = {
             </div>
 
             <div class="setting-group">
+                <h4>API-Tokens</h4>
+                <p class="setting-desc">API-Tokens werden nur von Admins erstellt und einmalig angezeigt. Zugriff erfolgt via <code>X-API-Key</code> oder <code>Authorization: Bearer ...</code>.</p>
+                <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:0.75rem;">
+                    <select id="rbac-token-user" class="form-select" style="max-width:220px;" onchange="Ninko.onRbacTokenUserChange(this.value)">
+                        ${this._rbacUserOptions(this._rbacTokenSelectedUser || '')}
+                    </select>
+                    <input id="rbac-token-name" type="text" class="form-input" placeholder="Token-Name" style="max-width:220px;">
+                    <input id="rbac-token-exp-hours" type="number" min="1" max="8760" class="form-input" placeholder="Ablauf in Stunden" value="720" style="max-width:180px;">
+                    <button class="btn btn-primary btn-sm" onclick="Ninko.createRbacUserApiToken()">Token erstellen</button>
+                </div>
+                <div id="rbac-token-created" class="save-status" style="margin-bottom:0.6rem;"></div>
+                <div id="rbac-token-list"><p class="text-muted">Bitte Benutzer auswählen.</p></div>
+            </div>
+
+            <div class="setting-group">
+                <h4>Benutzerdefinierte Settings</h4>
+                <p class="setting-desc">Freies JSON-Feld je Benutzer (z.B. individuelle Präferenzen oder Modulvorgaben).</p>
+                <div class="form-row">
+                    <label class="form-label" for="rbac-user-settings-user">Benutzer</label>
+                    <select id="rbac-user-settings-user" class="form-select" style="max-width:220px;" onchange="Ninko.onRbacSettingsUserChange(this.value)">
+                        ${this._rbacUserOptions(this._rbacSelectedUser || '')}
+                    </select>
+                </div>
+                <div class="form-row">
+                    <label class="form-label" for="rbac-user-custom-settings-json">Settings (JSON)</label>
+                    <textarea id="rbac-user-custom-settings-json" class="form-input" rows="8" placeholder='{"dashboard":{"default_module":"kubernetes"}}'></textarea>
+                </div>
+                <div class="form-actions">
+                    <button class="btn btn-outline btn-sm" onclick="Ninko.loadRbacUserCustomSettings()">Laden</button>
+                    <button class="btn btn-primary btn-sm" onclick="Ninko.saveRbacUserCustomSettings()">Speichern</button>
+                </div>
+            </div>
+
+            <div class="setting-group">
                 <h4>Gruppen</h4>
                 <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:0.75rem;">
                     <input id="rbac-group-id" type="text" class="form-input" placeholder="group_id" style="max-width:180px;">
@@ -3275,6 +3573,8 @@ const Ninko = {
                 <div id="rbac-roles-list" style="margin-top:0.75rem;">${this._renderRbacRolesTable()}</div>
             </div>
         `;
+        this.loadRbacUserApiTokens();
+        this.loadRbacUserCustomSettings();
     },
 
     _setRbacStatus(message, ok = true) {
@@ -3296,6 +3596,8 @@ const Ninko = {
                 <td style="display:flex; gap:0.35rem;">
                     <button class="btn btn-outline btn-sm" onclick="Ninko.toggleRbacUserActive('${this._escapeHtml(u.username)}', ${u.active ? 'false' : 'true'})">${u.active ? 'Deaktivieren' : 'Aktivieren'}</button>
                     <button class="btn btn-outline btn-sm" onclick="Ninko.setRbacUserPassword('${this._escapeHtml(u.username)}')">Passwort</button>
+                    <button class="btn btn-outline btn-sm" onclick="Ninko.openRbacUserSettings('${this._escapeHtml(u.username)}')">Settings</button>
+                    <button class="btn btn-outline btn-sm" onclick="Ninko.openRbacUserTokens('${this._escapeHtml(u.username)}')">API-Token</button>
                     <button class="btn btn-outline btn-sm" style="color:var(--error-color);" onclick="Ninko.deleteRbacUser('${this._escapeHtml(u.username)}')">Löschen</button>
                 </td>
             </tr>
@@ -3472,6 +3774,147 @@ const Ninko = {
             if (!res.ok) throw new Error((await res.json()).detail || 'Fehler beim Löschen');
             this._setRbacStatus(`Benutzer ${username} gelöscht.`);
             await this.loadRbacSettings();
+        } catch (e) {
+            this._setRbacStatus(e.message || 'Fehler', false);
+        }
+    },
+
+    openRbacUserSettings(username) {
+        this._rbacSelectedUser = username;
+        const sel = document.getElementById('rbac-user-settings-user');
+        if (sel) sel.value = username;
+        this.loadRbacUserCustomSettings();
+    },
+
+    openRbacUserTokens(username) {
+        this._rbacTokenSelectedUser = username;
+        const sel = document.getElementById('rbac-token-user');
+        if (sel) sel.value = username;
+        this.loadRbacUserApiTokens();
+    },
+
+    onRbacSettingsUserChange(username) {
+        this._rbacSelectedUser = username || '';
+        this.loadRbacUserCustomSettings();
+    },
+
+    onRbacTokenUserChange(username) {
+        this._rbacTokenSelectedUser = username || '';
+        this.loadRbacUserApiTokens();
+    },
+
+    async loadRbacUserCustomSettings() {
+        const username = this._rbacSelectedUser || document.getElementById('rbac-user-settings-user')?.value || '';
+        const ta = document.getElementById('rbac-user-custom-settings-json');
+        if (!username || !ta) return;
+        try {
+            const res = await fetch(`/api/auth/users/${encodeURIComponent(username)}/settings`);
+            if (!res.ok) throw new Error((await res.json()).detail || 'Fehler beim Laden der Settings');
+            const data = await res.json();
+            ta.value = JSON.stringify(data.settings || {}, null, 2);
+            this._setRbacStatus(`Settings für ${username} geladen.`);
+        } catch (e) {
+            this._setRbacStatus(e.message || 'Fehler', false);
+        }
+    },
+
+    async saveRbacUserCustomSettings() {
+        const username = this._rbacSelectedUser || document.getElementById('rbac-user-settings-user')?.value || '';
+        const ta = document.getElementById('rbac-user-custom-settings-json');
+        if (!username || !ta) return this._setRbacStatus('Bitte Benutzer wählen.', false);
+        let settings = {};
+        try {
+            settings = ta.value.trim() ? JSON.parse(ta.value) : {};
+        } catch {
+            return this._setRbacStatus('Ungültiges JSON in benutzerdefinierten Settings.', false);
+        }
+        try {
+            const res = await fetch(`/api/auth/users/${encodeURIComponent(username)}/settings`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ settings }),
+            });
+            if (!res.ok) throw new Error((await res.json()).detail || 'Fehler beim Speichern der Settings');
+            this._setRbacStatus(`Settings für ${username} gespeichert.`);
+            await this.loadRbacSettings();
+            this._rbacSelectedUser = username;
+        } catch (e) {
+            this._setRbacStatus(e.message || 'Fehler', false);
+        }
+    },
+
+    async loadRbacUserApiTokens() {
+        const username = this._rbacTokenSelectedUser || document.getElementById('rbac-token-user')?.value || '';
+        const listEl = document.getElementById('rbac-token-list');
+        if (!listEl || !username) return;
+        try {
+            const res = await fetch(`/api/auth/users/${encodeURIComponent(username)}/api-tokens`);
+            if (!res.ok) throw new Error((await res.json()).detail || 'Fehler beim Laden der API-Tokens');
+            const data = await res.json();
+            const tokens = data.tokens || [];
+            if (!tokens.length) {
+                listEl.innerHTML = '<p class="text-muted">Keine API-Tokens vorhanden.</p>';
+                return;
+            }
+            const rows = tokens.map(t => `
+                <tr>
+                    <td><code>${this._escapeHtml(t.id || '')}</code></td>
+                    <td>${this._escapeHtml(t.name || '')}</td>
+                    <td>${this._escapeHtml(t.created_at || '-')}</td>
+                    <td>${this._escapeHtml(t.expires_at || '-')}</td>
+                    <td>${t.revoked ? 'revoked' : 'active'}</td>
+                    <td>${t.revoked ? '-' : `<button class="btn btn-outline btn-sm" style="color:var(--error-color);" onclick="Ninko.revokeRbacUserApiToken('${this._escapeHtml(username)}','${this._escapeHtml(t.id || '')}')">Revoke</button>`}</td>
+                </tr>
+            `).join('');
+            listEl.innerHTML = `
+                <div style="overflow:auto;">
+                    <table class="log-table">
+                        <thead><tr><th>ID</th><th>Name</th><th>Created</th><th>Expires</th><th>Status</th><th>Aktion</th></tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+            `;
+        } catch (e) {
+            listEl.innerHTML = `<p class="empty-state">${this._escapeHtml(e.message || 'Fehler')}</p>`;
+        }
+    },
+
+    async createRbacUserApiToken() {
+        const username = this._rbacTokenSelectedUser || document.getElementById('rbac-token-user')?.value || '';
+        const name = document.getElementById('rbac-token-name')?.value?.trim() || 'api-token';
+        const expiresHours = parseInt(document.getElementById('rbac-token-exp-hours')?.value || '720', 10);
+        const out = document.getElementById('rbac-token-created');
+        if (!username) return this._setRbacStatus('Bitte Benutzer für API-Token wählen.', false);
+        try {
+            const res = await fetch(`/api/auth/users/${encodeURIComponent(username)}/api-tokens`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, expires_hours: Number.isFinite(expiresHours) ? expiresHours : 720 }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Fehler beim Erstellen des API-Tokens');
+            if (out) {
+                out.innerHTML = `
+                    <span class="sf sf-ok">Token erstellt (wird nur einmal angezeigt):</span>
+                    <code style="display:block; margin-top:0.35rem; word-break:break-all;">${this._escapeHtml(data.token || '')}</code>
+                `;
+            }
+            this._setRbacStatus(`API-Token für ${username} erstellt.`);
+            await this.loadRbacUserApiTokens();
+        } catch (e) {
+            if (out) out.innerHTML = '';
+            this._setRbacStatus(e.message || 'Fehler', false);
+        }
+    },
+
+    async revokeRbacUserApiToken(username, tokenId) {
+        try {
+            const res = await fetch(`/api/auth/users/${encodeURIComponent(username)}/api-tokens/${encodeURIComponent(tokenId)}`, {
+                method: 'DELETE',
+            });
+            if (!res.ok) throw new Error((await res.json()).detail || 'Fehler beim Widerruf');
+            this._setRbacStatus(`Token ${tokenId} widerrufen.`);
+            await this.loadRbacUserApiTokens();
         } catch (e) {
             this._setRbacStatus(e.message || 'Fehler', false);
         }

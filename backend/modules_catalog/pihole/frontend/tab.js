@@ -228,3 +228,5 @@ const PiholeTab = {
         this.stopPolling();
     }
 };
+
+if (typeof Ninko !== 'undefined') Ninko._pluginTabs['pihole'] = PiholeTab;

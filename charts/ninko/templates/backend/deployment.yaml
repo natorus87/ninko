@@ -83,6 +83,24 @@ spec:
                 secretKeyRef:
                   name: {{ include "ninko.fullname" . }}-secrets
                   key: SQLITE_SECRETS_KEY
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ninko.fullname" . }}-secrets
+                  key: SESSION_SECRET
+            - name: BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ninko.fullname" . }}-secrets
+                  key: BOOTSTRAP_ADMIN_PASSWORD
+
+            # ─── API Auth / Session Security ───────────────
+            - name: API_AUTH_ENABLED
+              value: {{ .Values.backend.auth.enabled | toString | quote }}
+            - name: ADMIN_USERNAME
+              value: {{ .Values.backend.auth.adminUsername | quote }}
+            - name: SESSION_COOKIE_SECURE
+              value: {{ .Values.backend.auth.sessionCookieSecure | toString | quote }}
 
             # ─── Core Modules ───────────────────────────────
             - name: NINKO_MODULE_WEB_SEARCH

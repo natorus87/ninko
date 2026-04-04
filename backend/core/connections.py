@@ -48,11 +48,31 @@ class ConnectionManager:
         return f"ninko:connections:{tenant}:{module_id}"
 
     @staticmethod
+    def _get_legacy_redis_key(module_id: str) -> str:
+        # Legacy format (pre multi-tenant connections):
+        # ninko:connections:<module_id>
+        return f"ninko:connections:{module_id}"
+
+    @staticmethod
     async def list_connections(module_id: str, tenant_id: str = "") -> List[ConnectionRead]:
         """Holt alle konfigurierten Verbindungen für ein Modul."""
         redis = get_redis()
-        key = ConnectionManager._get_redis_key(module_id, tenant_id)
+        tenant = ConnectionManager._effective_tenant_id(tenant_id)
+        key = ConnectionManager._get_redis_key(module_id, tenant)
         raw = await redis.connection.get(key)
+
+        # Backward compatibility: migrate old key format into default tenant key.
+        if not raw and tenant == "default":
+            legacy_key = ConnectionManager._get_legacy_redis_key(module_id)
+            legacy_raw = await redis.connection.get(legacy_key)
+            if legacy_raw:
+                raw = legacy_raw
+                await redis.connection.set(key, legacy_raw)
+                logger.info(
+                    "Connection key auto-migrated: %s -> %s",
+                    legacy_key,
+                    key,
+                )
         
         if not raw:
             return []

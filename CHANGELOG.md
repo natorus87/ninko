@@ -7,6 +7,51 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.0] – 2026-04-04
+
+### Fixed
+
+- **Plugin dashboard registration**: All 38 catalog modules now register themselves in `Ninko._pluginTabs` at the end of their `tab.js`. Previously, modules loaded as plugins from `backend/plugins/` (installed via Marketplace from GitHub) could not be initialized by `switchModuleTab()` because `getTabObject()` relied on a hardcoded map with global variable name checks. Modules using `const X = {}` (proxmox, wordpress, checkmk, docker, glpi, kubernetes, linux_server, opnsense, pihole, tasmota) had their global name inaccessible in some environments. IIFE-based modules (telegram, teams, qdrant, fritzbox, discord) did not register at all.
+  - Added `Ninko._pluginTabs['id'] = TabObject` to all 19 affected modules.
+  - Ionos module had no tab object at all — wrapped procedural auto-init in a minimal `IonosTab` with `init()`.
+  - Email module replaced broken `setTimeout` auto-init with proper `_pluginTabs` registration.
+
+### Changed
+
+- **Sidebar cleanup**: Removed redundant logout button (top-right arrow icon) and "Einstellungen" nav item from the bottom sidebar nav — both are fully covered by the bottom user account menu dropdown.
+
+## [0.9.9] – 2026-04-04
+
+### Fixed
+
+- **Kubernetes migration stability**:
+  - Migrated runtime from namespace `kumio` to `ninko` with PVC data copy and secret carry-over.
+  - Kept ingress host continuity (`kumio.conbro.local`) while enabling `ninko.conbro.local`.
+  - Unified Traefik CRD usage to `traefik.containo.us/v1alpha1` for cluster compatibility.
+
+- **Auth/session post-login lockout**:
+  - Fixed first-login password change flow where sessions could remain in `password_change_required=true`.
+  - `POST /api/auth/change-password` now re-issues a fresh session cookie immediately.
+  - API middleware now explicitly allows `POST /api/auth/change-password` without API key fallback errors.
+
+- **Connection storage compatibility (multi-tenant transition)**:
+  - Added backward-compatible fallback from legacy `ninko:connections:<module>` keys to tenant-scoped `ninko:connections:default:<module>`.
+  - Added automatic migration path to prevent missing default connections after upgrades/migrations.
+
+- **SafeGuard false positive**:
+  - Removed Dutch keyword stem `wissen` from destructive prefilter terms to avoid German false positives in read-only queries.
+
+- **Image generation runtime robustness**:
+  - Fixed write permission failures when storing generated images.
+  - Image output directory now uses a writable fallback chain (`$NINKO_IMAGES_DIR` → `/app/data/images` → `data/images` → `/tmp/ninko-images`).
+  - Re-enabled `image_gen` in Kubernetes deployment defaults.
+
+### Changed
+
+- **Security hardening in deployment manifests**:
+  - Added explicit auth/session env config in k8s + Helm (`API_AUTH_ENABLED`, `ADMIN_USERNAME`, `SESSION_COOKIE_SECURE`).
+  - Added required secret fields for `SESSION_SECRET` and `BOOTSTRAP_ADMIN_PASSWORD`.
+
 ## [0.9.8] – 2026-04-04
 
 ### Added

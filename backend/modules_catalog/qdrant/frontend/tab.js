@@ -461,5 +461,6 @@
     };
 
     window.QdrantTab = QdrantTab;
+    if (typeof Ninko !== 'undefined') Ninko._pluginTabs['qdrant'] = QdrantTab;
 
 })();

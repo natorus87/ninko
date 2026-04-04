@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=50">
+    <link rel="stylesheet" href="/static/style.css?v=51">
     <script>if(localStorage.getItem('ninko_theme')==='light')document.documentElement.classList.add('light-mode-pre');</script>
 </head>
 
@@ -31,21 +31,6 @@
                             <span class="logo-text">Ninko</span>
                         </div>
                         <div style="display:flex;align-items:center;gap:.45rem;">
-                            <button
-                                id="btn-logout"
-                                class="btn-icon btn-icon-sm"
-                                type="button"
-                                onclick="Ninko.logout()"
-                                title="Abmelden"
-                                aria-label="Abmelden"
-                                style="display:none;"
-                            >
-                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                                    <polyline points="16 17 21 12 16 7"></polyline>
-                                    <line x1="21" y1="12" x2="9" y2="12"></line>
-                                </svg>
-                            </button>
                             <span class="status-dot" id="status-dot"></span>
                         </div>
                     </div>
@@ -80,15 +65,6 @@
                                 </svg>
                             </span>
                             <span class="tab-label" data-i18n="nav.modules">Module</span>
-                        </li>
-                        <li class="nav-tab" data-tab="settings">
-                            <span class="tab-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none"
-                                    stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                    stroke-linejoin="round">
-                                    <circle cx="12" cy="12" r="3"></circle>
-                                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                                </svg></span>
-                            <span class="tab-label" data-i18n="nav.settings">Einstellungen</span>
                         </li>
                     </ul>
 
@@ -160,6 +136,53 @@
                                 <span data-i18n="nav.logs">Logs</span>
                             </button>
                         </div>
+                    </div>
+
+                    <div class="sidebar-account-wrap" id="sidebar-account-wrap">
+                        <div class="sidebar-account-menu" id="sidebar-account-menu" style="display:none;">
+                            <button class="sidebar-account-menu-item" type="button" onclick="Ninko.openSettingsFromMenu()">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                                </svg>
+                                <span>Einstellungen</span>
+                            </button>
+                            <button class="sidebar-account-menu-item" type="button" onclick="Ninko.openLanguageFromMenu()">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <line x1="2" y1="12" x2="22" y2="12"></line>
+                                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                                </svg>
+                                <span>Sprache</span>
+                            </button>
+                            <a class="sidebar-account-menu-item" href="https://github.com/natorus87/ninko/blob/main/DOCS.md" target="_blank" rel="noopener noreferrer" onclick="Ninko.closeSidebarUserMenu()">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                                </svg>
+                                <span>Hilfe (GitHub Docs)</span>
+                            </a>
+                            <button class="sidebar-account-menu-item sidebar-account-menu-item-danger" type="button" onclick="Ninko.logout()">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                                    <polyline points="16 17 21 12 16 7"></polyline>
+                                    <line x1="21" y1="12" x2="9" y2="12"></line>
+                                </svg>
+                                <span>Abmelden</span>
+                            </button>
+                        </div>
+
+                        <button class="sidebar-account-trigger" id="sidebar-account-trigger" type="button" onclick="Ninko.toggleSidebarUserMenu(event)" aria-label="Benutzer-Menü" title="Benutzer-Menü">
+                            <div class="sidebar-account-avatar" id="sidebar-account-avatar">A</div>
+                            <div class="sidebar-account-meta">
+                                <div class="sidebar-account-name" id="sidebar-account-name">admin</div>
+                                <div class="sidebar-account-plan" id="sidebar-account-plan">Administrator</div>
+                            </div>
+                            <svg class="sidebar-account-arrow" id="sidebar-account-arrow" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </button>
                     </div>
 
                 </div>
@@ -964,6 +987,89 @@
                                         Quick-Action Buttons im Welcome anzeigen
                                     </label>
                                 </div>
+                                <div class="form-row" style="margin-top:0.35rem;">
+                                    <label class="form-label" style="font-weight:700;">Login Screen</label>
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="branding-login-title">Login Titel</label>
+                                    <input id="branding-login-title" type="text" class="form-input" placeholder="Ninko Login">
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="branding-login-subtitle">Login Untertitel</label>
+                                    <input id="branding-login-subtitle" type="text" class="form-input" placeholder="Please sign in...">
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="branding-login-help-url">Login Hilfe-Link (GitHub Docs)</label>
+                                    <input id="branding-login-help-url" type="text" class="form-input" placeholder="https://github.com/natorus87/ninko/blob/main/DOCS.md">
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="branding-login-background-style">Login Hintergrund-Stil</label>
+                                    <select id="branding-login-background-style" class="form-select">
+                                        <option value="aurora">Aurora</option>
+                                        <option value="gradient">Gradient</option>
+                                        <option value="minimal">Minimal</option>
+                                    </select>
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="branding-login-card-style">Login Card-Stil</label>
+                                    <select id="branding-login-card-style" class="form-select">
+                                        <option value="glass">Glass</option>
+                                        <option value="solid">Solid</option>
+                                    </select>
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="branding-login-head-mode">Login Kopf-Modus</label>
+                                    <select id="branding-login-head-mode" class="form-select" onchange="Ninko.onLoginHeadModeChange()">
+                                        <option value="image">Bild (Ninko Kopf)</option>
+                                        <option value="text">Nur Text</option>
+                                        <option value="off">Aus</option>
+                                    </select>
+                                </div>
+                                <div class="form-row" id="branding-login-image-row">
+                                    <label class="form-label" for="branding-login-image-url">Login Kopf-Bild-URL</label>
+                                    <input id="branding-login-image-url" type="text" class="form-input" placeholder="/static/images/logo_dashboard_new.png?v=3">
+                                    <div class="text-muted" style="font-size:0.8rem; margin-top:0.35rem;">Login Kopf Vorschau</div>
+                                    <img id="branding-login-preview" src="/static/images/logo_dashboard_new.png?v=3" alt="Login Vorschau" style="margin-top:0.4rem; max-height:110px; max-width:280px; object-fit:contain; border:1px solid var(--border-color); border-radius:8px; padding:6px; background:var(--bg-body);">
+                                    <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+                                        <input id="branding-login-file" type="file" class="form-input" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" style="max-width:320px;">
+                                        <button class="btn btn-outline btn-sm" onclick="Ninko.uploadBrandingAsset('login')">Login Bild hochladen</button>
+                                        <button class="btn btn-outline btn-sm" onclick="Ninko.deleteBrandingAsset('login')">Login Bild löschen</button>
+                                    </div>
+                                </div>
+                                <div class="form-row" id="branding-login-eyes-row">
+                                    <label class="form-label">
+                                        <input id="branding-login-show-eyes" type="checkbox" checked>
+                                        Leuchtende Augen im Login aktivieren
+                                    </label>
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" for="branding-login-gen-prompt">Login Bild-Generator Prompt (FLUX/Together)</label>
+                                    <textarea id="branding-login-gen-prompt" class="form-input" rows="3" placeholder="Futuristic AI guardian head, glowing cyan eyes, dark navy background, clean composition, high detail"></textarea>
+                                    <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+                                        <button class="btn btn-outline btn-sm" onclick="Ninko.generateBrandingLoginImage()">Login Bild generieren</button>
+                                        <span id="branding-login-gen-status" class="save-status"></span>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label">Login Live-Vorschau</label>
+                                    <div id="branding-login-live-preview" style="width:min(100%,420px); border:1px solid var(--border-color); border-radius:14px; padding:0.8rem; background:var(--bg-secondary);">
+                                        <div id="branding-login-preview-shell" style="border:1px solid var(--border-color); border-radius:12px; padding:1rem; background:linear-gradient(180deg, color-mix(in srgb, var(--bg-secondary) 92%, white 8%) 0%, var(--bg-secondary) 100%);">
+                                            <div id="branding-login-preview-head-wrap" style="text-align:center; margin:0 auto 0.7rem; max-width:220px;">
+                                                <div id="branding-login-preview-image-wrap" class="logo-wrapper" style="max-width:170px;">
+                                                    <img id="branding-login-preview-image" src="/static/images/logo_dashboard_new.png?v=3" alt="Login Head" style="display:block; width:100%; height:auto;">
+                                                    <div id="branding-login-preview-eye-left" class="eye eye-left"></div>
+                                                    <div id="branding-login-preview-eye-right" class="eye eye-right"></div>
+                                                </div>
+                                                <div id="branding-login-preview-text" style="display:none; font-weight:800; letter-spacing:0.03em; font-size:1rem; color:var(--accent-blue);">NINKO</div>
+                                            </div>
+                                            <div id="branding-login-preview-title" style="font-weight:760; text-align:center; font-size:1.15rem;">Ninko Login</div>
+                                            <div id="branding-login-preview-subtitle" style="color:var(--text-secondary); text-align:center; font-size:0.86rem; margin-top:0.3rem;">Please sign in with your admin account.</div>
+                                            <div id="branding-login-preview-help-wrap" style="margin-top:0.55rem; text-align:center;">
+                                                <a id="branding-login-preview-help" href="#" target="_blank" rel="noopener noreferrer" style="font-size:0.82rem; color:var(--accent-blue);">Hilfe / Dokumentation</a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                                 <div class="form-actions">
                                     <span id="branding-save-status" class="save-status"></span>
                                     <button class="btn btn-primary btn-sm" onclick="Ninko.saveBrandingSettings()">Branding speichern</button>
@@ -1333,6 +1439,8 @@
                                         <option value="together_ai">Together AI (Flux, SDXL)</option>
                                         <option value="openai">OpenAI (DALL-E 2/3)</option>
                                         <option value="google">Google (Imagen 3/4)</option>
+                                        <option value="stability_ai">Stability AI (Stable Image Core)</option>
+                                        <option value="huggingface">Hugging Face (Inference API)</option>
                                     </select>
                                 </div>
                                 <div class="form-row">
@@ -1346,7 +1454,9 @@
                                     <p class="text-muted" style="font-size:0.8rem;margin-top:0.25rem;">
                                         Together AI: <code>black-forest-labs/FLUX.1-schnell-Free</code> | 
                                         OpenAI: <code>dall-e-3</code> | 
-                                        Google: <code>imagen-3.0-generate-002</code>
+                                        Google: <code>imagen-3.0-generate-002</code> |
+                                        Stability: <code>stable-image-core</code> |
+                                        Hugging Face: <code>black-forest-labs/FLUX.1-schnell</code>
                                     </p>
                                 </div>
                                 <div class="form-actions">
@@ -1542,7 +1652,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
-    <script src="/static/app.js?v=58"></script>
+    <script src="/static/app.js?v=61"></script>
 </body>
 
 </html>

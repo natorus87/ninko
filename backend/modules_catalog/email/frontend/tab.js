@@ -96,9 +96,4 @@ const EmailTab = {
     }
 };
 
-// Initialisieren, wenn die Tab im DOM ist
-setTimeout(() => {
-    if (document.getElementById('email-tab-content')) {
-        EmailTab.init();
-    }
-}, 100);
+if (typeof Ninko !== 'undefined') Ninko._pluginTabs['email'] = EmailTab;

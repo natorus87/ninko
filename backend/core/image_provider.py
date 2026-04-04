@@ -5,6 +5,8 @@ Unterstützte Provider:
 - together_ai: Together AI (Flux, SDXL, etc.)
 - openai: OpenAI DALL-E 2/3
 - google: Google Imagen 3/4
+- stability_ai: Stability AI (Stable Image Core)
+- huggingface: Hugging Face Inference API
 
 Konfiguration in Redis: ninko:settings:image_provider
 """
@@ -15,6 +17,8 @@ import base64
 import json
 import logging
 import os
+import re
+import tempfile
 import uuid
 from pathlib import Path
 from typing import Any
@@ -24,7 +28,7 @@ import httpx
 logger = logging.getLogger("ninko.core.image_provider")
 
 REDIS_KEY = "ninko:settings:image_provider"
-IMAGES_DIR = Path("data/images")
+IMAGES_DIR = Path("/app/data/images")
 
 # ── Default Config ───────────────────────────────────────────────────────────
 
@@ -36,9 +40,30 @@ DEFAULT_CONFIG: dict[str, Any] = {
 
 
 def _ensure_images_dir() -> Path:
-    """Stellt sicher, dass das Images-Verzeichnis existiert."""
-    IMAGES_DIR.mkdir(parents=True, exist_ok=True)
-    return IMAGES_DIR
+    """
+    Stellt sicher, dass ein beschreibbares Images-Verzeichnis existiert.
+    Fallback-Reihenfolge:
+    1) $NINKO_IMAGES_DIR
+    2) /app/data/images (persistent volume)
+    3) ./data/images (legacy relative path)
+    4) /tmp/ninko-images (ephemeral fallback)
+    """
+    candidates = []
+    env_dir = (os.getenv("NINKO_IMAGES_DIR") or "").strip()
+    if env_dir:
+        candidates.append(Path(env_dir))
+    candidates.extend([IMAGES_DIR, Path("data/images"), Path("/tmp/ninko-images")])
+
+    for cand in candidates:
+        try:
+            cand.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(dir=str(cand), delete=True):
+                pass
+            return cand
+        except (OSError, PermissionError):
+            continue
+
+    raise PermissionError("Kein beschreibbares Verzeichnis für Bildspeicherung gefunden.")
 
 
 # ── Provider Config laden/speichern ──────────────────────────────────────────
@@ -156,6 +181,67 @@ async def _generate_google(prompt: str, api_key: str, model: str, size: str) -> 
         return base64.b64decode(b64), "png"
 
 
+def _parse_size(size: str) -> tuple[int, int]:
+    m = re.fullmatch(r"\s*(\d{2,5})x(\d{2,5})\s*", size or "")
+    if not m:
+        return 1024, 1024
+    w = max(256, min(2048, int(m.group(1))))
+    h = max(256, min(2048, int(m.group(2))))
+    return w, h
+
+
+async def _generate_stability(prompt: str, api_key: str, model: str, size: str) -> tuple[bytes, str]:
+    """Stability AI – Stable Image Core."""
+    _ = model or "stable-image-core"
+    w, h = _parse_size(size)
+    async with httpx.AsyncClient(timeout=120) as client:
+        resp = await client.post(
+            "https://api.stability.ai/v2beta/stable-image/generate/core",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Accept": "image/*",
+            },
+            data={
+                "prompt": prompt,
+                "output_format": "png",
+                "aspect_ratio": "1:1",
+                "width": str(w),
+                "height": str(h),
+            },
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(f"Stability AI Error {resp.status_code}: {resp.text[:300]}")
+        return resp.content, "png"
+
+
+async def _generate_huggingface(prompt: str, api_key: str, model: str, size: str) -> tuple[bytes, str]:
+    """Hugging Face Inference API."""
+    model = model or "black-forest-labs/FLUX.1-schnell"
+    w, h = _parse_size(size)
+    async with httpx.AsyncClient(timeout=180) as client:
+        resp = await client.post(
+            f"https://api-inference.huggingface.co/models/{model}",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "inputs": prompt,
+                "parameters": {"width": w, "height": h},
+            },
+        )
+        content_type = (resp.headers.get("content-type") or "").lower()
+        if resp.status_code != 200:
+            raise RuntimeError(f"HuggingFace Error {resp.status_code}: {resp.text[:300]}")
+        if "image/" not in content_type:
+            raise RuntimeError(f"HuggingFace returned non-image response: {resp.text[:300]}")
+        if "jpeg" in content_type or "jpg" in content_type:
+            return resp.content, "jpg"
+        if "webp" in content_type:
+            return resp.content, "webp"
+        return resp.content, "png"
+
+
 # ── Hauptfunktion ────────────────────────────────────────────────────────────
 
 async def generate_image(
@@ -183,7 +269,7 @@ async def generate_image(
         raise ValueError(
             "Kein Image-Generation-Provider konfiguriert. "
             "Bitte in den Einstellungen unter 'Bildgenerierung' einen Provider einrichten "
-            "(Together AI, OpenAI oder Google)."
+            "(Together AI, OpenAI, Google, Stability AI oder Hugging Face)."
         )
     if not api_key:
         raise ValueError(
@@ -198,8 +284,15 @@ async def generate_image(
         image_bytes, ext = await _generate_openai(prompt, api_key, model, size)
     elif backend == "google":
         image_bytes, ext = await _generate_google(prompt, api_key, model, size)
+    elif backend == "stability_ai":
+        image_bytes, ext = await _generate_stability(prompt, api_key, model, size)
+    elif backend == "huggingface":
+        image_bytes, ext = await _generate_huggingface(prompt, api_key, model, size)
     else:
-        raise ValueError(f"Unbekannter Image-Provider: '{backend}'. Unterstützt: together_ai, openai, google.")
+        raise ValueError(
+            f"Unbekannter Image-Provider: '{backend}'. "
+            "Unterstützt: together_ai, openai, google, stability_ai, huggingface."
+        )
 
     # Bild speichern
     img_dir = _ensure_images_dir()

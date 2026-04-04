@@ -299,3 +299,5 @@ const K8sTab = {
         this.stopPolling();
     }
 };
+
+if (typeof Ninko !== 'undefined') { Ninko._pluginTabs['kubernetes'] = K8sTab; Ninko._pluginTabs['k8s'] = K8sTab; }

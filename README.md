@@ -11,14 +11,14 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.9.4-blue.svg" alt="Version"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-beta-orange.svg" alt="Status"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.0.0-blue.svg" alt="Version"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-stable-brightgreen.svg" alt="Status"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.12-blue.svg" alt="Python"></a>
   <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.115-green.svg" alt="FastAPI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
 </p>
 
-> **Beta:** Ninko is functional and actively used in production environments, but the API and module interfaces may still change. Feedback and contributions welcome.
+> **v1.0.0 — Stable Release:** Ninko is production-ready and actively deployed. The core API and module interfaces are stable. Feedback and contributions welcome.
 
 ---
 
@@ -27,11 +27,12 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 - **Chat Interface** – Control your entire IT infrastructure in natural language
 - **Module Marketplace** – Install any module from GitHub with one click, no rebuild required; supports multiple repos (official + community)
 - **3 core modules** always available: `web_search`, `image_gen`, `codelab`
-- **27 catalog modules** installable on demand: Kubernetes, Proxmox, Checkmk, Pi-hole, Home Assistant, Cisco, MikroTik, Netgear, Ubiquiti, and more
+- **33 catalog modules** installable on demand: Kubernetes, Proxmox, Checkmk, Pi-hole, Home Assistant, GitHub, GitLab, Cisco, MikroTik, Netgear, Ubiquiti, and more
 - **4-tier orchestrator routing** – Direct / Module Agent / Dynamic Agent / Pipeline
 - **Long-term memory** – ChromaDB-backed semantic memory across all sessions
 - **Local LLMs** – Ollama, LM Studio, or any OpenAI-compatible API (no cloud required)
-- **Workflow engine** – Visual DAG editor for automated multi-step tasks
+- **Workflow engine** – Visual DAG editor with parallel branches, retries, sub-workflows, and versioning
+- **GitHub / GitLab modules** – Full CI/CD control: trigger pipelines, manage PRs/MRs, issues, releases, repositories
 - **Theme system** – Built-in presets, custom token-based themes, and GitHub theme repository import
 - **Dynamic agents** – AI creates specialized agents at runtime on demand
 - **Skills system** – Reusable procedural knowledge as SKILL.md files
@@ -111,6 +112,13 @@ docker compose up -d
 The dashboard is available at **http://localhost:8000**.
 
 On first start, configure your LLM backend under **Settings → LLM Provider** (Ollama, LM Studio, or OpenAI-compatible).
+
+### Operational Notes (Apr 2026)
+
+- Runtime namespace is now `ninko` (migration from legacy `kumio` completed).
+- First-login password change is enforced and completed in-app (no browser prompt).
+- If migrating from older builds, connection keys are auto-migrated from legacy Redis format to tenant-scoped format.
+- `image_gen` is enabled in Kubernetes defaults and stores generated images on writable persistent/fallback paths.
 
 ---
 
@@ -236,6 +244,8 @@ Telegram and Teams bots use a pending-message flow: Ninko stores the message for
 | `synology` | Synology NAS management |
 | `slack` | Slack messaging and channel workflows |
 | `ubiquiti` | Ubiquiti UniFi device management |
+| `github` | GitHub Actions, PRs, Issues, Repositories, Variables & Secrets management |
+| `gitlab` | GitLab Pipelines, MRs, Issues, CI/CD variables and repository management |
 
 Catalog modules are installed at runtime via **Settings → Marketplace** — no image rebuild required. The official module source is `https://github.com/natorus87/ninko` (pre-configured); additional community repos can be added in the same settings panel.
 

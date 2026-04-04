@@ -192,3 +192,5 @@ const LinuxServerTab = {
         this.stopPolling();
     }
 };
+
+if (typeof Ninko !== 'undefined') Ninko._pluginTabs['linux_server'] = LinuxServerTab;

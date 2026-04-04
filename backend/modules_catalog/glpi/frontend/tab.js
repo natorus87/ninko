@@ -184,3 +184,5 @@ const GlpiTab = {
         this.stopPolling();
     }
 };
+
+if (typeof Ninko !== 'undefined') Ninko._pluginTabs['glpi'] = GlpiTab;

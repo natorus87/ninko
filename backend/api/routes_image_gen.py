@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from core.image_provider import (
+    generate_image,
     get_image_provider_config,
     save_image_provider_config,
     IMAGES_DIR,
@@ -62,6 +63,11 @@ class ImageProviderConfig(BaseModel):
     model: str = ""
 
 
+class ImageGenerateRequest(BaseModel):
+    prompt: str
+    size: str = "1024x1024"
+
+
 @router.get("/api/settings/image-provider")
 async def get_image_provider() -> dict:
     """Holt die aktuelle Image-Provider-Konfiguration."""
@@ -89,3 +95,28 @@ async def update_image_provider(data: ImageProviderConfig) -> dict[str, str]:
     await save_image_provider_config(config)
     logger.info("Image-Provider konfiguriert: %s (Modell: %s)", config["backend"], config["model"])
     return {"status": "ok", "backend": config["backend"], "model": config["model"]}
+
+
+@router.post("/api/images/generate")
+async def generate_image_asset(body: ImageGenerateRequest) -> dict:
+    """
+    Generiert ein Bild direkt über die konfigurierte Image-Provider-Pipeline.
+    """
+    prompt = (body.prompt or "").strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Prompt darf nicht leer sein.")
+    try:
+        result = await generate_image(prompt=prompt, size=body.size or "1024x1024")
+        return {
+            "status": "ok",
+            "image_id": result.get("image_id", ""),
+            "filename": result.get("filename", ""),
+            "url": result.get("url", ""),
+            "backend": result.get("backend", ""),
+            "model": result.get("model", ""),
+            "size_bytes": result.get("size_bytes", 0),
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))

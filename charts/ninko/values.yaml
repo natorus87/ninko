@@ -30,6 +30,11 @@ secrets:
   # Generate with: python3 -c "import secrets; print(secrets.token_hex(32))"
   # REQUIRED – helm install will fail if left empty.
   sqliteSecretsKey: ""
+  # Session signing secret for cookie/session authentication.
+  # Generate with: python3 -c "import secrets; print(secrets.token_hex(32))"
+  sessionSecret: ""
+  # Initial admin password used for bootstrap/login setup.
+  bootstrapAdminPassword: ""
 
 # ─── Backend (FastAPI) ────────────────────────
 backend:
@@ -70,6 +75,12 @@ backend:
     enabled: true
     defaultLang: de
     defaultVoice: thorsten-medium
+
+  # ── Auth / Session Security ──
+  auth:
+    enabled: true
+    adminUsername: admin
+    sessionCookieSecure: true
 
   logLevel: INFO
   language: de

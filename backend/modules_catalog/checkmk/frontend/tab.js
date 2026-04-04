@@ -200,3 +200,5 @@ const CheckmkTab = {
         this.stopPolling();
     },
 };
+
+if (typeof Ninko !== 'undefined') Ninko._pluginTabs['checkmk'] = CheckmkTab;

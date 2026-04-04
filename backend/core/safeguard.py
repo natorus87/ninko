@@ -431,7 +431,6 @@ _DESTRUCTIVE_TERMS: tuple[tuple[str, bool], ...] = (
     # ── Dutch (NL) ───────────────────────────────────────────────────────────
     ("verwijder", False),  # verwijder/verwijderen/verwijderd
     ("verniet", False),  # vernietig/vernietigen
-    ("wissen", False),  # wissen (erase)
     ("wis ", True),  # wis de data — not "wist"
     ("leegmak", False),  # leegmaken
     # ── Polish (PL) ──────────────────────────────────────────────────────────

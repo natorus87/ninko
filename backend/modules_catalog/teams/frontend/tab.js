@@ -186,4 +186,5 @@
             // kein Polling-Interval notwendig
         },
     };
+    if (typeof Ninko !== 'undefined') Ninko._pluginTabs['teams'] = window.TeamsTab;
 })();

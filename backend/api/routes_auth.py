@@ -8,7 +8,10 @@ Supports:
 
 from __future__ import annotations
 
+import hashlib
+import secrets
 import re
+import time
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -16,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from core.auth import (
     ROLE_ADMIN,
+    create_api_access_token,
     create_session_token,
     resolve_request_auth,
     resolve_request_role,
@@ -53,8 +57,22 @@ def _sanitize_user(user: dict[str, Any]) -> dict[str, Any]:
         "must_change_password": bool(user.get("must_change_password", False)),
         "roles": list(user.get("roles") or []),
         "groups": list(user.get("groups") or []),
+        "custom_settings": user.get("custom_settings", {}) if isinstance(user.get("custom_settings"), dict) else {},
         "created_at": user.get("created_at", ""),
         "updated_at": user.get("updated_at", ""),
+    }
+
+
+def _sanitize_api_token_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": str(entry.get("id", "")),
+        "name": str(entry.get("name", "")),
+        "created_at": str(entry.get("created_at", "")),
+        "expires_at": str(entry.get("expires_at", "")),
+        "created_by": str(entry.get("created_by", "")),
+        "last_used_at": str(entry.get("last_used_at", "")),
+        "revoked": bool(entry.get("revoked", False)),
+        "revoked_at": str(entry.get("revoked_at", "")),
     }
 
 
@@ -122,8 +140,29 @@ class ChangeOwnPasswordRequest(BaseModel):
     new_password: str = Field(min_length=8, max_length=256)
 
 
+class ApiTokenCreateRequest(BaseModel):
+    name: str = Field(default="api-token", min_length=1, max_length=120)
+    expires_hours: int = Field(default=24 * 30, ge=1, le=24 * 365)
+
+
+class UserCustomSettingsRequest(BaseModel):
+    settings: dict[str, Any] = Field(default_factory=dict)
+
+
+def _should_set_secure_cookie(request: Request, cfg_secure: bool) -> bool:
+    """
+    Enable Secure cookies only when requested by config and request is HTTPS.
+    Accept X-Forwarded-Proto for reverse proxy termination (Traefik/nginx).
+    """
+    if not cfg_secure:
+        return False
+    proto_hdr = (request.headers.get("x-forwarded-proto") or "").split(",", 1)[0].strip().lower()
+    is_https = request.url.scheme == "https" or proto_hdr == "https"
+    return is_https
+
+
 @router.post("/login")
-async def login(body: LoginRequest, response: Response) -> dict:
+async def login(body: LoginRequest, response: Response, request: Request) -> dict:
     cfg = get_settings()
     if not cfg.API_AUTH_ENABLED:
         raise HTTPException(status_code=400, detail="Auth is disabled.")
@@ -151,7 +190,7 @@ async def login(body: LoginRequest, response: Response) -> dict:
             key=cfg.SESSION_COOKIE_NAME,
             value=token,
             httponly=True,
-            secure=cfg.SESSION_COOKIE_SECURE,
+            secure=_should_set_secure_cookie(request, cfg.SESSION_COOKIE_SECURE),
             samesite="lax",
             max_age=max(1, int(cfg.SESSION_TTL_HOURS)) * 3600,
             path="/",
@@ -229,7 +268,7 @@ async def me(request: Request) -> dict:
 
 
 @router.post("/change-password")
-async def change_own_password(body: ChangeOwnPasswordRequest, request: Request) -> dict:
+async def change_own_password(body: ChangeOwnPasswordRequest, request: Request, response: Response) -> dict:
     cfg = get_settings()
     if not cfg.API_AUTH_ENABLED:
         raise HTTPException(status_code=400, detail="Auth is disabled.")
@@ -260,6 +299,29 @@ async def change_own_password(body: ChangeOwnPasswordRequest, request: Request) 
     user_entry["must_change_password"] = False
     user_entry["updated_at"] = state["updated_at"]
     await rbac_store.save(state)
+
+    # Session sofort auf "Passwort gewechselt" aktualisieren, damit die Security-Middleware
+    # nicht weiter mit `password_change_required=true` blockiert.
+    effective = await rbac_store.build_effective_permissions(username)
+    if effective:
+        token = create_session_token(
+            username,
+            role=str(effective["base_role"]),
+            tenant_id=str(effective.get("tenant_id", "default")),
+            module_permissions=effective["module_permissions"],
+            password_change_required=False,
+        )
+        cfg = get_settings()
+        response.set_cookie(
+            key=cfg.SESSION_COOKIE_NAME,
+            value=token,
+            httponly=True,
+            secure=_should_set_secure_cookie(request, cfg.SESSION_COOKIE_SECURE),
+            samesite="lax",
+            max_age=max(1, int(cfg.SESSION_TTL_HOURS)) * 3600,
+            path="/",
+        )
+
     return {"status": "updated", "username": username}
 
 
@@ -322,6 +384,8 @@ async def create_user(body: UserCreateRequest, request: Request) -> dict:
         "must_change_password": False,
         "roles": sorted(set(body.roles)),
         "groups": sorted(set(body.groups)),
+        "custom_settings": {},
+        "api_tokens": [],
         "created_at": state["updated_at"],
         "updated_at": state["updated_at"],
     }
@@ -381,6 +445,10 @@ async def update_user(username: str, body: UserUpdateRequest, request: Request) 
         user["active"] = body.active
     if body.tenant_id is not None:
         user["tenant_id"] = body.tenant_id.strip() or "default"
+    if not isinstance(user.get("custom_settings"), dict):
+        user["custom_settings"] = {}
+    if not isinstance(user.get("api_tokens"), list):
+        user["api_tokens"] = []
 
     user["updated_at"] = state["updated_at"]
     await rbac_store.save(state)
@@ -428,6 +496,140 @@ async def delete_user(username: str, request: Request) -> dict:
 
     await rbac_store.save(state)
     return {"status": "deleted", "username": username}
+
+
+@router.get("/users/{username}/settings")
+async def get_user_custom_settings(username: str, request: Request) -> dict:
+    _assert_admin(request)
+    username = _validate_id(username, "username")
+    state = await rbac_store.load()
+    user = state["users"].get(username)
+    if not isinstance(user, dict):
+        raise HTTPException(status_code=404, detail="User not found.")
+    settings = user.get("custom_settings", {})
+    if not isinstance(settings, dict):
+        settings = {}
+    return {"username": username, "settings": settings}
+
+
+@router.put("/users/{username}/settings")
+async def update_user_custom_settings(username: str, body: UserCustomSettingsRequest, request: Request) -> dict:
+    _assert_admin(request)
+    username = _validate_id(username, "username")
+    state = await rbac_store.load()
+    users: dict[str, dict[str, Any]] = state["users"]
+    user = users.get(username)
+    if not isinstance(user, dict):
+        raise HTTPException(status_code=404, detail="User not found.")
+    user["custom_settings"] = body.settings if isinstance(body.settings, dict) else {}
+    user["updated_at"] = state["updated_at"]
+    await rbac_store.save(state)
+    return {"status": "updated", "username": username, "settings": user["custom_settings"]}
+
+
+@router.get("/users/{username}/api-tokens")
+async def list_user_api_tokens(username: str, request: Request) -> dict:
+    _assert_admin(request)
+    username = _validate_id(username, "username")
+    state = await rbac_store.load()
+    user = state["users"].get(username)
+    if not isinstance(user, dict):
+        raise HTTPException(status_code=404, detail="User not found.")
+    tokens = user.get("api_tokens", [])
+    if not isinstance(tokens, list):
+        tokens = []
+    sanitized = [_sanitize_api_token_entry(t) for t in tokens if isinstance(t, dict)]
+    sanitized.sort(key=lambda t: t.get("created_at", ""), reverse=True)
+    return {"username": username, "tokens": sanitized, "count": len(sanitized)}
+
+
+@router.post("/users/{username}/api-tokens")
+async def create_user_api_token(username: str, body: ApiTokenCreateRequest, request: Request) -> dict:
+    _assert_admin(request)
+    username = _validate_id(username, "username")
+    state = await rbac_store.load()
+    users: dict[str, dict[str, Any]] = state["users"]
+    user = users.get(username)
+    if not isinstance(user, dict):
+        raise HTTPException(status_code=404, detail="User not found.")
+    if not bool(user.get("active", True)):
+        raise HTTPException(status_code=400, detail="Cannot create API token for inactive user.")
+
+    effective = await rbac_store.build_effective_permissions(username)
+    if not effective:
+        raise HTTPException(status_code=400, detail="No effective permissions for this user.")
+
+    raw_token = create_api_access_token(
+        username,
+        role=str(effective["base_role"]),
+        tenant_id=str(effective.get("tenant_id", "default")),
+        module_permissions=effective["module_permissions"],
+        expires_hours=body.expires_hours,
+    )
+    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    token_id = secrets.token_hex(8)
+    auth_ctx = resolve_request_auth(request) or {}
+    created_by = str(auth_ctx.get("username", "admin"))
+    expires_at = time.strftime(
+        "%Y-%m-%dT%H:%M:%SZ",
+        time.gmtime(time.time() + int(body.expires_hours) * 3600),
+    )
+
+    token_entry = {
+        "id": token_id,
+        "name": body.name.strip() or "api-token",
+        "token_hash": token_hash,
+        "created_at": state["updated_at"],
+        "expires_at": expires_at,
+        "created_by": created_by,
+        "last_used_at": "",
+        "revoked": False,
+        "revoked_at": "",
+    }
+    tokens = user.get("api_tokens")
+    if not isinstance(tokens, list):
+        tokens = []
+    tokens.append(token_entry)
+    user["api_tokens"] = tokens
+    user["updated_at"] = state["updated_at"]
+    await rbac_store.save(state)
+
+    return {
+        "status": "created",
+        "username": username,
+        "token": raw_token,
+        "token_meta": _sanitize_api_token_entry(token_entry),
+        "warning": "Store this token securely. It is shown only once.",
+    }
+
+
+@router.delete("/users/{username}/api-tokens/{token_id}")
+async def revoke_user_api_token(username: str, token_id: str, request: Request) -> dict:
+    _assert_admin(request)
+    username = _validate_id(username, "username")
+    token_id = _validate_id(token_id, "token_id")
+    state = await rbac_store.load()
+    users: dict[str, dict[str, Any]] = state["users"]
+    user = users.get(username)
+    if not isinstance(user, dict):
+        raise HTTPException(status_code=404, detail="User not found.")
+    tokens = user.get("api_tokens")
+    if not isinstance(tokens, list):
+        tokens = []
+
+    found = None
+    for t in tokens:
+        if isinstance(t, dict) and str(t.get("id", "")) == token_id:
+            found = t
+            break
+    if not found:
+        raise HTTPException(status_code=404, detail="Token not found.")
+
+    found["revoked"] = True
+    found["revoked_at"] = state["updated_at"]
+    user["updated_at"] = state["updated_at"]
+    await rbac_store.save(state)
+    return {"status": "revoked", "username": username, "token_id": token_id}
 
 
 @router.get("/roles")

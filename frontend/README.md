@@ -2,6 +2,14 @@
 
 Single-page Vanilla JavaScript application serving as the dashboard for the Ninko IT-Operations AI platform.
 
+## Operational Sync (Apr 2026)
+
+- First-login password change uses an in-app modal (same window), no browser `prompt()`.
+- Login/session flow is aligned with backend middleware to avoid API `401/403` loops after password changes.
+- WebSocket `403` entries can still appear in logs during reconnect races; one accepted connection is expected after app bootstrap.
+- Logout button (sidebar top-right) and "Einstellungen" sidebar nav item removed — both replaced by the bottom user account menu.
+- Plugin dashboard init: all catalog modules register via `Ninko._pluginTabs['id'] = TabObject` at the end of `tab.js`. This is the canonical plugin pattern. `getTabObject()` in `app.js` checks `_pluginTabs` as a fallback after the hardcoded map.
+
 ## Overview
 
 The frontend is a modular, SPA-like interface built with vanilla JavaScript (no frameworks). It communicates with the FastAPI backend via REST and WebSocket APIs.

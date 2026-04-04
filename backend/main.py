@@ -6,6 +6,7 @@ Lädt Module dynamisch, registriert Routen, startet Monitor.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 from contextlib import asynccontextmanager
@@ -65,7 +66,7 @@ from core.auth import (
     role_allows,
 )
 from core.rate_limit import InMemoryRateLimiter
-from core.rbac import RbacStore
+from core.rbac import RBAC_REDIS_KEY, RbacStore
 
 # Redis-Log-Handler (nach Redis-Verfügbarkeit lazy)
 from core.log_handler import RedisLogHandler as _RedisLogHandler
@@ -425,12 +426,23 @@ def _required_role_for_request(path: str, method: str) -> str | None:
     if not path.startswith("/api/"):
         return None
 
-    if path == "/api/auth/login" or path == "/api/auth/logout" or path == "/api/auth/me":
+    if (
+        path == "/api/auth/login"
+        or path == "/api/auth/logout"
+        or path == "/api/auth/me"
+        or path == "/api/auth/change-password"
+    ):
+        return None
+    method_u = method.upper()
+    if method_u == "GET" and (
+        path == "/api/themes/active"
+        or path == "/api/settings/branding"
+        or path.startswith("/api/settings/branding/assets/")
+    ):
         return None
     if path.startswith("/api/auth/"):
         return ROLE_ADMIN
 
-    method_u = method.upper()
     is_mutating = method_u in {"POST", "PUT", "PATCH", "DELETE"}
 
     # Sensitive read endpoints
@@ -504,6 +516,50 @@ def _extract_module_id_from_path(path: str) -> str | None:
     return first
 
 
+def _extract_api_key_from_request(request: Request) -> str:
+    auth_header = request.headers.get("Authorization", "").strip()
+    if auth_header.lower().startswith("bearer "):
+        token = auth_header[7:].strip()
+        if token:
+            return token
+    return request.headers.get("X-API-Key", "").strip()
+
+
+async def _is_active_user_api_token(username: str, raw_token: str) -> bool:
+    if not username or not raw_token:
+        return False
+    try:
+        from core.redis_client import get_redis as _get_redis
+
+        redis = _get_redis()
+        raw = await redis.connection.get(RBAC_REDIS_KEY)
+        if not raw:
+            return False
+        state = json.loads(raw if isinstance(raw, str) else raw.decode("utf-8"))
+        users = state.get("users", {}) if isinstance(state, dict) else {}
+        user = users.get(username, {}) if isinstance(users, dict) else {}
+        if not isinstance(user, dict):
+            return False
+        if not bool(user.get("active", True)):
+            return False
+
+        token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+        token_entries = user.get("api_tokens", [])
+        if not isinstance(token_entries, list):
+            return False
+        for entry in token_entries:
+            if not isinstance(entry, dict):
+                continue
+            if str(entry.get("token_hash", "")) != token_hash:
+                continue
+            if bool(entry.get("revoked", False)):
+                return False
+            return True
+        return False
+    except Exception:
+        return False
+
+
 @app.middleware("http")
 async def api_security_middleware(request: Request, call_next) -> object:
     path = request.url.path
@@ -525,6 +581,14 @@ async def api_security_middleware(request: Request, call_next) -> object:
         client_ip = request.client.host if request.client else "unknown"
 
         auth_ctx = resolve_request_auth(request)
+        if auth_ctx and str(auth_ctx.get("auth_source", "")) == "api_token":
+            raw_token = _extract_api_key_from_request(request)
+            username = str(auth_ctx.get("username", "")).strip()
+            if not await _is_active_user_api_token(username, raw_token):
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Missing or invalid API key."},
+                )
         if auth_ctx and bool(auth_ctx.get("password_change_required", False)):
             allowed_while_reset = {
                 "/api/auth/me",

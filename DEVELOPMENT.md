@@ -74,6 +74,8 @@ To add a new module (e.g., `myservice`):
 - **`tab.js` must NOT use ES module syntax** (`export`, `import`). The frontend dynamically appends `<script>` tags without `type="module"`, so ES module syntax causes a `SyntaxError: Unexpected token 'export'` that silently breaks the entire page.
 - Use a **self-invoking IIFE** pattern instead: `(async function initMyTab() { ... })();`
 - Use emoji-only icons (no FontAwesome classes) in `tab.html` and `manifest.py`, since FontAwesome is not loaded globally.
+- **`Ninko._pluginTabs['id'] = TabObject` is mandatory** for all catalog modules — must be the last executable line in `tab.js`. This ensures `switchModuleTab()` can call `init()` regardless of how the module is loaded (core vs. plugin from Marketplace). `const X = {}` at top-level of an injected script may not be accessible via `typeof X` across script scopes in all environments; `_pluginTabs` is always reliable.
+- Do **not** use `setTimeout(() => { ... })` auto-init in `tab.js`. Init is managed exclusively by `switchModuleTab()` via `_pluginTabs`.
 
 ---
 
@@ -108,6 +110,25 @@ docker compose up -d backend
 ---
 
 ## 📝 Recent Development History
+
+### Phase 21: Namespace Migration, Auth Stabilization, and Runtime Recovery (Apr 2026)
+- **Task**: Stabilize production after Kubernetes namespace migration (`kumio` → `ninko`).
+- **Migration outcome**:
+  - PVC data copied to new namespace.
+  - Ingress switched to new backend while preserving host compatibility.
+  - Runtime now operates in namespace `ninko`.
+- **Auth/session fixes**:
+  - First-login password change now refreshes session cookie immediately.
+  - `change-password` endpoint bypasses API-key fallback checks correctly.
+  - Login flow uses in-app modal instead of browser `prompt()`.
+- **Connection persistence fix**:
+  - During multi-tenant key-format migration, legacy connection keys were not detected.
+  - Added backward-compatible key fallback + auto-migration to tenant-scoped keys.
+- **SafeGuard fix**:
+  - Removed false-positive destructive keyword `wissen` from prefilter.
+- **Image generation recovery**:
+  - Enabled image module in Kubernetes deployment defaults.
+  - Added writable image directory fallback chain to prevent permission crashes.
 
 ### Phase 20: Theme System & Module Hardening (Apr 2026)
 - **Task**: Implemented end-to-end dashboard theming and hardened core modules (`codelab`, `web_search`).

@@ -299,4 +299,5 @@
             }
         },
     };
+    if (typeof Ninko !== 'undefined') Ninko._pluginTabs['telegram'] = window.TelegramModule;
 })();

@@ -502,6 +502,9 @@ async def delete_branding_asset(filename: str) -> dict:
             if data.get("welcome_image_url") == asset_url:
                 data["welcome_image_url"] = _branding_defaults()["welcome_image_url"]
                 changed = True
+            if data.get("login_image_url") == asset_url:
+                data["login_image_url"] = _branding_defaults()["login_image_url"]
+                changed = True
             if changed:
                 await redis.connection.set(REDIS_KEY_BRANDING, json.dumps(data))
         except (

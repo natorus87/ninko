@@ -158,3 +158,5 @@ const HomeAssistantTab = {
 };
 
 HomeAssistantTab.init();
+
+if (typeof Ninko !== 'undefined') Ninko._pluginTabs['homeassistant'] = HomeAssistantTab;

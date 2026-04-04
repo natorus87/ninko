@@ -2,6 +2,19 @@
 
 FastAPI-based Python 3.12 backend for the Ninko IT-Operations AI platform.
 
+## Operational Sync (Apr 2026)
+
+- Kubernetes runtime namespace is `ninko` (post-migration baseline).
+- Auth flow:
+  - first-login password change is enforced,
+  - `POST /api/auth/change-password` refreshes session cookie immediately.
+- Connection storage:
+  - canonical key: `ninko:connections:<tenant>:<module>`
+  - legacy key fallback + auto-migration is enabled for `ninko:connections:<module>`.
+- Image generation:
+  - writable image output directory fallback is implemented to avoid permission failures.
+- Plugin frontend loading: `GET /api/modules/{name}/frontend/{tab.html|tab.js}` checks `backend/modules/` first, then `backend/plugins/` as fallback — all Marketplace-installed modules are served transparently.
+
 ## Overview
 
 Ninko is a modular, AI-powered IT-Operations platform with an immutable core and auto-discovering modules. The AI Orchestrator routes user requests to specialized module agents using keyword-based detection.

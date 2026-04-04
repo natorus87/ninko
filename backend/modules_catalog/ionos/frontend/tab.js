@@ -52,6 +52,15 @@ async function loadIonosConnections() {
     }
 }
 
+const IonosTab = {
+    async init() {
+        await loadIonosConnections();
+        if (currentIonosConnectionId) await fetchIonosStatus();
+    },
+    destroy() {}
+};
+if (typeof Ninko !== 'undefined') Ninko._pluginTabs['ionos'] = IonosTab;
+
 async function fetchIonosStatus() {
     if (!currentIonosConnectionId) return;
 

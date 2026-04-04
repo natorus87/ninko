@@ -249,3 +249,5 @@ const TasmotaTab = {
         this.stopPolling();
     },
 };
+
+if (typeof Ninko !== 'undefined') Ninko._pluginTabs['tasmota'] = TasmotaTab;

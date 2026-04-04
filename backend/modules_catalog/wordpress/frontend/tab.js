@@ -244,3 +244,5 @@ const WordPressTab = {
         if (this.pollInterval) clearInterval(this.pollInterval);
     }
 };
+
+if (typeof Ninko !== 'undefined') Ninko._pluginTabs['wordpress'] = WordPressTab;

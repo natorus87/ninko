@@ -116,4 +116,5 @@
 
     // Auto-Init if possible
     setTimeout(init, 300);
+    if (typeof Ninko !== 'undefined') Ninko._pluginTabs['fritzbox'] = window.fritzboxApp;
 })();

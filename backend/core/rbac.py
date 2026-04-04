@@ -138,6 +138,15 @@ class RbacStore:
         state.setdefault("roles", _default_roles())
         state.setdefault("groups", _default_groups())
         state.setdefault("updated_at", _now_iso())
+        users = state.get("users")
+        if isinstance(users, dict):
+            for user in users.values():
+                if not isinstance(user, dict):
+                    continue
+                if not isinstance(user.get("custom_settings"), dict):
+                    user["custom_settings"] = {}
+                if not isinstance(user.get("api_tokens"), list):
+                    user["api_tokens"] = []
         return state
 
     async def save(self, state: dict[str, Any]) -> None:
@@ -172,6 +181,8 @@ class RbacStore:
             "must_change_password": bool(must_change_password),
             "roles": roles or [],
             "groups": groups or [],
+            "custom_settings": {},
+            "api_tokens": [],
             "created_at": _now_iso(),
             "updated_at": _now_iso(),
         }
@@ -205,6 +216,8 @@ class RbacStore:
                 "must_change_password": bool(must_change_password),
                 "roles": ["role_admin"],
                 "groups": ["group_admins"],
+                "custom_settings": {},
+                "api_tokens": [],
                 "created_at": _now_iso(),
                 "updated_at": _now_iso(),
             }
@@ -220,6 +233,10 @@ class RbacStore:
             group_ids = set(user.get("groups") or [])
             group_ids.add("group_admins")
             user["groups"] = sorted(group_ids)
+            if not isinstance(user.get("custom_settings"), dict):
+                user["custom_settings"] = {}
+            if not isinstance(user.get("api_tokens"), list):
+                user["api_tokens"] = []
             user["updated_at"] = _now_iso()
 
         admin_group = groups["group_admins"]

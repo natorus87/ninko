@@ -25,6 +25,7 @@ Ninko is a modular, AI-powered IT-Operations platform built on FastAPI (Python 3
 17. [Startup Order & Persistence](#17-startup-order--persistence)
 18. [Theme System](#18-theme-system)
 19. [REST API Reference](#19-rest-api-reference)
+20. [Operational Migration Notes (Apr 2026)](#20-operational-migration-notes-apr-2026)
 
 ---
 
@@ -38,6 +39,13 @@ Ninko is a modular, AI-powered IT-Operations platform built on FastAPI (Python 3
 | **Auto-Discovering Modules** | Modules register themselves at startup via `ModuleManifest` |
 | **4-Tier Routing** | Every request is automatically assigned to the correct handler |
 | **Local AI by Default** | All LLM calls remain within the local network (Ollama / LM Studio) |
+
+### Current Runtime Baseline (Apr 2026)
+
+- Kubernetes namespace: `ninko`
+- Backend deployment: `ninko-backend`
+- Ingress hosts: `kumio.conbro.local` and `ninko.conbro.local`
+- Connection Redis key format: `ninko:connections:<tenant>:<module>` (`default` tenant used for single-tenant operation)
 
 ### System Diagram
 
@@ -1081,16 +1089,23 @@ async def list_resources(connection_id: str = ""):
 
 ```javascript
 // No ES module syntax (no export/import).
-// Core modules: define a global object, register it in app.js:getTabObject().
+// All catalog modules (both core and plugin) must register via _pluginTabs.
+// getTabObject() in app.js checks _pluginTabs as a fallback — this guarantees
+// the dashboard init() is called regardless of how the module is loaded.
 const MyModuleTab = {
     async init() {
-        // Called on first tab activation.
+        // Called on first tab activation by switchModuleTab().
+    },
+    destroy() {
+        // Optional cleanup (clear polling intervals etc.)
     }
 };
 
-// For plugins (ZIP-installed, cannot edit app.js):
+// REQUIRED for all catalog modules — must be the last line in tab.js.
 if (typeof Ninko !== 'undefined') Ninko._pluginTabs['mymodule'] = MyModuleTab;
 ```
+
+> **Why `_pluginTabs` is mandatory for catalog modules**: When a module is installed from GitHub Marketplace it lands in `backend/plugins/`. `getTabObject()` in `app.js` contains a hardcoded map of known global variable names. If the tab.js uses `const X = {}` (rather than `window.X = {}`), the variable may not be accessible via `typeof X` across script scopes in all browsers. `_pluginTabs` registration is explicit and always reliable.
 
 ### Activating a Module
 
@@ -1110,6 +1125,7 @@ Ninko discovers and loads the module automatically on the next start.
 - [ ] Register read-only tools in `safeguard.py:_TOOL_READONLY`.
 - [ ] `routes.py` endpoints accept `connection_id: str = ""`.
 - [ ] `frontend/tab.js` does not use `export`/`import`.
+- [ ] `frontend/tab.js` last line: `if (typeof Ninko !== 'undefined') Ninko._pluginTabs['mymodule'] = MyModuleTab;`
 
 ---
 
@@ -2473,6 +2489,19 @@ Update image provider configuration.
 | `422 Unprocessable Entity` | Pydantic validation error | Missing required fields, wrong type |
 | `500 Internal Server Error` | Server-side error | LLM unreachable, Redis down |
 | `503 Service Unavailable` | Service not available | TTS disabled, ChromaDB down |
+
+---
+
+## 20. Operational Migration Notes (Apr 2026)
+
+- Runtime namespace migrated from `kumio` to `ninko`.
+- Connection metadata moved to tenant-aware keys:
+  - Legacy: `ninko:connections:<module>`
+  - Current: `ninko:connections:default:<module>` (single-tenant default)
+- Backend now includes compatibility fallback to read legacy keys and auto-migrate them.
+- First-login password change updates the session cookie immediately to avoid stale auth lockout.
+- SafeGuard destructive prefilter no longer treats `wissen` as destructive to prevent German false positives.
+- Image generation writes to a verified writable directory chain (`$NINKO_IMAGES_DIR`, `/app/data/images`, `data/images`, `/tmp/ninko-images`).
 
 ---
 
