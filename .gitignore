@@ -89,6 +89,7 @@ data/tmp/
 CLAUDE.md
 AGENTS.md
 .claude/
+.codex
 skills-lock.json
 
 # Interne Entwicklungs-Todos
