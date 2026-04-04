@@ -17,7 +17,7 @@ async def check_linux_server_health() -> dict:
     try:
         return {"status": "ok", "detail": "Linux Server Modul bereit (SSH)"}
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"status": "error", "detail": str(e)}
+        return {"status": "error", "detail": str(exc)}
 
 
 module_manifest = ModuleManifest(

@@ -28,7 +28,7 @@ async def check_pihole_health() -> dict:
             "detail": f"Pi-hole {status}, {blocked:,} domains blocked",
         }
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"status": "error", "detail": f"Pi-hole unreachable: {e}"}
+        return {"status": "error", "detail": f"Pi-hole unreachable: {exc}"}
 
 
 module_manifest = ModuleManifest(

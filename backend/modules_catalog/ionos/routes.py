@@ -17,5 +17,5 @@ async def get_status(connection_id: str = "") -> object:
         zone_count = len(zones) if isinstance(zones, list) else 0
         return {"status": "ok", "message": f"Connected. {zone_count} zones found."}
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        logger.warning("IONOS API error: %s", str(e))
-        return {"status": "error", "message": str(e)}
+        logger.warning("IONOS API error: %s", str(exc))
+        return {"status": "error", "message": str(exc)}

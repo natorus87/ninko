@@ -62,7 +62,7 @@ async def check_proxmox_health() -> dict:
         try:
             version = proxmox.version.get()
         except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-            if verify_ssl and ("ssl" in str(e).lower() or "certificate" in str(e).lower()):
+            if verify_ssl and ("ssl" in str(exc).lower() or "certificate" in str(exc).lower()):
                 proxmox = ProxmoxAPI(host_addr, port=8006, user=base_user, token_name=token_id, token_value=token_secret, verify_ssl=False)
                 version = proxmox.version.get()
             else:
@@ -70,7 +70,7 @@ async def check_proxmox_health() -> dict:
 
         return {"status": "ok", "detail": f"Proxmox VE {version.get('version', '?')} reachable ({conn.name})"}
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"status": "error", "detail": f"Proxmox not reachable: {e}"}
+        return {"status": "error", "detail": f"Proxmox not reachable: {exc}"}
 
 
 module_manifest = ModuleManifest(

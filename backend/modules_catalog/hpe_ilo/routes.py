@@ -62,4 +62,4 @@ async def get_status(connection_id: str = "") -> object:
             },
         }
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"error": str(e)}
+        return {"error": str(exc)}

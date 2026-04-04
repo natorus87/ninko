@@ -27,7 +27,7 @@ async def check_checkmk_health() -> dict:
 
         return {"status": "ok", "detail": "Checkmk erreichbar"}
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"status": "error", "detail": f"Checkmk nicht erreichbar: {e}"}
+        return {"status": "error", "detail": f"Checkmk nicht erreichbar: {exc}"}
 
 
 module_manifest = ModuleManifest(

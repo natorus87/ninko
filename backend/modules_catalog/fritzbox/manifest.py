@@ -36,8 +36,8 @@ async def check_fritzbox_health(connection_id: str = "") -> dict:
         return {"status": "ok", "detail": f"Connected to FritzBox {host}"}
         
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        logger.error("FritzBox health check failed: %s", e)
-        return {"status": "error", "detail": str(e)}
+        logger.error("FritzBox health check failed: %s", exc)
+        return {"status": "error", "detail": str(exc)}
 
 module_manifest = ModuleManifest(
     name="fritzbox",

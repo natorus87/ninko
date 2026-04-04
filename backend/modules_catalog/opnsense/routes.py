@@ -35,7 +35,7 @@ async def get_status(connection_id: str = "") -> ApiResponse:
         result = await get_opnsense_system_status.ainvoke({"connection_id": connection_id})
         return ApiResponse(status="ok", data=result)
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return ApiResponse(status="error", detail=str(e))
+        return ApiResponse(status="error", detail=str(exc))
 
 
 @router.get("/interfaces", response_model=ApiResponse)
@@ -45,7 +45,7 @@ async def get_interfaces(connection_id: str = "") -> ApiResponse:
         result = await get_opnsense_interfaces.ainvoke({"connection_id": connection_id})
         return ApiResponse(status="ok", data=result)
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return ApiResponse(status="error", detail=str(e))
+        return ApiResponse(status="error", detail=str(exc))
 
 
 @router.get("/services", response_model=ApiResponse)
@@ -55,7 +55,7 @@ async def get_services(connection_id: str = "") -> ApiResponse:
         result = await get_opnsense_services.ainvoke({"connection_id": connection_id})
         return ApiResponse(status="ok", data=result)
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return ApiResponse(status="error", detail=str(e))
+        return ApiResponse(status="error", detail=str(exc))
 
 
 @router.post("/firewall/rules", response_model=ApiResponse)
@@ -81,7 +81,7 @@ async def create_firewall_rule(
         })
         return ApiResponse(status="ok", data={"message": result})
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return ApiResponse(status="error", detail=str(e))
+        return ApiResponse(status="error", detail=str(exc))
 
 
 @router.delete("/firewall/rules/{rule_uuid}", response_model=ApiResponse)
@@ -94,7 +94,7 @@ async def delete_firewall_rule(rule_uuid: str, connection_id: str = "") -> ApiRe
         })
         return ApiResponse(status="ok", data={"message": result})
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return ApiResponse(status="error", detail=str(e))
+        return ApiResponse(status="error", detail=str(exc))
 
 
 @router.post("/nat/rules", response_model=ApiResponse)
@@ -122,7 +122,7 @@ async def create_nat_rule(
         })
         return ApiResponse(status="ok", data={"message": result})
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return ApiResponse(status="error", detail=str(e))
+        return ApiResponse(status="error", detail=str(exc))
 
 
 @router.delete("/nat/rules/{rule_uuid}", response_model=ApiResponse)
@@ -135,4 +135,4 @@ async def delete_nat_rule(rule_uuid: str, connection_id: str = "") -> ApiRespons
         })
         return ApiResponse(status="ok", data={"message": result})
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return ApiResponse(status="error", detail=str(e))
+        return ApiResponse(status="error", detail=str(exc))

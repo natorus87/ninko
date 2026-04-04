@@ -40,4 +40,4 @@ async def get_status(connection_id: str = "") -> object:
             "ports_count": len(port_list),
         }
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"error": str(e)}
+        return {"error": str(exc)}

@@ -23,7 +23,7 @@ async def get_status(connection_id: str = "") -> dict:
         )
         return {"status": "ok", "data": result}
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"status": "error", "detail": str(e)}
+        return {"status": "error", "detail": str(exc)}
 
 
 @router.get("/storage")
@@ -33,7 +33,7 @@ async def get_storage(connection_id: str = "") -> dict:
         result = await get_synology_storage.ainvoke({"connection_id": connection_id})
         return {"status": "ok", "data": result}
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"status": "error", "detail": str(e)}
+        return {"status": "error", "detail": str(exc)}
 
 
 @router.get("/packages")
@@ -43,4 +43,4 @@ async def get_packages(connection_id: str = "") -> dict:
         result = await get_synology_packages.ainvoke({"connection_id": connection_id})
         return {"status": "ok", "data": result}
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"status": "error", "detail": str(e)}
+        return {"status": "error", "detail": str(exc)}

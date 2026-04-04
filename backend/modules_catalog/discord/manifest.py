@@ -1,33 +1,30 @@
-"""Discord module — ModuleManifest and health check."""
+"""Discord module manifest and health check."""
 
 from __future__ import annotations
 
-from typing import Any
-
-from pydantic import BaseModel
+from core.module_registry import ModuleManifest
 
 
-class ModuleManifest(BaseModel):
-    name: str = "discord"
-    version: str = "1.0.0"
-    description: str = (
-        "Discord bot integration for messaging, channels, and server management"
-    )
-    author: str = "Ninko"
-    routing_keywords: list[str] = [
+module_manifest = ModuleManifest(
+    name="discord",
+    display_name="Discord",
+    description="Discord Bot – Server, Channels, Members und Messages verwalten.",
+    version="1.0.0",
+    author="Ninko",
+    enabled_by_default=False,
+    env_prefix="DISCORD_",
+    required_secrets=["DISCORD_BOT_TOKEN"],
+    optional_secrets=[],
+    routing_keywords=[
         "discord",
-        "server",
-        "chat",
-        "bot",
-        "text",
-        "nachricht",
-    ]
-    api_prefix: str = "/discord"
-    dashboard_tab: bool = True
-    requires_connection: bool = True
-
-
-module_manifest = ModuleManifest()
+        "discord server",
+        "discord channel",
+        "discord bot",
+        "discord nachricht",
+    ],
+    api_prefix="/api/discord",
+    dashboard_tab={"id": "discord", "label": "Discord", "icon": "💬"},
+)
 
 
 async def check_discord_health(connection_id: str = "") -> dict:
@@ -39,5 +36,5 @@ async def check_discord_health(connection_id: str = "") -> dict:
         if "error" in info:
             return {"status": "unhealthy", "detail": info.get("error")}
         return {"status": "healthy", "detail": "Bot connected"}
-    except Exception as e:
-        return {"status": "unhealthy", "detail": str(e)}
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return {"status": "unhealthy", "detail": str(exc)}

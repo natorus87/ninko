@@ -48,7 +48,7 @@ async def check_telegram_health(connection_id: str = "") -> dict:
                 return {"status": "error", "detail": f"HTTP {resp.status_code}: {resp.text[:100]}"}
 
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"status": "error", "detail": f"Telegram API unreachable: {e}"}
+        return {"status": "error", "detail": f"Telegram API unreachable: {exc}"}
 
 
 module_manifest = ModuleManifest(

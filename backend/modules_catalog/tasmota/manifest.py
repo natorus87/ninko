@@ -33,7 +33,7 @@ async def check_tasmota_health(connection_id: str = "") -> dict:
                 return {"status": "ok", "detail": f"Tasmota at {host} reachable"}
             return {"status": "error", "detail": f"HTTP {resp.status_code}"}
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"status": "error", "detail": str(e)}
+        return {"status": "error", "detail": str(exc)}
 
 
 module_manifest = ModuleManifest(

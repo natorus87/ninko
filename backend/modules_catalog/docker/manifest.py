@@ -35,7 +35,7 @@ async def check_docker_health() -> dict:
                 }
             return {"status": "error", "detail": f"Docker API antwortete mit HTTP {resp.status_code}"}
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"status": "error", "detail": f"Docker nicht erreichbar: {e}"}
+        return {"status": "error", "detail": f"Docker nicht erreichbar: {exc}"}
 
 
 module_manifest = ModuleManifest(

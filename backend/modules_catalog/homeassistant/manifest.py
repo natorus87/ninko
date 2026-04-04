@@ -14,7 +14,7 @@ async def check_homeassistant_health() -> dict:
         # But we'll trust that the client data is present.
         return {"status": "ok", "detail": "Home Assistant configuration present."}
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"status": "error", "detail": str(e)}
+        return {"status": "error", "detail": str(exc)}
 
 module_manifest = ModuleManifest(
     name="homeassistant",

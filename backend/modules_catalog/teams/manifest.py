@@ -23,7 +23,7 @@ async def check_teams_health(connection_id: str = "") -> dict:
         else:
             return {"status": "warning", "detail": "No valid token received or configured."}
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"status": "error", "detail": f"Authentication failed: {e}"}
+        return {"status": "error", "detail": f"Authentication failed: {exc}"}
 
 
 module_manifest = ModuleManifest(

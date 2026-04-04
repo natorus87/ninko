@@ -21,7 +21,7 @@ async def get_projects(connection_id: str = "") -> dict:
         result = await get_jira_projects.ainvoke({"connection_id": connection_id})
         return {"status": "ok", "data": result}
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"status": "error", "detail": str(e)}
+        return {"status": "error", "detail": str(exc)}
 
 
 @router.get("/issues")
@@ -39,4 +39,4 @@ async def get_issues(
         )
         return {"status": "ok", "data": result}
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"status": "error", "detail": str(e)}
+        return {"status": "error", "detail": str(exc)}

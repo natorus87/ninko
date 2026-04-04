@@ -67,7 +67,7 @@ async def check_microsoft_intune_health() -> dict:
     except aiohttp.ClientResponseError as e:
         return {"status": "error", "detail": f"HTTP {e.status}: {e.message}"}
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"status": "error", "detail": str(e)}
+        return {"status": "error", "detail": str(exc)}
 
 
 async def _get_token(tenant_id: str, client_id: str, client_secret: str) -> str:

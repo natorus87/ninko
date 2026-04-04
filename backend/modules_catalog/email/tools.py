@@ -166,8 +166,8 @@ async def check_connection(connection_id: str) -> dict:
 
         return {"status": "ok", "message": "IMAP & SMTP connected successfully."}
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        logger.error("Email connection check failed: %s", e, exc_info=True)
-        return {"status": "error", "message": str(e)}
+        logger.error("Email connection check failed: %s", exc, exc_info=True)
+        return {"status": "error", "message": str(exc)}
 
 
 # ================================

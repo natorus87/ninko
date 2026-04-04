@@ -496,6 +496,18 @@ def _extract_module_id_from_path(path: str) -> str | None:
 async def api_security_middleware(request: Request, call_next) -> object:
     path = request.url.path
 
+    # Frontend-Auth-Guard (wenn Auth aktiviert):
+    # / und /index.html sowie alle HTML-Routen hinter Login schützen.
+    if settings.API_AUTH_ENABLED and not path.startswith("/api/"):
+        public_non_api = (
+            path == "/health"
+            or path == "/login"
+            or path.startswith("/static/")
+            or path == "/favicon.ico"
+        )
+        if not public_non_api and resolve_request_role(request) is None:
+            return RedirectResponse(url="/login", status_code=302)
+
     # API-only security/rate limiting
     if path.startswith("/api/"):
         client_ip = request.client.host if request.client else "unknown"

@@ -400,8 +400,8 @@ async def handle_teams_turn(app: FastAPI, activity: dict[str, Any]) -> None:
         await send_teams_message(
             service_url, conv_id, activity_id,
             _t(
-                f"❌ Interner Fehler ({err_type}):\n{str(e)[:300]}\n\nBitte versuche es erneut.",
-                f"❌ Internal error ({err_type}):\n{str(e)[:300]}\n\nPlease try again.",
+                f"❌ Interner Fehler ({err_type}):\n{str(exc)[:300]}\n\nBitte versuche es erneut.",
+                f"❌ Internal error ({err_type}):\n{str(exc)[:300]}\n\nPlease try again.",
             ),
             apply_format=False,
         )

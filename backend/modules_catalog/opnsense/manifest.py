@@ -22,10 +22,10 @@ async def check_opnsense_health(connection_id: str = "") -> dict:
             if resp.status_code == 200:
                 return {"status": "ok", "detail": f"OPNsense at {host} reachable"}
             return {"status": "error", "detail": f"HTTP {resp.status_code}"}
-    except ValueError as e:
-        return {"status": "error", "detail": str(e)}
+    except ValueError as exc:
+        return {"status": "error", "detail": str(exc)}
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"status": "error", "detail": str(e)}
+        return {"status": "error", "detail": str(exc)}
 
 
 module_manifest = ModuleManifest(

@@ -29,7 +29,7 @@ async def get_status(connection_id: str = "") -> object:
             "system": sys if "error" not in sys else {"model": "Error / Unreachable", "firmware_version": "-", "uptime": 0}
         }
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        logger.error("Error fetching FritzBox status: %s", e)
+        logger.error("Error fetching FritzBox status: %s", exc)
         return {
             "wan": {"connected": False, "ip_address": "N/A"},
             "wlan": [],
@@ -47,5 +47,5 @@ async def get_devices(connection_id: str = "") -> object:
             return [] # gracefully return empty list to frontend
         return devices
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        logger.error("Error fetching FritzBox devices: %s", e)
+        logger.error("Error fetching FritzBox devices: %s", exc)
         return []

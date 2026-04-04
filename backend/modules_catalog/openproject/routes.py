@@ -40,4 +40,4 @@ async def get_status(connection_id: str = "") -> object:
             "users_count": len(users.get("_embedded", {}).get("elements", [])),
         }
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"error": str(e)}
+        return {"error": str(exc)}

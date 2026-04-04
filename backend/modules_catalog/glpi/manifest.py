@@ -58,7 +58,7 @@ async def check_glpi_health() -> dict:
                 return {"status": "error", "detail": f"HTTP {resp.status_code}: {resp.text[:100]}"}
 
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"status": "error", "detail": f"GLPI unreachable: {e}"}
+        return {"status": "error", "detail": f"GLPI unreachable: {exc}"}
 
 
 module_manifest = ModuleManifest(

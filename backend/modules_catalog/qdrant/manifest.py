@@ -37,7 +37,7 @@ async def check_qdrant_health() -> dict:
                 "detail": f"Qdrant responded with HTTP {response.status_code}",
             }
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"status": "error", "detail": f"Qdrant not reachable: {e}"}
+        return {"status": "error", "detail": f"Qdrant not reachable: {exc}"}
 
 
 module_manifest = ModuleManifest(

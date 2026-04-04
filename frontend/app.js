@@ -161,6 +161,10 @@ const Ninko = {
             } catch { /* Fallback */ }
         }
 
+        // Auth-Guard: verhindert unautorisierte App-Initialisierung (auch bei /index.html Direktaufruf)
+        const isAuthed = await this.ensureAuthenticated();
+        if (!isAuthed) return;
+
         await this.loadBrandingSettings();
         this.applyBranding();
 
@@ -199,6 +203,41 @@ const Ninko = {
         this._initCtxIndicator();
         document.documentElement.classList.remove('light-mode-pre');
         document.body.style.opacity = '1';
+    },
+
+    async ensureAuthenticated() {
+        try {
+            const res = await fetch('/api/auth/me', { credentials: 'include' });
+            if (!res.ok) return true; // API nicht erreichbar: App normal laden, damit Fehler sichtbar bleibt
+            const me = await res.json();
+            if (me.auth_enabled === false) {
+                this._updateAuthUi(false);
+                return true;
+            }
+            if (me.authenticated) {
+                this._updateAuthUi(true);
+                return true;
+            }
+            this._updateAuthUi(false);
+            window.location.replace('/login');
+            return false;
+        } catch {
+            return true;
+        }
+    },
+
+    _updateAuthUi(authenticated) {
+        const btn = document.getElementById('btn-logout');
+        if (btn) btn.style.display = authenticated ? 'inline-flex' : 'none';
+    },
+
+    async logout() {
+        try {
+            await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+        } catch {
+            // ignore network errors and force redirect anyway
+        }
+        window.location.replace('/login');
     },
 
     /** Custom Confirm Promise */

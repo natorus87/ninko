@@ -17,7 +17,7 @@ async def check_wordpress_health() -> dict:
     try:
         return {"status": "ok", "detail": "WordPress module ready (REST API v2)"}
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"status": "error", "detail": str(e)}
+        return {"status": "error", "detail": str(exc)}
 
 
 module_manifest = ModuleManifest(

@@ -27,7 +27,7 @@ async def check_ionos_health() -> dict:
             "detail": f"IONOS verbunden, {zone_count} Zonen gefunden",
         }
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"status": "error", "detail": f"IONOS API nicht erreichbar: {e}"}
+        return {"status": "error", "detail": f"IONOS API nicht erreichbar: {exc}"}
 
 
 module_manifest = ModuleManifest(

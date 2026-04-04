@@ -38,4 +38,4 @@ async def get_status(connection_id: str = "") -> object:
             "devices_count": len(devices.get("value", [])),
         }
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"error": str(e)}
+        return {"error": str(exc)}

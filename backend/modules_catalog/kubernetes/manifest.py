@@ -24,7 +24,7 @@ async def check_k8s_health() -> dict:
             "detail": f"Kubernetes {version.git_version} reachable",
         }
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"status": "error", "detail": f"Cluster not reachable: {e}"}
+        return {"status": "error", "detail": f"Cluster not reachable: {exc}"}
 
 
 module_manifest = ModuleManifest(

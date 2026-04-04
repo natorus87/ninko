@@ -19,7 +19,7 @@ async def check_jira_health() -> dict:
         client = await _get_api_client("")
         return {"status": "ok", "detail": "Jira API reachable"}
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        return {"status": "error", "detail": str(e)}
+        return {"status": "error", "detail": str(exc)}
 
 
 module_manifest = ModuleManifest(
