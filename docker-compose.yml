@@ -72,6 +72,12 @@ services:
       MONITOR_AUTO_REMEDIATE: "false"
       # Logging
       LOG_LEVEL: "INFO"
+      # Auth/Login
+      API_AUTH_ENABLED: "true"
+      ADMIN_USERNAME: "${NINKO_ADMIN_USERNAME:-admin}"
+      ADMIN_PASSWORD: "${NINKO_ADMIN_PASSWORD:-}"
+      BOOTSTRAP_ADMIN_PASSWORD: "${NINKO_BOOTSTRAP_ADMIN_PASSWORD:-admin}"
+      SESSION_COOKIE_SECURE: "false"
       # TTS (Piper) – deaktiviert by default
       # Aktivieren: TTS_ENABLED=true + piper installieren (scripts/download_voices.sh)
       TTS_ENABLED: "true"

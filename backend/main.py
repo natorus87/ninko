@@ -135,13 +135,23 @@ async def lifespan(app: FastAPI) -> object:
 
     # ── RBAC Bootstrap-Admin synchronisieren ──────────────────────────────────
     try:
-        if settings.API_AUTH_ENABLED and settings.ADMIN_PASSWORD:
-            rbac_store = RbacStore()
-            await rbac_store.bootstrap_admin_if_needed(
-                settings.ADMIN_USERNAME or "admin",
-                settings.ADMIN_PASSWORD,
-            )
-            logger.info("RBAC Bootstrap-Admin synchronisiert: %s", settings.ADMIN_USERNAME or "admin")
+        if settings.API_AUTH_ENABLED:
+            bootstrap_password = settings.ADMIN_PASSWORD or settings.BOOTSTRAP_ADMIN_PASSWORD
+            if bootstrap_password:
+                rbac_store = RbacStore()
+                await rbac_store.bootstrap_admin_if_needed(
+                    settings.ADMIN_USERNAME or "admin",
+                    bootstrap_password,
+                )
+                if not settings.ADMIN_PASSWORD:
+                    logger.warning(
+                        "RBAC Bootstrap nutzt BOOTSTRAP_ADMIN_PASSWORD für User '%s'. "
+                        "Bitte Passwort nach dem ersten Login ändern.",
+                        settings.ADMIN_USERNAME or "admin",
+                    )
+                logger.info("RBAC Bootstrap-Admin synchronisiert: %s", settings.ADMIN_USERNAME or "admin")
+            else:
+                logger.warning("API_AUTH_ENABLED=true aber kein Bootstrap-Passwort konfiguriert.")
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as _rbac_exc:
         logger.warning("RBAC Bootstrap konnte nicht synchronisiert werden: %s", _rbac_exc)
 

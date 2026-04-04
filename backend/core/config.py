@@ -72,6 +72,7 @@ class CoreSettings(BaseSettings):
     API_KEY_READ: str = ""
     ADMIN_USERNAME: str = "admin"
     ADMIN_PASSWORD: str = ""
+    BOOTSTRAP_ADMIN_PASSWORD: str = "admin"
     SESSION_SECRET: str = "change-me-in-production"
     SESSION_TTL_HOURS: int = 24
     SESSION_COOKIE_NAME: str = "ninko_session"
