@@ -1,8 +1,8 @@
 """GitHub module agent."""
 
 from agents.base_agent import BaseAgent
-from modules_catalog.github import tools
-from modules_catalog.github.manifest import module_manifest
+from . import tools
+from .manifest import module_manifest
 
 
 class GitHubAgent(BaseAgent):
