@@ -113,13 +113,6 @@ The dashboard is available at **http://localhost:8000**.
 
 On first start, configure your LLM backend under **Settings → LLM Provider** (Ollama, LM Studio, or OpenAI-compatible).
 
-### Operational Notes (Apr 2026)
-
-- Runtime namespace is now `ninko` (migration from legacy `kumio` completed).
-- First-login password change is enforced and completed in-app (no browser prompt).
-- If migrating from older builds, connection keys are auto-migrated from legacy Redis format to tenant-scoped format.
-- `image_gen` is enabled in Kubernetes defaults and stores generated images on writable persistent/fallback paths.
-
 ---
 
 ## Architecture
