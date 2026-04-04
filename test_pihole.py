@@ -1,9 +1,38 @@
 import asyncio
+import sys
+
 import httpx
-from modules.pihole.tools import _get_pihole_config, _authenticate
+
+sys.path.append("/app")
+sys.path.append("/app/backend")
+
+_get_pihole_config = None
+_authenticate = None
+
+for module_path in (
+    "modules.pihole.tools",
+    "modules_catalog.pihole.tools",
+    "backend.modules_catalog.pihole.tools",
+):
+    try:
+        module = __import__(module_path, fromlist=["_get_pihole_config", "_authenticate"])
+        _get_pihole_config = getattr(module, "_get_pihole_config", None)
+        _authenticate = getattr(module, "_authenticate", None)
+        if _get_pihole_config and _authenticate:
+            break
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError):
+        continue
 
 async def test():
-    cfg = await _get_pihole_config()
+    if _get_pihole_config is None or _authenticate is None:
+        print("SKIP: Pi-hole Modulpfad nicht importierbar.")
+        return
+    try:
+        cfg = await _get_pihole_config()
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        print(f"SKIP: Pi-hole Konfiguration fehlt ({exc})")
+        return
+
     url = cfg["url"]
     pwd = cfg["password"]
     print("Base URL:", url)

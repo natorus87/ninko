@@ -34,17 +34,23 @@ Stand: 2026-04-04
     - konsistente Felder (`display_name`, `env_prefix`, `required_secrets`, `api_prefix`, `dashboard_tab`) ergänzt
     - gemeinsames Antwortschema für diese Modul-Routen über `backend/core/schemas.py:ApiResponse` bereitgestellt
 
-- [ ] **Legacy-Testskripte reparieren (aktuell nicht lauffähig)**
+- [x] **Legacy-Testskripte reparieren (aktuell nicht lauffähig)**
   - Dateien: `backend/test_services.py`, `backend/test_monitor.py`, `test_pihole.py`
   - Problem:
     - `NoneType`-Crash wenn keine FritzBox-Connection vorhanden (`conn_data is None`)
     - veralteter Importpfad in `test_pihole.py` (`modules.pihole.tools` nicht vorhanden)
   - Ziel: robuste Precondition-Checks + korrekte Modulpfade + klare Skip-Meldungen statt Crash.
+  - Status 2026-04-04:
+    - FritzBox-Tests prüfen Connection/Secret/Host vor Verwendung und skippen sauber
+    - `test_pihole.py` nutzt robusten Fallback-Import (`modules` → `modules_catalog`) und skippt bei fehlender Konfiguration
 
-- [ ] **CI-Qualitätsgates ergänzen**
+- [x] **CI-Qualitätsgates ergänzen**
   - Dateien: `.github/workflows/*` (neu/erweitern)
   - Problem: Fehler wie `except Exception`-Regressionen und Manifest-Inkonsistenzen fallen erst spät auf.
   - Ziel: automatische Checks für `compileall`, verbotene Patterns (z. B. `except Exception` in Produktivmodulen), und einfache Modul-Integritätsprüfung.
+  - Status 2026-04-04:
+    - neuer Workflow `.github/workflows/ci-quality.yml` ergänzt
+    - Gates: `compileall` (backend), Pattern-Guard gegen broad catch-alls, Modul-Integritätscheck (Pflichtdateien) 
 
 ### Security
 - [x] **API-Authentifizierung/Autorisierung auf Core-Routern einführen**

@@ -1,0 +1,104 @@
+name: CI Quality Gates
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - develop
+
+jobs:
+  quality:
+    name: Compile, Guards, Module Integrity
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Compile Python Sources
+        run: |
+          python -m compileall backend
+
+      - name: Quality Guards
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+
+          import re
+          import sys
+          from pathlib import Path
+
+          project_root = Path('.')
+          scan_roots = [
+              Path('backend/agents'),
+              Path('backend/api'),
+              Path('backend/core'),
+              Path('backend/modules'),
+              Path('backend/modules_catalog'),
+          ]
+
+          excluded_parts = {
+              '_template',
+              '__pycache__',
+              'tests',
+          }
+          test_name_re = re.compile(r'^test_.*\\.py$|.*_test\\.py$')
+          broad_except_re = re.compile(r'\\bexcept\\s+Exception(?:\\s+as\\s+\\w+)?\\s*:')
+
+          violations: list[str] = []
+          for root in scan_roots:
+              if not root.exists():
+                  continue
+              for py_file in root.rglob('*.py'):
+                  if any(part in excluded_parts for part in py_file.parts):
+                      continue
+                  if test_name_re.match(py_file.name):
+                      continue
+                  rel = py_file.relative_to(project_root)
+                  text = py_file.read_text(encoding='utf-8', errors='ignore')
+                  for lineno, line in enumerate(text.splitlines(), start=1):
+                      if broad_except_re.search(line):
+                          violations.append(f"{rel}:{lineno}: broad catch-all 'except Exception'")
+
+          if violations:
+              print('Found forbidden broad exception handlers:')
+              for item in violations:
+                  print(f'  - {item}')
+              sys.exit(1)
+
+          print('No forbidden broad exception handlers found.')
+
+          module_roots = [Path('backend/modules'), Path('backend/modules_catalog')]
+          required_files = ('__init__.py', 'manifest.py', 'agent.py')
+          missing: list[str] = []
+
+          for module_root in module_roots:
+              if not module_root.exists():
+                  continue
+              for module_dir in module_root.iterdir():
+                  if not module_dir.is_dir():
+                      continue
+                  if module_dir.name.startswith('_'):
+                      continue
+                  init_file = module_dir / '__init__.py'
+                  if not init_file.exists():
+                      continue
+                  missing_files = [name for name in required_files if not (module_dir / name).exists()]
+                  if missing_files:
+                      rel_dir = module_dir.relative_to(project_root)
+                      missing.append(f"{rel_dir}: missing {', '.join(missing_files)}")
+
+          if missing:
+              print('Module integrity check failed:')
+              for item in missing:
+                  print(f'  - {item}')
+              sys.exit(1)
+
+          print('Module integrity check passed.')
+          PY

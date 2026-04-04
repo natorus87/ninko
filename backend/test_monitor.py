@@ -9,10 +9,23 @@ from fritzconnection import FritzConnection
 
 async def main() -> object:
     conn_data = await ConnectionManager.get_default_connection("fritzbox")
+    if conn_data is None:
+        print("SKIP: Keine FritzBox-Connection konfiguriert.")
+        return
+
     vault = get_vault()
     pwd_key = conn_data.vault_keys.get("password") or conn_data.vault_keys.get("FRITZBOX_PASSWORD")
+    if not pwd_key:
+        print("SKIP: FritzBox-Connection hat keinen Password Vault-Key.")
+        return
+
     pwd = await vault.get_secret(pwd_key)
-    fc = FritzConnection(address=conn_data.config.get("host"), password=pwd, user=conn_data.config.get("user"))
+    host = conn_data.config.get("host")
+    if not host:
+        print("SKIP: FritzBox-Connection ohne host.")
+        return
+
+    fc = FritzConnection(address=host, password=pwd, user=conn_data.config.get("user"))
     
     # Check OnlineMonitor
     try:
