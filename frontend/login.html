@@ -120,6 +120,25 @@
                 if (!res.ok) {
                     throw new Error(data.detail || 'Login fehlgeschlagen');
                 }
+                if (data.password_change_required) {
+                    const newPassword = window.prompt('Bitte neues Passwort setzen (mind. 8 Zeichen):');
+                    if (!newPassword || newPassword.length < 8) {
+                        throw new Error('Passwortwechsel erforderlich: Neues Passwort ungültig.');
+                    }
+                    const pwRes = await fetch('/api/auth/change-password', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                            current_password: payload.password,
+                            new_password: newPassword,
+                        }),
+                    });
+                    const pwData = await pwRes.json().catch(() => ({}));
+                    if (!pwRes.ok) {
+                        throw new Error(pwData.detail || 'Passwortwechsel fehlgeschlagen');
+                    }
+                }
                 window.location.replace('/');
             } catch (err) {
                 msg.className = 'msg err';

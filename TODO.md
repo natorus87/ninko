@@ -6,6 +6,39 @@ Stand: 2026-04-04
 
 ## Jetzt (P0)
 
+### Audit-Findings (2026-04-04)
+- [x] **Unsichere Auth-Defaults härten (Bootstrap nur einmalig + Passwortwechsel erzwingen)**
+  - Dateien: `backend/core/config.py`, `backend/main.py`, `docker-compose.yml`
+  - Problem: Default-Fallback `BOOTSTRAP_ADMIN_PASSWORD=admin` ist für Erststart praktisch, aber dauerhaft ein Risiko.
+  - Ziel: Erststart-Flow mit einmaligem Bootstrap-Token oder Pflicht-Passwortwechsel beim ersten Login; kein statischer Default in Produktion.
+  - Status 2026-04-04:
+    - `password_change_required` im Session-Token/`/api/auth/me` ergänzt
+    - neuer Endpoint: `POST /api/auth/change-password`
+    - API-Sperre bis Passwortwechsel (nur `/api/auth/me`, `/api/auth/change-password`, `/api/auth/logout` erlaubt)
+    - Login-Flow in `frontend/login.html` erzwingt Passwortwechsel vor Dashboard-Zugriff
+
+- [ ] **Catalog-Module auf konsistente Exception-Strategie umstellen**
+  - Dateien: `backend/modules_catalog/netbox/*`, `backend/modules_catalog/zabbix/*`, `backend/modules_catalog/gitlab/*`, `backend/modules_catalog/discord/routes.py`
+  - Problem: Breite `except Exception`-Blöcke verbergen Fehlerursachen und erschweren sichere Fehlerbehandlung.
+  - Ziel: spezifische Exception-Gruppen + standardisierte API-Fehlerantworten.
+
+- [ ] **Catalog-Manifeste standardisieren (Core `ModuleManifest` statt Custom-Stub)**
+  - Dateien: `backend/modules_catalog/netbox/manifest.py`, `backend/modules_catalog/zabbix/manifest.py`, `backend/modules_catalog/gitlab/manifest.py`
+  - Problem: Inkonsistente Manifest-Struktur (`api_prefix`, `dashboard_tab`, Health-Check-Referenzen) gegenüber Template/Core.
+  - Ziel: 1:1 auf `core.module_registry.ModuleManifest` migrieren.
+
+- [ ] **Legacy-Testskripte reparieren (aktuell nicht lauffähig)**
+  - Dateien: `backend/test_services.py`, `backend/test_monitor.py`, `test_pihole.py`
+  - Problem:
+    - `NoneType`-Crash wenn keine FritzBox-Connection vorhanden (`conn_data is None`)
+    - veralteter Importpfad in `test_pihole.py` (`modules.pihole.tools` nicht vorhanden)
+  - Ziel: robuste Precondition-Checks + korrekte Modulpfade + klare Skip-Meldungen statt Crash.
+
+- [ ] **CI-Qualitätsgates ergänzen**
+  - Dateien: `.github/workflows/*` (neu/erweitern)
+  - Problem: Fehler wie `except Exception`-Regressionen und Manifest-Inkonsistenzen fallen erst spät auf.
+  - Ziel: automatische Checks für `compileall`, verbotene Patterns (z. B. `except Exception` in Produktivmodulen), und einfache Modul-Integritätsprüfung.
+
 ### Security
 - [x] **API-Authentifizierung/Autorisierung auf Core-Routern einführen**
   - Dateien: `backend/main.py` (alle `app.include_router(...)`), `backend/api/routes_*.py`

@@ -154,6 +154,7 @@ class RbacStore:
         roles: list[str] | None = None,
         groups: list[str] | None = None,
         active: bool = True,
+        must_change_password: bool = False,
     ) -> None:
         if not username.strip() or not password:
             return
@@ -168,6 +169,7 @@ class RbacStore:
             "tenant_id": _normalize_tenant_id(tenant_id),
             "password_hash": hash_password(password),
             "active": active,
+            "must_change_password": bool(must_change_password),
             "roles": roles or [],
             "groups": groups or [],
             "created_at": _now_iso(),
@@ -175,7 +177,14 @@ class RbacStore:
         }
         await self.save(state)
 
-    async def bootstrap_admin_if_needed(self, username: str, password: str, *, force_password: bool = False) -> None:
+    async def bootstrap_admin_if_needed(
+        self,
+        username: str,
+        password: str,
+        *,
+        force_password: bool = False,
+        must_change_password: bool = False,
+    ) -> None:
         if not username.strip() or not password:
             return
         state = await self.load()
@@ -193,6 +202,7 @@ class RbacStore:
                 "tenant_id": "default",
                 "password_hash": hash_password(password),
                 "active": True,
+                "must_change_password": bool(must_change_password),
                 "roles": ["role_admin"],
                 "groups": ["group_admins"],
                 "created_at": _now_iso(),
@@ -203,6 +213,7 @@ class RbacStore:
             user["tenant_id"] = _normalize_tenant_id(str(user.get("tenant_id", "default")))
             if force_password:
                 user["password_hash"] = hash_password(password)
+                user["must_change_password"] = bool(must_change_password)
             role_ids = set(user.get("roles") or [])
             role_ids.add("role_admin")
             user["roles"] = sorted(role_ids)
@@ -286,6 +297,7 @@ class RbacStore:
         return {
             "username": username.strip(),
             "tenant_id": _normalize_tenant_id(str(user.get("tenant_id", "default"))),
+            "password_change_required": bool(user.get("must_change_password", False)),
             "base_role": base_role,
             "module_permissions": module_permissions,
             "role_ids": sorted(role_ids),

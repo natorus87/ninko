@@ -16,11 +16,9 @@ from pydantic import BaseModel, Field
 
 from core.auth import (
     ROLE_ADMIN,
-    create_admin_session_token,
     create_session_token,
     resolve_request_auth,
     resolve_request_role,
-    verify_admin_credentials,
 )
 from core.config import get_settings
 from core.rbac import RbacStore, hash_password
@@ -52,6 +50,7 @@ def _sanitize_user(user: dict[str, Any]) -> dict[str, Any]:
         "username": user.get("username", ""),
         "tenant_id": user.get("tenant_id", "default"),
         "active": bool(user.get("active", True)),
+        "must_change_password": bool(user.get("must_change_password", False)),
         "roles": list(user.get("roles") or []),
         "groups": list(user.get("groups") or []),
         "created_at": user.get("created_at", ""),
@@ -118,6 +117,11 @@ class UserPasswordRequest(BaseModel):
     password: str = Field(min_length=8, max_length=256)
 
 
+class ChangeOwnPasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=8, max_length=256)
+
+
 @router.post("/login")
 async def login(body: LoginRequest, response: Response) -> dict:
     cfg = get_settings()
@@ -141,6 +145,7 @@ async def login(body: LoginRequest, response: Response) -> dict:
             role=str(effective["base_role"]),
             tenant_id=str(effective.get("tenant_id", "default")),
             module_permissions=effective["module_permissions"],
+            password_change_required=bool(user.get("must_change_password", False)),
         )
         response.set_cookie(
             key=cfg.SESSION_COOKIE_NAME,
@@ -158,21 +163,8 @@ async def login(body: LoginRequest, response: Response) -> dict:
             "roles": effective["role_ids"],
             "groups": effective["group_ids"],
             "tenant_id": effective.get("tenant_id", "default"),
+            "password_change_required": bool(user.get("must_change_password", False)),
         }
-
-    # 2) Backward-compatible env-admin fallback
-    if verify_admin_credentials(username, password):
-        token = create_admin_session_token(username)
-        response.set_cookie(
-            key=cfg.SESSION_COOKIE_NAME,
-            value=token,
-            httponly=True,
-            secure=cfg.SESSION_COOKIE_SECURE,
-            samesite="lax",
-            max_age=max(1, int(cfg.SESSION_TTL_HOURS)) * 3600,
-            path="/",
-        )
-        return {"authenticated": True, "role": "admin", "username": username}
 
     raise HTTPException(status_code=401, detail="Invalid credentials.")
 
@@ -201,6 +193,7 @@ async def me(request: Request) -> dict:
             "groups": ["group_admins"],
             "module_permissions": {"*": {"read": True, "write": True}},
             "tenant_id": "default",
+            "password_change_required": False,
         }
 
     auth_ctx = resolve_request_auth(request)
@@ -219,6 +212,7 @@ async def me(request: Request) -> dict:
             "groups": effective["group_ids"],
             "module_permissions": effective["module_permissions"],
             "tenant_id": effective.get("tenant_id", "default"),
+            "password_change_required": bool(effective.get("password_change_required", False)),
         }
 
     return {
@@ -230,7 +224,43 @@ async def me(request: Request) -> dict:
         "groups": [],
         "module_permissions": auth_ctx.get("module_permissions", {}),
         "tenant_id": auth_ctx.get("tenant_id", "default"),
+        "password_change_required": bool(auth_ctx.get("password_change_required", False)),
     }
+
+
+@router.post("/change-password")
+async def change_own_password(body: ChangeOwnPasswordRequest, request: Request) -> dict:
+    cfg = get_settings()
+    if not cfg.API_AUTH_ENABLED:
+        raise HTTPException(status_code=400, detail="Auth is disabled.")
+
+    auth_ctx = resolve_request_auth(request)
+    if not auth_ctx:
+        raise HTTPException(status_code=401, detail="Not authenticated.")
+    if str(auth_ctx.get("auth_source", "")) != "session":
+        raise HTTPException(status_code=403, detail="Password change requires session authentication.")
+
+    username = str(auth_ctx.get("username", "")).strip()
+    if not username:
+        raise HTTPException(status_code=401, detail="Invalid session.")
+    if body.current_password == body.new_password:
+        raise HTTPException(status_code=400, detail="New password must be different.")
+
+    user = await rbac_store.authenticate_user(username, body.current_password)
+    if user is None:
+        raise HTTPException(status_code=400, detail="Current password is invalid.")
+
+    state = await rbac_store.load()
+    users: dict[str, dict[str, Any]] = state["users"]
+    user_entry = users.get(username)
+    if not isinstance(user_entry, dict):
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    user_entry["password_hash"] = hash_password(body.new_password)
+    user_entry["must_change_password"] = False
+    user_entry["updated_at"] = state["updated_at"]
+    await rbac_store.save(state)
+    return {"status": "updated", "username": username}
 
 
 @router.post("/bootstrap")
@@ -289,6 +319,7 @@ async def create_user(body: UserCreateRequest, request: Request) -> dict:
         "tenant_id": body.tenant_id.strip() or "default",
         "password_hash": hash_password(body.password),
         "active": body.active,
+        "must_change_password": False,
         "roles": sorted(set(body.roles)),
         "groups": sorted(set(body.groups)),
         "created_at": state["updated_at"],
@@ -370,6 +401,7 @@ async def set_user_password(username: str, body: UserPasswordRequest, request: R
         raise HTTPException(status_code=404, detail="User not found.")
 
     user["password_hash"] = hash_password(body.password)
+    user["must_change_password"] = False
     user["updated_at"] = state["updated_at"]
     await rbac_store.save(state)
     return {"status": "updated", "username": username}

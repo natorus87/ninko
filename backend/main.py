@@ -143,6 +143,7 @@ async def lifespan(app: FastAPI) -> object:
                     settings.ADMIN_USERNAME or "admin",
                     bootstrap_password,
                     force_password=bool(settings.ADMIN_PASSWORD),
+                    must_change_password=not bool(settings.ADMIN_PASSWORD),
                 )
                 if not settings.ADMIN_PASSWORD:
                     logger.warning(
@@ -523,6 +524,19 @@ async def api_security_middleware(request: Request, call_next) -> object:
     if path.startswith("/api/"):
         client_ip = request.client.host if request.client else "unknown"
 
+        auth_ctx = resolve_request_auth(request)
+        if auth_ctx and bool(auth_ctx.get("password_change_required", False)):
+            allowed_while_reset = {
+                "/api/auth/me",
+                "/api/auth/change-password",
+                "/api/auth/logout",
+            }
+            if path not in allowed_while_reset:
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "Password change required before accessing this endpoint."},
+                )
+
         if _rate_limiter is not None:
             allowed, retry_after = await _rate_limiter.allow(client_ip)
             if not allowed:
@@ -534,7 +548,6 @@ async def api_security_middleware(request: Request, call_next) -> object:
 
         required_role = _required_role_for_request(path, request.method)
         if required_role is not None:
-            auth_ctx = resolve_request_auth(request)
             actual_role = auth_ctx.get("role") if auth_ctx else None
             if actual_role is None:
                 return JSONResponse(

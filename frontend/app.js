@@ -215,6 +215,10 @@ const Ninko = {
                 return true;
             }
             if (me.authenticated) {
+                if (me.password_change_required) {
+                    window.location.replace('/login');
+                    return false;
+                }
                 this._updateAuthUi(true);
                 return true;
             }

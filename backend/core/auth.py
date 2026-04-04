@@ -48,6 +48,7 @@ def create_session_token(
     role: str,
     tenant_id: str = "default",
     module_permissions: dict[str, dict[str, bool]] | None = None,
+    password_change_required: bool = False,
 ) -> str:
     cfg = get_settings()
     now = int(time.time())
@@ -56,6 +57,7 @@ def create_session_token(
         "role": role,
         "tid": tenant_id or "default",
         "mods": module_permissions or {},
+        "pcr": bool(password_change_required),
         "iat": now,
         "exp": now + max(1, int(cfg.SESSION_TTL_HOURS)) * 3600,
     }
@@ -70,6 +72,7 @@ def create_admin_session_token(username: str) -> str:
         role=ROLE_ADMIN,
         tenant_id="default",
         module_permissions={"*": {"read": True, "write": True}},
+        password_change_required=False,
     )
 
 
@@ -186,6 +189,7 @@ def _session_context(session_token: str) -> dict[str, Any] | None:
         "role": role,
         "tenant_id": str(payload.get("tid", "default")).strip() or "default",
         "module_permissions": module_permissions,
+        "password_change_required": bool(payload.get("pcr", False)),
         "auth_source": "session",
     }
 
