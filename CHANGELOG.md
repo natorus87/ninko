@@ -7,6 +7,25 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.9.8] – 2026-04-04
+
+### Added
+
+- **GitHub-Modul** (Catalog):
+  - GitHub Actions: trigger, cancel, re-run workflows
+  - Pull Requests: create, merge, review
+  - Issues: list, create
+  - Repository: repos, branches, commits, tags, releases
+  - Variables, secrets, code search
+  - 30 Tools total für vollständige GitHub-Steuerung
+
+### Changed
+
+- **i18n**: GitHub Übersetzungen für alle 10 Sprachen ergänzt
+- **Tool-Labels**: GitHub Tool-Labels in base_agent.py
+
+---
+
 ## [0.9.7] – 2026-04-04
 
 ### Added
