@@ -44,6 +44,7 @@ from api.routes_safeguard_profiles import router as safeguard_profiles_router
 from api.routes_safeguard_audit import router as safeguard_audit_router
 from api.routes_auth import router as auth_router
 from api.routes_themes import router as themes_router
+from api.routes_operations import router as operations_router
 
 # Logging konfigurieren
 settings = get_settings()
@@ -58,10 +59,13 @@ from core.auth import (
     ROLE_ADMIN,
     ROLE_READ,
     ROLE_WRITE,
+    module_access_allows,
+    resolve_request_auth,
     resolve_request_role,
     role_allows,
 )
 from core.rate_limit import InMemoryRateLimiter
+from core.rbac import RbacStore
 
 # Redis-Log-Handler (nach Redis-Verfügbarkeit lazy)
 from core.log_handler import RedisLogHandler as _RedisLogHandler
@@ -129,9 +133,21 @@ async def lifespan(app: FastAPI) -> object:
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as _exc:
         logger.warning("LLM-Startup-Config konnte nicht geladen werden: %s", _exc)
 
-    # ── STT + TTS Settings aus Redis wiederherstellen ─────────────────────────
+    # ── RBAC Bootstrap-Admin synchronisieren ──────────────────────────────────
     try:
-        from api.routes_settings import REDIS_KEY_STT, REDIS_KEY_TTS
+        if settings.API_AUTH_ENABLED and settings.ADMIN_PASSWORD:
+            rbac_store = RbacStore()
+            await rbac_store.bootstrap_admin_if_needed(
+                settings.ADMIN_USERNAME or "admin",
+                settings.ADMIN_PASSWORD,
+            )
+            logger.info("RBAC Bootstrap-Admin synchronisiert: %s", settings.ADMIN_USERNAME or "admin")
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as _rbac_exc:
+        logger.warning("RBAC Bootstrap konnte nicht synchronisiert werden: %s", _rbac_exc)
+
+    # ── STT + TTS + OCR Settings aus Redis wiederherstellen ───────────────────
+    try:
+        from api.routes_settings import REDIS_KEY_STT, REDIS_KEY_TTS, REDIS_KEY_OCR
         import json as _json2
         import os as _os2
         from core.redis_client import get_redis as _get_redis2
@@ -149,8 +165,14 @@ async def lifespan(app: FastAPI) -> object:
             for _k, _v in _json2.loads(_tts_raw).items():
                 _os2.environ[_k] = str(_v).lower() if isinstance(_v, bool) else str(_v)
             logger.info("TTS-Settings aus Redis wiederhergestellt.")
+
+        _ocr_raw = await _redis2.connection.get(REDIS_KEY_OCR)
+        if _ocr_raw:
+            for _k, _v in _json2.loads(_ocr_raw).items():
+                _os2.environ[_k] = str(_v).lower() if isinstance(_v, bool) else str(_v)
+            logger.info("OCR-Settings aus Redis wiederhergestellt.")
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as _exc2:
-        logger.warning("STT/TTS-Startup-Config konnte nicht geladen werden: %s", _exc2)
+        logger.warning("STT/TTS/OCR-Startup-Config konnte nicht geladen werden: %s", _exc2)
 
     # ── Module Discovery ──────────────────────────────
     registry = ModuleRegistry()
@@ -391,8 +413,10 @@ def _required_role_for_request(path: str, method: str) -> str | None:
     if not path.startswith("/api/"):
         return None
 
-    if path.startswith("/api/auth/"):
+    if path == "/api/auth/login" or path == "/api/auth/logout" or path == "/api/auth/me":
         return None
+    if path.startswith("/api/auth/"):
+        return ROLE_ADMIN
 
     method_u = method.upper()
     is_mutating = method_u in {"POST", "PUT", "PATCH", "DELETE"}
@@ -431,6 +455,43 @@ def _required_role_for_request(path: str, method: str) -> str | None:
     return None
 
 
+_CORE_API_PREFIXES = {
+    "auth",
+    "themes",
+    "modules",
+    "memory",
+    "secrets",
+    "settings",
+    "ws",
+    "safeguard",
+    "scheduler",
+    "plugins",
+    "connections",
+    "agents",
+    "workflows",
+    "logs",
+    "transcription",
+    "tts",
+    "image-gen",
+    "skills",
+    "operations",
+    "chat",
+    "images",
+}
+
+
+def _extract_module_id_from_path(path: str) -> str | None:
+    if not path.startswith("/api/"):
+        return None
+    parts = [p for p in path.split("/") if p]
+    if len(parts) < 2:
+        return None
+    first = parts[1].strip().lower()
+    if first in _CORE_API_PREFIXES:
+        return None
+    return first
+
+
 @app.middleware("http")
 async def api_security_middleware(request: Request, call_next) -> object:
     path = request.url.path
@@ -450,7 +511,8 @@ async def api_security_middleware(request: Request, call_next) -> object:
 
         required_role = _required_role_for_request(path, request.method)
         if required_role is not None:
-            actual_role = resolve_request_role(request)
+            auth_ctx = resolve_request_auth(request)
+            actual_role = auth_ctx.get("role") if auth_ctx else None
             if actual_role is None:
                 return JSONResponse(
                     status_code=401,
@@ -460,6 +522,21 @@ async def api_security_middleware(request: Request, call_next) -> object:
                 return JSONResponse(
                     status_code=403,
                     content={"detail": "Insufficient role for this operation."},
+                )
+
+        # Module-level ACL (module routes only, no effect on core API routes)
+        module_id = _extract_module_id_from_path(path)
+        if module_id and settings.API_AUTH_ENABLED:
+            auth_ctx = resolve_request_auth(request)
+            if auth_ctx is None:
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Missing or invalid API key."},
+                )
+            if not module_access_allows(auth_ctx, module_id, request.method):
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": f"Access denied for module '{module_id}'."},
                 )
 
     return await call_next(request)
@@ -495,6 +572,7 @@ app.include_router(skills_router)
 app.include_router(safeguard_router)
 app.include_router(safeguard_profiles_router)
 app.include_router(safeguard_audit_router)
+app.include_router(operations_router)
 
 # ── Health Endpoint ──────────────────────────────────
 # NOTE: Must be registered BEFORE the catch-all static mount

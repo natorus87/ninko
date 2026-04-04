@@ -130,6 +130,10 @@
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
                                 Bildgenerierung
                             </button>
+                            <button class="settings-tab" data-settings-tab="access" onclick="Ninko.switchSettingsTab('access')">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><path d="M20 8v6"></path><path d="M23 11h-6"></path></svg>
+                                Benutzer & Rollen
+                            </button>
                             <button class="settings-tab" data-settings-tab="safeguard" onclick="Ninko.switchSettingsTab('safeguard')">
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
                                 <span data-i18n="safeguard.settingsTab">SafeGuard</span>
@@ -1332,6 +1336,63 @@
                                     <span id="imggen-save-status" class="save-status"></span>
                                     <button class="btn btn-primary btn-sm" onclick="Ninko.saveImageGenProvider()">Speichern</button>
                                 </div>
+                            </div>
+
+                            <div class="setting-group">
+                                <h4>Bilderkennung (OCR / Vision)</h4>
+                                <p class="setting-desc">Globale OCR-Konfiguration für Module (z.B. GLPI Bildanhänge).</p>
+                                <div class="form-row">
+                                    <label class="form-label" for="ocr-provider">Provider</label>
+                                    <select id="ocr-provider" class="form-select" style="max-width:220px;" onchange="Ninko.onOcrProviderChange()">
+                                        <option value="python">Python OCR (pytesseract)</option>
+                                        <option value="llm_vision">LLM Vision (OpenAI-kompatibel)</option>
+                                    </select>
+                                </div>
+
+                                <div id="ocr-python-fields">
+                                    <div class="form-row">
+                                        <label class="form-label" for="ocr-python-engine">Engine</label>
+                                        <select id="ocr-python-engine" class="form-select" style="max-width:220px;">
+                                            <option value="pytesseract">pytesseract</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-row">
+                                        <label class="form-label" for="ocr-language">OCR Sprache</label>
+                                        <input id="ocr-language" type="text" class="form-input" placeholder="deu+eng" style="max-width:140px;">
+                                        <span class="text-muted" style="font-size:0.8rem;align-self:center;">z.B. deu+eng, eng</span>
+                                    </div>
+                                </div>
+
+                                <div id="ocr-vision-fields" class="hidden">
+                                    <div class="form-row">
+                                        <label class="form-label" for="ocr-vision-api-url">Vision Base URL</label>
+                                        <input id="ocr-vision-api-url" type="text" class="form-input" placeholder="https://api.openai.com/v1">
+                                    </div>
+                                    <div class="form-row">
+                                        <label class="form-label" for="ocr-vision-api-key">Vision API Key</label>
+                                        <input id="ocr-vision-api-key" type="password" class="form-input" placeholder="sk-...">
+                                    </div>
+                                    <div class="form-row">
+                                        <label class="form-label" for="ocr-vision-model">Vision Modell</label>
+                                        <input id="ocr-vision-model" type="text" class="form-input" placeholder="gpt-4.1-mini">
+                                    </div>
+                                    <div class="form-row">
+                                        <label class="form-label" for="ocr-vision-prompt">Vision Prompt</label>
+                                        <textarea id="ocr-vision-prompt" class="form-input" rows="3"
+                                            placeholder="Extract all readable text from this image. Return plain text only."></textarea>
+                                    </div>
+                                </div>
+
+                                <div class="form-actions">
+                                    <span id="ocr-save-status" class="save-status"></span>
+                                    <button class="btn btn-primary btn-sm" id="ocr-save-btn" onclick="Ninko.saveOcrSettings()">💾 Speichern</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="settings-panel" id="settings-panel-access">
+                            <div id="rbac-root">
+                                <p class="text-muted">Lade Benutzerverwaltung…</p>
                             </div>
                         </div>
                         <!-- SafeGuard Tab -->

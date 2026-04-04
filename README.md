@@ -382,6 +382,8 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 - **Local AI**: All LLM calls stay within your network (Ollama/LM Studio). No data is sent to external services unless an OpenAI-compatible external provider is explicitly configured.
 - **Secrets**: Encrypted via HashiCorp Vault or local SQLite fallback. Never stored in plaintext on the filesystem.
 - **SafeGuard middleware**: Profile-based safety layer — classifies every message and (optionally) every tool call before execution. See the [SafeGuard section](#safeguard) above for details.
+- **Operation Journal**: Risky operations are tracked in `/api/operations/transactions` with confirmation state and rollback notes.
+- **Hardware safety baseline**: Physical and break-glass safeguards are documented in [HARDWARE_SAFETY.md](HARDWARE_SAFETY.md).
 - **Destructive actions**: `PROXMOX_CONFIRM_DESTRUCTIVE=true` (default) — the agent asks for confirmation before executing.
 - **Internal network only**: Ninko is not designed for public exposure. Place Traefik/Nginx with TLS and optional auth middleware in front.
 - **Do not commit `.env`**: The file is included in `.gitignore`. Template: `.env.example`.

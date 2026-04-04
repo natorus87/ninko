@@ -28,6 +28,17 @@ Der AI Orchestrator nutzt folgende Funktionen:
 - `create_ticket`: Erstellt neue Incident- oder Request-Tickets.
 - `add_ticket_followup`: Fügt einem bestehenden Ticket einen Kommentar hinzu.
 - `solve_ticket`: Markiert ein Ticket als "Gelöst" mit entsprechender Begründung.
+- `get_ticket_attachments`: Listet Anhänge eines Tickets.
+- `get_ticket_image_ocr`: Führt OCR auf einem Bildanhang aus (z.B. Screenshots).
+
+## OCR / Vision (global)
+
+Die OCR-Engine wird zentral in **Einstellungen -> TTS/STT -> OCR / Vision** konfiguriert:
+- `python` (pytesseract lokal)
+- `llm_vision` (OpenAI-kompatible Vision API)
+
+Für `llm_vision` müssen URL, API-Key und Modell gesetzt sein.
+Für `python` sind `pytesseract` + `Pillow` sowie das Systempaket `tesseract-ocr` erforderlich.
 
 ## Beispiel-Prompt (Chat)
 

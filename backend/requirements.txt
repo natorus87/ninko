@@ -55,3 +55,7 @@ numpy<2.0
 
 # ── Audio-Transkription (Whisper) ──────────────────
 faster-whisper>=1.1.0
+
+# ── OCR (Python) ────────────────────────────────────
+Pillow>=10.4.0
+pytesseract>=0.3.10

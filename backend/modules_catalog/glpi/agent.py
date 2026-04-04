@@ -25,6 +25,7 @@ from .tools import (
     list_categories,
     get_ticket_stats,
     get_ticket_attachments,
+    get_ticket_image_ocr,
     get_ticket_followups,
     get_ticket_solutions,
 )
@@ -37,6 +38,7 @@ Deine Fähigkeiten:
 - Ticket-Erstellung und -Verwaltung
 - Ticket-Suche nach Status, Priorität, Stichwort
 - Follow-ups, Lösungen und Anhänge abrufen
+- OCR auf Ticket-Bildern (Screenshot-/Foto-Analyse)
 - Tickets schließen mit Lösungsbeschreibung
 - Benutzer- und Gruppensuche
 - Ticket-Statistiken
@@ -63,6 +65,7 @@ Your capabilities:
 - Ticket creation and management
 - Ticket search by status, priority, keyword
 - Retrieve follow-ups, solutions, and attachments
+- OCR on ticket images (screenshots/photos)
 - Closing tickets with resolution descriptions
 - User and group search
 - Ticket statistics
@@ -104,6 +107,7 @@ class GlpiAgent(BaseAgent):
                 list_categories,
                 get_ticket_stats,
                 get_ticket_attachments,
+                get_ticket_image_ocr,
                 get_ticket_followups,
                 get_ticket_solutions,
             ],

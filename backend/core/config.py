@@ -130,6 +130,18 @@ class CoreSettings(BaseSettings):
     STT_SPELLCHECK: bool = False
     STT_CONFIDENCE_THRESHOLD: float = -1.0  # avg_logprob unter diesem Wert = unsicher
 
+    # ── OCR / Vision ───────────────────────────────────
+    OCR_PROVIDER: Literal["python", "llm_vision"] = "python"
+    OCR_PYTHON_ENGINE: Literal["pytesseract"] = "pytesseract"
+    OCR_LANGUAGE: str = "deu+eng"
+    OCR_VISION_API_URL: str = ""
+    OCR_VISION_API_KEY: str = ""
+    OCR_VISION_MODEL: str = ""
+    OCR_VISION_PROMPT: str = (
+        "Extract all readable text from this image. "
+        "Return plain text only, preserving line breaks where possible."
+    )
+
 
 # Singleton-Instanz
 _settings: CoreSettings | None = None

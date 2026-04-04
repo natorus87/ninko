@@ -1325,6 +1325,17 @@ _STT_ALLOWED = {
     "STT_CONFIDENCE_THRESHOLD",
 }
 
+REDIS_KEY_OCR = "ninko:settings:ocr"
+_OCR_ALLOWED = {
+    "OCR_PROVIDER",
+    "OCR_PYTHON_ENGINE",
+    "OCR_LANGUAGE",
+    "OCR_VISION_API_URL",
+    "OCR_VISION_API_KEY",
+    "OCR_VISION_MODEL",
+    "OCR_VISION_PROMPT",
+}
+
 
 @router.get("/stt")
 async def get_stt_settings() -> dict:
@@ -1400,6 +1411,91 @@ async def update_stt_settings(body: dict) -> dict:
         {k: v for k, v in data.items() if "KEY" not in k},
     )
     return {"status": "saved", **{k: v for k, v in data.items() if "KEY" not in k}}
+
+
+# ═══════════════════════════════════════════════════════
+#  OCR Settings
+# ═══════════════════════════════════════════════════════
+
+@router.get("/ocr")
+async def get_ocr_settings() -> dict:
+    """OCR/Vision-Konfiguration abrufen (Redis → Env → Default)."""
+    redis = get_redis()
+    raw = await redis.connection.get(REDIS_KEY_OCR)
+    if raw:
+        data = json.loads(raw)
+        key = (data.get("OCR_VISION_API_KEY") or "").strip()
+        data["OCR_VISION_API_KEY"] = ""
+        data["OCR_VISION_API_KEY_SET"] = bool(key)
+        return {"source": "redis", **data}
+
+    cfg = get_settings()
+    return {
+        "source": "default",
+        "OCR_PROVIDER": cfg.OCR_PROVIDER,
+        "OCR_PYTHON_ENGINE": cfg.OCR_PYTHON_ENGINE,
+        "OCR_LANGUAGE": cfg.OCR_LANGUAGE,
+        "OCR_VISION_API_URL": cfg.OCR_VISION_API_URL,
+        "OCR_VISION_API_KEY": "",
+        "OCR_VISION_API_KEY_SET": bool((cfg.OCR_VISION_API_KEY or "").strip()),
+        "OCR_VISION_MODEL": cfg.OCR_VISION_MODEL,
+        "OCR_VISION_PROMPT": cfg.OCR_VISION_PROMPT,
+    }
+
+
+@router.put("/ocr")
+async def update_ocr_settings(body: dict) -> dict:
+    """OCR/Vision-Konfiguration in Redis speichern und sofort in ENV übernehmen."""
+    redis = get_redis()
+    raw = await redis.connection.get(REDIS_KEY_OCR)
+    current_data = json.loads(raw) if raw else {}
+
+    incoming = {k: v for k, v in body.items() if k in _OCR_ALLOWED}
+    data = {**current_data, **incoming}
+
+    provider = str(data.get("OCR_PROVIDER", "python")).strip().lower()
+    if provider not in {"python", "llm_vision"}:
+        raise HTTPException(status_code=400, detail="Ungültiger OCR_PROVIDER.")
+    data["OCR_PROVIDER"] = provider
+
+    engine = str(data.get("OCR_PYTHON_ENGINE", "pytesseract")).strip().lower()
+    if engine not in {"pytesseract"}:
+        raise HTTPException(status_code=400, detail="Ungültiger OCR_PYTHON_ENGINE.")
+    data["OCR_PYTHON_ENGINE"] = engine
+
+    # Maskiertes Feld im Frontend soll bestehenden Key beibehalten.
+    # Nur ein expliziter leerer String löscht den Key.
+    if "OCR_VISION_API_KEY" not in incoming:
+        if "OCR_VISION_API_KEY" in current_data:
+            data["OCR_VISION_API_KEY"] = current_data.get("OCR_VISION_API_KEY", "")
+    else:
+        data["OCR_VISION_API_KEY"] = str(incoming.get("OCR_VISION_API_KEY", "")).strip()
+
+    data["OCR_LANGUAGE"] = str(data.get("OCR_LANGUAGE", "deu+eng")).strip() or "deu+eng"
+    data["OCR_VISION_API_URL"] = str(data.get("OCR_VISION_API_URL", "")).strip()
+    data["OCR_VISION_MODEL"] = str(data.get("OCR_VISION_MODEL", "")).strip()
+    data["OCR_VISION_PROMPT"] = str(data.get("OCR_VISION_PROMPT", "")).strip() or (
+        "Extract all readable text from this image. "
+        "Return plain text only, preserving line breaks where possible."
+    )
+
+    await redis.connection.set(REDIS_KEY_OCR, json.dumps(data))
+
+    for key, value in data.items():
+        os.environ[key] = str(value).lower() if isinstance(value, bool) else str(value)
+    import core.config
+
+    core.config._settings = None
+
+    logger.info(
+        "OCR-Settings aktualisiert: %s",
+        {k: v for k, v in data.items() if "KEY" not in k},
+    )
+    return {
+        "status": "saved",
+        **{k: v for k, v in data.items() if "KEY" not in k},
+        "OCR_VISION_API_KEY_SET": bool((data.get("OCR_VISION_API_KEY") or "").strip()),
+    }
 
 
 @router.put("/k8s/clusters/{cluster_name}/default")

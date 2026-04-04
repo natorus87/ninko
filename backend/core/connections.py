@@ -22,6 +22,7 @@ def _get_connection_lock(module_id: str) -> asyncio.Lock:
 
 from schemas.connection import ConnectionCreate, ConnectionRead, ConnectionUpdate
 from core.redis_client import get_redis
+from core import status_bus
 from core.vault import get_vault
 
 
@@ -32,14 +33,25 @@ class ConnectionManager:
     """Manager für Modul-Verbindungen."""
 
     @staticmethod
-    def _get_redis_key(module_id: str) -> str:
-        return f"ninko:connections:{module_id}"
+    def _effective_tenant_id(tenant_id: str = "") -> str:
+        t = (tenant_id or "").strip().lower()
+        if t:
+            return t
+        session_id = status_bus.get_session_id().strip()
+        if ":" in session_id:
+            return session_id.split(":", 1)[0].strip().lower() or "default"
+        return "default"
 
     @staticmethod
-    async def list_connections(module_id: str) -> List[ConnectionRead]:
+    def _get_redis_key(module_id: str, tenant_id: str = "") -> str:
+        tenant = ConnectionManager._effective_tenant_id(tenant_id)
+        return f"ninko:connections:{tenant}:{module_id}"
+
+    @staticmethod
+    async def list_connections(module_id: str, tenant_id: str = "") -> List[ConnectionRead]:
         """Holt alle konfigurierten Verbindungen für ein Modul."""
         redis = get_redis()
-        key = ConnectionManager._get_redis_key(module_id)
+        key = ConnectionManager._get_redis_key(module_id, tenant_id)
         raw = await redis.connection.get(key)
         
         if not raw:
@@ -58,18 +70,18 @@ class ConnectionManager:
         return connections
 
     @staticmethod
-    async def get_connection(module_id: str, connection_id: str) -> Optional[ConnectionRead]:
+    async def get_connection(module_id: str, connection_id: str, tenant_id: str = "") -> Optional[ConnectionRead]:
         """Holt eine spezifische Verbindung per ID."""
-        connections = await ConnectionManager.list_connections(module_id)
+        connections = await ConnectionManager.list_connections(module_id, tenant_id)
         for conn in connections:
             if conn.id == connection_id:
                 return conn
         return None
 
     @staticmethod
-    async def get_default_connection(module_id: str) -> Optional[ConnectionRead]:
+    async def get_default_connection(module_id: str, tenant_id: str = "") -> Optional[ConnectionRead]:
         """Holt die Standardverbindung für ein Modul."""
-        connections = await ConnectionManager.list_connections(module_id)
+        connections = await ConnectionManager.list_connections(module_id, tenant_id)
         if not connections:
             return None
         
@@ -81,10 +93,11 @@ class ConnectionManager:
         return connections[0]
 
     @staticmethod
-    async def create_connection(module_id: str, data: ConnectionCreate) -> ConnectionRead:
+    async def create_connection(module_id: str, data: ConnectionCreate, tenant_id: str = "") -> ConnectionRead:
         """Erstellt eine neue Verbindung und speichert Daten sicher ab."""
+        tenant = ConnectionManager._effective_tenant_id(tenant_id)
         async with _get_connection_lock(module_id):
-            connections = await ConnectionManager.list_connections(module_id)
+            connections = await ConnectionManager.list_connections(module_id, tenant)
 
             conn_id = str(uuid.uuid4())
             vault = get_vault()
@@ -117,16 +130,17 @@ class ConnectionManager:
             )
 
             connections.append(new_conn)
-            await ConnectionManager._save_connections(module_id, connections)
+            await ConnectionManager._save_connections(module_id, connections, tenant)
             logger.info("Verbindung erstellt: %s im Modul %s (ID: %s)", data.name, module_id, conn_id)
 
             return new_conn
         
     @staticmethod
-    async def update_connection(module_id: str, connection_id: str, data: ConnectionUpdate) -> Optional[ConnectionRead]:
+    async def update_connection(module_id: str, connection_id: str, data: ConnectionUpdate, tenant_id: str = "") -> Optional[ConnectionRead]:
         """Aktualisiert eine bestehende Verbindung."""
+        tenant = ConnectionManager._effective_tenant_id(tenant_id)
         async with _get_connection_lock(module_id):
-            connections = await ConnectionManager.list_connections(module_id)
+            connections = await ConnectionManager.list_connections(module_id, tenant)
             target = next((c for c in connections if c.id == connection_id), None)
 
             if not target:
@@ -154,16 +168,17 @@ class ConnectionManager:
                         await vault.set_secret(v_key, secret_val)
                         target.vault_keys[secret_key] = v_key
 
-            await ConnectionManager._save_connections(module_id, connections)
+            await ConnectionManager._save_connections(module_id, connections, tenant)
             logger.info("Verbindung aktualisiert: %s im Modul %s", target.name, module_id)
             return target
 
     @staticmethod
-    async def delete_connection(module_id: str, connection_id: str) -> bool:
+    async def delete_connection(module_id: str, connection_id: str, tenant_id: str = "") -> bool:
         """Löscht eine Verbindung komplett auf Basis ihrer ID, inklusive Secrets aus Vault."""
+        tenant = ConnectionManager._effective_tenant_id(tenant_id)
         async with _get_connection_lock(module_id):
             logger.info("START delete_connection: module=%s, id=%s", module_id, connection_id)
-            connections = await ConnectionManager.list_connections(module_id)
+            connections = await ConnectionManager.list_connections(module_id, tenant)
             target = next((c for c in connections if c.id == connection_id), None)
 
             if not target:
@@ -182,14 +197,14 @@ class ConnectionManager:
             if target.is_default and connections:
                 connections[0].is_default = True
 
-            await ConnectionManager._save_connections(module_id, connections)
+            await ConnectionManager._save_connections(module_id, connections, tenant)
             logger.info("Verbindung gelöscht: %s im Modul %s", target.name, module_id)
             return True
 
     @staticmethod
-    async def _save_connections(module_id: str, connections: List[ConnectionRead]) -> None:
+    async def _save_connections(module_id: str, connections: List[ConnectionRead], tenant_id: str = "") -> None:
         redis = get_redis()
-        key = ConnectionManager._get_redis_key(module_id)
+        key = ConnectionManager._get_redis_key(module_id, tenant_id)
         data = [json.loads(c.model_dump_json()) for c in connections]
         logger.info(
             "Speichere %d Verbindungen für %s in Redis Key %s",

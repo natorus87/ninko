@@ -657,3 +657,390 @@ async def get_opnsense_logs(lines: int = 50, connection_id: str = "") -> List[Di
     except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
         logger.error("Failed to retrieve OPNsense logs: %s", e)
         return [{"error": str(e)}]
+
+
+@tool
+async def set_opnsense_interface(
+    interface: str,
+    enabled: bool = True,
+    ip_address: str = "",
+    subnet_mask: int = 24,
+    connection_id: str = "",
+) -> str:
+    """
+    Configure network interface settings on OPNsense.
+    Use this tool to enable/disable an interface or set its IP address.
+
+    Args:
+        interface: Interface name (e.g., 'opt1', 'opt2', 'lan', 'wan')
+        enabled: Enable or disable the interface
+        ip_address: IPv4 address (optional, for static IP)
+        subnet_mask: Subnet mask in CIDR notation (default: 24)
+        connection_id: Optional connection ID
+    """
+    try:
+        interface_map = {
+            "lan": "lan",
+            "wan": "wan",
+            "opt1": "opt1",
+            "opt2": "opt2",
+            "opt3": "opt3",
+            "opt4": "opt4",
+            "opt5": "opt5",
+        }
+        iface_key = interface_map.get(interface.lower(), interface)
+
+        payload = {
+            "interface": iface_key,
+            "enable": "1" if enabled else "0",
+        }
+
+        if ip_address:
+            payload["ipaddr"] = ip_address
+            payload["subnet"] = str(subnet_mask)
+
+        result = await _opnsense_request(
+            "/api/interfaces/v Interfaces/set",
+            connection_id,
+            method="POST",
+            json_data=payload,
+        )
+
+        if result.get("status") == "ok":
+            return _t(
+                de=f"Interface '{interface}' konfiguriert: {'aktiviert' if enabled else 'deaktiviert'}{f', IP: {ip_address}/{subnet_mask}' if ip_address else ''}",
+                en=f"Interface '{interface}' configured: {'enabled' if enabled else 'disabled'}{f', IP: {ip_address}/{subnet_mask}' if ip_address else ''}",
+                fr=f"Interface '{interface}' configurée: {'activée' if enabled else 'désactivée'}{f', IP: {ip_address}/{subnet_mask}' if ip_address else ''}",
+                es=f"Interfaz '{interface}' configurada: {'habilitada' if enabled else 'deshabilitada'}{f', IP: {ip_address}/{subnet_mask}' if ip_address else ''}",
+                it=f"Interfaccia '{interface}' configurata: {'abilitata' if enabled else 'disabilitata'}{f', IP: {ip_address}/{subnet_mask}' if ip_address else ''}",
+                nl=f"Interface '{interface}' geconfigureerd: {'ingeschakeld' if enabled else 'uitgeschakeld'}{f', IP: {ip_address}/{subnet_mask}' if ip_address else ''}",
+                pl=f"Interfejs '{interface}' skonfigurowany: {'włączony' if enabled else 'wyłączony'}{f', IP: {ip_address}/{subnet_mask}' if ip_address else ''}",
+                pt=f"Interface '{interface}' configurado: {'ativado' if enabled else 'desativado'}{f', IP: {ip_address}/{subnet_mask}' if ip_address else ''}",
+                ja=f"インターフェース '{interface}' が設定されました: {'有効' if enabled else '無効'}{f', IP: {ip_address}/{subnet_mask}' if ip_address else ''}",
+                zh=f"接口 '{interface}' 已配置: {'启用' if enabled else '禁用'}{f', IP: {ip_address}/{subnet_mask}' if ip_address else ''}",
+            )
+
+        return _t(
+            de=f"Fehler beim Konfigurieren von Interface '{interface}'",
+            en=f"Error configuring interface '{interface}'",
+            fr=f"Erreur lors de la configuration de l'interface '{interface}'",
+            es=f"Error al configurar la interfaz '{interface}'",
+            it=f"Errore durante la configurazione dell'interfaccia '{interface}'",
+            nl=f"Fout bij het configureren van interface '{interface}'",
+            pl=f"Błąd podczas konfigurowania interfejsu '{interface}'",
+            pt=f"Erro ao configurar a interface '{interface}'",
+            ja=f"インターフェース '{interface}' の設定中にエラーが発生しました",
+            zh=f"配置接口 '{interface}' 时出错",
+        )
+
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
+        logger.error("Failed to configure OPNsense interface: %s", e)
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
+
+
+@tool
+async def get_opnsense_dhcp_settings(
+    interface: str = "lan",
+    connection_id: str = "",
+) -> Dict:
+    """
+    Get DHCP server settings for a specific interface on OPNsense.
+    Use this tool to retrieve DHCP configuration (range, enable/disable).
+    """
+    try:
+        result = await _opnsense_request(
+            f"/api/dhcpv4/settings/{interface}",
+            connection_id,
+            method="GET",
+        )
+
+        settings = result.get(interface, {})
+        return {
+            "interface": interface,
+            "enabled": settings.get("enable", False),
+            "range_start": settings.get("range", {}).get("from", ""),
+            "range_end": settings.get("range", {}).get("to", ""),
+            "default_lease": settings.get("defaultleasetime", ""),
+            "max_lease": settings.get("maxleasetime", ""),
+            "dns_servers": settings.get("dnsserver", []),
+            "domain": settings.get("domain", ""),
+            "gateway": settings.get("gateway", ""),
+        }
+
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
+        logger.error("Failed to retrieve OPNsense DHCP settings: %s", e)
+        return {"error": str(e)}
+
+
+@tool
+async def set_opnsense_dhcp(
+    interface: str = "lan",
+    enabled: bool = True,
+    range_start: str = "",
+    range_end: str = "",
+    dns_servers: str = "",
+    gateway: str = "",
+    connection_id: str = "",
+) -> str:
+    """
+    Configure DHCP server on OPNsense.
+    Use this tool to enable/disable DHCP and set the IP range.
+    """
+    try:
+        interface_map = {
+            "lan": "lan",
+            "wan": "wan",
+            "opt1": "opt1",
+            "opt2": "opt2",
+            "opt3": "opt3",
+            "opt4": "opt4",
+            "opt5": "opt5",
+        }
+        iface_key = interface_map.get(interface.lower(), interface)
+
+        range_from = range_start if range_start else "192.168.1.100"
+        range_to = range_end if range_end else "192.168.1.200"
+
+        payload = {
+            iface_key: {
+                "enable": "1" if enabled else "0",
+                "range": {"from": range_from, "to": range_to},
+            }
+        }
+
+        if dns_servers:
+            payload[iface_key]["dnsserver"] = dns_servers.split(",")
+        if gateway:
+            payload[iface_key]["gateway"] = gateway
+
+        result = await _opnsense_request(
+            f"/api/dhcpv4/settings/{iface_key}/set",
+            connection_id,
+            method="POST",
+            json_data=payload,
+        )
+
+        if result.get("status") == "ok":
+            return _t(
+                de=f"DHCP für '{interface}' konfiguriert: {'aktiviert' if enabled else 'deaktiviert'}, Range: {range_from} - {range_to}",
+                en=f"DHCP configured for '{interface}': {'enabled' if enabled else 'disabled'}, Range: {range_from} - {range_to}",
+                fr=f"DHCP configuré pour '{interface}': {'activé' if enabled else 'désactivé'}, Plage: {range_from} - {range_to}",
+                es=f"DHCP configurado para '{interface}': {'habilitado' if enabled else 'deshabilitado'}, Rango: {range_from} - {range_to}",
+                it=f"DHCP configurato per '{interface}': {'abilitato' if enabled else 'disabilitato'}, Range: {range_from} - {range_to}",
+                nl=f"DHCP geconfigureerd voor '{interface}': {'ingeschakeld' if enabled else 'uitgeschakeld'}, Bereik: {range_from} - {range_to}",
+                pl=f"DHCP skonfigurowany dla '{interface}': {'włączony' if enabled else 'wyłączony'}, Zakres: {range_from} - {range_to}",
+                pt=f"DHCP configurado para '{interface}': {'ativado' if enabled else 'desativado'}, Intervalo: {range_from} - {range_to}",
+                ja=f"'{interface}' のDHCPが設定されました: {'有効' if enabled else '無効'}、範囲: {range_from} - {range_to}",
+                zh=f"'{interface}' 的DHCP已配置: {'启用' if enabled else '禁用'}，范围: {range_from} - {range_to}",
+            )
+
+        return _t(
+            de=f"Fehler beim Konfigurieren von DHCP für '{interface}'",
+            en=f"Error configuring DHCP for '{interface}'",
+            fr=f"Erreur lors de la configuration du DHCP pour '{interface}'",
+            es=f"Error al configurar DHCP para '{interface}'",
+            it=f"Errore durante la configurazione del DHCP per '{interface}'",
+            nl=f"Fout bij het configureren van DHCP voor '{interface}'",
+            pl=f"Błąd podczas konfigurowania DHCP dla '{interface}'",
+            pt=f"Erro ao configurar DHCP para '{interface}'",
+            ja=f"'{interface}' のDHCP設定中にエラーが発生しました",
+            zh=f"配置 '{interface}' 的DHCP时出错",
+        )
+
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
+        logger.error("Failed to configure OPNsense DHCP: %s", e)
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
+
+
+@tool
+async def get_opnsense_virtual_ips(connection_id: str = "") -> List[Dict]:
+    """
+    Get virtual IPs (CARP, proxy ARP, other) on OPNsense.
+    Use this tool to see configured virtual IP addresses.
+    """
+    try:
+        result = await _opnsense_request(
+            "/api/firewall/virtual_ip/search",
+            connection_id,
+            method="GET",
+        )
+
+        vips = result.get("rows", [])
+        return [
+            {
+                "mode": vip.get("mode", ""),
+                "interface": vip.get("interface", ""),
+                "address": vip.get("address", ""),
+                "description": vip.get("descr", ""),
+                "uuid": vip.get("uuid", ""),
+            }
+            for vip in vips
+        ]
+
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
+        logger.error("Failed to retrieve OPNsense virtual IPs: %s", e)
+        return [{"error": str(e)}]
+
+
+@tool
+async def create_opnsense_virtual_ip(
+    mode: str,
+    interface: str,
+    address: str,
+    description: str = "",
+    connection_id: str = "",
+) -> str:
+    """
+    Create a virtual IP (CARP, proxy ARP, etc.) on OPNsense.
+    Use this tool to add a virtual IP address for HA/load balancing.
+    """
+    try:
+        interface_map = {
+            "lan": "lan",
+            "wan": "wan",
+            "opt1": "opt1",
+            "opt2": "opt2",
+            "opt3": "opt3",
+            "opt4": "opt4",
+            "opt5": "opt5",
+        }
+        iface_key = interface_map.get(interface.lower(), interface)
+
+        payload = {
+            "virtualip": {
+                "mode": mode,
+                "interface": iface_key,
+                "address": address,
+                "descr": description,
+            }
+        }
+
+        result = await _opnsense_request(
+            "/api/firewall/virtual_ip/add",
+            connection_id,
+            method="POST",
+            json_data=payload,
+        )
+
+        if result.get("status") == "ok":
+            return _t(
+                de=f"Virtuelle IP erstellt: {address} ({mode}) auf {interface}",
+                en=f"Virtual IP created: {address} ({mode}) on {interface}",
+                fr=f"IP virtuelle créée: {address} ({mode}) sur {interface}",
+                es=f"IP virtual creada: {address} ({mode}) en {interface}",
+                it=f"IP virtuale creata: {address} ({mode}) su {interface}",
+                nl=f"Virtueel IP aangemaakt: {address} ({mode}) op {interface}",
+                pl=f"Utworzono wirtualny adres IP: {address} ({mode}) na {interface}",
+                pt=f"IP virtual criado: {address} ({mode}) em {interface}",
+                ja=f"仮想IPが作成されました: {address} ({mode}) ({interface} 上)",
+                zh=f"虚拟IP已创建: {address} ({mode}) 于 {interface}",
+            )
+
+        return _t(
+            de=f"Fehler beim Erstellen der virtuellen IP '{address}'",
+            en=f"Error creating virtual IP '{address}'",
+            fr=f"Erreur lors de la création de l'IP virtuelle '{address}'",
+            es=f"Error al crear la IP virtual '{address}'",
+            it=f"Errore durante la creazione dell'IP virtuale '{address}'",
+            nl=f"Fout bij het aanmaken van virtueel IP '{address}'",
+            pl=f"Błąd podczas tworzenia wirtualnego IP '{address}'",
+            pt=f"Erro ao criar IP virtual '{address}'",
+            ja=f"仮想IP '{address}' の作成中にエラーが発生しました",
+            zh=f"创建虚拟IP '{address}' 时出错",
+        )
+
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
+        logger.error("Failed to create OPNsense virtual IP: %s", e)
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
+
+
+@tool
+async def delete_opnsense_virtual_ip(
+    vip_uuid: str,
+    connection_id: str = "",
+) -> str:
+    """
+    Delete a virtual IP on OPNsense by UUID.
+    Use this tool to remove a virtual IP address.
+    """
+    try:
+        result = await _opnsense_request(
+            f"/api/firewall/virtual_ip/del/{vip_uuid}",
+            connection_id,
+            method="POST",
+        )
+
+        if result.get("status") == "ok":
+            return _t(
+                de=f"Virtuelle IP gelöscht: UUID {vip_uuid}",
+                en=f"Virtual IP deleted: UUID {vip_uuid}",
+                fr=f"IP virtuelle supprimée: UUID {vip_uuid}",
+                es=f"IP virtual eliminada: UUID {vip_uuid}",
+                it=f"IP virtuale eliminata: UUID {vip_uuid}",
+                nl=f"Virtueel IP verwijderd: UUID {vip_uuid}",
+                pl=f"Wirtualny IP usunięty: UUID {vip_uuid}",
+                pt=f"IP virtual excluído: UUID {vip_uuid}",
+                ja=f"仮想IPが削除されました: UUID {vip_uuid}",
+                zh=f"虚拟IP已删除: UUID {vip_uuid}",
+            )
+
+        return _t(
+            de=f"Fehler beim Löschen der virtuellen IP",
+            en=f"Error deleting virtual IP",
+            fr=f"Erreur lors de la suppression de l'IP virtuelle",
+            es=f"Error al eliminar la IP virtual",
+            it=f"Errore durante l'eliminazione dell'IP virtuale",
+            nl=f"Fout bij het verwijderen van virtueel IP",
+            pl=f"Błąd podczas usuwania wirtualnego IP",
+            pt=f"Erro ao excluir IP virtual",
+            ja=f"仮想IPの削除中にエラーが発生しました",
+            zh=f"删除虚拟IP时出错",
+        )
+
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
+        logger.error("Failed to delete OPNsense virtual IP: %s", e)
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )

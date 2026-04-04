@@ -76,23 +76,27 @@ class RedisClient:
     # ── UI Chat History (persistent, geräteübergreifend) ──
     UI_HISTORY_KEY = "ninko:ui:history"
 
-    async def ui_history_save(self, conversation: dict) -> None:
+    def _ui_history_key(self, tenant_id: str = "default") -> str:
+        t = (tenant_id or "default").strip().lower().replace(" ", "_")
+        return f"{self.UI_HISTORY_KEY}:{t or 'default'}"
+
+    async def ui_history_save(self, conversation: dict, *, tenant_id: str = "default") -> None:
         """Speichert oder aktualisiert einen Konversationseintrag dauerhaft."""
         conv_id = conversation.get("id")
         if not conv_id:
             return
-        await self._redis.hset(self.UI_HISTORY_KEY, conv_id, json.dumps(conversation))
+        await self._redis.hset(self._ui_history_key(tenant_id), conv_id, json.dumps(conversation))
 
-    async def ui_history_get_all(self) -> list[dict]:
+    async def ui_history_get_all(self, *, tenant_id: str = "default") -> list[dict]:
         """Gibt alle gespeicherten Konversationen zurück (sortiert nach updatedAt desc)."""
-        raw = await self._redis.hgetall(self.UI_HISTORY_KEY)
+        raw = await self._redis.hgetall(self._ui_history_key(tenant_id))
         entries = [json.loads(v) for v in raw.values()]
         entries.sort(key=lambda e: e.get("updatedAt", 0), reverse=True)
         return entries
 
-    async def ui_history_delete(self, conv_id: str) -> None:
+    async def ui_history_delete(self, conv_id: str, *, tenant_id: str = "default") -> None:
         """Löscht einen Konversationseintrag."""
-        await self._redis.hdel(self.UI_HISTORY_KEY, conv_id)
+        await self._redis.hdel(self._ui_history_key(tenant_id), conv_id)
 
     # ── Cache ──────────────────────────────────────────
     async def cache_set(self, key: str, value: Any, ttl: int = 300) -> None:

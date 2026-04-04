@@ -13,6 +13,17 @@ Copy the `_template` folder, rename it, and follow the checklist below.
 4. Define `required_secrets` in the manifest
 5. **Complete all integration steps below** (⚠️ Without these steps the module will not work in the Marketplace!)
 
+### Placeholder Policy (Important for Agent Workflows)
+
+- Keep the template placeholders and instructional comments in the template itself.
+- Do NOT remove placeholder structure globally from `_template` files.
+- For a real module copy, replace only module-specific identifiers:
+  - `template` (module id)
+  - `Template` (display/class prefix)
+  - `TEMPLATE_` (env/secret prefix)
+  - i18n keys under `modules._template.*`
+- Keep `REQUIRED:` comment markers in your copied module until all replacements are done.
+
 ---
 
 ## Required Files

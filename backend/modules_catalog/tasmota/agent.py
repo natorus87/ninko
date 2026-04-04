@@ -12,6 +12,10 @@ from .tools import (
     get_tasmota_sensors,
     get_tasmota_wifi_info,
     send_tasmota_command,
+    get_tasmota_group_devices,
+    set_tasmota_group_power,
+    discover_tasmota_devices,
+    control_tasmota_device,
 )
 
 logger = logging.getLogger("ninko.modules.tasmota.agent")
@@ -24,6 +28,8 @@ Deine Fähigkeiten:
 - Abfrage von Sensor-Daten (Temperatur, Feuchtigkeit, Leistung, Strom, Spannung)
 - Schalten von Relais und Steckdosen
 - Überwachung des WLAN-Status
+- Multi-Device-Management (Gruppen-Broadcast, Geräte-Liste via MQTT Discovery)
+- Steuerung einzelner Geräte über Topic
 
 Verhaltensregeln:
 - Frage immer zuerst nach der Host-Adresse, falls keine Verbindung konfiguriert ist
@@ -40,6 +46,8 @@ Your capabilities:
 - Query sensor data (temperature, humidity, power, current, voltage)
 - Switch relays and outlets
 - Monitor WiFi status
+- Multi-device management (group broadcast, device discovery via MQTT)
+- Control individual devices by topic
 
 Behavior rules:
 - Always ask for the host address if no connection is configured
@@ -56,6 +64,8 @@ Vos capacités:
 - Interrogation des données de capteurs (température, humidité, puissance, courant, tension)
 - Commutation des relais et prises
 - Surveillance du statut WiFi
+- Gestion multi-appareils (broadcast de groupe, découverte d'appareils via MQTT)
+- Contrôle d'appareils individuels par topic
 
 Règles de comportement:
 - Demandez toujours l'adresse hôte si aucune connexion n'est configurée
@@ -72,6 +82,8 @@ Tus capacidades:
 - Consultar datos de sensores (temperatura, humedad, potencia, corriente, voltaje)
 - Conmutar relés y enchufes
 - Monitorear el estado de WiFi
+- Gestión multi-dispositivo (broadcast de grupo, descubrimiento de dispositivos vía MQTT)
+- Controlar dispositivos individuales por topic
 
 Reglas de comportamiento:
 - Siempre pregunta por la dirección del host si no hay conexión configurada
@@ -88,6 +100,8 @@ Le tue capacità:
 - Interrogare dati dei sensori (temperatura, umidità, potenza, corrente, tensione)
 - Commutare relè e prese
 - Monitorare lo stato WiFi
+- Gestione multi-dispositivo (broadcast di gruppo, scoperta dispositivi via MQTT)
+- Controllare singoli dispositivi per topic
 
 Regole di comportamento:
 - Chiedi sempre l'indirizzo dell'host se non è configurata alcuna connessione
@@ -104,6 +118,8 @@ Jouw mogelijkheden:
 - Sensor data opvragen (temperatuur, vochtigheid, vermogen, stroom, spanning)
 - Relais en stopcontacten schakelen
 - WiFi-status monitoren
+- Multi-device management (groepsbroadcast, apparaatontdekking via MQTT)
+- Individuele apparaten aansturen via topic
 
 Gedragsregels:
 - Vraag altijd naar het hostadres als er geen verbinding is geconfigureerd
@@ -120,6 +136,8 @@ Twoje możliwości:
 - Odpytywanie danych czujników (temperatura, wilgotność, moc, prąd, napięcie)
 - Przełączanie przekaźników i gniazdek
 - Monitorowanie statusu WiFi
+- Zarządzanie wieloma urządzeniami (rozgłaszanie grupowe, wykrywanie urządzeń przez MQTT)
+- Sterowanie poszczególnymi urządzeniami przez temat
 
 Zasady zachowania:
 - Zawsze pytaj o adres hosta, jeśli nie skonfigurowano połączenia
@@ -136,6 +154,8 @@ Suas capacidades:
 - Consultar dados de sensores (temperatura, umidade, potência, corrente, tensão)
 - Alternar relés e tomadas
 - Monitorar o status do WiFi
+- Gerenciamento multi-dispositivo (broadcast de grupo, descoberta de dispositivos via MQTT)
+- Controlar dispositivos individuais por tópico
 
 Regras de comportamento:
 - Sempre pergunte pelo endereço do host se nenhuma conexão estiver configurada
@@ -152,6 +172,8 @@ Segurança:
 - センサーデータをクエリ（温度、湿度、電力、電流、電圧）
 - リレーとコンセントを切り替え
 - WiFiステータスを監視
+- マルチデバイス管理（グループブロードキャスト、MQTTによるデバイス検出）
+- トピックで個々のデバイスを制御
 
 行動規則:
 - 接続が設定されていない場合は常にホストアドレスを確認
@@ -168,6 +190,8 @@ Segurança:
 - 查询传感器数据（温度、湿度、功率、电流、电压）
 - 切换继电器和插座
 - 监控WiFi状态
+- 多设备管理（群组广播、通过MQTT发现设备）
+- 通过主题控制单个设备
 
 行为规则:
 - 如果未配置连接，请始终询问主机地址
@@ -194,5 +218,9 @@ class TasmotaAgent(BaseAgent):
                 get_tasmota_sensors,
                 get_tasmota_wifi_info,
                 send_tasmota_command,
+                get_tasmota_group_devices,
+                set_tasmota_group_power,
+                discover_tasmota_devices,
+                control_tasmota_device,
             ],
         )

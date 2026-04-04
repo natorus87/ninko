@@ -14,6 +14,7 @@ from langchain_core.tools import tool
 
 from core.vault import get_vault
 from core.tls import get_connection_verify_arg
+from core.ocr_service import extract_text_from_image_bytes
 
 logger = logging.getLogger("ninko.modules.glpi.tools")
 
@@ -531,6 +532,93 @@ async def get_ticket_attachments(ticket_id: int, connection_id: str = "") -> dic
             "ticket_id": ticket_id,
             "attachments": attachments,
         }
+
+
+async def _download_attachment_for_ticket(
+    ticket_id: int,
+    attachment_id: int,
+    connection_id: str = "",
+) -> tuple[bytes, str, str]:
+    """Download attachment bytes and return (bytes, mime, filename)."""
+    async with glpi_session(connection_id) as (client, base_url, headers):
+        docs_resp = await client.get(
+            f"{base_url}/apirest.php/Ticket/{ticket_id}/Document",
+            headers=headers,
+        )
+        docs_resp.raise_for_status()
+        documents = docs_resp.json()
+
+        target_doc = next(
+            (doc for doc in documents if isinstance(doc, dict) and int(doc.get("id", 0)) == int(attachment_id)),
+            None,
+        )
+        if not target_doc:
+            raise ValueError(f"Attachment {attachment_id} nicht im Ticket {ticket_id} gefunden.")
+
+        filename = target_doc.get("filename", "")
+        mime = target_doc.get("mime", "") or "application/octet-stream"
+        download_url = f"{base_url}/front/document.send.php?docid={attachment_id}&ticket={ticket_id}"
+
+        resp = await client.get(download_url, headers=headers)
+        if resp.status_code != 200 or not resp.content:
+            # Fallback: mögliche API-Download-Routen versuchen
+            for fallback in (
+                f"{base_url}/apirest.php/Document/{attachment_id}",
+                f"{base_url}/apirest.php/Document/{attachment_id}/Document",
+            ):
+                fb = await client.get(fallback, headers=headers)
+                if fb.status_code == 200 and fb.content:
+                    resp = fb
+                    break
+
+        if resp.status_code != 200 or not resp.content:
+            raise ValueError(
+                f"Attachment konnte nicht heruntergeladen werden (HTTP {resp.status_code})."
+            )
+
+        return resp.content, mime, filename
+
+
+@tool
+async def get_ticket_image_ocr(
+    ticket_id: int,
+    attachment_id: int,
+    connection_id: str = "",
+) -> dict:
+    """
+    Run OCR on a GLPI ticket attachment image and return extracted text.
+    Uses global OCR settings: python (pytesseract) or llm_vision.
+    """
+    image_bytes, mime, filename = await _download_attachment_for_ticket(
+        ticket_id=ticket_id,
+        attachment_id=attachment_id,
+        connection_id=connection_id,
+    )
+
+    if not (mime.startswith("image/") or filename.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"))):
+        raise ValueError(
+            f"Attachment {attachment_id} ist kein unterstütztes Bild (mime={mime}, file={filename})."
+        )
+
+    result = await extract_text_from_image_bytes(
+        image_bytes,
+        mime_type=mime,
+        filename=filename,
+    )
+    text = (result.get("text") or "").strip()
+
+    return {
+        "status": "success",
+        "ticket_id": ticket_id,
+        "attachment_id": attachment_id,
+        "filename": filename,
+        "mime": mime,
+        "ocr_provider": result.get("provider", ""),
+        "ocr_engine": result.get("engine", ""),
+        "ocr_model": result.get("model", ""),
+        "text": text,
+        "text_length": len(text),
+    }
 
 
 @tool

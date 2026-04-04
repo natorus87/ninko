@@ -16,6 +16,7 @@ from .tools import (
     get_ticket_stats,
     close_ticket as close_ticket_tool,
     add_followup as add_followup_tool,
+    get_ticket_image_ocr as get_ticket_image_ocr_tool,
 )
 
 logger = logging.getLogger("ninko.modules.glpi.routes")
@@ -80,6 +81,18 @@ async def add_followup_api(ticket_id: int, content: str, is_private: bool = Fals
         "content": content,
         "is_private": is_private,
     })
+
+
+@router.get("/tickets/{ticket_id}/attachments/{attachment_id}/ocr")
+async def ticket_attachment_ocr(ticket_id: int, attachment_id: int, connection_id: str = "") -> object:
+    """Run OCR on a ticket attachment image."""
+    return await get_ticket_image_ocr_tool.ainvoke(
+        {
+            "ticket_id": ticket_id,
+            "attachment_id": attachment_id,
+            "connection_id": connection_id,
+        }
+    )
 
 
 @router.get("/base-url")

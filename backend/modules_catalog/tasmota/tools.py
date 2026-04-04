@@ -337,3 +337,201 @@ async def send_tasmota_command(command: str, connection_id: str = "") -> Dict:
             "error": str(e),
             "success": False,
         }
+
+
+@tool
+async def get_tasmota_group_devices(
+    group_topic: str,
+    connection_id: str = "",
+) -> List[Dict]:
+    """
+    Get all devices in a Tasmota group (via MQTT or HTTP).
+    Use this tool to list devices that share the same group topic.
+    """
+    try:
+        host = await _get_tasmota_host(connection_id)
+        if not host:
+            return {"error": "No Tasmota host configured"}
+
+        result = await _tasmota_request(host, f"Status 13")
+        devices = result.get("StatusNET", {}).get("Friendly", [])
+
+        return [
+            {
+                "index": i,
+                "name": name,
+                "topic": f"{group_topic}_{i + 1}" if i > 0 else group_topic,
+            }
+            for i, name in enumerate(devices)
+            if name
+        ]
+
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+        logger.error("Failed to get Tasmota group devices: %s", e)
+        return [{"error": str(e)}]
+
+
+@tool
+async def set_tasmota_group_power(
+    group_topic: str,
+    power: int,
+    connection_id: str = "",
+) -> str:
+    """
+    Control all devices in a Tasmota group (Broadcast).
+    Use this tool to turn all devices in a group on/off.
+    """
+    try:
+        host = await _get_tasmota_host(connection_id)
+        if not host:
+            raise ValueError(
+                _t(
+                    de="Keine Tasmota-Host-Adresse konfiguriert.",
+                    en="No Tasmota host address configured.",
+                    fr="Aucune adresse hôte Tasmota configurée.",
+                    es="No hay dirección de host Tasmota configurada.",
+                    it="Nessun indirizzo host Tasmota configurato.",
+                    nl="Geen Tasmota-hostadres geconfigureerd.",
+                    pl="Nie skonfigurowano adresu hosta Tasmota.",
+                    pt="Nenhum endereço de host Tasmota configurado.",
+                    ja="Tasmotaホストアドレスが設定されていません。",
+                    zh="未配置Tasmota主机地址。",
+                )
+            )
+
+        command = f"GroupTopic {group_topic}"
+        await _tasmota_request(host, command)
+
+        command = f"Power{power}"
+        result = await _tasmota_request(host, command)
+
+        return _t(
+            de=f"Gruppen-Befehl '{command}' an {group_topic} gesendet.",
+            en=f"Group command '{command}' sent to {group_topic}.",
+            fr=f"Commande de groupe '{command}' envoyée à {group_topic}.",
+            es=f"Comando de grupo '{command}' enviado a {group_topic}.",
+            it=f"Comando di gruppo '{command}' inviato a {group_topic}.",
+            nl=f"Groepsopdracht '{command}' verzonden naar {group_topic}.",
+            pl=f"Polecenie grupowe '{command}' wysłane do {group_topic}.",
+            pt=f"Comando de grupo '{command}' enviado para {group_topic}.",
+            ja=f"グループコマンド '{command}' を {group_topic} に送信しました。",
+            zh=f"群组命令 '{command}' 已发送到 {group_topic}。",
+        )
+
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+        logger.error("Failed to send Tasmota group command: %s", e)
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )
+
+
+@tool
+async def discover_tasmota_devices(
+    mqtt_broker: str = "",
+    connection_id: str = "",
+) -> List[Dict]:
+    """
+    Discover Tasmota devices via MQTT (if broker configured).
+    Use this tool to find all Tasmota devices on the network.
+    """
+    try:
+        host = await _get_tasmota_host(connection_id)
+        if not host:
+            return {"error": "No Tasmota host configured"}
+
+        result = await _tasmota_request(host, "Status 11")
+
+        devices = []
+        for idx, dev in enumerate(result.get("StatusNET", {}).get("MqttDiscovery", [])):
+            devices.append(
+                {
+                    "index": idx,
+                    "topic": dev.get("Topic", ""),
+                    "name": dev.get("Name", ""),
+                    "model": dev.get("Model", ""),
+                    "ip": dev.get("IP", ""),
+                }
+            )
+
+        return (
+            devices
+            if devices
+            else [
+                {
+                    "info": "No MQTT discovery results. Ensure MQTT is configured on devices."
+                }
+            ]
+        )
+
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+        logger.error("Failed to discover Tasmota devices: %s", e)
+        return [{"error": str(e)}]
+
+
+@tool
+async def control_tasmota_device(
+    device_topic: str,
+    command: str,
+    connection_id: str = "",
+) -> str:
+    """
+    Control a specific Tasmota device by its topic.
+    Use this tool to control a specific device (Power, Dimmer, etc.).
+    """
+    try:
+        host = await _get_tasmota_host(connection_id)
+        if not host:
+            raise ValueError(
+                _t(
+                    de="Keine Tasmota-Host-Adresse konfiguriert.",
+                    en="No Tasmota host address configured.",
+                    fr="Aucune adresse hôte Tasmota configurée.",
+                    es="No hay dirección de host Tasmota configurada.",
+                    it="Nessun indirizzo host Tasmota configurato.",
+                    nl="Geen Tasmota-hostadres geconfigureerd.",
+                    pl="Nie skonfigurowano adresu hosta Tasmota.",
+                    pt="Nenhum endereço de host Tasmota configurado.",
+                    ja="Tasmotaホストアドレスが設定されていません。",
+                    zh="未配置Tasmota主机地址。",
+                )
+            )
+
+        full_command = f"cmnd/{device_topic}/{command}"
+        result = await _tasmota_request(host, full_command)
+
+        return _t(
+            de=f"Befehl an {device_topic}: {command} -> {result}",
+            en=f"Command to {device_topic}: {command} -> {result}",
+            fr=f"Commande à {device_topic}: {command} -> {result}",
+            es=f"Comando a {device_topic}: {command} -> {result}",
+            it=f"Comando a {device_topic}: {command} -> {result}",
+            nl=f"Opdracht naar {device_topic}: {command} -> {result}",
+            pl=f"Polecenie do {device_topic}: {command} -> {result}",
+            pt=f"Comando para {device_topic}: {command} -> {result}",
+            ja=f"{device_topic} へのコマンド: {command} -> {result}",
+            zh=f"发送到 {device_topic} 的命令: {command} -> {result}",
+        )
+
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+        logger.error("Failed to control Tasmota device: %s", e)
+        return _t(
+            de=f"Fehler: {e}",
+            en=f"Error: {e}",
+            fr=f"Erreur: {e}",
+            es=f"Error: {e}",
+            it=f"Errore: {e}",
+            nl=f"Fout: {e}",
+            pl=f"Błąd: {e}",
+            pt=f"Erro: {e}",
+            ja=f"エラー: {e}",
+            zh=f"错误: {e}",
+        )

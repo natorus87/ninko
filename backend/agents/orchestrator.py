@@ -269,7 +269,7 @@ VERFÜGBARE MODULE: Siehe VERFÜGBARE MODULE weiter unten — nutze `call_module
 
 WICHTIG: `call_module_agent` für EINZELNE Modul-Aufrufe. `run_pipeline` wenn Ergebnisse zwischen Modulen fließen müssen. Multi-Modul-Anfragen mit explizit sequentiellem Intent (z.B. "restart X und schick dann Telegram-Nachricht") werden automatisch als Tier-4-Pipeline erkannt und benötigen KEIN manuelles `run_pipeline` im ReAct-Loop — vermeide Doppel-Routing.
 
-BILD-TAGS: Wenn ein Tool-Ergebnis `[KUMIO_IMAGE:url]` enthält, übernimm diesen Tag EXAKT und UNVERÄNDERT in deine Antwort. Ersetze ihn NIEMALS durch einen Markdown-Link, eine URL oder ein Emoji. Der Tag muss wörtlich `[KUMIO_IMAGE:https://...]` im Antworttext erscheinen.
+BILD-TAGS: Wenn ein Tool-Ergebnis `[NINKO_IMAGE:url]` enthält, übernimm diesen Tag EXAKT und UNVERÄNDERT in deine Antwort. Ersetze ihn NIEMALS durch einen Markdown-Link, eine URL oder ein Emoji. Der Tag muss wörtlich `[NINKO_IMAGE:https://...]` im Antworttext erscheinen.
 
 Verhalte dich professionell, proaktiv und sicherheitsbewusst."""
 

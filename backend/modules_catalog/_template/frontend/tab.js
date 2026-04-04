@@ -87,6 +87,17 @@ function _tmplEsc(s) {
     return d.innerHTML;
 }
 
+function _tmplT(key, fallback, ...args) {
+    try {
+        const translated = (typeof I18n !== 'undefined' && typeof I18n.t === 'function')
+            ? I18n.t(key, ...args)
+            : key;
+        return translated === key ? fallback : translated;
+    } catch {
+        return fallback;
+    }
+}
+
 const TemplateTab = {
     API_PREFIX: '/api/template',
     pollInterval: null,
@@ -111,6 +122,7 @@ const TemplateTab = {
             ?.addEventListener('click', (e) => {
                 const action = e.target.closest('[data-action]')?.dataset.action;
                 if (action === 'template-refresh') this.refresh();
+                if (action === 'template-toggle-conn-select') this.toggleSelect('template-conn-select');
                 // Add more actions here:
                 // if (action === 'template-delete') this._handleDelete(e);
             });
@@ -209,7 +221,10 @@ const TemplateTab = {
             const conns = data.connections || [];
 
             if (conns.length === 0) {
-                this._setSelectLabel('template-conn-select', I18n.t('modules._template.noConnections'));
+                this._setSelectLabel(
+                    'template-conn-select',
+                    _tmplT('modules._template.noConnections', 'No connections configured')
+                );
                 this.currentConnectionId = '';
                 return;
             }
@@ -235,7 +250,7 @@ const TemplateTab = {
             );
         } catch (err) {
             console.error('Template: connection load error', err);
-            this._setSelectLabel('template-conn-select', 'Fehler beim Laden');
+            this._setSelectLabel('template-conn-select', 'Failed to load');
         }
     },
 
@@ -249,7 +264,9 @@ const TemplateTab = {
         if (!container) return;
 
         // Show loading state
-        container.innerHTML = '<p class="empty-state">' + I18n.t('modules._template.loading') + '</p>';
+        container.innerHTML = '<p class="empty-state">' +
+            _tmplT('modules._template.loading', 'Loading...') +
+            '</p>';
 
         try {
             const res = await fetch(`${this.API_PREFIX}/status${this.getQueryParams()}`);
@@ -270,13 +287,17 @@ const TemplateTab = {
                             ${_tmplEsc(item.status)}
                         </span>
                     </div>`).join('')
-                : '<p class="empty-state">' + I18n.t('modules._template.noEntries') + '</p>';
+                : '<p class="empty-state">' +
+                    _tmplT('modules._template.noEntries', 'No entries found.') +
+                  '</p>';
 
         } catch (err) {
             console.error('Template: refresh error', err);
             // ✓ Always show an error state — never leave container blank
             if (container) {
-                container.innerHTML = '<p class="empty-state text-error">' + I18n.t('modules._template.loadDataError') + '</p>';
+                container.innerHTML = '<p class="empty-state text-error">' +
+                    _tmplT('modules._template.loadDataError', 'Failed to load data.') +
+                    '</p>';
             }
         }
     },
@@ -292,6 +313,7 @@ const TemplateTab = {
 // ── Plugin Registration ────────────────────────────────────────────────
 // Key must match manifest.py dashboard_tab.id.
 // Must be synchronous and at module level (not inside init()).
+// REQUIRED: Replace key 'template' in copied modules.
 if (typeof Ninko !== 'undefined') {
     Ninko._pluginTabs['template'] = TemplateTab;
 }

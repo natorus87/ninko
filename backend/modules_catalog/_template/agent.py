@@ -163,6 +163,7 @@ class TemplateAgent(BaseAgent):
 
     def __init__(self) -> None:
         super().__init__(
+            # REQUIRED: module name must match manifest.name exactly.
             # Name MUSS dem manifest.name entsprechen
             name="template",
             system_prompt=TEMPLATE_SYSTEM_PROMPT,

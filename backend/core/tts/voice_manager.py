@@ -16,6 +16,7 @@ Beispiel:
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -32,6 +33,11 @@ _VOICE_DOWNLOAD_EXCEPTIONS = (
 )
 
 _HUGGINGFACE_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
+_HUGGINGFACE_TREE_API = "https://huggingface.co/api/models/rhasspy/piper-voices/tree/main"
+_CATALOG_CACHE_TTL_SECONDS = 600.0
+
+_catalog_cache_data: list[dict[str, str]] = []
+_catalog_cache_ts: float = 0.0
 
 
 @dataclass
@@ -170,3 +176,73 @@ class VoiceManager:
         except _VOICE_DOWNLOAD_EXCEPTIONS as exc:
             logger.error("Download fehlgeschlagen für '%s/%s': %s", lang, voice, exc)
             return False
+
+    async def fetch_voice_catalog(self, lang: str | None = None) -> list[dict[str, str]]:
+        """
+        Lädt den verfügbaren Stimmen-Katalog aus HuggingFace.
+
+        Returns eine Liste mit Einträgen:
+            {"lang": "de", "voice": "thorsten-medium", "quality": "medium"}
+        """
+        normalized_lang = (lang or "").strip().lower()
+        catalog = await self._fetch_catalog_cached()
+        if not normalized_lang:
+            return catalog
+        return [entry for entry in catalog if entry.get("lang") == normalized_lang]
+
+    async def _fetch_catalog_cached(self) -> list[dict[str, str]]:
+        """Liest den HF-Katalog mit TTL-Cache."""
+        global _catalog_cache_data, _catalog_cache_ts
+        now = time.monotonic()
+        if _catalog_cache_data and (now - _catalog_cache_ts) < _CATALOG_CACHE_TTL_SECONDS:
+            return _catalog_cache_data
+
+        catalog = await self._fetch_catalog_from_hf()
+        if catalog:
+            _catalog_cache_data = catalog
+            _catalog_cache_ts = now
+        return catalog
+
+    async def _fetch_catalog_from_hf(self) -> list[dict[str, str]]:
+        """
+        Holt die Dateibaum-Liste aus HF und extrahiert Stimmen aus *.onnx-Pfaden.
+        Erwarteter Pfad:
+            <lang_short>/<lang_code>/<speaker>/<quality>/<lang_code-speaker-quality>.onnx
+        """
+        url = f"{_HUGGINGFACE_TREE_API}?recursive=true"
+        catalog: dict[tuple[str, str], dict[str, str]] = {}
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+                payload = response.json()
+        except _VOICE_DOWNLOAD_EXCEPTIONS as exc:
+            logger.warning("Konnte HF-Stimmenkatalog nicht laden: %s", exc)
+            return []
+
+        if not isinstance(payload, list):
+            logger.warning("Unerwartetes HF-Katalogformat: %s", type(payload).__name__)
+            return []
+
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            path = str(item.get("path", ""))
+            if not path.endswith(".onnx"):
+                continue
+            parts = path.split("/")
+            if len(parts) < 5:
+                continue
+
+            lang_short = parts[0].strip().lower()
+            speaker = parts[2].strip().lower()
+            quality = parts[3].strip().lower()
+            if not lang_short or not speaker or not quality:
+                continue
+
+            voice_name = f"{speaker}-{quality}"
+            key = (lang_short, voice_name)
+            catalog[key] = {"lang": lang_short, "voice": voice_name, "quality": quality}
+
+        return sorted(catalog.values(), key=lambda x: (x["lang"], x["voice"]))

@@ -19,6 +19,7 @@ async def get_status(connection_id: str = "") -> dict:
     """
     REST-Endpunkt für das UI-Frontend.
     connection_id wird aus dem Query-Parameter übernommen und an das Tool weitergegeben.
+    REQUIRED: Route path and logger/module identifiers should be adjusted in copied modules.
     """
     try:
         result = await beispiel_tool.ainvoke({"parameter": "status-check", "connection_id": connection_id})

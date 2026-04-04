@@ -205,7 +205,7 @@ docker compose up -d backend
 - **Task**: Global rename from earlier project name to **Ninko** and complete visual redesign.
 - **Backend Rebranding**:
     - Logger root renamed to `ninko`.
-    - Module environment variable prefix initially changed to `KUMIO_`.
+    - Module environment variable prefix was temporarily changed during migration.
     - Current standard is `NINKO_` (e.g. `NINKO_MODULE_<NAME>`).
     - Redis key prefix changed to `ninko:`.
     - Vault path prefix changed to `ninko/`.
@@ -429,4 +429,3 @@ Der WebSearch-Agent lief in eine Endlosschleife: Das Routing-Keyword `"aktuell"`
 - Ensure `routing_keywords` remain unique enough to avoid orchestrator confusion.
 - Document new tools in `tools.py` docstrings (Agent uses them for reasoning!).
 - When adding secret fields (e.g., `_KEY`, `_PASSWORD`, `_TOKEN`, `_SECRET`), register them in `routes_settings.py:_get_secret_keys()` and add the module name to `_get_env_connection()`.
-

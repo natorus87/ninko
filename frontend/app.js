@@ -62,6 +62,10 @@ const I18n = {
 
 /** Globale Shorthand-Funktion */
 function t(key, ...args) { return I18n.t(key, ...args); }
+function tf(key, fallback, ...args) {
+    const translated = I18n.t(key, ...args);
+    return translated === key ? fallback : translated;
+}
 
 // ──────────────────────────────────────────────────────
 
@@ -99,6 +103,11 @@ const Ninko = {
     _activeThemeDefinition: null,
     _appliedThemeVars: [],
     _themeRepos: [],
+    _rbacModules: [],
+    _rbacRoles: [],
+    _rbacGroups: [],
+    _rbacUsers: [],
+    t: tf,
 
     // ─── SVG Icon Library (Lucide-style, currentColor) ───
     _ic: {
@@ -1873,8 +1882,9 @@ const Ninko = {
     },
 
     formatText(text) {
-        // [KUMIO_IMAGE:url] → inline <img> Tag (beliebige URL — lokal /api/images/ oder extern https://)
-        text = text.replace(/\[KUMIO_IMAGE:([^\]]+)\]/g,
+        // [NINKO_IMAGE:url] → inline <img> Tag (beliebige URL — lokal /api/images/ oder extern https://)
+        // Backward-compat: akzeptiert auch alte [KUMIO_IMAGE:url]-Marker.
+        text = text.replace(/\[(?:NINKO_IMAGE|KUMIO_IMAGE):([^\]]+)\]/g,
             '<img src="$1" alt="Generiertes Bild" style="max-width:100%;border-radius:8px;margin:0.5rem 0;box-shadow:0 2px 8px rgba(0,0,0,0.15);">');
         // Fallback: /api/images/ URLs die der LLM als Link formatiert hat
         text = text.replace(/<a[^>]*href="(\/api\/images\/[\w\-]+\.\w+)"[^>]*>[^<]*<\/a>/g,
@@ -2195,7 +2205,8 @@ const Ninko = {
         if (tabId === 'k8s') this.loadK8sClusters();
         if (tabId === 'language') this.renderLanguageTab();
         if (tabId === 'tts') { this.loadSttSettings(); this.loadTtsSettings(); this.loadTtsVoices(); }
-        if (tabId === 'imagegen') this.loadImageGenProvider();
+        if (tabId === 'imagegen') { this.loadImageGenProvider(); this.loadOcrSettings(); }
+        if (tabId === 'access') this.loadRbacSettings();
         if (tabId === 'safeguard') this.renderSafeguardSettingsPanel();
         if (tabId === 'logs') this.startLogPolling();
     },
@@ -2710,6 +2721,101 @@ const Ninko = {
         }
     },
 
+    // ─── OCR Settings ───
+    onOcrProviderChange() {
+        const provider = document.getElementById('ocr-provider')?.value;
+        document.getElementById('ocr-python-fields')?.classList.toggle('hidden', provider !== 'python');
+        document.getElementById('ocr-vision-fields')?.classList.toggle('hidden', provider !== 'llm_vision');
+    },
+
+    async loadOcrSettings() {
+        try {
+            const res = await fetch('/api/settings/ocr');
+            if (!res.ok) throw new Error(res.statusText);
+            const d = await res.json();
+
+            const providerEl = document.getElementById('ocr-provider');
+            if (providerEl) {
+                providerEl.value = d.OCR_PROVIDER || 'python';
+                this.onOcrProviderChange();
+            }
+
+            const engineEl = document.getElementById('ocr-python-engine');
+            if (engineEl) engineEl.value = d.OCR_PYTHON_ENGINE || 'pytesseract';
+
+            const langEl = document.getElementById('ocr-language');
+            if (langEl) langEl.value = d.OCR_LANGUAGE || 'deu+eng';
+
+            const urlEl = document.getElementById('ocr-vision-api-url');
+            if (urlEl) urlEl.value = d.OCR_VISION_API_URL || '';
+
+            const keyEl = document.getElementById('ocr-vision-api-key');
+            const hasKey = !!(d.OCR_VISION_API_KEY_SET || d.OCR_VISION_API_KEY);
+            if (keyEl) keyEl.value = hasKey ? '••••••••' : '';
+            if (keyEl) keyEl.dataset.hasKey = hasKey ? '1' : '';
+
+            const modelEl = document.getElementById('ocr-vision-model');
+            if (modelEl) modelEl.value = d.OCR_VISION_MODEL || '';
+
+            const promptEl = document.getElementById('ocr-vision-prompt');
+            if (promptEl) {
+                promptEl.value = d.OCR_VISION_PROMPT || 'Extract all readable text from this image. Return plain text only.';
+            }
+
+            const st = document.getElementById('ocr-save-status');
+            if (st) {
+                st.innerHTML = d.source === 'redis'
+                    ? '<span class="sf sf-ok">Gespeichert</span>'
+                    : '<span class="sf sf-loading">Standard</span>';
+            }
+        } catch {
+            const st = document.getElementById('ocr-save-status');
+            if (st) st.innerHTML = '<span class="sf sf-error">Fehler beim Laden</span>';
+        }
+    },
+
+    async saveOcrSettings() {
+        const btn = document.getElementById('ocr-save-btn');
+        const st = document.getElementById('ocr-save-status');
+        btn.disabled = true;
+        st.innerHTML = '<span class="sf sf-loading">Speichere…</span>';
+        try {
+            const keyEl = document.getElementById('ocr-vision-api-key');
+            const keyVal = keyEl?.value || '';
+            const apiKey = keyVal && keyVal !== '••••••••'
+                ? keyVal
+                : (keyEl?.dataset.hasKey ? undefined : '');
+
+            const body = {
+                OCR_PROVIDER: document.getElementById('ocr-provider')?.value || 'python',
+                OCR_PYTHON_ENGINE: document.getElementById('ocr-python-engine')?.value || 'pytesseract',
+                OCR_LANGUAGE: document.getElementById('ocr-language')?.value.trim() || 'deu+eng',
+                OCR_VISION_API_URL: document.getElementById('ocr-vision-api-url')?.value.trim() || '',
+                OCR_VISION_MODEL: document.getElementById('ocr-vision-model')?.value.trim() || '',
+                OCR_VISION_PROMPT: document.getElementById('ocr-vision-prompt')?.value.trim()
+                    || 'Extract all readable text from this image. Return plain text only.',
+            };
+            if (apiKey !== undefined) body.OCR_VISION_API_KEY = apiKey;
+
+            const res = await fetch('/api/settings/ocr', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+
+            st.innerHTML = '<span class="sf sf-ok">Gespeichert</span>';
+            if (keyEl && body.OCR_VISION_API_KEY) {
+                keyEl.value = '••••••••';
+                keyEl.dataset.hasKey = '1';
+            }
+        } catch (err) {
+            st.innerHTML = `<span class="sf sf-error">${err.message}</span>`;
+        } finally {
+            btn.disabled = false;
+        }
+    },
+
     // ─── TTS Settings ───
     async loadTtsSettings() {
         // Stimmen laden und Select befüllen
@@ -3015,6 +3121,411 @@ const Ninko = {
             'google': 'imagen-3.0-generate-002',
         };
         modelInput.placeholder = placeholders[backend] || 'Leer = Standard-Modell';
+    },
+
+    // ─── Access / RBAC Settings ───
+    async loadRbacSettings() {
+        const root = document.getElementById('rbac-root');
+        if (!root) return;
+        root.innerHTML = '<p class="text-muted">Lade Benutzerverwaltung…</p>';
+
+        try {
+            const [modsRes, rolesRes, groupsRes, usersRes] = await Promise.all([
+                fetch('/api/auth/modules/available'),
+                fetch('/api/auth/roles'),
+                fetch('/api/auth/groups'),
+                fetch('/api/auth/users'),
+            ]);
+            if (!modsRes.ok || !rolesRes.ok || !groupsRes.ok || !usersRes.ok) {
+                throw new Error('RBAC-Endpunkte nicht verfügbar oder keine Berechtigung.');
+            }
+
+            const mods = await modsRes.json();
+            const roles = await rolesRes.json();
+            const groups = await groupsRes.json();
+            const users = await usersRes.json();
+
+            this._rbacModules = mods.modules || [];
+            this._rbacRoles = roles.roles || [];
+            this._rbacGroups = groups.groups || [];
+            this._rbacUsers = users.users || [];
+
+            this.renderRbacSettings();
+        } catch (e) {
+            root.innerHTML = `<p class="empty-state">${this._escapeHtml(e.message || 'Fehler beim Laden der Benutzerverwaltung.')}</p>`;
+        }
+    },
+
+    renderRbacSettings() {
+        const root = document.getElementById('rbac-root');
+        if (!root) return;
+
+        const roleOptions = this._rbacRoles
+            .map(r => `<option value="${this._escapeHtml(r.id)}">${this._escapeHtml(r.name || r.id)}</option>`)
+            .join('');
+        const groupOptions = this._rbacGroups
+            .map(g => `<option value="${this._escapeHtml(g.id)}">${this._escapeHtml(g.name || g.id)}</option>`)
+            .join('');
+
+        root.innerHTML = `
+            <div class="setting-group">
+                <h4>Benutzerverwaltung (RBAC)</h4>
+                <p class="setting-desc">Verwalte Benutzer, Gruppen und Rollen. Rechte können pro Modul konfiguriert werden.</p>
+                <div class="form-actions">
+                    <span id="rbac-save-status" class="save-status"></span>
+                    <button class="btn btn-outline btn-sm" onclick="Ninko.loadRbacSettings()">Neu laden</button>
+                </div>
+            </div>
+
+            <div class="setting-group">
+                <h4>Benutzer</h4>
+                <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:0.75rem;">
+                    <input id="rbac-user-username" type="text" class="form-input" placeholder="username" style="max-width:180px;">
+                    <input id="rbac-user-password" type="password" class="form-input" placeholder="Passwort (>=8)" style="max-width:220px;">
+                    <select id="rbac-user-role" class="form-select" style="max-width:200px;">
+                        <option value="">Rolle (optional)</option>
+                        ${roleOptions}
+                    </select>
+                    <select id="rbac-user-group" class="form-select" style="max-width:200px;">
+                        <option value="">Gruppe (optional)</option>
+                        ${groupOptions}
+                    </select>
+                    <button class="btn btn-primary btn-sm" onclick="Ninko.createRbacUser()">Benutzer anlegen</button>
+                </div>
+                <div id="rbac-users-list">${this._renderRbacUsersTable()}</div>
+            </div>
+
+            <div class="setting-group">
+                <h4>Gruppen</h4>
+                <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:0.75rem;">
+                    <input id="rbac-group-id" type="text" class="form-input" placeholder="group_id" style="max-width:180px;">
+                    <input id="rbac-group-name" type="text" class="form-input" placeholder="Anzeigename" style="max-width:220px;">
+                    <select id="rbac-group-role" class="form-select" style="max-width:220px;">
+                        <option value="">Rolle zuweisen (optional)</option>
+                        ${roleOptions}
+                    </select>
+                    <button class="btn btn-primary btn-sm" onclick="Ninko.createRbacGroup()">Gruppe anlegen</button>
+                </div>
+                <div id="rbac-groups-list">${this._renderRbacGroupsTable()}</div>
+            </div>
+
+            <div class="setting-group">
+                <h4>Rollen</h4>
+                <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:0.75rem;">
+                    <input id="rbac-role-id" type="text" class="form-input" placeholder="role_id" style="max-width:180px;">
+                    <input id="rbac-role-name" type="text" class="form-input" placeholder="Anzeigename" style="max-width:220px;">
+                    <select id="rbac-role-base" class="form-select" style="max-width:140px;">
+                        <option value="read">read</option>
+                        <option value="write">write</option>
+                        <option value="admin">admin</option>
+                    </select>
+                    <button class="btn btn-primary btn-sm" onclick="Ninko.createRbacRole()">Rolle anlegen</button>
+                </div>
+                <div class="form-row">
+                    <label class="form-label" for="rbac-role-edit-select">Rolle für Modulrechte bearbeiten</label>
+                    <select id="rbac-role-edit-select" class="form-select" onchange="Ninko.renderRbacRolePermissions()">
+                        <option value="">Bitte Rolle wählen…</option>
+                        ${roleOptions}
+                    </select>
+                </div>
+                <div id="rbac-role-permissions"></div>
+                <div id="rbac-roles-list" style="margin-top:0.75rem;">${this._renderRbacRolesTable()}</div>
+            </div>
+        `;
+    },
+
+    _setRbacStatus(message, ok = true) {
+        const el = document.getElementById('rbac-save-status');
+        if (!el) return;
+        el.innerHTML = ok
+            ? `<span class="sf sf-ok">${this._escapeHtml(message)}</span>`
+            : `<span class="sf sf-error">${this._escapeHtml(message)}</span>`;
+    },
+
+    _renderRbacUsersTable() {
+        if (!this._rbacUsers.length) return '<p class="text-muted">Keine Benutzer vorhanden.</p>';
+        const rows = this._rbacUsers.map(u => `
+            <tr>
+                <td><code>${this._escapeHtml(u.username)}</code></td>
+                <td>${u.active ? 'aktiv' : 'inaktiv'}</td>
+                <td>${this._escapeHtml((u.roles || []).join(', ') || '-')}</td>
+                <td>${this._escapeHtml((u.groups || []).join(', ') || '-')}</td>
+                <td style="display:flex; gap:0.35rem;">
+                    <button class="btn btn-outline btn-sm" onclick="Ninko.toggleRbacUserActive('${this._escapeHtml(u.username)}', ${u.active ? 'false' : 'true'})">${u.active ? 'Deaktivieren' : 'Aktivieren'}</button>
+                    <button class="btn btn-outline btn-sm" onclick="Ninko.setRbacUserPassword('${this._escapeHtml(u.username)}')">Passwort</button>
+                    <button class="btn btn-outline btn-sm" style="color:var(--error-color);" onclick="Ninko.deleteRbacUser('${this._escapeHtml(u.username)}')">Löschen</button>
+                </td>
+            </tr>
+        `).join('');
+        return `
+            <div style="overflow:auto;">
+                <table class="log-table">
+                    <thead><tr><th>User</th><th>Status</th><th>Rollen</th><th>Gruppen</th><th>Aktionen</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        `;
+    },
+
+    _renderRbacGroupsTable() {
+        if (!this._rbacGroups.length) return '<p class="text-muted">Keine Gruppen vorhanden.</p>';
+        const rows = this._rbacGroups.map(g => `
+            <tr>
+                <td><code>${this._escapeHtml(g.id)}</code></td>
+                <td>${this._escapeHtml(g.name || '')}</td>
+                <td>${this._escapeHtml((g.roles || []).join(', ') || '-')}</td>
+                <td>${this._escapeHtml(((g.users || []).length).toString())}</td>
+                <td>
+                    ${g.id === 'group_admins' ? '-' : `<button class="btn btn-outline btn-sm" style="color:var(--error-color);" onclick="Ninko.deleteRbacGroup('${this._escapeHtml(g.id)}')">Löschen</button>`}
+                </td>
+            </tr>
+        `).join('');
+        return `
+            <div style="overflow:auto;">
+                <table class="log-table">
+                    <thead><tr><th>ID</th><th>Name</th><th>Rollen</th><th>Mitglieder</th><th>Aktion</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        `;
+    },
+
+    _renderRbacRolesTable() {
+        if (!this._rbacRoles.length) return '<p class="text-muted">Keine Rollen vorhanden.</p>';
+        const rows = this._rbacRoles.map(r => `
+            <tr>
+                <td><code>${this._escapeHtml(r.id)}</code></td>
+                <td>${this._escapeHtml(r.name || '')}</td>
+                <td>${this._escapeHtml(r.base_role || 'read')}</td>
+                <td>${this._escapeHtml(Object.keys(r.module_permissions || {}).join(', ') || '-')}</td>
+                <td>
+                    ${r.id === 'role_admin' ? '-' : `<button class="btn btn-outline btn-sm" style="color:var(--error-color);" onclick="Ninko.deleteRbacRole('${this._escapeHtml(r.id)}')">Löschen</button>`}
+                </td>
+            </tr>
+        `).join('');
+        return `
+            <div style="overflow:auto;">
+                <table class="log-table">
+                    <thead><tr><th>ID</th><th>Name</th><th>Base Role</th><th>Module</th><th>Aktion</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        `;
+    },
+
+    renderRbacRolePermissions() {
+        const roleId = document.getElementById('rbac-role-edit-select')?.value || '';
+        const container = document.getElementById('rbac-role-permissions');
+        if (!container) return;
+        if (!roleId) {
+            container.innerHTML = '';
+            return;
+        }
+        const role = this._rbacRoles.find(r => r.id === roleId);
+        if (!role) {
+            container.innerHTML = '<p class="text-muted">Rolle nicht gefunden.</p>';
+            return;
+        }
+
+        const currentPerms = role.module_permissions || {};
+        const rows = this._rbacModules.map(m => {
+            const key = (m.id || '').toLowerCase().replace(/-/g, '_');
+            const wildcard = currentPerms['*'] || {};
+            const specific = currentPerms[key] || {};
+            const readChecked = (specific.read === true) || (specific.read !== false && wildcard.read === true);
+            const writeChecked = (specific.write === true) || (specific.write !== false && wildcard.write === true);
+            return `
+                <tr>
+                    <td>${this._escapeHtml(m.display_name || m.id)}</td>
+                    <td><input type="checkbox" data-rbac-perm="read" data-module-id="${this._escapeHtml(key)}" ${readChecked ? 'checked' : ''}></td>
+                    <td><input type="checkbox" data-rbac-perm="write" data-module-id="${this._escapeHtml(key)}" ${writeChecked ? 'checked' : ''}></td>
+                </tr>
+            `;
+        }).join('');
+
+        container.innerHTML = `
+            <div style="margin-top:0.6rem;">
+                <div class="text-muted" style="font-size:0.82rem; margin-bottom:0.4rem;">Rolle: <code>${this._escapeHtml(roleId)}</code></div>
+                <div style="overflow:auto; max-height:280px;">
+                    <table class="log-table">
+                        <thead><tr><th>Modul</th><th>Read</th><th>Write</th></tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+                <div class="form-actions" style="margin-top:0.5rem;">
+                    <button class="btn btn-primary btn-sm" onclick="Ninko.saveRbacRolePermissions('${this._escapeHtml(roleId)}')">Modulrechte speichern</button>
+                </div>
+            </div>
+        `;
+    },
+
+    async createRbacUser() {
+        const username = document.getElementById('rbac-user-username')?.value?.trim() || '';
+        const password = document.getElementById('rbac-user-password')?.value || '';
+        const role = document.getElementById('rbac-user-role')?.value || '';
+        const group = document.getElementById('rbac-user-group')?.value || '';
+        if (!username || !password) return this._setRbacStatus('Username und Passwort sind Pflicht.', false);
+        try {
+            const res = await fetch('/api/auth/users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username,
+                    password,
+                    active: true,
+                    roles: role ? [role] : [],
+                    groups: group ? [group] : [],
+                }),
+            });
+            if (!res.ok) throw new Error((await res.json()).detail || 'Fehler beim Anlegen');
+            this._setRbacStatus(`Benutzer ${username} angelegt.`);
+            await this.loadRbacSettings();
+        } catch (e) {
+            this._setRbacStatus(e.message || 'Fehler', false);
+        }
+    },
+
+    async toggleRbacUserActive(username, active) {
+        try {
+            const user = this._rbacUsers.find(u => u.username === username);
+            if (!user) throw new Error('Benutzer nicht gefunden');
+            const res = await fetch(`/api/auth/users/${encodeURIComponent(username)}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    active,
+                    roles: user.roles || [],
+                    groups: user.groups || [],
+                }),
+            });
+            if (!res.ok) throw new Error((await res.json()).detail || 'Fehler beim Aktualisieren');
+            this._setRbacStatus(`Benutzer ${username} aktualisiert.`);
+            await this.loadRbacSettings();
+        } catch (e) {
+            this._setRbacStatus(e.message || 'Fehler', false);
+        }
+    },
+
+    async setRbacUserPassword(username) {
+        const pw = prompt(`Neues Passwort für ${username} (mind. 8 Zeichen):`);
+        if (!pw) return;
+        try {
+            const res = await fetch(`/api/auth/users/${encodeURIComponent(username)}/password`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: pw }),
+            });
+            if (!res.ok) throw new Error((await res.json()).detail || 'Fehler beim Passwort-Update');
+            this._setRbacStatus(`Passwort für ${username} gesetzt.`);
+        } catch (e) {
+            this._setRbacStatus(e.message || 'Fehler', false);
+        }
+    },
+
+    async deleteRbacUser(username) {
+        if (!confirm(`Benutzer ${username} wirklich löschen?`)) return;
+        try {
+            const res = await fetch(`/api/auth/users/${encodeURIComponent(username)}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error((await res.json()).detail || 'Fehler beim Löschen');
+            this._setRbacStatus(`Benutzer ${username} gelöscht.`);
+            await this.loadRbacSettings();
+        } catch (e) {
+            this._setRbacStatus(e.message || 'Fehler', false);
+        }
+    },
+
+    async createRbacGroup() {
+        const group_id = document.getElementById('rbac-group-id')?.value?.trim() || '';
+        const name = document.getElementById('rbac-group-name')?.value?.trim() || '';
+        const role = document.getElementById('rbac-group-role')?.value || '';
+        if (!group_id || !name) return this._setRbacStatus('group_id und Name sind Pflicht.', false);
+        try {
+            const res = await fetch('/api/auth/groups', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ group_id, name, description: '', roles: role ? [role] : [] }),
+            });
+            if (!res.ok) throw new Error((await res.json()).detail || 'Fehler beim Anlegen');
+            this._setRbacStatus(`Gruppe ${group_id} angelegt.`);
+            await this.loadRbacSettings();
+        } catch (e) {
+            this._setRbacStatus(e.message || 'Fehler', false);
+        }
+    },
+
+    async deleteRbacGroup(groupId) {
+        if (!confirm(`Gruppe ${groupId} wirklich löschen?`)) return;
+        try {
+            const res = await fetch(`/api/auth/groups/${encodeURIComponent(groupId)}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error((await res.json()).detail || 'Fehler beim Löschen');
+            this._setRbacStatus(`Gruppe ${groupId} gelöscht.`);
+            await this.loadRbacSettings();
+        } catch (e) {
+            this._setRbacStatus(e.message || 'Fehler', false);
+        }
+    },
+
+    async createRbacRole() {
+        const role_id = document.getElementById('rbac-role-id')?.value?.trim() || '';
+        const name = document.getElementById('rbac-role-name')?.value?.trim() || '';
+        const base_role = document.getElementById('rbac-role-base')?.value || 'read';
+        if (!role_id || !name) return this._setRbacStatus('role_id und Name sind Pflicht.', false);
+        try {
+            const res = await fetch('/api/auth/roles', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    role_id,
+                    name,
+                    description: '',
+                    base_role,
+                    module_permissions: { '*': { read: true, write: base_role !== 'read' } },
+                }),
+            });
+            if (!res.ok) throw new Error((await res.json()).detail || 'Fehler beim Anlegen');
+            this._setRbacStatus(`Rolle ${role_id} angelegt.`);
+            await this.loadRbacSettings();
+        } catch (e) {
+            this._setRbacStatus(e.message || 'Fehler', false);
+        }
+    },
+
+    async saveRbacRolePermissions(roleId) {
+        const rows = Array.from(document.querySelectorAll('#rbac-role-permissions input[data-module-id]'));
+        const module_permissions = {};
+        const byModule = new Map();
+        for (const input of rows) {
+            const moduleId = input.dataset.moduleId;
+            const perm = input.dataset.rbacPerm;
+            if (!byModule.has(moduleId)) byModule.set(moduleId, { read: false, write: false });
+            byModule.get(moduleId)[perm] = !!input.checked;
+        }
+        for (const [moduleId, perms] of byModule.entries()) module_permissions[moduleId] = perms;
+
+        try {
+            const res = await fetch(`/api/auth/roles/${encodeURIComponent(roleId)}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ module_permissions }),
+            });
+            if (!res.ok) throw new Error((await res.json()).detail || 'Fehler beim Speichern');
+            this._setRbacStatus(`Modulrechte für ${roleId} gespeichert.`);
+            await this.loadRbacSettings();
+        } catch (e) {
+            this._setRbacStatus(e.message || 'Fehler', false);
+        }
+    },
+
+    async deleteRbacRole(roleId) {
+        if (!confirm(`Rolle ${roleId} wirklich löschen?`)) return;
+        try {
+            const res = await fetch(`/api/auth/roles/${encodeURIComponent(roleId)}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error((await res.json()).detail || 'Fehler beim Löschen');
+            this._setRbacStatus(`Rolle ${roleId} gelöscht.`);
+            await this.loadRbacSettings();
+        } catch (e) {
+            this._setRbacStatus(e.message || 'Fehler', false);
+        }
     },
 
     // ─── Module Settings & Connections ───
@@ -4145,12 +4656,16 @@ const Ninko = {
             const versionInfo = isUpdate
                 ? `<span class="module-config-version">v${mod.installed_version}</span><span class="text-muted" style="font-size:0.76rem;"> → v${mod.version}</span>`
                 : (mod.version ? `<span class="module-config-version">v${mod.version}</span>` : '');
+            const sourceInfo = isUpdate && mod.installed_source
+                ? `<span class="text-muted" style="font-size:0.72rem;">source: ${this._escapeHtml(mod.installed_source)}</span>`
+                : '';
             return `
             <div class="module-config-card" id="mkt-card-${repoId}-${mod.name}" style="transition:opacity 0.3s;">
                 <div class="module-config-header">
                     <div class="module-config-info">
                         <span class="module-config-name">${mod.display_name || mod.name}</span>
                         ${versionInfo}
+                        ${sourceInfo}
                     </div>
                     <button class="${btnClass}" onclick="Ninko.installFromRepo('${mod.name}','${repoId}')"
                         id="mkt-btn-${repoId}-${mod.name}"

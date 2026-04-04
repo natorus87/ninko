@@ -15,6 +15,12 @@ from .tools import (
     get_opnsense_dhcp_leases,
     restart_opnsense_service,
     get_opnsense_logs,
+    set_opnsense_interface,
+    get_opnsense_dhcp_settings,
+    set_opnsense_dhcp,
+    get_opnsense_virtual_ips,
+    create_opnsense_virtual_ip,
+    delete_opnsense_virtual_ip,
 )
 
 logger = logging.getLogger("ninko.modules.opnsense.agent")
@@ -31,6 +37,9 @@ Deine Fähigkeiten:
 - Firewall-Logs abrufen
 - Erstellen und Löschen von Firewall-Regeln (mit Bestätigung)
 - Erstellen und Löschen von NAT-Regeln (mit Bestätigung)
+- Interface-Konfiguration (IP,Subnetz, aktivieren/deaktivieren)
+- DHCP-Server-Konfiguration (Range, DNS, Gateway)
+- Virtual IPs (CARP, Proxy ARP) verwalten
 
 Verhaltensregeln:
 - Frage immer zuerst nach der Host-Adresse, falls keine Verbindung konfiguriert ist
@@ -54,6 +63,9 @@ Your capabilities:
 - Retrieve firewall logs
 - Create and delete firewall rules (with confirmation)
 - Create and delete NAT rules (with confirmation)
+- Interface configuration (IP, subnet, enable/disable)
+- DHCP server configuration (range, DNS, gateway)
+- Virtual IPs (CARP, Proxy ARP) management
 
 Behavior rules:
 - Always ask for the host address if no connection is configured
@@ -77,6 +89,9 @@ Vos capacités:
 - Récupération des journaux de pare-feu
 - Création et suppression de règles de pare-feu (avec confirmation)
 - Création et suppression de règles NAT (avec confirmation)
+- Configuration des interfaces (IP, subnet, activer/désactiver)
+- Configuration du serveur DHCP (plage, DNS, passerelle)
+- Gestion des IPs virtuelles (CARP, Proxy ARP)
 
 Règles de comportement:
 - Demandez toujours l'adresse hôte si aucune connexion n'est configurée
@@ -100,6 +115,9 @@ Tus capacidades:
 - Recuperar registros de firewall
 - Crear y eliminar reglas de firewall (con confirmación)
 - Crear y eliminar reglas NAT (con confirmación)
+- Configuración de interfaces (IP, subred, activar/desactivar)
+- Configuración del servidor DHCP (rango, DNS, puerta de enlace)
+- Gestión de IPs virtuales (CARP, Proxy ARP)
 
 Reglas de comportamiento:
 - Siempre pregunta por la dirección del host si no hay conexión configurada
@@ -123,6 +141,9 @@ Le tue capacità:
 - Recupero dei log del firewall
 - Creazione e eliminazione delle regole del firewall (con conferma)
 - Creazione e eliminazione delle regole NAT (con conferma)
+- Configurazione delle interfacce (IP, subnet, attiva/disattiva)
+- Configurazione del server DHCP (range, DNS, gateway)
+- Gestione degli IP virtuali (CARP, Proxy ARP)
 
 Regole di comportamento:
 - Chiedi sempre l'indirizzo dell'host se non è configurata alcuna connessione
@@ -146,6 +167,9 @@ Jouw mogelijkheden:
 - Firewall-logboeken ophalen
 - Firewall-regels maken en verwijderen (met bevestiging)
 - NAT-regels maken en verwijderen (met bevestiging)
+- Interface-configuratie (IP, subnet, activeren/deactiveren)
+- DHCP-serverconfiguratie (range, DNS, gateway)
+- Virtual IPs (CARP, Proxy ARP) beheren
 
 Gedragsregels:
 - Vraag altijd naar het hostadres als er geen verbinding is geconfigureerd
@@ -169,6 +193,9 @@ Twoje możliwości:
 - Pobieranie logów firewalla
 - Tworzenie i usuwanie reguł firewalla (z potwierdzeniem)
 - Tworzenie i usuwanie reguł NAT (z potwierdzeniem)
+- Konfiguracja interfejsów (IP, podsieć, włączanie/wyłączanie)
+- Konfiguracja serwera DHCP (zakres, DNS, brama)
+- Zarządzanie wirtualnymi IP (CARP, Proxy ARP)
 
 Zasady zachowania:
 - Zawsze pytaj o adres hosta, jeśli nie skonfigurowano połączenia
@@ -192,6 +219,9 @@ Suas capacidades:
 - Recuperar logs de firewall
 - Criar e excluir regras de firewall (com confirmação)
 - Criar e excluir regras NAT (com confirmação)
+- Configuração de interfaces (IP, sub-rede, ativar/desativar)
+- Configuração do servidor DHCP (intervalo, DNS, gateway)
+- Gestão de IPs virtuais (CARP, Proxy ARP)
 
 Regras de comportamento:
 - Sempre pergunte pelo endereço do host se nenhuma conexão estiver configurada
@@ -215,6 +245,9 @@ Segurança:
 - ファイアウォールログの取得
 - ファイアウォールルールの作成と削除（確認が必要）
 - NATルールの作成と削除（確認が必要）
+- インターフェース設定（IP、サブネット、有効化/無効化）
+- DHCPサーバー設定（範囲、DNS、ゲートウェイ）
+- 仮想IP管理（CARP、Proxy ARP）
 
 行動規則:
 - 接続が設定されていない場合は常にホストアドレスを確認
@@ -238,6 +271,9 @@ Segurança:
 - 获取防火墙日志
 - 创建和删除防火墙规则（需确认）
 - 创建和删除NAT规则（需确认）
+- 接口配置（IP、子网、启用/禁用）
+- DHCP服务器配置（范围、DNS、网关）
+- 虚拟IP管理（CARP、Proxy ARP）
 
 行为规则:
 - 如果未配置连接，请始终询问主机地址
@@ -274,5 +310,11 @@ class OPNsenseAgent(BaseAgent):
                 delete_opnsense_nat_rule,
                 restart_opnsense_service,
                 get_opnsense_logs,
+                set_opnsense_interface,
+                get_opnsense_dhcp_settings,
+                set_opnsense_dhcp,
+                get_opnsense_virtual_ips,
+                create_opnsense_virtual_ip,
+                delete_opnsense_virtual_ip,
             ],
         )

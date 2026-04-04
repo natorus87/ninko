@@ -556,8 +556,8 @@ class TelegramBot:
 
             # ── Image generation: detect marker, URL, or phrase ────────────
             image_path = None
-            # 1. [KUMIO_IMAGE:url] marker
-            m = re.search(r'\[KUMIO_IMAGE:(/api/images/[^\]]+)\]', final_text)
+            # 1. [NINKO_IMAGE:url] marker (backward-compat: KUMIO_IMAGE)
+            m = re.search(r'\[(?:NINKO_IMAGE|KUMIO_IMAGE):(/api/images/[^\]]+)\]', final_text)
             if not m:
                 # 2. /api/images/ URL irgendwo im Text
                 m = re.search(r'(/api/images/[\w\-]+\.\w+)', final_text)
@@ -582,7 +582,7 @@ class TelegramBot:
 
             if image_path:
                 # Text without markers/URL for caption
-                caption = re.sub(r'\[KUMIO_IMAGE:[^\]]+\]\s*\n?', '', final_text).strip()
+                caption = re.sub(r'\[(?:NINKO_IMAGE|KUMIO_IMAGE):[^\]]+\]\s*\n?', '', final_text).strip()
                 caption = re.sub(r'/api/images/[\w\-]+\.\w+\s*\n?', '', caption).strip()
                 caption = format_for_telegram(caption)[:1024]  # Telegram caption limit
                 try:

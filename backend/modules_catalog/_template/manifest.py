@@ -17,6 +17,10 @@ async def check_template_health() -> dict:
 
 
 module_manifest = ModuleManifest(
+    # REQUIRED: Replace these identifiers for your new module copy
+    # - name / api_prefix / dashboard_tab.id
+    # - display_name / description / routing_keywords
+    # - env_prefix / required_secrets / optional_secrets
     name="template",
     display_name="Template Modul",
     description="Vorlage zum Erstellen neuer Ninko-Module.",

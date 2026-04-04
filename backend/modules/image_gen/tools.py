@@ -32,11 +32,11 @@ async def generate_image(prompt: str, size: str = "1024x1024") -> str:
     try:
         result = await _gen(prompt=prompt, size=size)
         url = result["url"]
-        # [KUMIO_IMAGE:...] wird vom Telegram-Bot und der Web-UI erkannt
+        # [NINKO_IMAGE:...] wird vom Telegram-Bot und der Web-UI erkannt
         # und als Bild angezeigt (nicht als Text-URL)
         return (
             f"✅ Bild generiert!\n"
-            f"[KUMIO_IMAGE:{url}]\n"
+            f"[NINKO_IMAGE:{url}]\n"
             f"Prompt: {prompt}\n"
             f"Provider: {result['backend']} ({result['model']})"
         )

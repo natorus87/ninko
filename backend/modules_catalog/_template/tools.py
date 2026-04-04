@@ -26,6 +26,7 @@ async def _get_api_client(connection_id: str = "") -> dict:
     2. Fallback to env vars (e.g. TEMPLATE_URL, TEMPLATE_API_KEY)
     3. ValueError only if nothing is configured
     """
+    # REQUIRED: replace module id "template" and key names "TEMPLATE_*" in copied modules.
     # ── 1. ConnectionManager ──
     if connection_id:
         conn = await ConnectionManager.get_connection("template", connection_id)

@@ -23,6 +23,7 @@ import logging
 import os
 import tempfile
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -83,6 +84,19 @@ class TranscriptionResponse(BaseModel):
     language: str
 
 
+class WhisperBenchmarkResult(BaseModel):
+    model_size: str
+    text: str
+    language: str
+    avg_confidence: float
+    duration_ms: int
+
+
+class WhisperBenchmarkResponse(BaseModel):
+    results: list[WhisperBenchmarkResult]
+    recommended_model: str
+
+
 def _parse_csv_set(raw: str) -> set[str]:
     return {x.strip().lower() for x in (raw or "").split(",") if x.strip()}
 
@@ -133,6 +147,31 @@ async def _transcribe_whisper(tmp_path: str) -> tuple[str, float, str]:
 
     def do_transcribe() -> tuple[str, float, str]:
         model = _load_whisper_model()
+        lang_arg: str | None = language if language != "auto" else None
+        segments_gen, info = model.transcribe(tmp_path, language=lang_arg)
+        segments = list(segments_gen)
+        text = " ".join(s.text.strip() for s in segments).strip()
+        avg_conf = (
+            sum(s.avg_logprob for s in segments) / len(segments)
+            if segments else -2.0
+        )
+        return text, avg_conf, info.language
+
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, do_transcribe)
+
+
+async def _transcribe_whisper_with_model(tmp_path: str, model_size: str) -> tuple[str, float, str]:
+    """Transkribiert mit explizitem Whisper-Modell (ohne globalen Cache)."""
+    import asyncio
+    from faster_whisper import WhisperModel  # type: ignore
+
+    language = os.getenv("WHISPER_LANGUAGE", "de")
+    device = os.getenv("WHISPER_DEVICE", "cpu")
+    compute_type = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
+
+    def do_transcribe() -> tuple[str, float, str]:
+        model = WhisperModel(model_size, device=device, compute_type=compute_type)
         lang_arg: str | None = language if language != "auto" else None
         segments_gen, info = model.transcribe(tmp_path, language=lang_arg)
         segments = list(segments_gen)
@@ -234,6 +273,85 @@ async def transcribe_audio(file: UploadFile = File(...)) -> TranscriptionRespons
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         logger.error("Transkriptionsfehler: %s", exc)
         raise HTTPException(status_code=500, detail=f"Transkription fehlgeschlagen: {exc}")
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+
+@router.post("/whisper/benchmark", response_model=WhisperBenchmarkResponse)
+async def benchmark_whisper_models(
+    file: UploadFile = File(...),
+    models: str = "base,small",
+) -> WhisperBenchmarkResponse:
+    """
+    Vergleicht mehrere Whisper-Modelle auf derselben Audio-Datei.
+    Standardmäßig: base vs small.
+    """
+    content = await file.read()
+    filename = file.filename or "audio.webm"
+    _validate_upload_meta(
+        filename=filename,
+        content_type=file.content_type or "",
+        byte_len=len(content),
+    )
+    ext = Path(filename).suffix.lower() or ".ogg"
+
+    requested = [m.strip().lower() for m in models.split(",") if m.strip()]
+    seen: set[str] = set()
+    ordered_models = []
+    for model_name in requested:
+        if model_name in seen:
+            continue
+        seen.add(model_name)
+        ordered_models.append(model_name)
+    if not ordered_models:
+        raise HTTPException(status_code=400, detail="Mindestens ein Modell angeben.")
+
+    allowed = {"tiny", "base", "small", "medium", "large-v3"}
+    invalid = [m for m in ordered_models if m not in allowed]
+    if invalid:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ungültige Modelle: {', '.join(invalid)}. Erlaubt: {', '.join(sorted(allowed))}",
+        )
+
+    tmp_path: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+
+        results: list[WhisperBenchmarkResult] = []
+        for model_name in ordered_models:
+            start = time.perf_counter()
+            text, avg_conf, detected_lang = await _transcribe_whisper_with_model(
+                tmp_path, model_name
+            )
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            results.append(
+                WhisperBenchmarkResult(
+                    model_size=model_name,
+                    text=text,
+                    language=detected_lang,
+                    avg_confidence=avg_conf,
+                    duration_ms=duration_ms,
+                )
+            )
+
+        # Höhere avg_logprob ist besser (weniger negativ), bei Gleichstand schnelleres Modell.
+        best = sorted(results, key=lambda r: (r.avg_confidence, -r.duration_ms), reverse=True)[0]
+        return WhisperBenchmarkResponse(results=results, recommended_model=best.model_size)
+
+    except HTTPException:
+        raise
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        logger.error("Whisper-Benchmark fehlgeschlagen: %s", exc)
+        raise HTTPException(status_code=500, detail=f"Benchmark fehlgeschlagen: {exc}")
     finally:
         if tmp_path:
             try:

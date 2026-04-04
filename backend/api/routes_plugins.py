@@ -45,6 +45,7 @@ _DEFAULT_REPOS: list[dict[str, str]] = [
 ]
 _marketplace_cache: dict[str, Any] = {}
 _CACHE_TTL = 300  # 5 Minuten
+_REDIS_PLUGIN_META_KEY = "ninko:plugins:metadata"
 
 
 # ─── Hilfsfunktionen ──────────────────────────────────────────────────────────
@@ -118,6 +119,29 @@ def _mask_repo(repo: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+async def _load_plugin_meta() -> dict[str, Any]:
+    """Lädt Plugin-Metadaten aus Redis (Hash: plugin_name -> JSON)."""
+    redis = get_redis()
+    raw = await redis.connection.hgetall(_REDIS_PLUGIN_META_KEY)
+    out: dict[str, Any] = {}
+    for name, payload in raw.items():
+        try:
+            out[name] = json.loads(payload)
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError):
+            continue
+    return out
+
+
+async def _set_plugin_meta(plugin_name: str, meta: dict[str, Any]) -> None:
+    redis = get_redis()
+    await redis.connection.hset(_REDIS_PLUGIN_META_KEY, plugin_name, json.dumps(meta))
+
+
+async def _delete_plugin_meta(plugin_name: str) -> None:
+    redis = get_redis()
+    await redis.connection.hdel(_REDIS_PLUGIN_META_KEY, plugin_name)
+
+
 async def _download_dir_to_zip(
     client: httpx.AsyncClient,
     owner: str,
@@ -164,6 +188,7 @@ def _build_module_list(
     all_modules: list[dict[str, str]],
     registry: Any,
     plugins_dir: Path,
+    plugin_meta: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Teilt Repo-Module in: nicht installiert vs. installiertes Plugin (mit Update-Info)."""
     installed_map: dict[str, str] = {m.name: m.version for m in registry.list_all_modules()}
@@ -173,6 +198,7 @@ def _build_module_list(
     for mod in all_modules:
         name = mod["name"]
         repo_version = mod.get("version", "")
+        meta = (plugin_meta or {}).get(name, {})
         if name not in installed_map:
             new_modules.append(mod)
         elif (plugins_dir / name).is_dir():
@@ -181,8 +207,41 @@ def _build_module_list(
                 **mod,
                 "installed_version": installed_version,
                 "update_available": _version_tuple(repo_version) > _version_tuple(installed_version),
+                "installed_source": meta.get("source", ""),
+                "installed_updated_at": meta.get("updated_at", 0),
             })
     return {"modules": new_modules, "updates": updates}
+
+
+@router.get("/installed")
+async def list_installed_plugins(request: Request) -> JSONResponse:
+    """Listet installierte Plugins inkl. Versionierungs-/Herkunfts-Metadaten."""
+    registry = request.app.state.registry
+    plugins_dir = Path(__file__).resolve().parent.parent / "plugins"
+    plugins_dir.mkdir(parents=True, exist_ok=True)
+    plugin_meta = await _load_plugin_meta()
+
+    installed_map: dict[str, str] = {m.name: m.version for m in registry.list_all_modules()}
+    installed = []
+    for plugin_dir in sorted(plugins_dir.iterdir()):
+        if not plugin_dir.is_dir():
+            continue
+        name = plugin_dir.name
+        meta = plugin_meta.get(name, {})
+        installed.append(
+            {
+                "name": name,
+                "version": installed_map.get(name, ""),
+                "installed_at": meta.get("installed_at", 0),
+                "updated_at": meta.get("updated_at", 0),
+                "source": meta.get("source", "unknown"),
+                "repo_id": meta.get("repo_id", ""),
+                "repo_url": meta.get("repo_url", ""),
+                "repo_version": meta.get("repo_version", ""),
+            }
+        )
+
+    return JSONResponse(content={"plugins": installed})
 
 _MAX_UNCOMPRESSED_SIZE = 100 * 1024 * 1024  # 100 MB
 _DANGEROUS_REQ_PATTERNS = (
@@ -300,6 +359,19 @@ async def upload_plugin(request: Request, file: UploadFile = File(...)) -> JSONR
         
         if not loaded:
             raise HTTPException(status_code=500, detail="Plugin in den Ordner entpackt, aber Import durch ModuleRegistry fehlgeschlagen.")
+
+        now = time.time()
+        await _set_plugin_meta(
+            plugin_name,
+            {
+                "source": "upload",
+                "repo_id": "",
+                "repo_url": "",
+                "repo_version": "",
+                "installed_at": now,
+                "updated_at": now,
+            },
+        )
             
         return JSONResponse(status_code=201, content={"message": f"Plugin '{plugin_name}' erfolgreich installiert und geladen.", "plugin_name": plugin_name})
         
@@ -406,11 +478,12 @@ async def list_repo_modules(request: Request, repo_id: str) -> JSONResponse:
 
     registry = request.app.state.registry
     plugins_dir = Path(__file__).resolve().parent.parent / "plugins"
+    plugin_meta = await _load_plugin_meta()
 
     cache_key = f"{repo_cfg['repo_url']}:{repo_cfg['branch']}:{repo_cfg['modules_path']}"
     cached = _marketplace_cache.get(cache_key)
     if cached and time.time() - cached["ts"] < _CACHE_TTL:
-        return JSONResponse(content=_build_module_list(cached["modules"], registry, plugins_dir))
+        return JSONResponse(content=_build_module_list(cached["modules"], registry, plugins_dir, plugin_meta))
 
     owner, repo_name = parsed
     branch = repo_cfg.get("branch", "main")
@@ -428,7 +501,7 @@ async def list_repo_modules(request: Request, repo_id: str) -> JSONResponse:
                 try:
                     all_modules = cat_resp.json().get("modules", [])
                     _marketplace_cache[cache_key] = {"ts": time.time(), "modules": all_modules}
-                    return JSONResponse(content=_build_module_list(all_modules, registry, plugins_dir))
+                    return JSONResponse(content=_build_module_list(all_modules, registry, plugins_dir, plugin_meta))
                 except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError):
                     pass  # fall through to API
 
@@ -478,7 +551,7 @@ async def list_repo_modules(request: Request, repo_id: str) -> JSONResponse:
                 })
 
             _marketplace_cache[cache_key] = {"ts": time.time(), "modules": all_modules}
-            return JSONResponse(content=_build_module_list(all_modules, registry, plugins_dir))
+            return JSONResponse(content=_build_module_list(all_modules, registry, plugins_dir, plugin_meta))
 
     except httpx.TimeoutException:
         return JSONResponse(content={"modules": [], "updates": [], "error": "Timeout beim Abruf."})
@@ -582,10 +655,36 @@ async def install_from_repo(
         if not loaded:
             raise HTTPException(status_code=500, detail="Modul heruntergeladen, aber Import fehlgeschlagen.")
 
+        module_listing = await list_repo_modules(request, repo_id)
+        repo_version = ""
+        try:
+            listing_body = json.loads(module_listing.body.decode("utf-8"))
+            merged = (listing_body.get("modules") or []) + (listing_body.get("updates") or [])
+            match = next((m for m in merged if m.get("name") == module_name), None)
+            if match:
+                repo_version = str(match.get("version", "") or "")
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError):
+            repo_version = ""
+
+        now = time.time()
+        old_meta = (await _load_plugin_meta()).get(module_name, {})
+        await _set_plugin_meta(
+            module_name,
+            {
+                "source": "marketplace",
+                "repo_id": repo_id,
+                "repo_url": repo_cfg["repo_url"],
+                "repo_version": repo_version,
+                "installed_at": old_meta.get("installed_at", now),
+                "updated_at": now,
+            },
+        )
+
         _marketplace_cache.clear()
         return JSONResponse(status_code=201, content={
             "message": f"Modul '{module_name}' erfolgreich installiert.",
             "module_name": module_name,
+            "repo_version": repo_version,
         })
 
     except HTTPException:
@@ -618,6 +717,7 @@ async def delete_plugin(request: Request, plugin_name: str) -> JSONResponse:
     try:
         shutil.rmtree(target_dir)
         registry.remove_plugin(plugin_name)
+        await _delete_plugin_meta(plugin_name)
         return JSONResponse(content={"message": f"Plugin '{plugin_name}' deinstalliert. Die Änderungen werden beim nächsten Neustart vollständig aktiv."})
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as e:
         logger.error("Fehler beim Löschen des Plugins %s: %s", plugin_name, e)
