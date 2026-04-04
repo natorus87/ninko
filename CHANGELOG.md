@@ -7,6 +7,48 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.9.6] – 2026-04-04
+
+### Added
+
+- **Zabbix-Modul** (Catalog):
+  - `get_zabbix_status` — Server-Status und Version
+  - `list_zabbix_hosts` — Host-Liste
+  - `get_zabbix_host` — Host-Details
+  - `list_zabbix_items` — Monitoring-Items
+  - `list_zabbix_triggers` — Trigger-Liste
+  - `get_zabbix_problems` — Aktuelle Probleme
+  - `list_zabbix_graphs` — Graphen-Liste
+  - `list_zabbix_actions` — Actions/Alerts
+  - `get_zabbix_history` — Historische Daten
+  - `get_zabbix_host_group` — Host-Gruppen
+  - `list_zabbix_templates` — Templates
+  - `create_zabbix_host` — Host erstellen
+  - `delete_zabbix_host` — Host löschen
+
+- **NetBox-Modul** (Catalog):
+  - `get_netbox_status` — Server-Status und Version
+  - `list_netbox_sites` — Site-Liste
+  - `get_netbox_site` — Site-Details
+  - `list_netbox_devices` — Device-Liste
+  - `get_netbox_device` — Device-Details
+  - `list_netbox_racks` — Rack-Liste
+  - `get_netbox_rack` — Rack-Details
+  - `list_netbox_vlans` — VLAN-Liste
+  - `list_netbox_prefixes` — Prefix-Liste
+  - `list_netbox_ip_addresses` — IP-Adressen
+  - `list_netbox_circuits` — Circuits
+  - `list_netbox_cables` — Kabel
+  - `list_netbox_clusters` — Cluster
+  - `get_netbox_device_interfaces` — Device-Interfaces
+
+### Changed
+
+- **i18n**: Zabbix und NetBox Übersetzungen für alle 10 Sprachen ergänzt
+- **Tool-Labels**: Zabbix und NetBox Tool-Labels in base_agent.py
+
+---
+
 ## [0.9.5] – 2026-04-04
 
 ### Added
