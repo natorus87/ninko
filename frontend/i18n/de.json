@@ -650,6 +650,23 @@
       "loadError2": "Fehler beim Laden.",
       "noIssues": "Keine aktuellen Probleme",
       "noData": "Keine Daten verfügbar"
+    },
+    "discord": {
+      "noConnections": "Keine Discord-Verbindungen",
+      "selectConnection": "Bitte Verbindung auswählen.",
+      "loading": "Lade…",
+      "guild": "Server",
+      "channels": "Kanäle",
+      "members": "Mitglieder",
+      "messages": "Nachrichten",
+      "noChannels": "Keine Kanäle gefunden.",
+      "noMembers": "Keine Mitglieder gefunden.",
+      "noMessages": "Keine Nachrichten.",
+      "loadError": "Fehler beim Laden.",
+      "error": "Fehler: ",
+      "createChannel": "Kanal erstellen",
+      "deleteChannel": "Kanal löschen",
+      "sendMessage": "Nachricht senden"
     }
   }
 }

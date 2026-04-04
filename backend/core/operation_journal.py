@@ -28,6 +28,13 @@ _MAX_TX_INDEX = 5000
 _TX_TTL_SECONDS = 60 * 60 * 24 * 14  # 14 days
 
 
+def _tenant_from_session(session_id: str) -> str:
+    sid = (session_id or "").strip()
+    if ":" in sid:
+        return sid.split(":", 1)[0].strip().lower() or "default"
+    return "default"
+
+
 class OperationJournal:
     """Redis-backed transaction journal for risky operations."""
 
@@ -49,6 +56,7 @@ class OperationJournal:
             "timestamp": now,
             "updated_at": now,
             "status": _STATUS_PENDING,
+            "tenant_id": _tenant_from_session(session_id),
             "session_id": session_id,
             "source": source,
             "category": category,
@@ -127,6 +135,7 @@ class OperationJournal:
         limit: int = 100,
         status: str = "",
         session_id: str = "",
+        tenant_id: str = "",
         category: str = "",
     ) -> list[dict]:
         redis = get_redis()
@@ -139,6 +148,8 @@ class OperationJournal:
             if status and item.get("status") != status:
                 continue
             if session_id and item.get("session_id") != session_id:
+                continue
+            if tenant_id and item.get("tenant_id") != tenant_id:
                 continue
             if category and item.get("category") != category:
                 continue

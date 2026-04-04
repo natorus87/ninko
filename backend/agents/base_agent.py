@@ -391,6 +391,15 @@ _TOOL_LABELS: dict[str, str] = {
     "transition_jira_issue": _t(de="Transitioniere Issue", en="Transitioning issue"),
     "get_jira_priorities": _t(de="Lade Prioritäten", en="Loading priorities"),
     "get_jira_issue_counts": _t(de="Zähle Issues", en="Counting issues"),
+    # Discord
+    "get_discord_guild_info": _t(de="Lade Server-Info", en="Loading server info"),
+    "list_discord_channels": _t(de="Lade Kanäle", en="Loading channels"),
+    "list_discord_members": _t(de="Lade Mitglieder", en="Loading members"),
+    "send_discord_message": _t(de="Sende Nachricht", en="Sending message"),
+    "create_discord_channel": _t(de="Erstelle Kanal", en="Creating channel"),
+    "get_discord_channel_messages": _t(de="Lade Nachrichten", en="Loading messages"),
+    "search_discord_messages": _t(de="Suche Nachrichten", en="Searching messages"),
+    "delete_discord_channel": _t(de="Lösche Kanal", en="Deleting channel"),
 }
 
 

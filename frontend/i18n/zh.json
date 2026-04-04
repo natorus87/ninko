@@ -642,6 +642,23 @@
       "loadError2": "加载错误。",
       "noIssues": "无当前问题",
       "noData": "暂无数据"
+    },
+    "discord": {
+      "noConnections": "无Discord连接",
+      "selectConnection": "请选择连接。",
+      "loading": "加载中…",
+      "guild": "服务器",
+      "channels": "频道",
+      "members": "成员",
+      "messages": "消息",
+      "noChannels": "未找到频道。",
+      "noMembers": "未找到成员。",
+      "noMessages": "无消息。",
+      "loadError": "加载错误。",
+      "error": "错误: ",
+      "createChannel": "创建频道",
+      "deleteChannel": "删除频道",
+      "sendMessage": "发送消息"
     }
   }
 }

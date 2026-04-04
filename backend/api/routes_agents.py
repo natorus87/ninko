@@ -10,9 +10,10 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from core.auth import auth_tenant_id, resolve_request_auth
 from core.redis_client import get_redis
 from schemas.agents import AgentDefinition, AgentCreate, AgentListResponse
 
@@ -27,28 +28,42 @@ class AgentGenerateRequest(BaseModel):
 REDIS_KEY = "ninko:agents"
 
 
-async def _load_agents(redis) -> list[dict]:
-    raw = await redis.connection.get(REDIS_KEY)
+def _tenant_key(tenant_id: str) -> str:
+    t = (tenant_id or "default").strip().lower().replace(" ", "_")
+    return f"{REDIS_KEY}:{t or 'default'}"
+
+
+async def _load_agents(redis, tenant_id: str) -> list[dict]:
+    raw = await redis.connection.get(_tenant_key(tenant_id))
     return json.loads(raw) if raw else []
 
 
-async def _save_agents(redis, agents: list[dict]) -> None:
-    await redis.connection.set(REDIS_KEY, json.dumps(agents))
+async def _save_agents(redis, tenant_id: str, agents: list[dict]) -> None:
+    await redis.connection.set(_tenant_key(tenant_id), json.dumps(agents))
+
+
+def _public_agent(agent: dict) -> dict:
+    a = dict(agent)
+    a.pop("tenant_id", None)
+    return a
 
 
 @router.get("/", response_model=AgentListResponse)
-async def list_agents() -> AgentListResponse:
+async def list_agents(request: Request) -> AgentListResponse:
     """Alle konfigurierten Agenten auflisten."""
     redis = get_redis()
-    agents = await _load_agents(redis)
-    return AgentListResponse(agents=[AgentDefinition(**a) for a in agents], total=len(agents))
+    tenant_id = auth_tenant_id(resolve_request_auth(request))
+    agents = await _load_agents(redis, tenant_id)
+    pub = [_public_agent(a) for a in agents]
+    return AgentListResponse(agents=[AgentDefinition(**a) for a in pub], total=len(pub))
 
 
 @router.post("/", status_code=201)
-async def create_agent(body: AgentCreate) -> dict:
+async def create_agent(body: AgentCreate, request: Request) -> dict:
     """Neuen Agenten erstellen."""
     redis = get_redis()
-    agents = await _load_agents(redis)
+    tenant_id = auth_tenant_id(resolve_request_auth(request))
+    agents = await _load_agents(redis, tenant_id)
 
     now = datetime.now(timezone.utc).isoformat()
     new_agent = AgentDefinition(
@@ -56,18 +71,18 @@ async def create_agent(body: AgentCreate) -> dict:
         created_at=now,
         updated_at=now,
     )
-
-    agents.append(new_agent.model_dump())
-    await _save_agents(redis, agents)
+    agents.append({**new_agent.model_dump(), "tenant_id": tenant_id})
+    await _save_agents(redis, tenant_id, agents)
     logger.info("Agent erstellt: %s (%s)", new_agent.name, new_agent.id)
     return {"id": new_agent.id, "status": "created"}
 
 
 @router.get("/{agent_id}")
-async def get_agent(agent_id: str) -> dict:
+async def get_agent(agent_id: str, request: Request) -> dict:
     """Einen Agenten abrufen (inkl. Soul MD wenn vorhanden)."""
     redis = get_redis()
-    agents = await _load_agents(redis)
+    tenant_id = auth_tenant_id(resolve_request_auth(request))
+    agents = await _load_agents(redis, tenant_id)
     agent = next((a for a in agents if a["id"] == agent_id), None)
     if not agent:
         raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' nicht gefunden")
@@ -81,14 +96,15 @@ async def get_agent(agent_id: str) -> dict:
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError):
         pass
 
-    return agent
+    return _public_agent(agent)
 
 
 @router.put("/{agent_id}")
-async def update_agent(agent_id: str, body: AgentCreate) -> dict:
+async def update_agent(agent_id: str, body: AgentCreate, request: Request) -> dict:
     """Agenten bearbeiten."""
     redis = get_redis()
-    agents = await _load_agents(redis)
+    tenant_id = auth_tenant_id(resolve_request_auth(request))
+    agents = await _load_agents(redis, tenant_id)
 
     idx = next((i for i, a in enumerate(agents) if a["id"] == agent_id), None)
     if idx is None:
@@ -100,24 +116,26 @@ async def update_agent(agent_id: str, body: AgentCreate) -> dict:
         **body.model_dump(),
         "id": agent_id,
         "updated_at": now,
+        "tenant_id": tenant_id,
     }
     agents[idx] = updated
-    await _save_agents(redis, agents)
+    await _save_agents(redis, tenant_id, agents)
     logger.info("Agent aktualisiert: %s", agent_id)
     return {"id": agent_id, "status": "updated"}
 
 
 @router.delete("/{agent_id}")
-async def delete_agent(agent_id: str) -> dict:
+async def delete_agent(agent_id: str, request: Request) -> dict:
     """Agenten löschen (inkl. Soul MD Cleanup)."""
     redis = get_redis()
-    agents = await _load_agents(redis)
+    tenant_id = auth_tenant_id(resolve_request_auth(request))
+    agents = await _load_agents(redis, tenant_id)
     deleted_agent = next((a for a in agents if a["id"] == agent_id), None)
     if not deleted_agent:
         raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' nicht gefunden")
 
     agents = [a for a in agents if a["id"] != agent_id]
-    await _save_agents(redis, agents)
+    await _save_agents(redis, tenant_id, agents)
 
     # Soul MD des gelöschten Agenten aufräumen
     try:
@@ -223,10 +241,11 @@ Antworte AUSSCHLIESSLICH mit einem JSON-Objekt ohne Markdown-Umrahmung:
 
 
 @router.post("/{agent_id}/duplicate", status_code=201)
-async def duplicate_agent(agent_id: str) -> dict:
+async def duplicate_agent(agent_id: str, request: Request) -> dict:
     """Agenten duplizieren."""
     redis = get_redis()
-    agents = await _load_agents(redis)
+    tenant_id = auth_tenant_id(resolve_request_auth(request))
+    agents = await _load_agents(redis, tenant_id)
     original = next((a for a in agents if a["id"] == agent_id), None)
     if not original:
         raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' nicht gefunden")
@@ -238,8 +257,9 @@ async def duplicate_agent(agent_id: str) -> dict:
         "name": f"{original['name']} (Kopie)",
         "created_at": now,
         "updated_at": now,
+        "tenant_id": tenant_id,
     }
     agents.append(duplicate)
-    await _save_agents(redis, agents)
+    await _save_agents(redis, tenant_id, agents)
     logger.info("Agent dupliziert: %s → %s", agent_id, duplicate["id"])
     return {"id": duplicate["id"], "status": "created"}

@@ -650,6 +650,23 @@
       "loadError2": "Error loading.",
       "noIssues": "No current issues",
       "noData": "No data available"
+    },
+    "discord": {
+      "noConnections": "No Discord connections",
+      "selectConnection": "Please select a connection.",
+      "loading": "Loading…",
+      "guild": "Server",
+      "channels": "Channels",
+      "members": "Members",
+      "messages": "Messages",
+      "noChannels": "No channels found.",
+      "noMembers": "No members found.",
+      "noMessages": "No messages.",
+      "loadError": "Error loading.",
+      "error": "Error: ",
+      "createChannel": "Create channel",
+      "deleteChannel": "Delete channel",
+      "sendMessage": "Send message"
     }
   }
 }

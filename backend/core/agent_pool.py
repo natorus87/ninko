@@ -66,22 +66,37 @@ class DynamicAgentPool:
         try:
             from core.redis_client import get_redis
             redis = get_redis()
-            raw = await redis.connection.get(REDIS_KEY)
-            if not raw:
-                return
-
-            agents = json.loads(raw)
             loaded = 0
-            for agent_def in agents:
-                if agent_def.get("enabled", True) and agent_def.get("system_prompt"):
+
+            async def _load_for_tenant(tenant_id: str, key: str) -> int:
+                raw = await redis.connection.get(key)
+                if not raw:
+                    return 0
+                tenant_loaded = 0
+                agents = json.loads(raw)
+                for agent_def in agents:
+                    if not agent_def.get("enabled", True) or not agent_def.get("system_prompt"):
+                        continue
                     try:
-                        self._instantiate(agent_def)
-                        loaded += 1
+                        self._instantiate({**agent_def, "tenant_id": tenant_id})
+                        tenant_loaded += 1
                     except _AGENT_POOL_EXCEPTIONS as exc:
                         logger.warning(
                             "Agent '%s' konnte nicht instanziiert werden: %s",
                             agent_def.get("name"), exc,
                         )
+                return tenant_loaded
+
+            # Legacy-Key (ohne Tenant) weiterhin unterstützen
+            loaded += await _load_for_tenant("default", REDIS_KEY)
+
+            # Tenant-scoped Keys laden
+            keys = await redis.connection.keys(f"{REDIS_KEY}:*")
+            for key in keys:
+                tenant = _tenant_from_key(key)
+                if not tenant:
+                    continue
+                loaded += await _load_for_tenant(tenant, key)
             logger.info("DynamicAgentPool: %d Agenten geladen.", loaded)
         except _AGENT_POOL_EXCEPTIONS as exc:
             logger.warning("DynamicAgentPool.load_from_redis fehlgeschlagen: %s", exc)
@@ -99,17 +114,20 @@ class DynamicAgentPool:
         """
         from agents.base_agent import BaseAgent
 
+        tenant_id = _normalize_tenant(agent_def.get("tenant_id", "default"))
         agent_id = agent_def["id"]
+        scoped_id = _scoped_id(tenant_id, agent_id)
+        normalized_def = {**agent_def, "tenant_id": tenant_id}
         agent = BaseAgent(
-            name=agent_def["name"],
-            system_prompt=agent_def["system_prompt"],
+            name=normalized_def["name"],
+            system_prompt=normalized_def["system_prompt"],
             tools=self._get_dynamic_tools(),
         )
-        self._live_agents[agent_id] = agent
-        self._meta[agent_id] = agent_def
+        self._live_agents[scoped_id] = agent
+        self._meta[scoped_id] = normalized_def
         logger.debug(
             "Dynamischer Agent instanziiert: '%s' (id=%s)",
-            agent_def["name"], agent_id,
+            normalized_def["name"], agent_id,
         )
         return agent
 
@@ -134,9 +152,12 @@ class DynamicAgentPool:
 
         best_id: str | None = None
         best_score = 0.0
+        tenant = _effective_tenant_id()
 
         for agent_id, meta in self._meta.items():
             if not meta.get("enabled", True):
+                continue
+            if _normalize_tenant(meta.get("tenant_id", "default")) != tenant:
                 continue
 
             # Suchraum: Name + Description + erste 300 Zeichen System-Prompt
@@ -169,9 +190,19 @@ class DynamicAgentPool:
 
     def get_agent_by_id(self, agent_id: str) -> tuple["BaseAgent | None", str]:
         """Gibt einen Agenten anhand seiner ID zurück, oder (None, '') wenn nicht gefunden."""
-        agent = self._live_agents.get(agent_id)
-        name = self._meta.get(agent_id, {}).get("name", agent_id) if agent else ""
-        return agent, name
+        tenant = _effective_tenant_id()
+        scoped = _scoped_id(tenant, agent_id)
+        agent = self._live_agents.get(scoped)
+        if agent:
+            name = self._meta.get(scoped, {}).get("name", agent_id)
+            return agent, name
+
+        # Fallback: für Legacy-/System-Kontexte nicht tenant-scoped suchen
+        for sid, a in self._live_agents.items():
+            if sid.endswith(f":{agent_id}"):
+                name = self._meta.get(sid, {}).get("name", agent_id)
+                return a, name
+        return None, ""
 
     # ──────────────────────────────────────────────────────────────────────
     # Registrierung
@@ -182,6 +213,7 @@ class DynamicAgentPool:
         name: str,
         system_prompt: str,
         description: str = "",
+        tenant_id: str = "",
     ) -> tuple[str, "BaseAgent"]:
         """
         Registriert einen neuen Agenten:
@@ -192,6 +224,7 @@ class DynamicAgentPool:
         import uuid
         from core.redis_client import get_redis
 
+        tenant = _effective_tenant_id(tenant_id)
         agent_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
 
@@ -207,14 +240,16 @@ class DynamicAgentPool:
             "created_at": now,
             "updated_at": now,
             "dynamic": True,
+            "tenant_id": tenant,
         }
 
         async with self._register_lock:
             redis = get_redis()
-            raw = await redis.connection.get(REDIS_KEY)
+            redis_key = _tenant_key(tenant)
+            raw = await redis.connection.get(redis_key)
             agents = json.loads(raw) if raw else []
             agents.append(agent_def)
-            await redis.connection.set(REDIS_KEY, json.dumps(agents))
+            await redis.connection.set(redis_key, json.dumps(agents))
 
         # Soul MD automatisch generieren und persistent speichern
         try:
@@ -240,7 +275,15 @@ class DynamicAgentPool:
 
     def get_by_id(self, agent_id: str) -> "BaseAgent | None":
         """Gibt einen Live-Agenten anhand seiner ID zurück."""
-        return self._live_agents.get(agent_id)
+        tenant = _effective_tenant_id()
+        scoped = _scoped_id(tenant, agent_id)
+        agent = self._live_agents.get(scoped)
+        if agent:
+            return agent
+        for sid, a in self._live_agents.items():
+            if sid.endswith(f":{agent_id}"):
+                return a
+        return None
 
     # ──────────────────────────────────────────────────────────────────────
     # Update
@@ -253,6 +296,7 @@ class DynamicAgentPool:
         name: str | None = None,
         system_prompt: str | None = None,
         description: str | None = None,
+        tenant_id: str = "",
     ) -> bool:
         """
         Aktualisiert einen bestehenden Agenten in Redis und im Live-Pool.
@@ -261,9 +305,12 @@ class DynamicAgentPool:
         from core.redis_client import get_redis
         from datetime import datetime, timezone
 
+        tenant = _effective_tenant_id(tenant_id)
+        scoped_id = _scoped_id(tenant, agent_id)
         async with self._register_lock:
             redis = get_redis()
-            raw = await redis.connection.get(REDIS_KEY)
+            redis_key = _tenant_key(tenant)
+            raw = await redis.connection.get(redis_key)
             agents = json.loads(raw) if raw else []
 
             idx = next((i for i, a in enumerate(agents) if a["id"] == agent_id), None)
@@ -278,11 +325,11 @@ class DynamicAgentPool:
                 agents[idx]["description"] = description
             agents[idx]["updated_at"] = datetime.now(timezone.utc).isoformat()
 
-            await redis.connection.set(REDIS_KEY, json.dumps(agents))
+            await redis.connection.set(redis_key, json.dumps(agents))
 
             # Live-Instanz neu erstellen damit der neue Prompt sofort wirkt
-            self._meta[agent_id] = agents[idx]
-            if agent_id in self._live_agents:
+            self._meta[scoped_id] = agents[idx]
+            if scoped_id in self._live_agents:
                 self._instantiate(agents[idx])
 
         # Soul MD neu generieren wenn name oder description geändert wurde
@@ -290,7 +337,7 @@ class DynamicAgentPool:
             try:
                 from core.soul_manager import get_soul_manager
                 sm = get_soul_manager()
-                meta = self._meta[agent_id]
+                meta = self._meta[scoped_id]
                 caps = _extract_capabilities(meta.get("system_prompt", ""))
                 soul_md = sm.generate_soul(
                     name=meta["name"],
@@ -306,7 +353,11 @@ class DynamicAgentPool:
 
     def list_agents(self) -> list[dict]:
         """Gibt alle Agent-Metadaten als Liste zurück."""
-        return list(self._meta.values())
+        tenant = _effective_tenant_id()
+        return [
+            m for m in self._meta.values()
+            if _normalize_tenant(m.get("tenant_id", "default")) == tenant
+        ]
 
 
 # ── Hilfsfunktion ────────────────────────────────────────────────────────
@@ -344,3 +395,37 @@ def get_agent_pool() -> DynamicAgentPool:
     if _global_pool is None:
         _global_pool = DynamicAgentPool()
     return _global_pool
+
+
+def _normalize_tenant(tenant_id: str) -> str:
+    t = (tenant_id or "default").strip().lower().replace(" ", "_")
+    return t or "default"
+
+
+def _effective_tenant_id(tenant_id: str = "") -> str:
+    if tenant_id:
+        return _normalize_tenant(tenant_id)
+    try:
+        from core import status_bus
+        sid = status_bus.get_session_id().strip()
+    except _AGENT_POOL_EXCEPTIONS:
+        sid = ""
+    if ":" in sid:
+        return _normalize_tenant(sid.split(":", 1)[0])
+    return "default"
+
+
+def _tenant_key(tenant_id: str) -> str:
+    return f"{REDIS_KEY}:{_normalize_tenant(tenant_id)}"
+
+
+def _tenant_from_key(key: str) -> str:
+    raw = (key or "").strip()
+    prefix = f"{REDIS_KEY}:"
+    if not raw.startswith(prefix):
+        return ""
+    return _normalize_tenant(raw[len(prefix):])
+
+
+def _scoped_id(tenant_id: str, agent_id: str) -> str:
+    return f"{_normalize_tenant(tenant_id)}:{agent_id}"

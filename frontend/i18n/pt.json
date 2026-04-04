@@ -642,6 +642,23 @@
       "loadError2": "Erro ao carregar.",
       "noIssues": "Sem problemas atuais",
       "noData": "Sem dados disponíveis"
+    },
+    "discord": {
+      "noConnections": "Sem conexões Discord",
+      "selectConnection": "Por favor selecione uma conexão.",
+      "loading": "Carregando…",
+      "guild": "Servidor",
+      "channels": "Canais",
+      "members": "Membros",
+      "messages": "Mensagens",
+      "noChannels": "Nenhum canal encontrado.",
+      "noMembers": "Nenhum membro encontrado.",
+      "noMessages": "Sem mensagens.",
+      "loadError": "Erro ao carregar.",
+      "error": "Erro: ",
+      "createChannel": "Criar canal",
+      "deleteChannel": "Excluir canal",
+      "sendMessage": "Enviar mensagem"
     }
   }
 }

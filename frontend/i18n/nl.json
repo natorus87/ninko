@@ -642,6 +642,23 @@
       "loadError2": "Fout bij laden.",
       "noIssues": "Geen huidige problemen",
       "noData": "Geen gegevens beschikbaar"
+    },
+    "discord": {
+      "noConnections": "Geen Discord-verbindingen",
+      "selectConnection": "Selecteer een verbinding.",
+      "loading": "Laden…",
+      "guild": "Server",
+      "channels": "Kanalen",
+      "members": "Leden",
+      "messages": "Berichten",
+      "noChannels": "Geen kanalen gevonden.",
+      "noMembers": "Geen leden gevonden.",
+      "noMessages": "Geen berichten.",
+      "loadError": "Fout bij laden.",
+      "error": "Fout: ",
+      "createChannel": "Kanaal maken",
+      "deleteChannel": "Kanaal verwijderen",
+      "sendMessage": "Bericht verzenden"
     }
   }
 }

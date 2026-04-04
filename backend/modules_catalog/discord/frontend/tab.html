@@ -1,0 +1,70 @@
+<div class="module-tab" id="discord-tab">
+    <div class="module-header">
+        <h3>Discord</h3>
+        <div class="connection-select-wrapper">
+            <select id="discord-conn-select" class="form-select" onchange="DiscordTab.load()">
+                <option value="">Lade…</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="module-content">
+        <div class="status-grid">
+            <div class="status-card" id="discord-card-server">
+                <div class="status-icon">🏠</div>
+                <div class="status-label" id="discord-server-name">-</div>
+                <div class="status-sublabel">Server</div>
+            </div>
+            <div class="status-card" id="discord-card-members">
+                <div class="status-icon">👥</div>
+                <div class="status-label" id="discord-member-count">-</div>
+                <div class="status-sublabel">Members</div>
+            </div>
+            <div class="status-card" id="discord-card-channels">
+                <div class="status-icon">📁</div>
+                <div class="status-label" id="discord-channel-count">-</div>
+                <div class="status-sublabel">Channels</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h4 data-i18n="discord.channels">Kanäle</h4>
+            <div id="discord-channels-list" class="channel-list"></div>
+        </div>
+
+        <div class="section">
+            <h4 data-i18n="discord.sendMessage">Nachricht senden</h4>
+            <div class="form-row">
+                <input type="text" id="discord-channel-input" class="form-input" placeholder="Channel ID">
+                <input type="text" id="discord-message-input" class="form-input" placeholder="Nachricht">
+                <button class="btn btn-primary" onclick="DiscordTab.sendMessage()" data-i18n="common.send">Senden</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+#discord-tab .status-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+#discord-tab .channel-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+#discord-tab .channel-item {
+    padding: 0.5rem;
+    background: var(--bg-secondary, #f5f5f5);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+#discord-tab .channel-type {
+    font-size: 0.8rem;
+    color: var(--text-muted, #666);
+}
+</style>

@@ -1,6 +1,42 @@
 # Ninko – Abgeschlossene Aufgaben
 
-Stand: 2026-04-03
+Stand: 2026-04-04
+
+---
+
+## Discord-Modul ✅ *2026-04-04*
+
+### Implementierte Funktionen
+- [x] `get_guild_info` — Server-Informationen abrufen
+- [x] `get_channels` — Kanal-Liste (Text/Voice/Category)
+- [x] `get_members` — Mitglieder-Liste
+- [x] `get_messages` — Nachrichten-History
+- [x] `create_channel` — Text/Voice-Kanal erstellen
+- [x] `delete_channel` — Kanal löschen
+- [x] `send_message` — Nachricht senden
+- [x] `search_messages` — Nachrichten durchsuchen
+
+### Technische Umsetzung
+- **Tools**: 8 LangGraph-Tools in `backend/modules_catalog/discord/tools.py`
+- **Agent**: System-Prompt mit allen 10 Sprachen
+- **Routing**: Keywords `discord`, `server`, `guild`, `channel`, `textkanal`
+- **Frontend**: Dashboard-Tab mit Kanal-Übersicht
+
+### Dateien erstellt
+- `backend/modules_catalog/discord/manifest.py`
+- `backend/modules_catalog/discord/schemas.py`
+- `backend/modules_catalog/discord/tools.py`
+- `backend/modules_catalog/discord/agent.py`
+- `backend/modules_catalog/discord/routes.py`
+- `backend/modules_catalog/discord/__init__.py`
+- `backend/modules_catalog/discord/frontend/tab.html`
+- `backend/modules_catalog/discord/frontend/tab.js`
+- `backend/modules_catalog/discord/README.md`
+
+### Dateien geändert
+- `backend/modules_catalog/catalog.json`
+- `backend/agents/base_agent.py` (Tool-Labels)
+- `frontend/i18n/*.json` (Discord-Sektion)
 
 ---
 

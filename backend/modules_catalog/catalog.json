@@ -183,6 +183,13 @@
       "author": "Ninko"
     },
     {
+      "name": "discord",
+      "display_name": "Discord",
+      "description": "Discord Bot – Server, Channels, Members, Messages – Send and manage Discord content.",
+      "version": "1.0.0",
+      "author": "Ninko"
+    },
+    {
       "name": "wordpress",
       "display_name": "WordPress",
       "description": "WordPress-Verwaltung – Plugins, Seiten, Beiträge, Benutzer, Einstellungen",

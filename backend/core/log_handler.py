@@ -31,6 +31,13 @@ _LOG_HANDLER_EXCEPTIONS = (
     RedisError,
 )
 
+
+def _tenant_from_session_id(session_id: str) -> str:
+    sid = (session_id or "").strip()
+    if ":" in sid:
+        return sid.split(":", 1)[0].strip().lower() or "default"
+    return "default"
+
 def _guess_category(logger_name: str) -> str:
     for prefix, cat in _CATEGORY_MAP.items():
         if logger_name.startswith(prefix):
@@ -80,6 +87,14 @@ class RedisLogHandler(logging.Handler):
                 "source": getattr(record, "source", ""),
                 "message": msg,
             }
+            try:
+                from core import status_bus
+                session_id = status_bus.get_session_id().strip()
+            except (RuntimeError, ValueError, TypeError, AttributeError, ImportError):
+                session_id = ""
+            if session_id:
+                entry["session_id"] = session_id
+            entry["tenant_id"] = _tenant_from_session_id(session_id)
             
             if record.exc_info:
                 try:

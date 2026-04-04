@@ -642,6 +642,23 @@
       "loadError2": "読み込みエラー。",
       "noIssues": "現在の問題なし",
       "noData": "データがありません"
+    },
+    "discord": {
+      "noConnections": "Discord接続なし",
+      "selectConnection": "接続を選択してください。",
+      "loading": "読み込み中…",
+      "guild": "サーバー",
+      "channels": "チャンネル",
+      "members": "メンバー",
+      "messages": "メッセージ",
+      "noChannels": "チャンネルが見つかりません。",
+      "noMembers": "メンバーが見つかりません。",
+      "noMessages": "メッセージはありません。",
+      "loadError": "読み込みエラー。",
+      "error": "エラー: ",
+      "createChannel": "チャンネル作成",
+      "deleteChannel": "チャンネル削除",
+      "sendMessage": "メッセージ送信"
     }
   }
 }

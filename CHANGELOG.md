@@ -7,6 +7,33 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.9.5] – 2026-04-04
+
+### Added
+
+- **Discord-Modul** (Catalog):
+  - `get_guild_info` — Server-Informationen abrufen
+  - `get_channels` — Kanal-Liste (Text/Voice/Category)
+  - `get_members` — Mitglieder-Liste
+  - `get_messages` — Nachrichten-History
+  - `create_channel` — Text/Voice-Kanal erstellen
+  - `delete_channel` — Kanal löschen
+  - `send_message` — Nachricht senden
+  - `search_messages` — Nachrichten durchsuchen
+
+- **Operation Journal Erweiterungen**:
+  - `GET /api/operations/transactions` — Transaktions-Liste
+  - `GET /api/operations/transactions/{id}` — Transaktions-Details
+  - Tenant-scoped Session-Management
+
+### Changed
+
+- **RBAC Multi-Tenancy**:
+  - Tenant-Scoping für Chat-History und Workflow-Storage
+  - Session-Token erweitert um `tenant_id`
+
+---
+
 ## [0.9.4] – 2026-04-03
 
 ### Added
