@@ -48,7 +48,7 @@ module_manifest = ModuleManifest(
         "Speichert und durchsucht Fachwissen, IT-Dokumentation und Runbooks "
         "per semantischer Vektorsuche mit Payload-Filterung nach Kategorie und Tags."
     ),
-    version="1.1.0",
+    version="1.1.1",
     author="Ninko Team",
     enabled_by_default=False,
     env_prefix="NINKO_MODULE_QDRANT",
