@@ -24,6 +24,10 @@ from .tools import (
     delete_resource,
     get_resource_yaml,
     create_namespace,
+    create_deployment,
+    patch_deployment,
+    patch_configmap,
+    create_configmap,
 )
 
 K8S_SYSTEM_PROMPT = _t(
@@ -51,7 +55,6 @@ Bei Fehlern:
 - Zeige zuerst den aktuellen Status
 - Analysiere Logs und Events
 - Schlage konkrete Maßnahmen vor""",
-
     en="""You are Ninko's Kubernetes specialist.
 
 Your capabilities:
@@ -75,7 +78,8 @@ Behavior rules:
 On errors:
 - Show current status first
 - Analyze logs and events
-- Suggest concrete actions""")
+- Suggest concrete actions""",
+)
 
 
 class KubernetesAgent(BaseAgent):
@@ -104,5 +108,9 @@ class KubernetesAgent(BaseAgent):
                 delete_resource,
                 get_resource_yaml,
                 create_namespace,
+                create_deployment,
+                patch_deployment,
+                patch_configmap,
+                create_configmap,
             ],
         )

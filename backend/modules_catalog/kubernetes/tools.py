@@ -30,7 +30,9 @@ async def _get_k8s_client(
     if connection_id:
         conn = await ConnectionManager.get_connection("kubernetes", connection_id)
         if not conn:
-            raise ValueError(f"Kubernetes connection with ID '{connection_id}' not found.")
+            raise ValueError(
+                f"Kubernetes connection with ID '{connection_id}' not found."
+            )
     else:
         conn = await ConnectionManager.get_default_connection("kubernetes")
         # Fallback to local
@@ -49,7 +51,7 @@ async def _get_k8s_client(
     # Get kubeconfig from Vault
     vault = get_vault()
     kubeconfig_key = conn.vault_keys.get("kubeconfig")
-    
+
     if not kubeconfig_key:
         # Maybe local context indicated by environment
         if conn.environment == "local":
@@ -63,14 +65,17 @@ async def _get_k8s_client(
 
     kubeconfig_bytes = base64.b64decode(kubeconfig_b64)
     kubeconfig_str = kubeconfig_bytes.decode("utf-8")
-    
+
     import yaml
+
     try:
         config_dict = yaml.safe_load(kubeconfig_str)
         config.load_kube_config_from_dict(config_dict)
     except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         logger.error("Failed to parse kubeconfig: %s", e)
-        raise ValueError(f"Invalid kubeconfig for connection '{conn.name}'. Please check the file.")
+        raise ValueError(
+            f"Invalid kubeconfig for connection '{conn.name}'. Please check the file."
+        )
 
     return client.CoreV1Api(), client.AppsV1Api(), client.NetworkingV1Api()
 
@@ -87,7 +92,11 @@ def _pod_age(creation_timestamp) -> str:
     if not creation_timestamp:
         return "unknown"
     now = datetime.now(timezone.utc)
-    delta = now - creation_timestamp.replace(tzinfo=timezone.utc) if creation_timestamp.tzinfo is None else now - creation_timestamp
+    delta = (
+        now - creation_timestamp.replace(tzinfo=timezone.utc)
+        if creation_timestamp.tzinfo is None
+        else now - creation_timestamp
+    )
     days = delta.days
     hours = delta.seconds // 3600
     if days > 0:
@@ -110,10 +119,14 @@ async def get_cluster_status(connection_id: str = "") -> dict:
 
     running = sum(1 for p in pods.items if p.status.phase == "Running")
     failing = sum(
-        1 for p in pods.items
+        1
+        for p in pods.items
         if p.status.phase in ("Failed", "Unknown")
         or any(
-            cs.state and cs.state.waiting and cs.state.waiting.reason in ("CrashLoopBackOff", "ErrImagePull", "ImagePullBackOff")
+            cs.state
+            and cs.state.waiting
+            and cs.state.waiting.reason
+            in ("CrashLoopBackOff", "ErrImagePull", "ImagePullBackOff")
             for cs in (p.status.container_statuses or [])
         )
     )
@@ -145,7 +158,9 @@ async def list_namespaces(connection_id: str = "") -> list[dict]:
 
 
 @tool
-async def get_all_pods(namespace: str = "default", connection_id: str = "") -> list[dict]:
+async def get_all_pods(
+    namespace: str = "default", connection_id: str = ""
+) -> list[dict]:
     """Lists all pods in a namespace."""
     v1, _, _ = await _get_k8s_client(connection_id)
     pods = v1.list_namespaced_pod(namespace=namespace)
@@ -157,16 +172,18 @@ async def get_all_pods(namespace: str = "default", connection_id: str = "") -> l
         total_count = len(containers)
         restarts = sum(c.restart_count for c in containers)
 
-        result.append({
-            "name": p.metadata.name,
-            "namespace": p.metadata.namespace,
-            "status": p.status.phase,
-            "ready": f"{ready_count}/{total_count}",
-            "restarts": restarts,
-            "age": _pod_age(p.metadata.creation_timestamp),
-            "node": p.spec.node_name or "",
-            "ip": p.status.pod_ip or "",
-        })
+        result.append(
+            {
+                "name": p.metadata.name,
+                "namespace": p.metadata.namespace,
+                "status": p.status.phase,
+                "ready": f"{ready_count}/{total_count}",
+                "restarts": restarts,
+                "age": _pod_age(p.metadata.creation_timestamp),
+                "node": p.spec.node_name or "",
+                "ip": p.status.pod_ip or "",
+            }
+        )
 
     return result
 
@@ -188,10 +205,15 @@ async def get_failing_pods(namespace: str = "", connection_id: str = "") -> list
         if p.status.phase in ("Failed", "Unknown"):
             issues.append(f"Phase: {p.status.phase}")
 
-        for cs in (p.status.container_statuses or []):
+        for cs in p.status.container_statuses or []:
             if cs.state and cs.state.waiting:
                 reason = cs.state.waiting.reason or "Unknown"
-                if reason in ("CrashLoopBackOff", "ErrImagePull", "ImagePullBackOff", "CreateContainerConfigError"):
+                if reason in (
+                    "CrashLoopBackOff",
+                    "ErrImagePull",
+                    "ImagePullBackOff",
+                    "CreateContainerConfigError",
+                ):
                     issues.append(f"{cs.name}: {reason}")
             if cs.state and cs.state.terminated:
                 reason = cs.state.terminated.reason or "Unknown"
@@ -203,15 +225,17 @@ async def get_failing_pods(namespace: str = "", connection_id: str = "") -> list
         if issues:
             containers = p.status.container_statuses or []
             ready_count = sum(1 for c in containers if c.ready)
-            failing.append({
-                "name": p.metadata.name,
-                "namespace": p.metadata.namespace,
-                "status": p.status.phase,
-                "ready": f"{ready_count}/{len(containers)}",
-                "restarts": sum(c.restart_count for c in containers),
-                "issues": issues,
-                "age": _pod_age(p.metadata.creation_timestamp),
-            })
+            failing.append(
+                {
+                    "name": p.metadata.name,
+                    "namespace": p.metadata.namespace,
+                    "status": p.status.phase,
+                    "ready": f"{ready_count}/{len(containers)}",
+                    "restarts": sum(c.restart_count for c in containers),
+                    "issues": issues,
+                    "age": _pod_age(p.metadata.creation_timestamp),
+                }
+            )
 
     return failing
 
@@ -241,7 +265,9 @@ async def restart_pod(namespace: str, pod_name: str, connection_id: str = "") ->
 
 
 @tool
-async def get_pod_logs(namespace: str, pod_name: str, lines: int = 100, connection_id: str = "") -> dict:
+async def get_pod_logs(
+    namespace: str, pod_name: str, lines: int = 100, connection_id: str = ""
+) -> dict:
     """Returns the last log lines of a pod."""
     v1, _, _ = await _get_k8s_client(connection_id)
 
@@ -266,7 +292,9 @@ async def get_pod_logs(namespace: str, pod_name: str, lines: int = 100, connecti
 
 
 @tool
-async def scale_deployment(namespace: str, name: str, replicas: int, connection_id: str = "") -> dict:
+async def scale_deployment(
+    namespace: str, name: str, replicas: int, connection_id: str = ""
+) -> dict:
     """Scales a deployment to the specified number of replicas."""
     _, apps_v1, _ = await _get_k8s_client(connection_id)
 
@@ -293,7 +321,9 @@ async def scale_deployment(namespace: str, name: str, replicas: int, connection_
 
 
 @tool
-async def rollout_restart(namespace: str, deployment_name: str, connection_id: str = "") -> dict:
+async def rollout_restart(
+    namespace: str, deployment_name: str, connection_id: str = ""
+) -> dict:
     """Performs a rollout restart of a deployment."""
     _, apps_v1, _ = await _get_k8s_client(connection_id)
 
@@ -304,9 +334,7 @@ async def rollout_restart(namespace: str, deployment_name: str, connection_id: s
             "spec": {
                 "template": {
                     "metadata": {
-                        "annotations": {
-                            "kubectl.kubernetes.io/restartedAt": now
-                        }
+                        "annotations": {"kubectl.kubernetes.io/restartedAt": now}
                     }
                 }
             }
@@ -332,7 +360,9 @@ async def rollout_restart(namespace: str, deployment_name: str, connection_id: s
 
 
 @tool
-async def get_deployment_status(namespace: str, name: str, connection_id: str = "") -> dict:
+async def get_deployment_status(
+    namespace: str, name: str, connection_id: str = ""
+) -> dict:
     """Returns the detailed status of a deployment."""
     _, apps_v1, _ = await _get_k8s_client(connection_id)
 
@@ -347,14 +377,18 @@ async def get_deployment_status(namespace: str, name: str, connection_id: str = 
             "updated": dep.status.updated_replicas or 0,
             "age": _pod_age(dep.metadata.creation_timestamp),
             "strategy": dep.spec.strategy.type if dep.spec.strategy else "unknown",
-            "image": dep.spec.template.spec.containers[0].image if dep.spec.template.spec.containers else "unknown",
+            "image": dep.spec.template.spec.containers[0].image
+            if dep.spec.template.spec.containers
+            else "unknown",
         }
     except client.ApiException as e:
         return {"error": f"{e.reason} ({e.status})"}
 
 
 @tool
-async def get_recent_events(namespace: str = "default", last_minutes: int = 30, connection_id: str = "") -> list[dict]:
+async def get_recent_events(
+    namespace: str = "default", last_minutes: int = 30, connection_id: str = ""
+) -> list[dict]:
     """Returns the recent Kubernetes events of a namespace."""
     v1, _, _ = await _get_k8s_client(connection_id)
 
@@ -365,20 +399,26 @@ async def get_recent_events(namespace: str = "default", last_minutes: int = 30, 
     for e in events.items:
         event_time = e.last_timestamp or e.event_time or e.metadata.creation_timestamp
         if event_time and event_time.replace(tzinfo=timezone.utc) >= cutoff:
-            recent.append({
-                "type": e.type,
-                "reason": e.reason,
-                "message": e.message,
-                "source": e.source.component if e.source else "",
-                "object": f"{e.involved_object.kind}/{e.involved_object.name}" if e.involved_object else "",
-                "timestamp": event_time.isoformat() if event_time else "",
-            })
+            recent.append(
+                {
+                    "type": e.type,
+                    "reason": e.reason,
+                    "message": e.message,
+                    "source": e.source.component if e.source else "",
+                    "object": f"{e.involved_object.kind}/{e.involved_object.name}"
+                    if e.involved_object
+                    else "",
+                    "timestamp": event_time.isoformat() if event_time else "",
+                }
+            )
 
     return sorted(recent, key=lambda x: x["timestamp"], reverse=True)
 
 
 @tool
-async def list_services(namespace: str = "default", connection_id: str = "") -> list[dict]:
+async def list_services(
+    namespace: str = "default", connection_id: str = ""
+) -> list[dict]:
     """Lists all services in a namespace."""
     v1, _, _ = await _get_k8s_client(connection_id)
 
@@ -390,7 +430,8 @@ async def list_services(namespace: str = "default", connection_id: str = "") -> 
             "type": svc.spec.type,
             "cluster_ip": svc.spec.cluster_ip or "",
             "ports": [
-                f"{p.port}/{p.protocol}" + (f"→{p.target_port}" if p.target_port else "")
+                f"{p.port}/{p.protocol}"
+                + (f"→{p.target_port}" if p.target_port else "")
                 for p in (svc.spec.ports or [])
             ],
         }
@@ -399,7 +440,9 @@ async def list_services(namespace: str = "default", connection_id: str = "") -> 
 
 
 @tool
-async def list_ingresses(namespace: str = "default", connection_id: str = "") -> list[dict]:
+async def list_ingresses(
+    namespace: str = "default", connection_id: str = ""
+) -> list[dict]:
     """Lists all ingresses in a namespace."""
     _, _, net_v1 = await _get_k8s_client(connection_id)
 
@@ -408,9 +451,7 @@ async def list_ingresses(namespace: str = "default", connection_id: str = "") ->
         {
             "name": ing.metadata.name,
             "namespace": ing.metadata.namespace,
-            "hosts": [
-                rule.host for rule in (ing.spec.rules or []) if rule.host
-            ],
+            "hosts": [rule.host for rule in (ing.spec.rules or []) if rule.host],
             "class_name": ing.spec.ingress_class_name or "",
         }
         for ing in ingresses.items
@@ -429,9 +470,7 @@ async def list_pvcs(namespace: str = "default", connection_id: str = "") -> list
             "namespace": pvc.metadata.namespace,
             "status": pvc.status.phase,
             "capacity": (
-                pvc.status.capacity.get("storage", "")
-                if pvc.status.capacity
-                else ""
+                pvc.status.capacity.get("storage", "") if pvc.status.capacity else ""
             ),
             "storage_class": pvc.spec.storage_class_name or "",
         }
@@ -440,7 +479,9 @@ async def list_pvcs(namespace: str = "default", connection_id: str = "") -> list
 
 
 @tool
-async def list_deployments(namespace: str = "default", connection_id: str = "") -> list[dict]:
+async def list_deployments(
+    namespace: str = "default", connection_id: str = ""
+) -> list[dict]:
     """Lists all Deployments in a namespace with replica counts and image info."""
     _, apps_v1, _ = await _get_k8s_client(connection_id)
     deps = apps_v1.list_namespaced_deployment(namespace=namespace)
@@ -450,7 +491,9 @@ async def list_deployments(namespace: str = "default", connection_id: str = "") 
             "namespace": d.metadata.namespace,
             "ready": f"{d.status.ready_replicas or 0}/{d.spec.replicas}",
             "available": d.status.available_replicas or 0,
-            "image": d.spec.template.spec.containers[0].image if d.spec.template.spec.containers else "",
+            "image": d.spec.template.spec.containers[0].image
+            if d.spec.template.spec.containers
+            else "",
             "age": _pod_age(d.metadata.creation_timestamp),
         }
         for d in deps.items
@@ -458,7 +501,9 @@ async def list_deployments(namespace: str = "default", connection_id: str = "") 
 
 
 @tool
-async def apply_manifest(yaml_content: str, namespace: str = "default", connection_id: str = "") -> dict:
+async def apply_manifest(
+    yaml_content: str, namespace: str = "default", connection_id: str = ""
+) -> dict:
     """Create or update any Kubernetes resource from a YAML manifest string.
 
     Accepts a YAML string describing one or more resources (Pod, Deployment, Service,
@@ -489,22 +534,29 @@ async def apply_manifest(yaml_content: str, namespace: str = "default", connecti
                 namespace=ns if resource.namespaced else None,
                 field_manager="ninko",
             )
-            results.append({
-                "kind": kind,
-                "name": name,
-                "namespace": ns,
-                "status": "applied",
-                "resource_version": resp.metadata.resourceVersion,
-            })
+            results.append(
+                {
+                    "kind": kind,
+                    "name": name,
+                    "namespace": ns,
+                    "status": "applied",
+                    "resource_version": resp.metadata.resourceVersion,
+                }
+            )
         except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
-            results.append({
-                "kind": kind,
-                "name": name,
-                "namespace": ns,
-                "status": "error",
-                "detail": str(e),
-            })
-    return {"applied": len([r for r in results if r["status"] == "applied"]), "results": results}
+            results.append(
+                {
+                    "kind": kind,
+                    "name": name,
+                    "namespace": ns,
+                    "status": "error",
+                    "detail": str(e),
+                }
+            )
+    return {
+        "applied": len([r for r in results if r["status"] == "applied"]),
+        "results": results,
+    }
 
 
 @tool
@@ -584,7 +636,9 @@ async def get_resource_yaml(
 
 
 @tool
-async def create_namespace(name: str, labels: dict | None = None, connection_id: str = "") -> dict:
+async def create_namespace(
+    name: str, labels: dict | None = None, connection_id: str = ""
+) -> dict:
     """Creates a new Kubernetes namespace.
 
     Args:
@@ -607,6 +661,242 @@ async def create_namespace(name: str, labels: dict | None = None, connection_id:
         return {
             "action": "create_namespace",
             "name": name,
+            "status": "error",
+            "detail": f"{e.reason} ({e.status})",
+        }
+
+
+@tool
+async def create_deployment(
+    name: str,
+    image: str,
+    namespace: str = "default",
+    replicas: int = 1,
+    port: int | None = None,
+    env_vars: list[dict] | None = None,
+    resources: dict | None = None,
+    labels: dict | None = None,
+    connection_id: str = "",
+) -> dict:
+    """Creates a full Deployment with container configuration.
+
+    Args:
+        name: Name of the deployment.
+        image: Container image (e.g., nginx:latest).
+        namespace: Target namespace.
+        replicas: Number of replicas (default: 1).
+        port: Container port to expose.
+        env_vars: List of env vars [{"name": "KEY", "value": "val"}].
+        resources: Dict with "limits" and/or "requests" cpu/memory.
+        labels: Dict of labels to attach.
+        connection_id: Optional Kubernetes connection ID.
+    """
+    _, apps_v1, _ = await _get_k8s_client(connection_id)
+
+    container = client.V1Container(
+        name=name,
+        image=image,
+        ports=[client.V1ContainerPort(container_port=port)] if port else None,
+        env=[
+            client.V1EnvVar(name=e["name"], value=e.get("value"))
+            for e in (env_vars or [])
+        ],
+        resources=client.V1ResourceRequirements(
+            limits=resources.get("limits") if resources else None,
+            requests=resources.get("requests") if resources else None,
+        )
+        if resources
+        else None,
+    )
+
+    pod_spec = client.V1PodSpec(containers=[container])
+    selector = {"app": name}
+    pod_template = client.V1PodTemplateSpec(
+        metadata=client.V1ObjectMeta(labels=labels or selector),
+        spec=pod_spec,
+    )
+
+    body = client.V1Deployment(
+        metadata=client.V1ObjectMeta(
+            name=name, namespace=namespace, labels=labels or None
+        ),
+        spec=client.V1DeploymentSpec(
+            replicas=replicas,
+            selector=client.V1LabelSelector(match_labels=selector),
+            template=pod_template,
+        ),
+    )
+
+    try:
+        dep = apps_v1.create_namespaced_deployment(namespace=namespace, body=body)
+        return {
+            "action": "create_deployment",
+            "name": dep.metadata.name,
+            "namespace": namespace,
+            "replicas": dep.spec.replicas,
+            "image": dep.spec.template.spec.containers[0].image,
+            "status": "created",
+        }
+    except client.ApiException as e:
+        return {
+            "action": "create_deployment",
+            "name": name,
+            "namespace": namespace,
+            "status": "error",
+            "detail": f"{e.reason} ({e.status})",
+        }
+
+
+@tool
+async def patch_deployment(
+    name: str,
+    namespace: str = "default",
+    image: str | None = None,
+    replicas: int | None = None,
+    env_vars: list[dict] | None = None,
+    resources: dict | None = None,
+    connection_id: str = "",
+) -> dict:
+    """Patches a Deployment with changes to image, replicas, env vars, or resources.
+
+    Args:
+        name: Name of the deployment to patch.
+        namespace: Namespace of the deployment.
+        image: New container image (e.g., nginx:1.25).
+        replicas: New replica count.
+        env_vars: List of env vars to set/update [{"name": "KEY", "value": "val"}].
+        resources: Dict with "limits" and/or "requests" cpu/memory.
+        connection_id: Optional Kubernetes connection ID.
+    """
+    _, apps_v1, _ = await _get_k8s_client(connection_id)
+
+    body: dict = {"spec": {}}
+
+    if replicas is not None:
+        body["spec"]["replicas"] = replicas
+
+    if image or env_vars or resources:
+        container_patch = {}
+        env_list = None
+        resources_obj = None
+
+        if env_vars:
+            env_list = [
+                client.V1EnvVar(name=e["name"], value=e.get("value")) for e in env_vars
+            ]
+
+        if resources:
+            resources_obj = client.V1ResourceRequirements(
+                limits=resources.get("limits") if resources else None,
+                requests=resources.get("requests") if resources else None,
+            )
+
+        if image or env_list or resources_obj:
+            container_patch = {
+                "name": name,
+            }
+            if image:
+                container_patch["image"] = image
+            if env_list:
+                container_patch["env"] = env_list
+            if resources_obj:
+                container_patch["resources"] = resources_obj
+
+        body["spec"]["template"] = {"spec": {"containers": [container_patch]}}
+
+    try:
+        apps_v1.patch_namespaced_deployment(name=name, namespace=namespace, body=body)
+        return {
+            "action": "patch_deployment",
+            "name": name,
+            "namespace": namespace,
+            "status": "patched",
+            "detail": "Deployment updated successfully.",
+        }
+    except client.ApiException as e:
+        return {
+            "action": "patch_deployment",
+            "name": name,
+            "namespace": namespace,
+            "status": "error",
+            "detail": f"{e.reason} ({e.status})",
+        }
+
+
+@tool
+async def patch_configmap(
+    name: str,
+    namespace: str = "default",
+    data: dict | None = None,
+    connection_id: str = "",
+) -> dict:
+    """Patches a ConfigMap with new or updated data entries.
+
+    Args:
+        name: Name of the ConfigMap to patch.
+        namespace: Namespace of the ConfigMap.
+        data: Dict of key-value pairs to set/update.
+        connection_id: Optional Kubernetes connection ID.
+    """
+    v1, _, _ = await _get_k8s_client(connection_id)
+
+    body = {"data": data}
+    try:
+        v1.patch_namespaced_config_map(name=name, namespace=namespace, body=body)
+        return {
+            "action": "patch_configmap",
+            "name": name,
+            "namespace": namespace,
+            "status": "patched",
+        }
+    except client.ApiException as e:
+        return {
+            "action": "patch_configmap",
+            "name": name,
+            "namespace": namespace,
+            "status": "error",
+            "detail": f"{e.reason} ({e.status})",
+        }
+
+
+@tool
+async def create_configmap(
+    name: str,
+    namespace: str = "default",
+    data: dict | None = None,
+    labels: dict | None = None,
+    connection_id: str = "",
+) -> dict:
+    """Creates a ConfigMap with key-value data.
+
+    Args:
+        name: Name of the ConfigMap.
+        namespace: Target namespace.
+        data: Dict of key-value pairs.
+        labels: Optional dict of labels.
+        connection_id: Optional Kubernetes connection ID.
+    """
+    v1, _, _ = await _get_k8s_client(connection_id)
+
+    body = client.V1ConfigMap(
+        metadata=client.V1ObjectMeta(
+            name=name, namespace=namespace, labels=labels or {}
+        ),
+        data=data or {},
+    )
+    try:
+        cm = v1.create_namespaced_config_map(namespace=namespace, body=body)
+        return {
+            "action": "create_configmap",
+            "name": cm.metadata.name,
+            "namespace": namespace,
+            "status": "created",
+        }
+    except client.ApiException as e:
+        return {
+            "action": "create_configmap",
+            "name": name,
+            "namespace": namespace,
             "status": "error",
             "detail": f"{e.reason} ({e.status})",
         }

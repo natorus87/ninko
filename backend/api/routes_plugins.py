@@ -50,24 +50,35 @@ _REDIS_PLUGIN_META_KEY = "ninko:plugins:metadata"
 
 # ─── Hilfsfunktionen ──────────────────────────────────────────────────────────
 
+
 def _parse_github_url(url: str) -> tuple[str, str] | None:
     """Extrahiert (owner, repo) aus einer GitHub-URL."""
-    m = re.search(r'github\.com[:/]([^/]+)/([^/.\s]+?)(?:\.git)?\s*$', url.strip())
+    m = re.search(r"github\.com[:/]([^/]+)/([^/.\s]+?)(?:\.git)?\s*$", url.strip())
     return (m.group(1), m.group(2)) if m else None
 
 
 def _version_tuple(v: str) -> tuple[int, ...]:
     try:
         return tuple(int(x) for x in v.strip().lstrip("v").split("."))
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError):
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        json.JSONDecodeError,
+    ):
         return (0,)
 
 
 def _extract_manifest_info(content: str) -> dict[str, str]:
     """Extrahiert key-Felder aus einer manifest.py per Regex."""
+
     def get(field: str) -> str:
         match = re.search(rf'{field}\s*=\s*["\']([^"\']+)["\']', content)
         return match.group(1) if match else ""
+
     return {
         "display_name": get("display_name"),
         "description": get("description"),
@@ -92,7 +103,9 @@ def _is_repo_allowed(repo_url: str) -> bool:
     if not allowed:
         return True
     url = repo_url.strip().lower()
-    return any(url == entry or url.startswith(entry.rstrip("/") + "/") for entry in allowed)
+    return any(
+        url == entry or url.startswith(entry.rstrip("/") + "/") for entry in allowed
+    )
 
 
 async def _load_repos() -> list[dict[str, Any]]:
@@ -127,7 +140,15 @@ async def _load_plugin_meta() -> dict[str, Any]:
     for name, payload in raw.items():
         try:
             out[name] = json.loads(payload)
-        except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError):
+        except (
+            RuntimeError,
+            ValueError,
+            TypeError,
+            KeyError,
+            OSError,
+            ImportError,
+            json.JSONDecodeError,
+        ):
             continue
     return out
 
@@ -157,10 +178,15 @@ async def _download_dir_to_zip(
     Verwendet den Repo-Tarball (github.com/archive) – kein api.github.com-Aufruf,
     daher kein Rate-Limit. Extrahiert nur das gewünschte Unterverzeichnis.
     """
-    tarball_url = f"https://github.com/{owner}/{repo}/archive/refs/heads/{branch}.tar.gz"
+    tarball_url = (
+        f"https://github.com/{owner}/{repo}/archive/refs/heads/{branch}.tar.gz"
+    )
     resp = await client.get(tarball_url, timeout=120.0, follow_redirects=True)
     if resp.status_code == 404:
-        raise HTTPException(status_code=404, detail=f"Repo '{owner}/{repo}' oder Branch '{branch}' nicht gefunden.")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Repo '{owner}/{repo}' oder Branch '{branch}' nicht gefunden.",
+        )
     resp.raise_for_status()
 
     prefix = path.rstrip("/") + "/"
@@ -172,10 +198,14 @@ async def _download_dir_to_zip(
             if not member.isfile():
                 continue
             # Strip leading "{repo}-{branch}/"
-            rel_to_root = member.name[len(tar_root):] if member.name.startswith(tar_root) else member.name
+            rel_to_root = (
+                member.name[len(tar_root) :]
+                if member.name.startswith(tar_root)
+                else member.name
+            )
             if not rel_to_root.startswith(prefix):
                 continue
-            rel = rel_to_root[len(prefix):]
+            rel = rel_to_root[len(prefix) :]
             if not rel:
                 continue
             f = tar.extractfile(member)
@@ -191,7 +221,9 @@ def _build_module_list(
     plugin_meta: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Teilt Repo-Module in: nicht installiert vs. installiertes Plugin (mit Update-Info)."""
-    installed_map: dict[str, str] = {m.name: m.version for m in registry.list_all_modules()}
+    installed_map: dict[str, str] = {
+        m.name: m.version for m in registry.list_all_modules()
+    }
     new_modules: list[dict[str, Any]] = []
     updates: list[dict[str, Any]] = []
 
@@ -203,13 +235,16 @@ def _build_module_list(
             new_modules.append(mod)
         elif (plugins_dir / name).is_dir():
             installed_version = installed_map[name]
-            updates.append({
-                **mod,
-                "installed_version": installed_version,
-                "update_available": _version_tuple(repo_version) > _version_tuple(installed_version),
-                "installed_source": meta.get("source", ""),
-                "installed_updated_at": meta.get("updated_at", 0),
-            })
+            updates.append(
+                {
+                    **mod,
+                    "installed_version": installed_version,
+                    "update_available": _version_tuple(repo_version)
+                    > _version_tuple(installed_version),
+                    "installed_source": meta.get("source", ""),
+                    "installed_updated_at": meta.get("updated_at", 0),
+                }
+            )
     return {"modules": new_modules, "updates": updates}
 
 
@@ -221,7 +256,9 @@ async def list_installed_plugins(request: Request) -> JSONResponse:
     plugins_dir.mkdir(parents=True, exist_ok=True)
     plugin_meta = await _load_plugin_meta()
 
-    installed_map: dict[str, str] = {m.name: m.version for m in registry.list_all_modules()}
+    installed_map: dict[str, str] = {
+        m.name: m.version for m in registry.list_all_modules()
+    }
     installed = []
     for plugin_dir in sorted(plugins_dir.iterdir()):
         if not plugin_dir.is_dir():
@@ -243,10 +280,101 @@ async def list_installed_plugins(request: Request) -> JSONResponse:
 
     return JSONResponse(content={"plugins": installed})
 
+
+async def _check_module_update_from_repo(
+    mod_name: str,
+    repo_url: str,
+    repo_id: str,
+    branch: str,
+    modules_path: str,
+    installed_version: str,
+) -> dict[str, Any]:
+    """Fetch latest version of a module from a GitHub repo."""
+    parsed = _parse_github_url(repo_url)
+    if not parsed:
+        return {"update_available": False}
+    owner, repo_name = parsed
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            raw_base = f"https://raw.githubusercontent.com/{owner}/{repo_name}/{branch}"
+            manifest_url = f"{raw_base}/{modules_path}/{mod_name}/manifest.py"
+            resp = await client.get(manifest_url)
+            if resp.status_code != 200:
+                return {"update_available": False}
+            info = _extract_manifest_info(resp.text)
+            repo_version = info.get("version", "")
+            return {
+                "repo_version": repo_version,
+                "update_available": _version_tuple(repo_version)
+                > _version_tuple(installed_version),
+            }
+    except Exception:
+        return {"update_available": False}
+
+
+@router.get("/check-updates")
+async def check_plugin_updates(request: Request) -> JSONResponse:
+    """Prüft für alle installierten Plugins, ob Updates verfügbar sind."""
+    registry = request.app.state.registry
+    plugins_dir = Path(__file__).resolve().parent.parent / "plugins"
+    plugins_dir.mkdir(parents=True, exist_ok=True)
+    plugin_meta = await _load_plugin_meta()
+    repos = await _load_repos()
+
+    installed_map: dict[str, str] = {
+        m.name: m.version for m in registry.list_all_modules()
+    }
+    results = []
+
+    for plugin_dir in sorted(plugins_dir.iterdir()):
+        if not plugin_dir.is_dir():
+            continue
+        name = plugin_dir.name
+        meta = plugin_meta.get(name, {})
+        installed_version = installed_map.get(name, "")
+        repo_url = meta.get("repo_url", "")
+        repo_id = meta.get("repo_id", _OFFICIAL_REPO_ID)
+        branch = "main"
+        modules_path = "backend/modules_catalog"
+
+        if repo_url:
+            parsed = _parse_github_url(repo_url)
+            if parsed:
+                owner, repo_name = parsed
+                for r in repos:
+                    if r.get("repo_url") == repo_url:
+                        branch = r.get("branch", "main")
+                        modules_path = r.get("modules_path", "backend/modules_catalog")
+                        break
+
+        update_info = await _check_module_update_from_repo(
+            name, repo_url, repo_id, branch, modules_path, installed_version
+        )
+
+        results.append(
+            {
+                "name": name,
+                "installed_version": installed_version,
+                "repo_version": update_info.get("repo_version", ""),
+                "update_available": update_info.get("update_available", False),
+                "repo_url": repo_url,
+            }
+        )
+
+    return JSONResponse(content={"plugins": results})
+
+
 _MAX_UNCOMPRESSED_SIZE = 100 * 1024 * 1024  # 100 MB
 _DANGEROUS_REQ_PATTERNS = (
-    "--index-url", "--extra-index-url", "-e git+", "-e svn+", "-e hg+",
-    "file://", "--trusted-host", "--find-links",
+    "--index-url",
+    "--extra-index-url",
+    "-e git+",
+    "-e svn+",
+    "-e hg+",
+    "file://",
+    "--trusted-host",
+    "--find-links",
 )
 
 
@@ -266,50 +394,64 @@ async def install_requirements_if_exist(plugin_dir: Path) -> bool:
     logger.info("Installiere Abhängigkeiten für Plugin aus: %s", req_file)
     try:
         proc = await asyncio.create_subprocess_exec(
-            "pip", "install", "-r", str(req_file),
+            "pip",
+            "install",
+            "-r",
+            str(req_file),
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await proc.communicate()
         if proc.returncode != 0:
             logger.error("pip install fehlgeschlagen:\n%s", stderr.decode())
             return False
-            
+
         logger.info("Abhängigkeiten erfolgreich installiert:\n%s", stdout.decode())
         return True
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as e:
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        json.JSONDecodeError,
+    ) as e:
         logger.error("Ausnahme bei der Installation der Abhängigkeiten: %s", e)
         return False
+
 
 @router.post("/upload")
 async def upload_plugin(request: Request, file: UploadFile = File(...)) -> JSONResponse:
     """
-    Nimmt ein ZIP-Archiv entgegen, entpackt es unter `backend/plugins/<name>` 
+    Nimmt ein ZIP-Archiv entgegen, entpackt es unter `backend/plugins/<name>`
     und lädt es per Hot-Load in den Speicher.
     """
     if not file.filename or not file.filename.endswith(".zip"):
-        raise HTTPException(status_code=400, detail="Es muss eine ZIP-Datei hochgeladen werden.")
-        
+        raise HTTPException(
+            status_code=400, detail="Es muss eine ZIP-Datei hochgeladen werden."
+        )
+
     plugins_dir = Path(__file__).resolve().parent.parent / "plugins"
     plugins_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # 1. ZIP in temporäres Verzeichnis speichern
     temp_dir = Path(mkdtemp())
     zip_path = temp_dir / file.filename
-    
+
     try:
         with open(zip_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-            
+
         # 2. ZIP-Sicherheitsprüfung und Entpacken
         extract_dir = temp_dir / "extracted"
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
             members = zip_ref.infolist()
             total_size = sum(m.file_size for m in members)
             if total_size > _MAX_UNCOMPRESSED_SIZE:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"ZIP-Archiv zu groß: {total_size // (1024*1024)} MB (max. 100 MB unkomprimiert).",
+                    detail=f"ZIP-Archiv zu groß: {total_size // (1024 * 1024)} MB (max. 100 MB unkomprimiert).",
                 )
             for member in members:
                 if member.is_symlink():
@@ -323,42 +465,56 @@ async def upload_plugin(request: Request, file: UploadFile = File(...)) -> JSONR
                         detail=f"ZIP-Archiv enthält ungültigen Pfad: {member.filename}",
                     )
             zip_ref.extractall(extract_dir)
-            
+
         # Wir erwarten, dass im ZIP genau EINER Ordner liegt (das Plugin-Package, z.B. 'mein_plugin')
         contents = list(extract_dir.iterdir())
         if len(contents) != 1 or not contents[0].is_dir():
-            raise HTTPException(status_code=400, detail="Das ZIP-Archiv muss exakt EINEN Root-Ordner (das Plugin-Verzeichnis) enthalten.")
-            
+            raise HTTPException(
+                status_code=400,
+                detail="Das ZIP-Archiv muss exakt EINEN Root-Ordner (das Plugin-Verzeichnis) enthalten.",
+            )
+
         plugin_source_dir = contents[0]
         plugin_name = plugin_source_dir.name
         if not re.fullmatch(r"[a-zA-Z0-9_\-]+", plugin_name):
-            raise HTTPException(status_code=400, detail="Ungültiger Plugin-Name im ZIP-Root.")
-        
+            raise HTTPException(
+                status_code=400, detail="Ungültiger Plugin-Name im ZIP-Root."
+            )
+
         # Sicherheits-Check: Befindet sich __init__.py darin?
         if not (plugin_source_dir / "__init__.py").exists():
-            raise HTTPException(status_code=400, detail="Keine __init__.py im Root-Verzeichnis des Plugins gefunden (Ungültiges Modul).")
-            
+            raise HTTPException(
+                status_code=400,
+                detail="Keine __init__.py im Root-Verzeichnis des Plugins gefunden (Ungültiges Modul).",
+            )
+
         plugin_target_dir = plugins_dir / plugin_name
-        
+
         # Wenn Plugin schon existiert, ersternfernen
         if plugin_target_dir.exists():
             shutil.rmtree(plugin_target_dir)
-            
+
         # Modul an den Zielort verschieben
         shutil.move(str(plugin_source_dir), str(plugin_target_dir))
-        
+
         # 3. Pip Requirements installieren
         success = await install_requirements_if_exist(plugin_target_dir)
         if not success:
-            shutil.rmtree(plugin_target_dir) # Rollback
-            raise HTTPException(status_code=500, detail="Abhängigkeiten (requirements.txt) konnten nicht installiert werden. Details im Log.")
-            
+            shutil.rmtree(plugin_target_dir)  # Rollback
+            raise HTTPException(
+                status_code=500,
+                detail="Abhängigkeiten (requirements.txt) konnten nicht installiert werden. Details im Log.",
+            )
+
         # 4. Hot-Loading in Memory
         registry = request.app.state.registry
         loaded = await registry.hot_load_plugin(plugin_name, request.app)
-        
+
         if not loaded:
-            raise HTTPException(status_code=500, detail="Plugin in den Ordner entpackt, aber Import durch ModuleRegistry fehlgeschlagen.")
+            raise HTTPException(
+                status_code=500,
+                detail="Plugin in den Ordner entpackt, aber Import durch ModuleRegistry fehlgeschlagen.",
+            )
 
         now = time.time()
         await _set_plugin_meta(
@@ -372,19 +528,35 @@ async def upload_plugin(request: Request, file: UploadFile = File(...)) -> JSONR
                 "updated_at": now,
             },
         )
-            
-        return JSONResponse(status_code=201, content={"message": f"Plugin '{plugin_name}' erfolgreich installiert und geladen.", "plugin_name": plugin_name})
-        
+
+        return JSONResponse(
+            status_code=201,
+            content={
+                "message": f"Plugin '{plugin_name}' erfolgreich installiert und geladen.",
+                "plugin_name": plugin_name,
+            },
+        )
+
     except HTTPException:
         raise
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as e:
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        json.JSONDecodeError,
+    ) as e:
         logger.error("Fehler beim Plugin Upload: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Unerwarteter Fehler: {str(e)}")
     finally:
         # Cleanup temp directory
         shutil.rmtree(temp_dir, ignore_errors=True)
 
+
 # ─── Marketplace API ─────────────────────────────────────────────────────────
+
 
 @router.get("/marketplace/repos")
 async def list_repos() -> JSONResponse:
@@ -399,9 +571,13 @@ async def add_repo(request: Request) -> JSONResponse:
     body = await request.json()
     repo_url = body.get("repo_url", "").strip()
     if not repo_url or not _parse_github_url(repo_url):
-        raise HTTPException(status_code=400, detail="Ungültige oder fehlende GitHub-URL.")
+        raise HTTPException(
+            status_code=400, detail="Ungültige oder fehlende GitHub-URL."
+        )
     if not _is_repo_allowed(repo_url):
-        raise HTTPException(status_code=403, detail="Repository ist nicht in der erlaubten Allowlist.")
+        raise HTTPException(
+            status_code=403, detail="Repository ist nicht in der erlaubten Allowlist."
+        )
 
     repos = await _load_repos()
     new_repo: dict[str, Any] = {
@@ -433,12 +609,17 @@ async def update_repo(request: Request, repo_id: str) -> JSONResponse:
         if not _parse_github_url(url):
             raise HTTPException(status_code=400, detail="Ungültige GitHub-URL.")
         if not _is_repo_allowed(url):
-            raise HTTPException(status_code=403, detail="Repository ist nicht in der erlaubten Allowlist.")
+            raise HTTPException(
+                status_code=403,
+                detail="Repository ist nicht in der erlaubten Allowlist.",
+            )
         repo["repo_url"] = url
     if "branch" in body:
         repo["branch"] = (body["branch"] or "main").strip()
     if "modules_path" in body:
-        repo["modules_path"] = (body["modules_path"] or "backend/modules_catalog").strip()
+        repo["modules_path"] = (
+            body["modules_path"] or "backend/modules_catalog"
+        ).strip()
 
     token_clear = bool(body.get("github_token_clear"))
     token_value = body.get("github_token", "").strip()
@@ -455,7 +636,9 @@ async def update_repo(request: Request, repo_id: str) -> JSONResponse:
 async def delete_repo(repo_id: str) -> JSONResponse:
     """Repo entfernen (Official-Repo kann nicht gelöscht werden)."""
     if repo_id == _OFFICIAL_REPO_ID:
-        raise HTTPException(status_code=403, detail="Das Official-Repo kann nicht gelöscht werden.")
+        raise HTTPException(
+            status_code=403, detail="Das Official-Repo kann nicht gelöscht werden."
+        )
     repos = await _load_repos()
     filtered = [r for r in repos if r["id"] != repo_id]
     if len(filtered) == len(repos):
@@ -470,20 +653,30 @@ async def list_repo_modules(request: Request, repo_id: str) -> JSONResponse:
     repos = await _load_repos()
     repo_cfg = next((r for r in repos if r["id"] == repo_id), None)
     if not repo_cfg:
-        return JSONResponse(content={"modules": [], "updates": [], "error": "Repo nicht gefunden."})
+        return JSONResponse(
+            content={"modules": [], "updates": [], "error": "Repo nicht gefunden."}
+        )
 
     parsed = _parse_github_url(repo_cfg["repo_url"])
     if not parsed:
-        return JSONResponse(content={"modules": [], "updates": [], "error": "Ungültige GitHub-URL."})
+        return JSONResponse(
+            content={"modules": [], "updates": [], "error": "Ungültige GitHub-URL."}
+        )
 
     registry = request.app.state.registry
     plugins_dir = Path(__file__).resolve().parent.parent / "plugins"
     plugin_meta = await _load_plugin_meta()
 
-    cache_key = f"{repo_cfg['repo_url']}:{repo_cfg['branch']}:{repo_cfg['modules_path']}"
+    cache_key = (
+        f"{repo_cfg['repo_url']}:{repo_cfg['branch']}:{repo_cfg['modules_path']}"
+    )
     cached = _marketplace_cache.get(cache_key)
     if cached and time.time() - cached["ts"] < _CACHE_TTL:
-        return JSONResponse(content=_build_module_list(cached["modules"], registry, plugins_dir, plugin_meta))
+        return JSONResponse(
+            content=_build_module_list(
+                cached["modules"], registry, plugins_dir, plugin_meta
+            )
+        )
 
     owner, repo_name = parsed
     branch = repo_cfg.get("branch", "main")
@@ -500,34 +693,75 @@ async def list_repo_modules(request: Request, repo_id: str) -> JSONResponse:
             if cat_resp.status_code == 200:
                 try:
                     all_modules = cat_resp.json().get("modules", [])
-                    _marketplace_cache[cache_key] = {"ts": time.time(), "modules": all_modules}
-                    return JSONResponse(content=_build_module_list(all_modules, registry, plugins_dir, plugin_meta))
-                except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError):
+                    _marketplace_cache[cache_key] = {
+                        "ts": time.time(),
+                        "modules": all_modules,
+                    }
+                    return JSONResponse(
+                        content=_build_module_list(
+                            all_modules, registry, plugins_dir, plugin_meta
+                        )
+                    )
+                except (
+                    RuntimeError,
+                    ValueError,
+                    TypeError,
+                    KeyError,
+                    OSError,
+                    ImportError,
+                    json.JSONDecodeError,
+                ):
                     pass  # fall through to API
 
             # 2. Fallback: GitHub API (subject to rate limit)
             tree_url = f"https://api.github.com/repos/{owner}/{repo_name}/git/trees/{branch}?recursive=1"
             resp = await client.get(tree_url, headers=headers)
             if resp.status_code == 404:
-                return JSONResponse(content={"modules": [], "updates": [], "error": f"Branch '{branch}' oder Repo nicht gefunden."})
+                return JSONResponse(
+                    content={
+                        "modules": [],
+                        "updates": [],
+                        "error": f"Branch '{branch}' oder Repo nicht gefunden.",
+                    }
+                )
             if resp.status_code == 401:
-                return JSONResponse(content={"modules": [], "updates": [], "error": "Zugriff verweigert – Token ungültig."})
+                return JSONResponse(
+                    content={
+                        "modules": [],
+                        "updates": [],
+                        "error": "Zugriff verweigert – Token ungültig.",
+                    }
+                )
             if resp.status_code == 403:
                 if resp.headers.get("X-RateLimit-Remaining") == "0":
-                    return JSONResponse(content={"modules": [], "updates": [], "error": "GitHub API Rate Limit erreicht (60 req/h ohne Token). Bitte ein GitHub Token in den Repo-Einstellungen hinterlegen."})
-                return JSONResponse(content={"modules": [], "updates": [], "error": "GitHub Zugriff verweigert. Bei privaten Repos bitte Token hinterlegen."})
+                    return JSONResponse(
+                        content={
+                            "modules": [],
+                            "updates": [],
+                            "error": "GitHub API Rate Limit erreicht (60 req/h ohne Token). Bitte ein GitHub Token in den Repo-Einstellungen hinterlegen.",
+                        }
+                    )
+                return JSONResponse(
+                    content={
+                        "modules": [],
+                        "updates": [],
+                        "error": "GitHub Zugriff verweigert. Bei privaten Repos bitte Token hinterlegen.",
+                    }
+                )
             resp.raise_for_status()
 
             tree = resp.json().get("tree", [])
             prefix = modules_path.rstrip("/") + "/"
-            dirs = sorted({
-                item["path"][len(prefix):].split("/")[0]
-                for item in tree
-                if item["path"].startswith(prefix)
-                and item["path"][len(prefix):].count("/") == 0
-                and item["type"] == "tree"
-                and not item["path"][len(prefix):].startswith("_")
-            })
+            dirs = sorted(
+                {
+                    item["path"][len(prefix) :].split("/")[0]
+                    for item in tree
+                    if item["path"].startswith(prefix)
+                    and item["path"][len(prefix) :].count("/") == 0
+                    and item["type"] == "tree"
+                    and not item["path"][len(prefix) :].startswith("_")
+                }
+            )
             all_modules = []
 
             async def _fetch_manifest(mod_name: str) -> dict[str, str]:
@@ -536,28 +770,59 @@ async def list_repo_modules(request: Request, repo_id: str) -> JSONResponse:
                     m_resp = await client.get(raw_url, timeout=10.0)
                     if m_resp.status_code == 200:
                         return _extract_manifest_info(m_resp.text)
-                except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError):
+                except (
+                    RuntimeError,
+                    ValueError,
+                    TypeError,
+                    KeyError,
+                    OSError,
+                    ImportError,
+                    json.JSONDecodeError,
+                ):
                     pass
-                return {"display_name": mod_name, "description": "", "version": "", "author": ""}
+                return {
+                    "display_name": mod_name,
+                    "description": "",
+                    "version": "",
+                    "author": "",
+                }
 
             manifests = await asyncio.gather(*[_fetch_manifest(n) for n in dirs])
             for mod_name, info in zip(dirs, manifests):
-                all_modules.append({
-                    "name": mod_name,
-                    "display_name": info.get("display_name") or mod_name,
-                    "description": info.get("description") or "",
-                    "version": info.get("version") or "",
-                    "author": info.get("author") or "",
-                })
+                all_modules.append(
+                    {
+                        "name": mod_name,
+                        "display_name": info.get("display_name") or mod_name,
+                        "description": info.get("description") or "",
+                        "version": info.get("version") or "",
+                        "author": info.get("author") or "",
+                    }
+                )
 
             _marketplace_cache[cache_key] = {"ts": time.time(), "modules": all_modules}
-            return JSONResponse(content=_build_module_list(all_modules, registry, plugins_dir, plugin_meta))
+            return JSONResponse(
+                content=_build_module_list(
+                    all_modules, registry, plugins_dir, plugin_meta
+                )
+            )
 
     except httpx.TimeoutException:
-        return JSONResponse(content={"modules": [], "updates": [], "error": "Timeout beim Abruf."})
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as e:
+        return JSONResponse(
+            content={"modules": [], "updates": [], "error": "Timeout beim Abruf."}
+        )
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        json.JSONDecodeError,
+    ) as e:
         logger.error("Marketplace fetch Fehler [%s]: %s", repo_id, e, exc_info=True)
-        return JSONResponse(content={"modules": [], "updates": [], "error": f"Fehler: {e}"})
+        return JSONResponse(
+            content={"modules": [], "updates": [], "error": f"Fehler: {e}"}
+        )
 
 
 @router.post("/install-from-repo/{module_name}")
@@ -567,7 +832,7 @@ async def install_from_repo(
     repo_id: str = Query(default=_OFFICIAL_REPO_ID),
 ) -> JSONResponse:
     """Lädt ein Modul aus dem angegebenen Repo herunter und installiert es als Plugin."""
-    if not re.fullmatch(r'[a-zA-Z0-9_]+', module_name):
+    if not re.fullmatch(r"[a-zA-Z0-9_]+", module_name):
         raise HTTPException(status_code=400, detail="Ungültiger Modulname.")
 
     repos = await _load_repos()
@@ -577,9 +842,13 @@ async def install_from_repo(
 
     parsed = _parse_github_url(repo_cfg["repo_url"])
     if not parsed:
-        raise HTTPException(status_code=400, detail="Ungültige GitHub-URL in der Repo-Konfiguration.")
+        raise HTTPException(
+            status_code=400, detail="Ungültige GitHub-URL in der Repo-Konfiguration."
+        )
     if not _is_repo_allowed(repo_cfg["repo_url"]):
-        raise HTTPException(status_code=403, detail="Repository ist nicht in der erlaubten Allowlist.")
+        raise HTTPException(
+            status_code=403, detail="Repository ist nicht in der erlaubten Allowlist."
+        )
 
     owner, repo_name = parsed
     branch = repo_cfg.get("branch", "main")
@@ -598,16 +867,27 @@ async def install_from_repo(
                 f"{raw_base}/{modules_path}/{module_name}/__init__.py", timeout=10.0
             )
             if check_resp.status_code == 404:
-                raise HTTPException(status_code=404, detail=f"Modul '{module_name}' nicht im Repo gefunden.")
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Modul '{module_name}' nicht im Repo gefunden.",
+                )
             if check_resp.status_code != 200:
-                raise HTTPException(status_code=502, detail=f"Zugriff auf Repo fehlgeschlagen (HTTP {check_resp.status_code}).")
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Zugriff auf Repo fehlgeschlagen (HTTP {check_resp.status_code}).",
+                )
 
             zip_buffer = io.BytesIO()
             with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
                 await _download_dir_to_zip(
-                    client, owner, repo_name,
+                    client,
+                    owner,
+                    repo_name,
                     f"{modules_path}/{module_name}",
-                    branch, headers, zf, module_name,
+                    branch,
+                    headers,
+                    zf,
+                    module_name,
                 )
 
         zip_path = temp_dir / f"{module_name}.zip"
@@ -618,7 +898,9 @@ async def install_from_repo(
             members = zip_ref.infolist()
             total_size = sum(m.file_size for m in members)
             if total_size > _MAX_UNCOMPRESSED_SIZE:
-                raise HTTPException(status_code=400, detail="Modul zu groß (max. 100 MB).")
+                raise HTTPException(
+                    status_code=400, detail="Modul zu groß (max. 100 MB)."
+                )
             for member in members:
                 if member.is_symlink():
                     raise HTTPException(
@@ -634,11 +916,15 @@ async def install_from_repo(
 
         contents = list(extract_dir.iterdir())
         if len(contents) != 1 or not contents[0].is_dir():
-            raise HTTPException(status_code=500, detail="Unerwartete ZIP-Struktur beim Download.")
+            raise HTTPException(
+                status_code=500, detail="Unerwartete ZIP-Struktur beim Download."
+            )
 
         plugin_source_dir = contents[0]
         if not (plugin_source_dir / "__init__.py").exists():
-            raise HTTPException(status_code=400, detail="Kein __init__.py im Modul gefunden.")
+            raise HTTPException(
+                status_code=400, detail="Kein __init__.py im Modul gefunden."
+            )
 
         plugin_target_dir = plugins_dir / module_name
         if plugin_target_dir.exists():
@@ -648,22 +934,38 @@ async def install_from_repo(
         success = await install_requirements_if_exist(plugin_target_dir)
         if not success:
             shutil.rmtree(plugin_target_dir)
-            raise HTTPException(status_code=500, detail="requirements.txt konnte nicht installiert werden.")
+            raise HTTPException(
+                status_code=500,
+                detail="requirements.txt konnte nicht installiert werden.",
+            )
 
         registry = request.app.state.registry
         loaded = await registry.hot_load_plugin(module_name, request.app)
         if not loaded:
-            raise HTTPException(status_code=500, detail="Modul heruntergeladen, aber Import fehlgeschlagen.")
+            raise HTTPException(
+                status_code=500,
+                detail="Modul heruntergeladen, aber Import fehlgeschlagen.",
+            )
 
         module_listing = await list_repo_modules(request, repo_id)
         repo_version = ""
         try:
             listing_body = json.loads(module_listing.body.decode("utf-8"))
-            merged = (listing_body.get("modules") or []) + (listing_body.get("updates") or [])
+            merged = (listing_body.get("modules") or []) + (
+                listing_body.get("updates") or []
+            )
             match = next((m for m in merged if m.get("name") == module_name), None)
             if match:
                 repo_version = str(match.get("version", "") or "")
-        except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError):
+        except (
+            RuntimeError,
+            ValueError,
+            TypeError,
+            KeyError,
+            OSError,
+            ImportError,
+            json.JSONDecodeError,
+        ):
             repo_version = ""
 
         now = time.time()
@@ -681,18 +983,37 @@ async def install_from_repo(
         )
 
         _marketplace_cache.clear()
-        return JSONResponse(status_code=201, content={
-            "message": f"Modul '{module_name}' erfolgreich installiert.",
-            "module_name": module_name,
-            "repo_version": repo_version,
-        })
+        return JSONResponse(
+            status_code=201,
+            content={
+                "message": f"Modul '{module_name}' erfolgreich installiert.",
+                "module_name": module_name,
+                "repo_version": repo_version,
+            },
+        )
 
     except HTTPException:
         raise
     except httpx.TimeoutException:
-        raise HTTPException(status_code=408, detail="Timeout beim Download vom Repository.")
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as e:
-        logger.error("install_from_repo Fehler [%s/%s]: %s", repo_id, module_name, e, exc_info=True)
+        raise HTTPException(
+            status_code=408, detail="Timeout beim Download vom Repository."
+        )
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        json.JSONDecodeError,
+    ) as e:
+        logger.error(
+            "install_from_repo Fehler [%s/%s]: %s",
+            repo_id,
+            module_name,
+            e,
+            exc_info=True,
+        )
         raise HTTPException(status_code=500, detail=f"Fehler: {e}")
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
@@ -705,20 +1026,171 @@ async def delete_plugin(request: Request, plugin_name: str) -> JSONResponse:
     Ein echter Memory-Cleanup erfordert jedoch einen Container-Neustart.
     """
     import re
-    if not re.fullmatch(r'[a-zA-Z0-9_\-]+', plugin_name):
+
+    if not re.fullmatch(r"[a-zA-Z0-9_\-]+", plugin_name):
         raise HTTPException(status_code=400, detail="Ungültiger Plugin-Name.")
     registry = request.app.state.registry
     plugins_dir = Path(__file__).resolve().parent.parent / "plugins"
     target_dir = plugins_dir / plugin_name
-    
+
     if not target_dir.exists() or not target_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"Plugin '{plugin_name}' existiert nicht.")
-        
+        raise HTTPException(
+            status_code=404, detail=f"Plugin '{plugin_name}' existiert nicht."
+        )
+
     try:
         shutil.rmtree(target_dir)
         registry.remove_plugin(plugin_name)
         await _delete_plugin_meta(plugin_name)
-        return JSONResponse(content={"message": f"Plugin '{plugin_name}' deinstalliert. Die Änderungen werden beim nächsten Neustart vollständig aktiv."})
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as e:
+        return JSONResponse(
+            content={
+                "message": f"Plugin '{plugin_name}' deinstalliert. Die Änderungen werden beim nächsten Neustart vollständig aktiv."
+            }
+        )
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        json.JSONDecodeError,
+    ) as e:
         logger.error("Fehler beim Löschen des Plugins %s: %s", plugin_name, e)
-        raise HTTPException(status_code=500, detail="Fehler beim Löschen der Plugin-Dateien.")
+        raise HTTPException(
+            status_code=500, detail="Fehler beim Löschen der Plugin-Dateien."
+        )
+
+
+@router.post("/reinstall/{plugin_name}")
+async def reinstall_plugin(request: Request, plugin_name: str) -> JSONResponse:
+    """
+    Re-installiert ein Plugin aus dem ursprünglichen Repository (Update).
+    """
+    import re
+
+    if not re.fullmatch(r"[a-zA-Z0-9_\-]+", plugin_name):
+        raise HTTPException(status_code=400, detail="Ungültiger Plugin-Name.")
+
+    plugin_meta = await _load_plugin_meta()
+    meta = plugin_meta.get(plugin_name, {})
+    repo_url = meta.get("repo_url", "")
+    repo_id = meta.get("repo_id", _OFFICIAL_REPO_ID)
+
+    if not repo_url:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Plugin '{plugin_name}' hat keine Repo-URL für Update. Bitte manuell neu installieren.",
+        )
+
+    repos = await _load_repos()
+    repo_cfg = next(
+        (r for r in repos if r.get("id") == repo_id or r.get("repo_url") == repo_url),
+        None,
+    )
+    if not repo_cfg:
+        raise HTTPException(
+            status_code=404, detail=f"Repository '{repo_id}' nicht gefunden."
+        )
+
+    parsed = _parse_github_url(repo_url)
+    if not parsed:
+        raise HTTPException(status_code=400, detail="Ungültige Repo-URL.")
+
+    owner, repo_name = parsed
+    branch = repo_cfg.get("branch", "main")
+    modules_path = repo_cfg.get("modules_path", "backend/modules_catalog")
+
+    plugins_dir = Path(__file__).resolve().parent.parent / "plugins"
+    plugins_dir.mkdir(parents=True, exist_ok=True)
+    plugin_dir = plugins_dir / plugin_name
+
+    if plugin_dir.exists():
+        shutil.rmtree(plugin_dir)
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            raw_base = f"https://raw.githubusercontent.com/{owner}/{repo_name}/{branch}"
+            catalog_url = f"{raw_base}/{modules_path}/{plugin_name}/manifest.py"
+            resp = await client.get(catalog_url)
+            if resp.status_code != 200:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Modul '{plugin_name}' nicht im Repo gefunden.",
+                )
+            manifest_info = _extract_manifest_info(resp.text)
+            repo_version = manifest_info.get("version", "")
+
+            tar_url = f"{raw_base}/{modules_path}/{plugin_name}.tar.gz"
+            tar_resp = await client.get(tar_url)
+            if tar_resp.status_code != 200:
+                tar_url = f"{raw_base}/{modules_path}/{plugin_name}.zip"
+                tar_resp = await client.get(tar_url)
+                if tar_resp.status_code != 200:
+                    raise HTTPException(
+                        status_code=404, detail="Konnte Modul nicht herunterladen."
+                    )
+
+            is_tar = tar_url.endswith(".tar.gz")
+            extract_dir = Path(mkdtemp())
+            if is_tar:
+                with tarfile.open(fileobj=io.BytesIO(tar_resp.content)) as tar:
+                    tar.extractall(extract_dir)
+            else:
+                with zipfile.ZipFile(io.BytesIO(tar_resp.content)) as zip_ref:
+                    zip_ref.extractall(extract_dir)
+
+            contents = list(extract_dir.iterdir())
+            if len(contents) != 1 or not contents[0].is_dir():
+                raise HTTPException(
+                    status_code=500, detail="Unerwartete Archiv-Struktur."
+                )
+
+            plugin_source_dir = contents[0]
+            if not (plugin_source_dir / "__init__.py").exists():
+                raise HTTPException(
+                    status_code=400, detail="Kein __init__.py im Modul gefunden."
+                )
+
+            shutil.move(str(plugin_source_dir), str(plugin_dir))
+
+            success = await install_requirements_if_exist(plugin_dir)
+            if not success:
+                shutil.rmtree(plugin_dir)
+                raise HTTPException(
+                    status_code=500,
+                    detail="requirements.txt konnte nicht installiert werden.",
+                )
+
+            registry = request.app.state.registry
+            loaded = await registry.hot_load_plugin(plugin_name, request.app)
+            if not loaded:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Modul heruntergeladen, aber Import fehlgeschlagen.",
+                )
+
+            now = time.time()
+            await _set_plugin_meta(
+                plugin_name,
+                {
+                    "source": "marketplace",
+                    "repo_id": repo_id,
+                    "repo_url": repo_url,
+                    "repo_version": repo_version,
+                    "installed_at": meta.get("installed_at", now),
+                    "updated_at": now,
+                },
+            )
+
+            return JSONResponse(
+                content={
+                    "message": f"Plugin '{plugin_name}' wurde auf Version {repo_version} aktualisiert."
+                }
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Fehler beim Re-Installieren des Plugins %s: %s", plugin_name, e)
+        raise HTTPException(status_code=500, detail=f"Update fehlgeschlagen: {e}")

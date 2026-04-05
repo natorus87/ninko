@@ -4130,6 +4130,87 @@ const Ninko = {
             { key: 'password', label: 'Password', placeholder: '••••••', type: 'password', isSecret: true },
             { key: 'api_token', label: 'API Token', placeholder: '••••••', type: 'password', isSecret: true },
         ],
+        mcp_server: [
+            {
+                key: 'transport',
+                label: 'Transport',
+                type: 'select',
+                defaultValue: 'stdio',
+                options: [
+                    { value: 'stdio', label: 'stdio' },
+                    { value: 'http', label: 'http' },
+                    { value: 'sse', label: 'sse' },
+                ],
+            },
+            {
+                key: 'command',
+                label: 'Command',
+                placeholder: 'npx -y @modelcontextprotocol/server-filesystem /srv/data',
+                showWhen: { key: 'transport', values: ['stdio'] },
+            },
+            {
+                key: 'args_json',
+                label: 'Command Args (JSON Array)',
+                type: 'textarea',
+                rows: 4,
+                placeholder: '["/srv/data"]',
+                showWhen: { key: 'transport', values: ['stdio'] },
+            },
+            {
+                key: 'cwd',
+                label: 'Working Directory (optional)',
+                placeholder: '/srv/mcp',
+                showWhen: { key: 'transport', values: ['stdio'] },
+            },
+            {
+                key: 'env_json',
+                label: 'Environment (JSON Object)',
+                type: 'textarea',
+                rows: 5,
+                placeholder: '{"NODE_ENV":"production"}',
+                showWhen: { key: 'transport', values: ['stdio'] },
+            },
+            {
+                key: 'url',
+                label: 'Server URL',
+                placeholder: 'https://mcp.example.com/mcp',
+                showWhen: { key: 'transport', values: ['http', 'sse'] },
+            },
+            {
+                key: 'message_url',
+                label: 'SSE Message URL (optional)',
+                placeholder: 'https://mcp.example.com/messages',
+                showWhen: { key: 'transport', values: ['sse'] },
+            },
+            {
+                key: 'headers_json',
+                label: 'Headers (JSON Object)',
+                type: 'textarea',
+                rows: 5,
+                placeholder: '{"X-API-Key":"value"}',
+                showWhen: { key: 'transport', values: ['http', 'sse'] },
+            },
+            {
+                key: 'protocol_version',
+                label: 'Protocol Version',
+                placeholder: '2025-03-26',
+                defaultValue: '2025-03-26',
+            },
+            {
+                key: 'timeout_seconds',
+                label: 'Timeout (seconds)',
+                type: 'number',
+                placeholder: '20',
+                defaultValue: '20',
+            },
+            {
+                key: 'MCP_AUTH_TOKEN',
+                label: 'Bearer Token (optional)',
+                placeholder: '••••••',
+                type: 'password',
+                isSecret: true,
+            },
+        ],
     },
 
     async loadModulesSettings() {
@@ -4139,19 +4220,30 @@ const Ninko = {
             if (!res.ok) throw new Error(res.statusText);
             const modules = await res.json();
 
+            const updatesRes = await fetch('/api/plugins/check-updates');
+            const updatesData = await updatesRes.json();
+            const updatesMap = {};
+            for (const p of (updatesData.plugins || [])) {
+                updatesMap[p.name] = p;
+            }
+
             if (!modules.length) {
                 container.innerHTML = '<p class="empty-state">Keine Module gefunden.</p>';
                 return;
             }
 
-            container.innerHTML = modules.map(mod => `
+            container.innerHTML = modules.map(mod => {
+                const updateInfo = updatesMap[mod.name] || {};
+                const hasUpdate = updateInfo.update_available;
+                return `
                 <div class="module-config-card" id="module-card-${mod.name}">
                     <div class="module-config-header">
                         <div class="module-config-info">
                             <span class="module-config-name">${mod.display_name}</span>
-                            <span class="module-config-version">v${mod.version}</span>
+                            <span class="module-config-version">v${mod.version}${hasUpdate ? ' <span style="color: var(--accent-color); font-weight: bold;">→ ' + updateInfo.repo_version + '</span>' : ''}</span>
                         </div>
                         <div style="display: flex; gap: 0.5rem; align-items: center; flex-shrink: 0;">
+                            ${hasUpdate ? `<button class="btn-sm" style="background: var(--accent-color); color: white;" onclick="Ninko.updatePlugin('${mod.name}')" title="Auf Version ${updateInfo.repo_version} aktualisieren">Update</button>` : ''}
                             <label class="toggle-switch" title="Aktivieren/Deaktivieren">
                                 <input type="checkbox" ${mod.enabled ? 'checked' : ''}
                                     id="mod-toggle-${mod.name}"
@@ -4173,7 +4265,7 @@ const Ninko = {
                         ${this._renderModuleConnectionForm(mod.name)}
                     </div>
                 </div>
-            `).join('');
+            `}).join('');
 
             // Load connections for enabled modules
             for (const mod of modules) {
@@ -4182,6 +4274,9 @@ const Ninko = {
                 } else if (mod.enabled) {
                     const lc = document.getElementById(`connections-list-${mod.name}`);
                     if (lc) lc.innerHTML = '<p class="text-muted" style="margin:0; font-size: 0.85rem">Keine konfigurationspflichtigen Verbindungen.</p>';
+                }
+                if (this.ACTION_FIELDS[mod.name]) {
+                    this.updateConnectionFieldVisibility(mod.name);
                 }
             }
 
@@ -4198,8 +4293,106 @@ const Ninko = {
             connContainer.style.display = opening ? 'block' : 'none';
             if (opening && this.ACTION_FIELDS[name]) {
                 this.loadModuleConnections(name);
+                this.updateConnectionFieldVisibility(name);
             }
         }
+    },
+
+    _getConnectionFieldValue(moduleName, key) {
+        const el = document.getElementById(`conn-new-${moduleName}-${key}`);
+        if (!el) return '';
+        if (el.type === 'checkbox') return el.checked ? 'true' : 'false';
+        return (el.value || '').trim();
+    },
+
+    updateConnectionFieldVisibility(moduleName) {
+        const container = document.getElementById(`mod-connections-container-${moduleName}`);
+        if (!container) return;
+        const rows = container.querySelectorAll('[data-show-when-key]');
+        rows.forEach((row) => {
+            const key = row.getAttribute('data-show-when-key');
+            const values = (row.getAttribute('data-show-when-values') || '')
+                .split(',')
+                .map(v => v.trim())
+                .filter(Boolean);
+            const current = this._getConnectionFieldValue(moduleName, key);
+            row.style.display = values.includes(current) ? '' : 'none';
+        });
+    },
+
+    applyMcpPreset(moduleName, presetId) {
+        if (moduleName !== 'mcp_server') return;
+        const presets = {
+            filesystem_stdio: {
+                name: 'Filesystem MCP',
+                environment: 'lab',
+                description: 'Lokaler stdio-MCP-Server fuer Dateisystemzugriff',
+                transport: 'stdio',
+                command: 'npx',
+                args_json: '["-y","@modelcontextprotocol/server-filesystem","/srv/data"]',
+                cwd: '',
+                env_json: '{}',
+                url: '',
+                message_url: '',
+                headers_json: '{}',
+                protocol_version: '2025-03-26',
+                timeout_seconds: '20',
+            },
+            remote_http: {
+                name: 'Remote MCP HTTP',
+                environment: 'staging',
+                description: 'HTTP-basierter MCP-Server',
+                transport: 'http',
+                command: '',
+                args_json: '[]',
+                cwd: '',
+                env_json: '{}',
+                url: 'https://mcp.example.com/mcp',
+                message_url: '',
+                headers_json: '{"X-API-Key":"replace-me"}',
+                protocol_version: '2025-03-26',
+                timeout_seconds: '20',
+            },
+            remote_sse: {
+                name: 'Remote MCP SSE',
+                environment: 'staging',
+                description: 'SSE-basierter MCP-Server',
+                transport: 'sse',
+                command: '',
+                args_json: '[]',
+                cwd: '',
+                env_json: '{}',
+                url: 'https://mcp.example.com/sse',
+                message_url: 'https://mcp.example.com/messages',
+                headers_json: '{"Authorization":"Bearer replace-me"}',
+                protocol_version: '2025-03-26',
+                timeout_seconds: '20',
+            },
+        };
+        const preset = presets[presetId];
+        if (!preset) return;
+
+        const setValue = (key, value) => {
+            const el = document.getElementById(`conn-new-${moduleName}-${key}`);
+            if (!el) return;
+            if (el.type === 'checkbox') {
+                el.checked = value === true || value === 'true';
+            } else {
+                el.value = value ?? '';
+            }
+        };
+
+        document.getElementById(`conn-new-${moduleName}-name`).value = preset.name;
+        document.getElementById(`conn-new-${moduleName}-environment`).value = preset.environment;
+        document.getElementById(`conn-new-${moduleName}-desc`).value = preset.description;
+
+        Object.entries(preset).forEach(([key, value]) => {
+            if (['name', 'environment', 'description'].includes(key)) return;
+            setValue(key, value);
+        });
+
+        this.updateConnectionFieldVisibility(moduleName);
+        showNotification(`MCP-Beispielprofil "${preset.name}" eingefuellt`, 'info');
     },
 
     async toggleModule(name, enabled) {
@@ -4228,6 +4421,19 @@ const Ninko = {
     _renderModuleConnectionForm(moduleName) {
         const moduleFields = this.ACTION_FIELDS[moduleName] || [];
         if (!moduleFields.length) return '';
+        const presetSection = moduleName === 'mcp_server'
+            ? `
+                <div class="form-row form-row-sm">
+                    <label class="form-label">Beispielprofile</label>
+                    <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                        <button type="button" class="btn btn-sm btn-outline" onclick="Ninko.applyMcpPreset('${moduleName}', 'filesystem_stdio')">Filesystem stdio</button>
+                        <button type="button" class="btn btn-sm btn-outline" onclick="Ninko.applyMcpPreset('${moduleName}', 'remote_http')">Remote HTTP</button>
+                        <button type="button" class="btn btn-sm btn-outline" onclick="Ninko.applyMcpPreset('${moduleName}', 'remote_sse')">Remote SSE</button>
+                    </div>
+                    <small class="text-muted">Füllt typische MCP-Server-Konfigurationen vor. Werte danach bei Bedarf anpassen.</small>
+                </div>
+            `
+            : '';
 
         return `
             <div class="add-connection-section" style="margin-top: 1rem; padding: 1rem; background: var(--bg-body); border-radius: 6px; border: 1px solid var(--border-color)">
@@ -4250,29 +4456,58 @@ const Ninko = {
                     <label class="form-label" for="conn-new-${moduleName}-desc">Beschreibung (optional)</label>
                     <input type="text" id="conn-new-${moduleName}-desc" class="form-input" placeholder="...">
                 </div>
+                ${presetSection}
                 ${moduleFields.map(f => {
+            const wrapperAttrs = f.showWhen
+                ? ` data-show-when-key="${f.showWhen.key}" data-show-when-values="${f.showWhen.values.join(',')}"`
+                : '';
             if (f.type === 'checkbox') {
                 return `
-                        <div class="form-row form-row-sm">
+                        <div class="form-row form-row-sm"${wrapperAttrs}>
                             <label class="form-label">
                                 <input type="checkbox" id="conn-new-${moduleName}-${f.key}" checked>
                                 ${f.label}
                             </label>
                         </div>`;
             }
+            if (f.type === 'select') {
+                const options = (f.options || []).map(opt => `
+                                <option value="${this._escapeHtml(opt.value)}" ${opt.value === (f.defaultValue || '') ? 'selected' : ''}>${this._escapeHtml(opt.label)}</option>
+                            `).join('');
+                const handler = moduleName === 'mcp_server' && f.key === 'transport'
+                    ? ` onchange="Ninko.updateConnectionFieldVisibility('${moduleName}')"`
+                    : '';
+                return `
+                        <div class="form-row form-row-sm"${wrapperAttrs}>
+                            <label class="form-label" for="conn-new-${moduleName}-${f.key}">${f.label}</label>
+                            <select id="conn-new-${moduleName}-${f.key}" class="form-select"${handler}>
+                                ${options}
+                            </select>
+                        </div>`;
+            }
             if (f.type === 'file') {
                 return `
-                        <div class="form-row form-row-sm">
+                        <div class="form-row form-row-sm"${wrapperAttrs}>
                             <label class="form-label" for="conn-new-${moduleName}-${f.key}">${f.label}</label>
                             <input type="file" id="conn-new-${moduleName}-${f.key}" class="form-input form-file">
                             ${f.isSecret ? '<small class="text-muted">Leer lassen, um das vorhandene Zertifikat beizubehalten.</small>' : ''}
                         </div>`;
             }
+            if (f.type === 'textarea') {
+                return `
+                        <div class="form-row form-row-sm"${wrapperAttrs}>
+                            <label class="form-label" for="conn-new-${moduleName}-${f.key}">${f.label}</label>
+                            <textarea id="conn-new-${moduleName}-${f.key}"
+                                class="form-input form-textarea"
+                                rows="${f.rows || 4}"
+                                placeholder="${f.placeholder || ''}">${f.defaultValue || ''}</textarea>
+                        </div>`;
+            }
             return `
-                        <div class="form-row form-row-sm">
+                        <div class="form-row form-row-sm"${wrapperAttrs}>
                             <label class="form-label" for="conn-new-${moduleName}-${f.key}">${f.label}</label>
                             <input type="${f.type || 'text'}" id="conn-new-${moduleName}-${f.key}"
-                                class="form-input" placeholder="${f.placeholder || ''}">
+                                class="form-input" placeholder="${f.placeholder || ''}" value="${f.defaultValue || ''}">
                         </div>`;
         }).join('')}
                 <div class="form-row form-row-sm">
@@ -4361,6 +4596,7 @@ const Ninko = {
                     el.value = '';
                 }
             }
+            this.updateConnectionFieldVisibility(moduleName);
 
             // Update UI state
             document.getElementById(`conn-form-title-${moduleName}`).textContent = 'Verbindung bearbeiten';
@@ -4388,10 +4624,11 @@ const Ninko = {
             const el = document.getElementById(`conn-new-${moduleName}-${f.key}`);
             if (f.type === 'checkbox') el.checked = true;
             else if (f.type === 'file') el.value = '';
-            else el.value = '';
+            else el.value = f.defaultValue || '';
 
             if (f.isSecret) el.placeholder = f.placeholder || '';
         }
+        this.updateConnectionFieldVisibility(moduleName);
     },
 
     async saveConnection(moduleName) {
@@ -4437,6 +4674,31 @@ const Ninko = {
                 if (val) {
                     if (f.isSecret) vault_keys[f.key] = val;
                     else config[f.key] = val;
+                }
+            }
+
+            if (moduleName === 'mcp_server') {
+                const transport = config.transport || 'stdio';
+                const jsonChecks = [
+                    { key: 'args_json', type: 'array', enabled: transport === 'stdio' },
+                    { key: 'env_json', type: 'object', enabled: transport === 'stdio' },
+                    { key: 'headers_json', type: 'object', enabled: transport === 'http' || transport === 'sse' },
+                ];
+                for (const check of jsonChecks) {
+                    if (!check.enabled || !config[check.key]) continue;
+                    const parsed = JSON.parse(config[check.key]);
+                    const isValid =
+                        (check.type === 'array' && Array.isArray(parsed)) ||
+                        (check.type === 'object' && parsed && typeof parsed === 'object' && !Array.isArray(parsed));
+                    if (!isValid) {
+                        throw new Error(`${check.key} muss gültiges JSON vom Typ ${check.type} sein.`);
+                    }
+                }
+                if (transport === 'stdio' && !config.command) {
+                    throw new Error('Für stdio ist ein Command erforderlich.');
+                }
+                if ((transport === 'http' || transport === 'sse') && !config.url) {
+                    throw new Error(`Für ${transport} ist eine URL erforderlich.`);
                 }
             }
 
@@ -4923,7 +5185,6 @@ const Ninko = {
             const res = await fetch(`/api/plugins/${name}`, { method: 'DELETE' });
             if (res.ok) {
                 showNotification(`Plugin '${name}' wurde deinstalliert.`, 'info');
-                // Hide card immediately, then reload to remove sidebar tab
                 const card = document.getElementById(`module-card-${name}`);
                 if (card) card.style.display = 'none';
                 setTimeout(() => window.location.reload(), 1500);
@@ -4934,6 +5195,31 @@ const Ninko = {
         } catch (e) {
             console.error('Plugin Delete Error:', e);
             showNotification('Netzwerkfehler beim Deinstallieren.', 'error');
+        }
+    },
+
+    async updatePlugin(name) {
+        const btn = event.target;
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Update...';
+
+        try {
+            const res = await fetch(`/api/plugins/reinstall/${name}`, { method: 'POST' });
+            if (res.ok) {
+                const data = await res.json();
+                showNotification(data.message || `Plugin '${name}' wurde aktualisiert.`, 'success');
+                setTimeout(() => window.location.reload(), 1500);
+            } else {
+                const err = await res.json();
+                showNotification(`Update-Fehler: ${err.detail || 'Konnte nicht aktualisiert werden.'}`, 'error');
+            }
+        } catch (e) {
+            console.error('Plugin Update Error:', e);
+            showNotification('Netzwerkfehler beim Aktualisieren.', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = originalText;
         }
     },
 

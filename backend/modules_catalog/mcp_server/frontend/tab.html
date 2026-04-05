@@ -1,0 +1,146 @@
+<div class="tab-content" id="tab-mcp-server">
+  <div class="mcp-header">
+    <h3>🔌 MCP Server</h3>
+    <select id="mcp-server-connection-select" class="connection-select">
+      <option value="">Verbindung wählen...</option>
+    </select>
+  </div>
+
+  <div class="mcp-grid">
+    <section class="mcp-card">
+      <h4>Status</h4>
+      <div class="mcp-actions">
+        <button id="mcp-server-validate-btn" class="mcp-btn" type="button">Validate</button>
+        <button id="mcp-server-refresh-btn" class="mcp-btn mcp-btn-secondary" type="button">Refresh</button>
+      </div>
+      <pre id="mcp-server-status" class="mcp-pre">Keine Verbindung ausgewählt.</pre>
+    </section>
+    <section class="mcp-card">
+      <h4>Tools</h4>
+      <div id="mcp-server-tools" class="mcp-list">Keine Daten.</div>
+    </section>
+    <section class="mcp-card">
+      <h4>Resources</h4>
+      <div id="mcp-server-resources" class="mcp-list">Keine Daten.</div>
+    </section>
+    <section class="mcp-card">
+      <h4>Tool Call</h4>
+      <label class="mcp-label" for="mcp-server-tool-name">Tool</label>
+      <input id="mcp-server-tool-name" class="mcp-input" type="text" placeholder="tool_name">
+      <label class="mcp-label" for="mcp-server-tool-args">Arguments (JSON)</label>
+      <textarea id="mcp-server-tool-args" class="mcp-textarea" rows="8" placeholder='{"example":"value"}'>{}</textarea>
+      <button id="mcp-server-call-btn" class="mcp-btn" type="button">Call Tool</button>
+      <pre id="mcp-server-call-result" class="mcp-pre">Noch kein Tool-Call ausgeführt.</pre>
+    </section>
+  </div>
+</div>
+
+<style>
+#tab-mcp-server {
+  padding: 1rem;
+}
+
+.mcp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.mcp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.mcp-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 1rem;
+}
+
+.mcp-card h4 {
+  margin: 0 0 0.75rem;
+}
+
+.mcp-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.mcp-pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.mcp-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.mcp-item {
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  font-size: 0.84rem;
+  cursor: pointer;
+}
+
+.mcp-item:hover {
+  outline: 1px solid var(--border-color);
+}
+
+.connection-select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.mcp-label {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.35rem;
+}
+
+.mcp-input,
+.mcp-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.7rem 0.8rem;
+  margin-bottom: 0.8rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.mcp-textarea {
+  resize: vertical;
+  min-height: 140px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.mcp-btn {
+  padding: 0.6rem 0.85rem;
+  border: 0;
+  border-radius: 8px;
+  background: var(--primary-color);
+  color: white;
+  cursor: pointer;
+}
+
+.mcp-btn-secondary {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+</style>

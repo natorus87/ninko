@@ -29,7 +29,9 @@ def _clean_for_tts(text: str) -> str:
     text = "\n".join(lines)
 
     # Remove context prefixes and chat ID references
-    text = re.sub(r"\[(?:Telegram Chat-ID|Teams User|Erkannte Sprache):[^\]]+\]\n?", "", text)
+    text = re.sub(
+        r"\[(?:Telegram Chat-ID|Teams User|Erkannte Sprache):[^\]]+\]\n?", "", text
+    )
     text = re.sub(r"(?:Telegram\s+)?Chat-?ID[:\s]+\d+", "", text)
 
     # Remove "via module" footer
@@ -39,22 +41,22 @@ def _clean_for_tts(text: str) -> str:
     text = re.sub(r"<[^>]+>", "", text)
 
     # Markdown formatting
-    text = re.sub(r"```[\s\S]*?```", "", text)          # Code blocks
-    text = re.sub(r"`([^`]+)`", r"\1", text)             # Inline code
-    text = re.sub(r"\*{1,3}([^*]+)\*{1,3}", r"\1", text) # Bold/Italic
-    text = re.sub(r"_([^_\n]+)_", r"\1", text)           # Underscore italic
-    text = re.sub(r"~~([^~]+)~~", r"\1", text)           # Strikethrough
+    text = re.sub(r"```[\s\S]*?```", "", text)  # Code blocks
+    text = re.sub(r"`([^`]+)`", r"\1", text)  # Inline code
+    text = re.sub(r"\*{1,3}([^*]+)\*{1,3}", r"\1", text)  # Bold/Italic
+    text = re.sub(r"_([^_\n]+)_", r"\1", text)  # Underscore italic
+    text = re.sub(r"~~([^~]+)~~", r"\1", text)  # Strikethrough
     text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)  # Headings
     text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)  # Links
 
     # Remove emojis
     text = re.sub(
         "["
-        "\U0001F300-\U0001F9FF"
-        "\U0001FA00-\U0001FAFF"
-        "\U00002600-\U000027BF"
-        "\U0001F1E0-\U0001F1FF"
-        "\u2000-\u206F"
+        "\U0001f300-\U0001f9ff"
+        "\U0001fa00-\U0001faff"
+        "\U00002600-\U000027bf"
+        "\U0001f1e0-\U0001f1ff"
+        "\u2000-\u206f"
         "✅❌🔄🎙️📊🚀💡⚠️ℹ️"
         "]+",
         "",
@@ -66,6 +68,7 @@ def _clean_for_tts(text: str) -> str:
     text = re.sub(r"[ \t]+", " ", text)
     return text.strip()
 
+
 logger = logging.getLogger("ninko.modules.telegram.bot")
 
 # Maximum message length (Telegram limit: 4096)
@@ -75,13 +78,18 @@ _MAX_MSG_LEN = 4000
 def _strip_pipeline_headers(text: str) -> str:
     """Remove 'Step N – module:' headers and Telegram send confirmations from pipeline responses."""
     # **Step 1 – module:** (Markdown bold)
-    text = re.sub(r'\*\*Schritt\s+\d+\s*[–-]\s*\w+:\*\*\s*\n?', '', text)
+    text = re.sub(r"\*\*Schritt\s+\d+\s*[–-]\s*\w+:\*\*\s*\n?", "", text)
     # Step 1 – module: (plain)
-    text = re.sub(r'(?m)^Schritt\s+\d+\s*[–-]\s*\w+:\s*\n?', '', text)
+    text = re.sub(r"(?m)^Schritt\s+\d+\s*[–-]\s*\w+:\s*\n?", "", text)
     # Telegram send confirmation (sent separately by the Telegram module)
-    text = re.sub(r'✅\s*Telegram-?\s*Nachricht\s+.*?(?:gesendet|erfolgreich)[^\n]*\n?', '', text, flags=re.IGNORECASE)
+    text = re.sub(
+        r"✅\s*Telegram-?\s*Nachricht\s+.*?(?:gesendet|erfolgreich)[^\n]*\n?",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
     # Normalize multiple blank lines
-    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 
 
@@ -155,7 +163,7 @@ class TelegramBot:
                     params: dict[str, Any] = {
                         "offset": self.offset,
                         "timeout": timeout_s,
-                        "allowed_updates": ["message"],
+                        "allowed_updates": ["message", "callback_query"],
                     }
 
                     resp = await poll_client.get(url, params=params)
@@ -166,11 +174,11 @@ class TelegramBot:
                             for update in updates:
                                 self.offset = update["update_id"] + 1
                                 # Process each update as an independent task
-                                asyncio.create_task(
-                                    self.handle_update(update, token)
-                                )
+                                asyncio.create_task(self.handle_update(update, token))
                         else:
-                            logger.error("Telegram API Error: %s", data.get("description"))
+                            logger.error(
+                                "Telegram API Error: %s", data.get("description")
+                            )
                             await asyncio.sleep(5)
                     elif resp.status_code == 401:
                         logger.error("Telegram Unauthorized. Stopping polling.")
@@ -184,7 +192,14 @@ class TelegramBot:
                 break
             except httpx.ReadTimeout:
                 continue  # Normal for long-polling with no new messages
-            except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as e:
+            except (
+                RuntimeError,
+                ValueError,
+                TypeError,
+                KeyError,
+                OSError,
+                asyncio.TimeoutError,
+            ) as e:
                 logger.exception("Error in Telegram polling loop: %s", e)
                 await asyncio.sleep(10)
 
@@ -222,13 +237,69 @@ class TelegramBot:
                     )
                     return resp2.status_code == 200 and resp2.json().get("ok")
 
-                logger.warning("sendMessage error: %s %s", resp.status_code, resp.text[:100])
+                logger.warning(
+                    "sendMessage error: %s %s", resp.status_code, resp.text[:100]
+                )
                 return False
-        except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as exc:
+        except (
+            RuntimeError,
+            ValueError,
+            TypeError,
+            KeyError,
+            OSError,
+            asyncio.TimeoutError,
+        ) as exc:
             logger.error("_send error: %s", exc)
             return False
 
-    async def _react(self, token: str, chat_id: int, message_id: int, emoji: str = "👍") -> None:
+    async def _send_with_keyboard(
+        self,
+        token: str,
+        chat_id: int,
+        text: str,
+        buttons: list[list[dict[str, str]]],
+        parse_mode: str = "HTML",
+    ) -> bool:
+        """
+        Send a message with inline keyboard buttons.
+        buttons: e.g. [[{"text": "Ja", "callback_data": "confirm_yes"}, {"text": "Nein", "callback_data": "confirm_no"}]]
+        Returns True on success.
+        """
+        payload: dict[str, Any] = {
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": parse_mode,
+            "reply_markup": {"inline_keyboard": buttons},
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(
+                    f"https://api.telegram.org/bot{token}/sendMessage",
+                    json=payload,
+                )
+                if resp.status_code == 200 and resp.json().get("ok"):
+                    return True
+                logger.warning(
+                    "sendMessage with keyboard error: %s %s",
+                    resp.status_code,
+                    resp.text[:100],
+                )
+                return False
+        except (
+            RuntimeError,
+            ValueError,
+            TypeError,
+            KeyError,
+            OSError,
+            asyncio.TimeoutError,
+        ) as exc:
+            logger.error("_send_with_keyboard error: %s", exc)
+            return False
+
+    async def _react(
+        self, token: str, chat_id: int, message_id: int, emoji: str = "👍"
+    ) -> None:
         """Set an emoji reaction on a message (best-effort, no error propagation)."""
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
@@ -240,7 +311,14 @@ class TelegramBot:
                         "reaction": [{"type": "emoji", "emoji": emoji}],
                     },
                 )
-        except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError):
+        except (
+            RuntimeError,
+            ValueError,
+            TypeError,
+            KeyError,
+            OSError,
+            asyncio.TimeoutError,
+        ):
             pass
 
     async def _keep_typing(self, token: str, chat_id: int) -> None:
@@ -253,7 +331,14 @@ class TelegramBot:
                             f"https://api.telegram.org/bot{token}/sendChatAction",
                             json={"chat_id": chat_id, "action": "typing"},
                         )
-                    except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError):
+                    except (
+                        RuntimeError,
+                        ValueError,
+                        TypeError,
+                        KeyError,
+                        OSError,
+                        asyncio.TimeoutError,
+                    ):
                         pass
                     await asyncio.sleep(4)
         except asyncio.CancelledError:
@@ -289,9 +374,18 @@ class TelegramBot:
                 audio_bytes = r2.content
 
             filename = file_path.rsplit("/", 1)[-1]
-            text, confidence, detected_lang = await transcribe_bytes_extended(audio_bytes, filename)
+            text, confidence, detected_lang = await transcribe_bytes_extended(
+                audio_bytes, filename
+            )
             return (text or None), confidence, detected_lang
-        except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as exc:
+        except (
+            RuntimeError,
+            ValueError,
+            TypeError,
+            KeyError,
+            OSError,
+            asyncio.TimeoutError,
+        ) as exc:
             logger.error("Error transcribing Telegram voice message: %s", exc)
             return None, -2.0, "de"
 
@@ -313,17 +407,27 @@ class TelegramBot:
                     "sendVoice Fehler: %s %s", resp.status_code, resp.text[:100]
                 )
                 return False
-        except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as exc:
+        except (
+            RuntimeError,
+            ValueError,
+            TypeError,
+            KeyError,
+            OSError,
+            asyncio.TimeoutError,
+        ) as exc:
             logger.error("_send_voice error: %s", exc)
             return False
 
-    async def _send_photo(self, token: str, chat_id: int, image_path: str, caption: str = "") -> bool:
+    async def _send_photo(
+        self, token: str, chat_id: int, image_path: str, caption: str = ""
+    ) -> bool:
         """
         Send a generated image as a photo via Telegram sendPhoto API.
         Loads the image locally and sends it as multipart/form-data.
         """
         try:
             from pathlib import Path
+
             # URL path → filesystem path: /api/images/xxx.png → /app/data/images/xxx.png
             filename = image_path.rsplit("/", 1)[-1]
             candidates = [
@@ -337,25 +441,48 @@ class TelegramBot:
                     img_file = c
                     break
             if not img_file:
-                logger.warning("Image file not found: %s (tried: %s)", filename, [str(c) for c in candidates])
+                logger.warning(
+                    "Image file not found: %s (tried: %s)",
+                    filename,
+                    [str(c) for c in candidates],
+                )
                 return False
 
             image_bytes = img_file.read_bytes()
             ext = img_file.suffix.lower()
-            mime_types = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif"}
+            mime_types = {
+                ".png": "image/png",
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".webp": "image/webp",
+                ".gif": "image/gif",
+            }
             mime = mime_types.get(ext, "image/png")
 
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(
                     f"https://api.telegram.org/bot{token}/sendPhoto",
-                    data={"chat_id": str(chat_id), "caption": caption, "parse_mode": "HTML"},
+                    data={
+                        "chat_id": str(chat_id),
+                        "caption": caption,
+                        "parse_mode": "HTML",
+                    },
                     files={"photo": (img_file.name, image_bytes, mime)},
                 )
                 if resp.status_code == 200 and resp.json().get("ok"):
                     return True
-                logger.warning("sendPhoto Fehler: %s %s", resp.status_code, resp.text[:200])
+                logger.warning(
+                    "sendPhoto Fehler: %s %s", resp.status_code, resp.text[:200]
+                )
                 return False
-        except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as exc:
+        except (
+            RuntimeError,
+            ValueError,
+            TypeError,
+            KeyError,
+            OSError,
+            asyncio.TimeoutError,
+        ) as exc:
             logger.error("_send_photo error: %s", exc)
             return False
 
@@ -378,18 +505,25 @@ class TelegramBot:
             file_id = voice.get("file_id")
             if file_id:
                 is_voice = True
-                text, confidence, detected_lang = await self._transcribe_voice(file_id, token)
+                text, confidence, detected_lang = await self._transcribe_voice(
+                    file_id, token
+                )
                 if not text:
-                    await self._send(token, chat_id, "❌ Transcription failed. Please send as text.")
+                    await self._send(
+                        token, chat_id, "❌ Transcription failed. Please send as text."
+                    )
                     return
                 # Confidence check
                 import core.config as _cfg_mod
+
                 _cfg = _cfg_mod.get_settings()
                 if confidence < _cfg.STT_CONFIDENCE_THRESHOLD:
                     low_confidence = True
                     logger.info(
                         "STT Konfidenz niedrig (%.2f < %.2f): '%s'",
-                        confidence, _cfg.STT_CONFIDENCE_THRESHOLD, text[:60],
+                        confidence,
+                        _cfg.STT_CONFIDENCE_THRESHOLD,
+                        text[:60],
                     )
 
         if not chat_id or not text:
@@ -397,14 +531,18 @@ class TelegramBot:
 
         # Allowlist check: only permit allowed chat IDs
         from core.connections import ConnectionManager
+
         conn = await ConnectionManager.get_default_connection("telegram")
         if conn:
             allowed_raw = conn.config.get("allowed_chat_ids", "")
             if allowed_raw:
-                allowed_ids = {s.strip() for s in str(allowed_raw).split(",") if s.strip()}
+                allowed_ids = {
+                    s.strip() for s in str(allowed_raw).split(",") if s.strip()
+                }
                 if str(chat_id) not in allowed_ids:
                     logger.warning(
-                        "Telegram: Access denied for chat ID %s (not in allowlist)", chat_id
+                        "Telegram: Access denied for chat ID %s (not in allowlist)",
+                        chat_id,
                     )
                     return
 
@@ -414,8 +552,14 @@ class TelegramBot:
         voice_lang: str | None = None
         voice_name: str | None = None
         if conn:
-            voice_reply = str(conn.config.get("voice_reply", "false")).lower() in ("true", "1", "yes")
-            voice_reply_text_too = str(conn.config.get("voice_reply_text_too", "false")).lower() in ("true", "1", "yes")
+            voice_reply = str(conn.config.get("voice_reply", "false")).lower() in (
+                "true",
+                "1",
+                "yes",
+            )
+            voice_reply_text_too = str(
+                conn.config.get("voice_reply_text_too", "false")
+            ).lower() in ("true", "1", "yes")
             voice_lang = conn.config.get("voice_lang") or None
             voice_name = conn.config.get("voice_name") or None
 
@@ -425,7 +569,12 @@ class TelegramBot:
         cmd = text.strip().lower().split("@")[0]  # /clear@botname → /clear
 
         if cmd == "/chatid":
-            await self._send(token, chat_id, f"🆔 Deine Telegram Chat-ID: <code>{chat_id}</code>", parse_mode="HTML")
+            await self._send(
+                token,
+                chat_id,
+                f"🆔 Deine Telegram Chat-ID: <code>{chat_id}</code>",
+                parse_mode="HTML",
+            )
             return
 
         if cmd in ("/start", "/clear", "/reset"):
@@ -435,8 +584,17 @@ class TelegramBot:
                 await redis.clear_chat_history(session_id_local)
                 # Race-condition protection: in-flight requests should not write back history
                 self._cleared_sessions.add(session_id_local)
-                await self._send(token, chat_id, "♻️ Chat history cleared. How can I help?")
-            except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as exc:
+                await self._send(
+                    token, chat_id, "♻️ Chat history cleared. How can I help?"
+                )
+            except (
+                RuntimeError,
+                ValueError,
+                TypeError,
+                KeyError,
+                OSError,
+                asyncio.TimeoutError,
+            ) as exc:
                 logger.error("Error clearing chat history for %s: %s", chat_id, exc)
                 await self._send(token, chat_id, f"❌ Error clearing history: {exc}")
             return
@@ -444,7 +602,8 @@ class TelegramBot:
         # ── Low confidence: ask for confirmation instead of processing ─────────
         if low_confidence:
             await self._send(
-                token, chat_id,
+                token,
+                chat_id,
                 _t(
                     f'🎙️ Ich habe verstanden:\n<i>"{text}"</i>\n\nIst das korrekt? (Antworte mit Ja oder schicke den Text nochmal.)',
                     f'🎙️ I understood:\n<i>"{text}"</i>\n\nIs this correct? (Reply with yes or send the text again.)',
@@ -470,28 +629,150 @@ class TelegramBot:
             pending_key = SAFEGUARD_PENDING_KEY.format(session_id=session_id)
             pending_raw = await redis.connection.get(pending_key)
 
-            if pending_raw and is_bot_confirmation(text):
-                # User confirmed — execute the stored action
-                text = pending_raw.decode() if isinstance(pending_raw, bytes) else pending_raw
+            # Check for callback_data (button clicks)
+            callback_query = update.get("callback_query")
+            if callback_query:
+                callback_data = callback_query.get("data", "")
+                callback_msg = callback_query.get("message", {})
+                callback_chat_id = callback_msg.get("chat", {}).get("id")
+
+                # Answer the callback query (remove loading spinner)
+                try:
+                    async with httpx.AsyncClient(timeout=5.0) as client:
+                        await client.post(
+                            f"https://api.telegram.org/bot{token}/answerCallbackQuery",
+                            json={"callback_query_id": callback_query.get("id")},
+                        )
+                except Exception:
+                    pass
+
+                # Handle button click
+                if callback_data == "confirm_yes" and pending_raw:
+                    # User clicked "Ja" → execute pending action
+                    text = (
+                        pending_raw.decode()
+                        if isinstance(pending_raw, bytes)
+                        else pending_raw
+                    )
+                    await redis.connection.delete(pending_key)
+                    logger.info(
+                        "Safeguard: Telegram user confirmed via button for %s.",
+                        session_id,
+                    )
+                elif callback_data == "confirm_no":
+                    # User clicked "Nein" → cancel
+                    await redis.connection.delete(pending_key)
+                    await self._send(
+                        token,
+                        chat_id,
+                        _t(
+                            "❌ Aktion abgebrochen.",
+                            "❌ Action cancelled.",
+                            fr="❌ Action annulée.",
+                            es="❌ Acción cancelada.",
+                            it="❌ Azione annullata.",
+                            nl="❌ Actie geannuleerd.",
+                            pl="❌ Działanie anulowane.",
+                            pt="❌ Ação cancelada.",
+                            ja="❌ アクションがキャンセルされました。",
+                            zh="❌ 操作已取消。",
+                        ),
+                    )
+                    return
+                elif callback_data == "confirm_yes" and not pending_raw:
+                    # Button click but no pending action
+                    await self._send(
+                        token,
+                        chat_id,
+                        _t(
+                            "Keine ausstehende Aktion.",
+                            "No pending action.",
+                            fr="Aucune action en attente.",
+                            es="No hay acción pendiente.",
+                            it="Nessuna azione in sospeso.",
+                            nl="Geen openstaande actie.",
+                            pl="Brak oczekującej akcji.",
+                            pt="Nenhuma ação pendente.",
+                            ja="保留中のアクションはありません。",
+                            zh="没有待处理的操作。",
+                        ),
+                    )
+                    return
+                else:
+                    # Unknown callback, ignore
+                    return
+
+            elif pending_raw and is_bot_confirmation(text):
+                # User confirmed via text (legacy support)
+                text = (
+                    pending_raw.decode()
+                    if isinstance(pending_raw, bytes)
+                    else pending_raw
+                )
                 await redis.connection.delete(pending_key)
-                logger.info("Safeguard: Telegram user confirmed pending action for %s.", session_id)
+                logger.info(
+                    "Safeguard: Telegram user confirmed pending action for %s.",
+                    session_id,
+                )
             elif safeguard:
                 sg_result = await safeguard.check(text)
                 if sg_result.requires_confirmation:
                     await redis.connection.set(pending_key, text, ex=300)
-                    await self._send(
-                        token, chat_id,
+                    await self._send_with_keyboard(
+                        token,
+                        chat_id,
                         _t(
                             f"⚠️ <b>Bestätigung erforderlich</b>\n\n"
                             f"<b>Kategorie:</b> {sg_result.category.value}\n"
                             f"<b>Begründung:</b> {sg_result.rationale}\n\n"
-                            f"Antworte mit <b>ja</b> um fortzufahren, oder schicke eine andere Nachricht um abzubrechen.",
+                            f"Möchtest du fortfahren?",
                             f"⚠️ <b>Confirmation required</b>\n\n"
                             f"<b>Category:</b> {sg_result.category.value}\n"
                             f"<b>Reason:</b> {sg_result.rationale}\n\n"
-                            f"Reply with <b>yes</b> to continue, or send another message to cancel.",
+                            f"Do you want to continue?",
+                            fr=f"⚠️ <b>Confirmation requise</b>\n\n<b>Catégorie:</b> {sg_result.category.value}\n<b>Raison:</b> {sg_result.rationale}\n\nVoulez-vous continuer?",
+                            es=f"⚠️ <b>Confirmación requerida</b>\n\n<b>Categoría:</b> {sg_result.category.value}\n<b>Razón:</b> {sg_result.rationale}\n\n¿Quieres continuar?",
+                            it=f"⚠️ <b>Conferma richiesta</b>\n\n<b>Categoria:</b> {sg_result.category.value}\n<b>Motivo:</b> {sg_result.rationale}\n\nVuoi continuare?",
+                            nl=f"⚠️ <b>Bevestiging vereist</b>\n\n<b>Categorie:</b> {sg_result.category.value}\n<b>Reden:</b> {sg_result.rationale}\n\nWil je doorgaan?",
+                            pl=f"⚠️ <b>Wymagane potwierdzenie</b>\n\n<b>Kategoria:</b> {sg_result.category.value}\n<b>Powód:</b> {sg_result.rationale}\n\nCzy chcesz kontynuować?",
+                            pt=f"⚠️ <b>Confirmação necessária</b>\n\n<b>Categoria:</b> {sg_result.category.value}\n<b>Motivo:</b> {sg_result.rationale}\n\nQuer continuar?",
+                            ja=f"⚠️ <b>確認が必要</b>\n\n<b>カテゴリ:</b> {sg_result.category.value}\n<b>理由:</b> {sg_result.rationale}\n\n続行しますか？",
+                            zh=f"⚠️ <b>需要确认</b>\n\n<b>类别:</b> {sg_result.category.value}\n<b>原因:</b> {sg_result.rationale}\n\n是否继续？",
                         ),
-                        parse_mode="HTML",
+                        [
+                            [
+                                {
+                                    "text": _t(
+                                        "✅ Ja",
+                                        "✅ Yes",
+                                        "✅ Oui",
+                                        "✅ Sí",
+                                        "✅ Sì",
+                                        "✅ Ja",
+                                        "✅ Tak",
+                                        "✅ Sim",
+                                        "✅ はい",
+                                        "✅ 是",
+                                    ),
+                                    "callback_data": "confirm_yes",
+                                },
+                                {
+                                    "text": _t(
+                                        "❌ Nein",
+                                        "❌ No",
+                                        "❌ Non",
+                                        "❌ No",
+                                        "❌ No",
+                                        "❌ Nee",
+                                        "❌ Nie",
+                                        "❌ Não",
+                                        "❌ いいえ",
+                                        "❌ 否",
+                                    ),
+                                    "callback_data": "confirm_no",
+                                },
+                            ]
+                        ],
                     )
                     return
 
@@ -499,7 +780,11 @@ class TelegramBot:
 
             # Chat-ID + detected language as context hint
             lang_hint = ""
-            if os.getenv("WHISPER_LANGUAGE", "de") == "auto" and detected_lang and detected_lang != "de":
+            if (
+                os.getenv("WHISPER_LANGUAGE", "de") == "auto"
+                and detected_lang
+                and detected_lang != "de"
+            ):
                 lang_hint = f"[Erkannte Sprache: {detected_lang}] "
             contextualized_text = f"[Telegram Chat-ID: {chat_id}]\n{lang_hint}{text}"
 
@@ -512,7 +797,9 @@ class TelegramBot:
             # Save history — skip if session was cleared in the meantime
             if session_id in self._cleared_sessions:
                 self._cleared_sessions.discard(session_id)
-                logger.info("History save for %s skipped (session was cleared).", session_id)
+                logger.info(
+                    "History save for %s skipped (session was cleared).", session_id
+                )
             else:
                 if did_compact:
                     await redis.store_chat_message(
@@ -520,21 +807,27 @@ class TelegramBot:
                         role="system_compaction",
                         content="Conversation history has been compressed.",
                     )
-                await redis.store_chat_message(session_id=session_id, role="user", content=text)
-                await redis.store_chat_message(session_id=session_id, role="assistant", content=response_text)
+                await redis.store_chat_message(
+                    session_id=session_id, role="user", content=text
+                )
+                await redis.store_chat_message(
+                    session_id=session_id, role="assistant", content=response_text
+                )
 
             # ── Context compression: inform user ──────────────────────────────
             if did_compact:
                 await self._send(
-                    token, chat_id,
+                    token,
+                    chat_id,
                     "🗜️ <i>Conversation history has been compressed — older details have been summarized.</i>",
                     parse_mode="HTML",
                 )
 
             # ── Voice-Reply: always voice for voice inputs, no text ────────────
             if is_voice:
-                await self._send_voice_reply(token, chat_id, response_text,
-                                             lang=voice_lang, voice=voice_name)
+                await self._send_voice_reply(
+                    token, chat_id, response_text, lang=voice_lang, voice=voice_name
+                )
                 return
 
             # ── Telegram module already sent directly → don't send again ───────
@@ -557,38 +850,73 @@ class TelegramBot:
             # ── Image generation: detect marker, URL, or phrase ────────────
             image_path = None
             # 1. [NINKO_IMAGE:url] marker (backward-compat: KUMIO_IMAGE)
-            m = re.search(r'\[(?:NINKO_IMAGE|KUMIO_IMAGE):(/api/images/[^\]]+)\]', final_text)
+            m = re.search(
+                r"\[(?:NINKO_IMAGE|KUMIO_IMAGE):(/api/images/[^\]]+)\]", final_text
+            )
             if not m:
                 # 2. /api/images/ URL irgendwo im Text
-                m = re.search(r'(/api/images/[\w\-]+\.\w+)', final_text)
+                m = re.search(r"(/api/images/[\w\-]+\.\w+)", final_text)
             if m:
                 image_path = m.group(1)
                 logger.info("Image path detected in text: %s", image_path)
-            elif re.search(r'[Bb]ild\s+(?:erfolgreich\s+)?generiert|[Bb]ild\s+erstellt|generate_image', response_text, re.IGNORECASE):
+            elif re.search(
+                r"[Bb]ild\s+(?:erfolgreich\s+)?generiert|[Bb]ild\s+erstellt|generate_image",
+                response_text,
+                re.IGNORECASE,
+            ):
                 # 3. Tool was called but LLM omitted URL → use most recent image
                 #    IMPORTANT: use response_text (raw) not final_text (filtered)
                 try:
                     from pathlib import Path
+
                     img_dir = Path("/app/data/images")
                     if img_dir.exists():
-                        imgs = sorted(img_dir.glob("*.png"), key=lambda p: p.stat().st_mtime, reverse=True)
+                        imgs = sorted(
+                            img_dir.glob("*.png"),
+                            key=lambda p: p.stat().st_mtime,
+                            reverse=True,
+                        )
                         if imgs:
-                            age_seconds = __import__("time").time() - imgs[0].stat().st_mtime
+                            age_seconds = (
+                                __import__("time").time() - imgs[0].stat().st_mtime
+                            )
                             if age_seconds < 300:  # Only images less than 5 minutes old
                                 image_path = f"/api/images/{imgs[0].name}"
-                                logger.info("Image URL missing in response, using newest image (%ds old): %s", age_seconds, image_path)
-                except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as e:
+                                logger.info(
+                                    "Image URL missing in response, using newest image (%ds old): %s",
+                                    age_seconds,
+                                    image_path,
+                                )
+                except (
+                    RuntimeError,
+                    ValueError,
+                    TypeError,
+                    KeyError,
+                    OSError,
+                    asyncio.TimeoutError,
+                ) as e:
                     logger.debug("Error searching for newest image: %s", e)
 
             if image_path:
                 # Text without markers/URL for caption
-                caption = re.sub(r'\[(?:NINKO_IMAGE|KUMIO_IMAGE):[^\]]+\]\s*\n?', '', final_text).strip()
-                caption = re.sub(r'/api/images/[\w\-]+\.\w+\s*\n?', '', caption).strip()
+                caption = re.sub(
+                    r"\[(?:NINKO_IMAGE|KUMIO_IMAGE):[^\]]+\]\s*\n?", "", final_text
+                ).strip()
+                caption = re.sub(r"/api/images/[\w\-]+\.\w+\s*\n?", "", caption).strip()
                 caption = format_for_telegram(caption)[:1024]  # Telegram caption limit
                 try:
                     await self._send_photo(token, chat_id, image_path, caption)
-                except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as exc:
-                    logger.warning("Image send failed, falling back to text: %s", img_err)
+                except (
+                    RuntimeError,
+                    ValueError,
+                    TypeError,
+                    KeyError,
+                    OSError,
+                    asyncio.TimeoutError,
+                ) as exc:
+                    logger.warning(
+                        "Image send failed, falling back to text: %s", img_err
+                    )
                     fallback = format_for_telegram(final_text)
                     await self._send(token, chat_id, fallback, parse_mode="HTML")
                 return
@@ -596,11 +924,21 @@ class TelegramBot:
             final_text = format_for_telegram(final_text)
 
             # Send response in chunks (Telegram limit: 4096 characters)
-            chunks = [final_text[i : i + _MAX_MSG_LEN] for i in range(0, len(final_text), _MAX_MSG_LEN)]
+            chunks = [
+                final_text[i : i + _MAX_MSG_LEN]
+                for i in range(0, len(final_text), _MAX_MSG_LEN)
+            ]
             for chunk in chunks:
                 await self._send(token, chat_id, chunk, parse_mode="HTML")
 
-        except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as exc:
+        except (
+            RuntimeError,
+            ValueError,
+            TypeError,
+            KeyError,
+            OSError,
+            asyncio.TimeoutError,
+        ) as exc:
             logger.exception("Error in Telegram orchestrator processing: %s", exc)
             # Descriptive error message instead of generic text
             err_type = type(exc).__name__
@@ -620,8 +958,12 @@ class TelegramBot:
                 pass
 
     async def _send_voice_reply(
-        self, token: str, chat_id: int, text: str,
-        lang: str | None = None, voice: str | None = None,
+        self,
+        token: str,
+        chat_id: int,
+        text: str,
+        lang: str | None = None,
+        voice: str | None = None,
     ) -> None:
         """
         Synthesize text with Piper TTS and send it as a Telegram voice message.
@@ -634,13 +976,17 @@ class TelegramBot:
 
             clean_text = _clean_for_tts(text)
             if not clean_text:
-                logger.warning("Voice-Reply: cleaned text empty, sending text fallback.")
+                logger.warning(
+                    "Voice-Reply: cleaned text empty, sending text fallback."
+                )
                 await self._send(token, chat_id, text)
                 return
 
             if not is_tts_available():
                 logger.warning("Voice-Reply: TTS not available, sending text fallback.")
-                await self._send(token, chat_id, format_for_telegram(text), parse_mode="HTML")
+                await self._send(
+                    token, chat_id, format_for_telegram(text), parse_mode="HTML"
+                )
                 return
 
             wav_bytes = await synthesize_reply(clean_text, lang=lang, voice=voice)
@@ -648,11 +994,20 @@ class TelegramBot:
             ok = await self._send_voice(token, chat_id, ogg_bytes)
             if ok:
                 logger.info(
-                    "Voice-Reply sent to chat %s: %d KB OGG", chat_id, len(ogg_bytes) // 1024
+                    "Voice-Reply sent to chat %s: %d KB OGG",
+                    chat_id,
+                    len(ogg_bytes) // 1024,
                 )
             else:
                 logger.warning("Voice-Reply sendVoice failed for chat %s", chat_id)
-        except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as exc:
+        except (
+            RuntimeError,
+            ValueError,
+            TypeError,
+            KeyError,
+            OSError,
+            asyncio.TimeoutError,
+        ) as exc:
             logger.error("Voice-Reply error for chat %s: %s", chat_id, exc)
 
 
