@@ -15,6 +15,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 - **On-the-fly `_pluginTabs` registration for legacy plugin installs**: Old plugin installations (pre-v1.0.0) in `backend/plugins/` may not have the `Ninko._pluginTabs['id'] = TabObject` line in their `tab.js`. `routes_modules.py` now auto-patches the served JS on-the-fly: detects the exported tab object via regex (`_detect_tab_object()`), then appends the registration snippet if missing. No reinstall required.
 
+### Changed
+
+- **Module versions bumped** after `tab.js` frontend changes: checkmk, discord → `1.1.0`; docker, email, fritzbox, glpi, homeassistant, ionos, kubernetes, linux_server, opnsense, pihole, proxmox, qdrant, tasmota, teams, telegram, wordpress → `1.1.1`.
+
 ## [1.0.0] – 2026-04-04
 
 ### Fixed
