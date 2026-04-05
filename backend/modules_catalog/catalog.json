@@ -211,6 +211,13 @@
       "author": "Ninko"
     },
     {
+      "name": "mcp_server",
+      "display_name": "MCP Server",
+      "description": "Generic Model Context Protocol integration for arbitrary MCP servers.",
+      "version": "1.0.0",
+      "author": "Ninko Team"
+    },
+    {
       "name": "github",
       "display_name": "GitHub",
       "description": "GitHub – Repositories, Actions, Pull Requests, Issues und Releases.",

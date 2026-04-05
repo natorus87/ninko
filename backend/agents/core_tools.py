@@ -5,9 +5,9 @@ These tools provide fundamental system capabilities rather than domain-specific 
 
 import asyncio
 import logging
-import shlex
-from pathlib import Path
 from langchain_core.tools import tool
+from core.task_registry import get_task_registry
+from core.tool_permissions import PermissionDeniedError, validate_cli_command, validate_tool_permission
 
 # Strong references to background tasks to prevent premature GC
 _background_tasks: set[asyncio.Task] = set()
@@ -20,6 +20,11 @@ __all__ = [
     "create_dag_workflow",
     "create_linear_workflow",
     "execute_workflow",
+    "create_task",
+    "get_task",
+    "list_tasks",
+    "stop_task",
+    "task_output",
     "call_module_agent",
     "run_pipeline",
     "install_skill",
@@ -168,58 +173,11 @@ async def execute_cli_command(command: str) -> str:
     logger.info("Führe lokales CLI-Kommando aus: %s", command)
     try:
         try:
-            args = shlex.split(command)
-        except ValueError as e:
+            args = validate_cli_command(command, _ALLOWED_COMMANDS)
+        except PermissionDeniedError as e:
             return _t(
-                f"Fehler: Ungültige Befehlssyntax: {e}",
-                f"Error: Invalid command syntax: {e}",
-                f"Erreur : syntaxe de commande invalide : {e}",
-                f"Error: Sintaxis de comando inválida: {e}",
-                f"Errore: Sintassi del comando non valida: {e}",
-                f"Fout: Ongeldige opdrachtsyntaxis: {e}",
-                f"Błąd: Nieprawidłowa składnia polecenia: {e}",
-                f"Erro: Sintaxe de comando inválida: {e}",
-                f"エラー: 無効なコマンド構文: {e}",
-                f"错误: 无效的命令语法: {e}",
-            )
-
-        if not args:
-            return _t(
-                "Fehler: Leerer Befehl.",
-                "Error: Empty command.",
-                "Erreur : Commande vide.",
-                "Error: Comando vacío.",
-                "Errore: Comando vuoto.",
-                "Fout: Lege opdracht.",
-                "Błąd: Puste polecenie.",
-                "Erro: Comando vazio.",
-                "エラー: 空のコマンド",
-                "错误: 空命令",
-            )
-
-        cmd_name = Path(args[0]).name
-        if cmd_name not in _ALLOWED_COMMANDS:
-            return _t(
-                f"Fehler: Befehl '{cmd_name}' ist nicht erlaubt. "
-                f"Erlaubte Befehle: {', '.join(sorted(_ALLOWED_COMMANDS))}",
-                f"Error: Command '{cmd_name}' is not allowed. "
-                f"Allowed commands: {', '.join(sorted(_ALLOWED_COMMANDS))}",
-                f"Erreur : Le commande '{cmd_name}' n'est pas autorisée. "
-                f"Commandes autorisées: {', '.join(sorted(_ALLOWED_COMMANDS))}",
-                f"Error: El comando '{cmd_name}' no está permitido. "
-                f"Comandos permitidos: {', '.join(sorted(_ALLOWED_COMMANDS))}",
-                f"Errore: Il comando '{cmd_name}' non è autorizzato. "
-                f"Comandi consentiti: {', '.join(sorted(_ALLOWED_COMMANDS))}",
-                f"Fout: Opdracht '{cmd_name}' is niet toegestaan. "
-                f"Toegestane opdrachten: {', '.join(sorted(_ALLOWED_COMMANDS))}",
-                f"Błąd: Polecenie '{cmd_name}' jest niedozwolone. "
-                f"Dozwolone polecenia: {', '.join(sorted(_ALLOWED_COMMANDS))}",
-                f"Erro: O comando '{cmd_name}' não é permitido. "
-                f"Comandos permitidos: {', '.join(sorted(_ALLOWED_COMMANDS))}",
-                f"エラー: コマンド '{cmd_name}' は許可されていません。 "
-                f"許可されたコマンド: {', '.join(sorted(_ALLOWED_COMMANDS))}",
-                f"错误: 命令 '{cmd_name}' 不被允许。 "
-                f"允许的命令: {', '.join(sorted(_ALLOWED_COMMANDS))}",
+                f"Fehler: {e}",
+                f"Error: {e}",
             )
 
         process = await asyncio.create_subprocess_exec(
@@ -268,6 +226,81 @@ async def execute_cli_command(command: str) -> str:
         return _t(
             f"Fehler bei der Ausführung von '{command}': {exc}",
             f"Error executing '{command}': {exc}",
+        )
+
+
+@tool
+async def create_task(command: str, description: str = "") -> dict:
+    """
+    Startet ein lokales CLI-Kommando als Hintergrund-Task und gibt die Task-Metadaten zurück.
+    Nutze dieses Tool für längere Diagnose- oder Monitoring-Kommandos, die nicht blockierend
+    im aktuellen Agent-Lauf ausgeführt werden sollen.
+    """
+    try:
+        decision = validate_tool_permission("create_task")
+        if not decision.allowed:
+            raise PermissionDeniedError(decision.reason)
+        args = validate_cli_command(command, _ALLOWED_COMMANDS)
+        registry = get_task_registry()
+        task = await registry.create_cli_task(command=command, description=description)
+        await registry.start_cli_task(task["id"], args)
+        return task
+    except (PermissionDeniedError, ValueError, RuntimeError, OSError) as exc:
+        logger.error("create_task fehlgeschlagen: %s", exc)
+        return {"status": "error", "detail": str(exc)}
+
+
+@tool
+async def get_task(task_id: str) -> dict:
+    """
+    Gibt Status und Metadaten eines zuvor gestarteten Hintergrund-Tasks zurück.
+    """
+    registry = get_task_registry()
+    task = await registry.get_task(task_id)
+    if not task:
+        return {"status": "error", "detail": f"Task '{task_id}' nicht gefunden."}
+    return task
+
+
+@tool
+async def list_tasks() -> list[dict]:
+    """
+    Listet alle bekannten Hintergrund-Tasks mit Status und Kurzmetadaten auf.
+    """
+    registry = get_task_registry()
+    return await registry.list_tasks()
+
+
+@tool
+async def stop_task(task_id: str) -> dict:
+    """
+    Stoppt einen laufenden Hintergrund-Task. Verwende dieses Tool, wenn ein
+    Diagnose- oder Hintergrundjob nicht weiterlaufen soll.
+    """
+    try:
+        decision = validate_tool_permission("stop_task")
+        if not decision.allowed:
+            raise PermissionDeniedError(decision.reason)
+        registry = get_task_registry()
+        return await registry.stop_task(task_id)
+    except (PermissionDeniedError, ValueError, RuntimeError, OSError) as exc:
+        logger.error("stop_task fehlgeschlagen: %s", exc)
+        return {"status": "error", "detail": str(exc)}
+
+
+@tool
+async def task_output(task_id: str) -> str:
+    """
+    Gibt die bisherige Ausgabe eines Hintergrund-Tasks zurück.
+    """
+    try:
+        registry = get_task_registry()
+        return _truncate_output(await registry.task_output(task_id))
+    except (ValueError, RuntimeError, OSError) as exc:
+        logger.error("task_output fehlgeschlagen: %s", exc)
+        return _t(
+            f"Fehler beim Laden der Task-Ausgabe: {exc}",
+            f"Error loading task output: {exc}",
         )
 
 

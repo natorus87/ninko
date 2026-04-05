@@ -888,6 +888,9 @@ _TOOL_READONLY: frozenset[str] = frozenset(
         "create_linear_workflow",
         "execute_workflow",
         "run_pipeline",
+        "get_task",
+        "list_tasks",
+        "task_output",
         "generate_image",
         "get_routing_info",
         # Search
