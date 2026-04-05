@@ -335,7 +335,6 @@ async def check_plugin_updates(request: Request) -> JSONResponse:
         meta = plugin_meta.get(name, {})
         module_repo_url = meta.get("repo_url", repo_url)
         module_repo_id = meta.get("repo_id", _OFFICIAL_REPO_ID)
-        is_plugin = name in plugin_meta
 
         if module_repo_url:
             parsed = _parse_github_url(module_repo_url)
@@ -361,10 +360,8 @@ async def check_plugin_updates(request: Request) -> JSONResponse:
                 "name": name,
                 "installed_version": installed_version,
                 "repo_version": update_info.get("repo_version", ""),
-                "update_available": update_info.get("update_available", False)
-                and is_plugin,
+                "update_available": update_info.get("update_available", False),
                 "repo_url": module_repo_url,
-                "is_plugin": is_plugin,
             }
         )
 
@@ -1105,43 +1102,18 @@ async def reinstall_plugin(request: Request, plugin_name: str) -> JSONResponse:
     plugins_dir.mkdir(parents=True, exist_ok=True)
     plugin_dir = plugins_dir / plugin_name
 
-    if plugin_dir.exists():
-        import os
-        import stat
-
-        def handle_remove_readonly(func, path, exc):
-            try:
-                os.chmod(path, stat.S_IWUSR | stat.S_IRUSR | stat.S_IXUSR)
-                func(path)
-            except Exception:
-                pass
-
-        try:
-            shutil.rmtree(plugin_dir, onerror=handle_remove_readonly)
-        except Exception:
-            pass
+    import subprocess
 
     if plugin_dir.exists():
         try:
-            for root, dirs, files in os.walk(plugin_dir):
-                for d in dirs:
-                    try:
-                        os.chmod(os.path.join(root, d), 0o755)
-                    except:
-                        pass
-                for f in files:
-                    try:
-                        os.chmod(os.path.join(root, f), 0o644)
-                    except:
-                        pass
-            shutil.rmtree(plugin_dir)
+            subprocess.run(["rm", "-rf", str(plugin_dir)], check=True)
         except Exception:
             pass
 
     if plugin_dir.exists():
         return JSONResponse(
             content={
-                "detail": f"Plugin '{plugin_name}' ist Teil des Docker-Images und kann nicht via UI aktualisiert werden. Bitte via Docker-Image-Update neu deployen oder im Kubernetes das PersistentVolume manuell bereinigen."
+                "detail": f"Plugin '{plugin_name}' konnte nicht gelöscht werden. Bitte manuell via kubectl exec -n ninko -- rm -rf /app/plugins/{plugin_name} löschen."
             },
             status_code=500,
         )

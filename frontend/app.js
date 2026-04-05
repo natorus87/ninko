@@ -4234,7 +4234,7 @@ const Ninko = {
 
             container.innerHTML = modules.map(mod => {
                 const updateInfo = updatesMap[mod.name] || {};
-                const hasUpdate = updateInfo.update_available && updateInfo.is_plugin;
+                const hasUpdate = updateInfo.update_available;
                 return `
                 <div class="module-config-card" id="module-card-${mod.name}">
                     <div class="module-config-header">
