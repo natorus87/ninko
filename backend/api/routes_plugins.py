@@ -1103,7 +1103,25 @@ async def reinstall_plugin(request: Request, plugin_name: str) -> JSONResponse:
     plugin_dir = plugins_dir / plugin_name
 
     if plugin_dir.exists():
-        shutil.rmtree(plugin_dir)
+        import os
+        import stat
+
+        def handle_remove_readonly(func, path, exc):
+            os.chmod(path, stat.S_IWUSR | stat.S_IRUSR)
+            func(path)
+
+        try:
+            shutil.rmtree(plugin_dir, onerror=handle_remove_readonly)
+        except PermissionError:
+            pass
+
+    if plugin_dir.exists():
+        return JSONResponse(
+            content={
+                "detail": f"Kann Plugin '{plugin_name}' nicht aktualisieren: Berechtigungsfehler. Bitte manuell im Dateisystem löschen."
+            },
+            status_code=500,
+        )
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
