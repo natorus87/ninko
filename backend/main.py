@@ -9,6 +9,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -601,7 +602,11 @@ async def api_security_middleware(request: Request, call_next) -> object:
                     content={"detail": "Password change required before accessing this endpoint."},
                 )
 
-        if _rate_limiter is not None:
+        # Module frontend files are exempt — they are static assets loaded in bulk
+        # on every page load (2 requests × N modules can exceed burst limit).
+        _is_module_frontend = re.match(r"^/api/modules/[^/]+/frontend/", path) is not None
+
+        if _rate_limiter is not None and not _is_module_frontend:
             allowed, retry_after = await _rate_limiter.allow(client_ip)
             if not allowed:
                 return JSONResponse(

@@ -7,6 +7,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.1] – 2026-04-05
+
+### Fixed
+
+- **Rate limiter blocking module frontend files on page load**: `loadModules()` fires 2 requests per installed module (tab.html + tab.js) in rapid succession. With many catalog modules installed, this exceeded the burst limit of 30 and returned HTTP 429 for all subsequent modules, causing "Modul X hat kein Dashboard." for most plugins. Fix: `/api/modules/*/frontend/*` paths are now exempt from the in-memory rate limiter in `main.py` — these are static assets, not API endpoints, and the burst limit is not meaningful here.
+
+- **On-the-fly `_pluginTabs` registration for legacy plugin installs**: Old plugin installations (pre-v1.0.0) in `backend/plugins/` may not have the `Ninko._pluginTabs['id'] = TabObject` line in their `tab.js`. `routes_modules.py` now auto-patches the served JS on-the-fly: detects the exported tab object via regex (`_detect_tab_object()`), then appends the registration snippet if missing. No reinstall required.
+
 ## [1.0.0] – 2026-04-04
 
 ### Fixed
