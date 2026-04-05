@@ -7,6 +7,31 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.1.0] – 2026-04-05
+
+### Added
+
+- **Module Update Detection**: New `/api/plugins/check-updates` endpoint fetches the latest version of each installed plugin from GitHub. The modules settings page now displays an "Update" button when a newer version is available, showing the version jump (e.g., `v1.0.0 → v1.2.0`).
+- **Plugin Reinstall Endpoint**: `POST /api/plugins/reinstall/{name}` allows updating plugins directly from their original repository without manual reinstall.
+- **Telegram Inline Keyboard Buttons**: Safeguard confirmation requests now use Telegram inline keyboard buttons instead of text prompts. Users can tap "✅ Yes" / "❌ No" instead of typing "ja"/"nein". Fully multilingual (10 languages supported).
+- **Kubernetes Patch Tools**: Added new tools to the K8s module:
+  - `create_deployment` – Full Deployment creation with image, replicas, ports, env vars, resources, labels
+  - `patch_deployment` – Patch deployments (image, replicas, env vars, resources)
+  - `create_configmap` / `patch_configmap` – ConfigMap management
+- **MCP Server Multilingual**: All error messages, validation strings, and tool outputs in the MCP Server module are now multilingual (de, en, fr, es, it, nl, pl, pt, ja, zh).
+- **Task Registry**: New `core/task_registry.py` for background task management in agents.
+- **Tool Permissions**: New `core/tool_permissions.py` with CLI command validation and permission system.
+- **MCP Registry**: New `core/mcp_registry.py` for MCP server connection and tool/resource management.
+
+### Changed
+
+- **Kubernetes module version** bumped to `1.2.0` for new patch tools.
+
+### Fixed
+
+- **Telegram callback query handling**: Added `callback_query` to allowed_updates in polling loop to handle button clicks.
+- **Multilingual button text**: Telegram confirmation buttons now show correctly translated labels in all 10 supported languages.
+
 ## [1.0.1] – 2026-04-05
 
 ### Fixed

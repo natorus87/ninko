@@ -11,14 +11,14 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.0.0-blue.svg" alt="Version"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.1.0-blue.svg" alt="Version"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-stable-brightgreen.svg" alt="Status"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.12-blue.svg" alt="Python"></a>
   <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.115-green.svg" alt="FastAPI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
 </p>
 
-> **v1.0.0 — Stable Release:** Ninko is production-ready and actively deployed. The core API and module interfaces are stable. Feedback and contributions welcome.
+> **v1.1.0 — Stable Release:** Ninko is production-ready and actively deployed. The core API and module interfaces are stable. Feedback and contributions welcome.
 
 ---
 
@@ -26,6 +26,7 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 
 - **Chat Interface** – Control your entire IT infrastructure in natural language
 - **Module Marketplace** – Install any module from GitHub with one click, no rebuild required; supports multiple repos (official + community)
+- **Module Updates** – Check for updates directly from the UI; one-click update button when new versions available
 - **3 core modules** always available: `web_search`, `image_gen`, `codelab`
 - **33 catalog modules** installable on demand: Kubernetes, Proxmox, Checkmk, Pi-hole, Home Assistant, GitHub, GitLab, Cisco, MikroTik, Netgear, Ubiquiti, and more
 - **4-tier orchestrator routing** – Direct / Module Agent / Dynamic Agent / Pipeline
