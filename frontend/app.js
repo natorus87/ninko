@@ -5205,18 +5205,21 @@ const Ninko = {
         btn.textContent = 'Update...';
 
         try {
-            const res = await fetch(`/api/plugins/reinstall/${name}`, { method: 'POST' });
+            const res = await fetch(`/api/plugins/reinstall/${name}`, { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
             if (res.ok) {
                 const data = await res.json();
                 showNotification(data.message || `Plugin '${name}' wurde aktualisiert.`, 'success');
                 setTimeout(() => window.location.reload(), 1500);
             } else {
-                const err = await res.json();
-                showNotification(`Update-Fehler: ${err.detail || 'Konnte nicht aktualisiert werden.'}`, 'error');
+                const err = await res.json().catch(() => ({ detail: 'Unknown error' }));
+                showNotification(`Update-Fehler: ${err.detail || 'HTTP ' + res.status}`, 'error');
             }
         } catch (e) {
             console.error('Plugin Update Error:', e);
-            showNotification('Netzwerkfehler beim Aktualisieren.', 'error');
+            showNotification('Netzwerkfehler beim Aktualisieren: ' + e.message, 'error');
         } finally {
             btn.disabled = false;
             btn.textContent = originalText;
