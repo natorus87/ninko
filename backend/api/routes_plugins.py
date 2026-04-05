@@ -1077,14 +1077,8 @@ async def reinstall_plugin(request: Request, plugin_name: str) -> JSONResponse:
 
     plugin_meta = await _load_plugin_meta()
     meta = plugin_meta.get(plugin_name, {})
-    repo_url = meta.get("repo_url", "")
+    repo_url = meta.get("repo_url", "") or "https://github.com/natorus87/ninko"
     repo_id = meta.get("repo_id", _OFFICIAL_REPO_ID)
-
-    if not repo_url:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Plugin '{plugin_name}' hat keine Repo-URL für Update. Bitte manuell neu installieren.",
-        )
 
     repos = await _load_repos()
     repo_cfg = next(
