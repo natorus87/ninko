@@ -71,6 +71,7 @@ from core.rbac import RBAC_REDIS_KEY, RbacStore
 
 # Redis-Log-Handler (nach Redis-Verfügbarkeit lazy)
 from core.log_handler import RedisLogHandler as _RedisLogHandler
+
 _redis_log_handler = _RedisLogHandler(level=logging.INFO)
 root_logger = logging.getLogger()
 if not any(isinstance(h, _RedisLogHandler) for h in root_logger.handlers):
@@ -90,8 +91,11 @@ async def lifespan(app: FastAPI) -> object:
     try:
         from core.redis_client import get_redis as _get_redis_startup
         from api.routes_settings import (
-            REDIS_KEY_LLM, REDIS_KEY_LLM_PROVIDERS, REDIS_KEY_EMBED_MODEL,
-            _reconfigure_llm, _apply_default_provider,
+            REDIS_KEY_LLM,
+            REDIS_KEY_LLM_PROVIDERS,
+            REDIS_KEY_EMBED_MODEL,
+            _reconfigure_llm,
+            _apply_default_provider,
         )
         from schemas.settings import LlmSettings
         import json as _json
@@ -105,13 +109,19 @@ async def lifespan(app: FastAPI) -> object:
             _providers = _json.loads(_providers_raw)
             if _providers:
                 _apply_default_provider(_providers)
-                _default = next((p for p in _providers if p.get("is_default")), _providers[0])
+                _default = next(
+                    (p for p in _providers if p.get("is_default")), _providers[0]
+                )
                 logger.info(
                     "LLM-Provider aus Redis wiederhergestellt: %s (backend=%s, model=%s)",
-                    _default.get("name"), _default.get("backend"), _default.get("model"),
+                    _default.get("name"),
+                    _default.get("backend"),
+                    _default.get("model"),
                 )
             else:
-                logger.info("LLM-Provider-Liste in Redis ist leer – nutze Standard-Env-Vars.")
+                logger.info(
+                    "LLM-Provider-Liste in Redis ist leer – nutze Standard-Env-Vars."
+                )
         else:
             # ② Fallback: Legacy Single-Provider-Key
             _llm_raw = await _redis_startup.connection.get(REDIS_KEY_LLM)
@@ -124,21 +134,37 @@ async def lifespan(app: FastAPI) -> object:
                     _llm_settings.backend,
                 )
             else:
-                logger.info("Keine LLM-Einstellungen in Redis – nutze Standard-Env-Vars.")
+                logger.info(
+                    "Keine LLM-Einstellungen in Redis – nutze Standard-Env-Vars."
+                )
 
         # ③ Globales Embedding-Modell aus Redis laden
         _embed_raw = await _redis_startup.connection.get(REDIS_KEY_EMBED_MODEL)
         if _embed_raw:
-            _embed_model = _embed_raw if isinstance(_embed_raw, str) else _embed_raw.decode()
+            _embed_model = (
+                _embed_raw if isinstance(_embed_raw, str) else _embed_raw.decode()
+            )
             _os.environ["EMBED_MODEL"] = _embed_model
-            logger.info("Embedding-Modell aus Redis wiederhergestellt: %s", _embed_model)
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as _exc:
+            logger.info(
+                "Embedding-Modell aus Redis wiederhergestellt: %s", _embed_model
+            )
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        json.JSONDecodeError,
+    ) as _exc:
         logger.warning("LLM-Startup-Config konnte nicht geladen werden: %s", _exc)
 
     # ── RBAC Bootstrap-Admin synchronisieren ──────────────────────────────────
     try:
         if settings.API_AUTH_ENABLED:
-            bootstrap_password = settings.ADMIN_PASSWORD or settings.BOOTSTRAP_ADMIN_PASSWORD
+            bootstrap_password = (
+                settings.ADMIN_PASSWORD or settings.BOOTSTRAP_ADMIN_PASSWORD
+            )
             if bootstrap_password:
                 rbac_store = RbacStore()
                 await rbac_store.bootstrap_admin_if_needed(
@@ -153,11 +179,26 @@ async def lifespan(app: FastAPI) -> object:
                         "Bitte Passwort nach dem ersten Login ändern.",
                         settings.ADMIN_USERNAME or "admin",
                     )
-                logger.info("RBAC Bootstrap-Admin synchronisiert: %s", settings.ADMIN_USERNAME or "admin")
+                logger.info(
+                    "RBAC Bootstrap-Admin synchronisiert: %s",
+                    settings.ADMIN_USERNAME or "admin",
+                )
             else:
-                logger.warning("API_AUTH_ENABLED=true aber kein Bootstrap-Passwort konfiguriert.")
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as _rbac_exc:
-        logger.warning("RBAC Bootstrap konnte nicht synchronisiert werden: %s", _rbac_exc)
+                logger.warning(
+                    "API_AUTH_ENABLED=true aber kein Bootstrap-Passwort konfiguriert."
+                )
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        json.JSONDecodeError,
+    ) as _rbac_exc:
+        logger.warning(
+            "RBAC Bootstrap konnte nicht synchronisiert werden: %s", _rbac_exc
+        )
 
     # ── STT + TTS + OCR Settings aus Redis wiederherstellen ───────────────────
     try:
@@ -185,8 +226,18 @@ async def lifespan(app: FastAPI) -> object:
             for _k, _v in _json2.loads(_ocr_raw).items():
                 _os2.environ[_k] = str(_v).lower() if isinstance(_v, bool) else str(_v)
             logger.info("OCR-Settings aus Redis wiederhergestellt.")
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as _exc2:
-        logger.warning("STT/TTS/OCR-Startup-Config konnte nicht geladen werden: %s", _exc2)
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        json.JSONDecodeError,
+    ) as _exc2:
+        logger.warning(
+            "STT/TTS/OCR-Startup-Config konnte nicht geladen werden: %s", _exc2
+        )
 
     # ── Module Discovery ──────────────────────────────
     registry = ModuleRegistry()
@@ -197,6 +248,7 @@ async def lifespan(app: FastAPI) -> object:
 
     # ── Soul Manager laden ────────────────────────────
     from core.soul_manager import get_soul_manager
+
     soul_manager = get_soul_manager()
     soul_manager.load()
     await soul_manager.load_from_redis()
@@ -217,6 +269,7 @@ async def lifespan(app: FastAPI) -> object:
 
     # ── Skills laden ──────────────────────────────────
     from core.skills_manager import get_skills_manager
+
     skills_manager = get_skills_manager()
     skills_manager.load()
     app.state.skills_manager = skills_manager
@@ -248,17 +301,30 @@ async def lifespan(app: FastAPI) -> object:
         safeguard._active_profile_id = _sg_profile_id
         app.state.safeguard = safeguard
         from agents.base_agent import set_global_safeguard
+
         set_global_safeguard(safeguard)
         logger.info(
             "Safeguard-Middleware initialisiert (Modell: %s, Profil: %s, Timeout: %.1fs).",
-            _sg_model, _sg_profile_id, settings.SAFEGUARD_TIMEOUT_SECONDS,
+            _sg_model,
+            _sg_profile_id,
+            settings.SAFEGUARD_TIMEOUT_SECONDS,
         )
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as _sg_exc:
-        logger.warning("Safeguard-Middleware konnte nicht initialisiert werden: %s", _sg_exc)
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+    ) as _sg_exc:
+        logger.warning(
+            "Safeguard-Middleware konnte nicht initialisiert werden: %s", _sg_exc
+        )
         app.state.safeguard = None
 
     # ── Dynamischer Agenten-Pool laden ────────────────
     from core.agent_pool import get_agent_pool
+
     agent_pool = get_agent_pool()
     await agent_pool.load_from_redis()
     app.state.agent_pool = agent_pool
@@ -281,13 +347,22 @@ async def lifespan(app: FastAPI) -> object:
     # ── Safeguard paused-agent cleanup (Background) ───
     safeguard = app.state.safeguard
     if safeguard:
+
         async def _sg_cleanup_loop() -> object:
             while True:
                 await asyncio.sleep(60)
                 try:
                     await safeguard.cleanup_paused_agents()
-                except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError):
+                except (
+                    RuntimeError,
+                    ValueError,
+                    TypeError,
+                    KeyError,
+                    OSError,
+                    ImportError,
+                ):
                     pass
+
         sg_cleanup_task = asyncio.create_task(_sg_cleanup_loop())
         logger.info("Safeguard paused-agent cleanup task started.")
 
@@ -295,6 +370,7 @@ async def lifespan(app: FastAPI) -> object:
     telegram_bot = None
     try:
         from modules.telegram.bot import init_telegram_bot as _init_tg
+
         telegram_bot = _init_tg(app)
         app.state.telegram_bot = telegram_bot
         await telegram_bot.start()
@@ -302,6 +378,7 @@ async def lifespan(app: FastAPI) -> object:
         # Telegram is a catalog module; only available when installed via Marketplace
         try:
             from plugins.telegram.bot import init_telegram_bot as _init_tg
+
             telegram_bot = _init_tg(app)
             app.state.telegram_bot = telegram_bot
             await telegram_bot.start()
@@ -312,7 +389,7 @@ async def lifespan(app: FastAPI) -> object:
     # MUST mount AFTER module routes, otherwise the catch-all
     # StaticFiles("/") will shadow /api/k8s/* etc.
     _possible_frontend = [
-        Path(__file__).resolve().parent / "frontend",        # /app/frontend (Docker)
+        Path(__file__).resolve().parent / "frontend",  # /app/frontend (Docker)
         Path(__file__).resolve().parent.parent / "frontend",  # ../frontend (local dev)
     ]
     for _fdir in _possible_frontend:
@@ -324,7 +401,9 @@ async def lifespan(app: FastAPI) -> object:
                 if settings.API_AUTH_ENABLED and resolve_request_role(request) is None:
                     return RedirectResponse(url="/login", status_code=302)
                 response = FileResponse(str(_frontend_dir / "index.html"))
-                response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+                response.headers["Cache-Control"] = (
+                    "no-cache, no-store, must-revalidate"
+                )
                 response.headers["Pragma"] = "no-cache"
                 response.headers["Expires"] = "0"
                 return response
@@ -338,7 +417,9 @@ async def lifespan(app: FastAPI) -> object:
                 return FileResponse(str(_frontend_dir / "login.html"))
 
             app.mount("/static", StaticFiles(directory=str(_fdir)), name="static")
-            app.mount("/", StaticFiles(directory=str(_fdir), html=True), name="frontend")
+            app.mount(
+                "/", StaticFiles(directory=str(_fdir), html=True), name="frontend"
+            )
             logger.info("Frontend served from: %s", _fdir)
             break
 
@@ -350,11 +431,11 @@ async def lifespan(app: FastAPI) -> object:
 
     # ── Shutdown ──────────────────────────────────────
     logger.info("Ninko wird heruntergefahren…")
-    
+
     # Telegram Bot stoppen (falls geladen)
     if telegram_bot is not None:
         await telegram_bot.stop()
-    
+
     await monitor.stop()
     monitor_task.cancel()
     await scheduler.stop()
@@ -363,6 +444,7 @@ async def lifespan(app: FastAPI) -> object:
         sg_cleanup_task.cancel()
 
     from core.redis_client import get_redis
+
     redis = get_redis()
     await redis.close()
 
@@ -379,9 +461,7 @@ app = FastAPI(
 
 # ── CORS ──────────────────────────────────────────────
 _cors_origins = [
-    o.strip()
-    for o in (settings.CORS_ALLOW_ORIGINS or "").split(",")
-    if o.strip()
+    o.strip() for o in (settings.CORS_ALLOW_ORIGINS or "").split(",") if o.strip()
 ]
 if not _cors_origins:
     _cors_origins = ["http://localhost:8000", "http://127.0.0.1:8000"]
@@ -395,9 +475,7 @@ if not _cors_methods:
     _cors_methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 
 _cors_headers = [
-    h.strip()
-    for h in (settings.CORS_ALLOW_HEADERS or "").split(",")
-    if h.strip()
+    h.strip() for h in (settings.CORS_ALLOW_HEADERS or "").split(",") if h.strip()
 ]
 if not _cors_headers:
     _cors_headers = ["Authorization", "Content-Type", "X-API-Key"]
@@ -439,6 +517,8 @@ def _required_role_for_request(path: str, method: str) -> str | None:
         path == "/api/themes/active"
         or path == "/api/settings/branding"
         or path.startswith("/api/settings/branding/assets/")
+        or path == "/api/settings/modules"
+        or path == "/api/plugins/check-updates"
     ):
         return None
     if path.startswith("/api/auth/"):
@@ -599,12 +679,16 @@ async def api_security_middleware(request: Request, call_next) -> object:
             if path not in allowed_while_reset:
                 return JSONResponse(
                     status_code=403,
-                    content={"detail": "Password change required before accessing this endpoint."},
+                    content={
+                        "detail": "Password change required before accessing this endpoint."
+                    },
                 )
 
         # Module frontend files are exempt — they are static assets loaded in bulk
         # on every page load (2 requests × N modules can exceed burst limit).
-        _is_module_frontend = re.match(r"^/api/modules/[^/]+/frontend/", path) is not None
+        _is_module_frontend = (
+            re.match(r"^/api/modules/[^/]+/frontend/", path) is not None
+        )
 
         if _rate_limiter is not None and not _is_module_frontend:
             allowed, retry_after = await _rate_limiter.allow(client_ip)
@@ -646,14 +730,18 @@ async def api_security_middleware(request: Request, call_next) -> object:
 
     return await call_next(request)
 
+
 # ── Cache Prevention Middleware ───────────────────────
 @app.middleware("http")
 async def add_no_cache_header(request: Request, call_next) -> object:
     response = await call_next(request)
     if request.url.path.startswith("/api/"):
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Cache-Control"] = (
+            "no-store, no-cache, must-revalidate, max-age=0"
+        )
         response.headers["Pragma"] = "no-cache"
     return response
+
 
 # ── Core-Routen ──────────────────────────────────────
 app.include_router(chat_router)
@@ -678,6 +766,7 @@ app.include_router(safeguard_router)
 app.include_router(safeguard_profiles_router)
 app.include_router(safeguard_audit_router)
 app.include_router(operations_router)
+
 
 # ── Health Endpoint ──────────────────────────────────
 # NOTE: Must be registered BEFORE the catch-all static mount

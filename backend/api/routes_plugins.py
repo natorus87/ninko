@@ -315,7 +315,7 @@ async def _check_module_update_from_repo(
 
 @router.get("/check-updates")
 async def check_plugin_updates(request: Request) -> JSONResponse:
-    """Prüft für alle installierten Plugins, ob Updates verfügbar sind."""
+    """Prüft für alle installierten Module (Plugins + Built-in), ob Updates verfügbar sind."""
     registry = request.app.state.registry
     plugins_dir = Path(__file__).resolve().parent.parent / "plugins"
     plugins_dir.mkdir(parents=True, exist_ok=True)
@@ -327,29 +327,32 @@ async def check_plugin_updates(request: Request) -> JSONResponse:
     }
     results = []
 
-    for plugin_dir in sorted(plugins_dir.iterdir()):
-        if not plugin_dir.is_dir():
-            continue
-        name = plugin_dir.name
-        meta = plugin_meta.get(name, {})
-        installed_version = installed_map.get(name, "")
-        repo_url = meta.get("repo_url", "")
-        repo_id = meta.get("repo_id", _OFFICIAL_REPO_ID)
-        branch = "main"
-        modules_path = "backend/modules_catalog"
+    repo_url = "https://github.com/natorus87/ninko"
+    branch = "main"
+    modules_path = "backend/modules_catalog"
 
-        if repo_url:
-            parsed = _parse_github_url(repo_url)
+    for name, installed_version in installed_map.items():
+        meta = plugin_meta.get(name, {})
+        module_repo_url = meta.get("repo_url", repo_url)
+        module_repo_id = meta.get("repo_id", _OFFICIAL_REPO_ID)
+
+        if module_repo_url:
+            parsed = _parse_github_url(module_repo_url)
             if parsed:
                 owner, repo_name = parsed
                 for r in repos:
-                    if r.get("repo_url") == repo_url:
+                    if r.get("repo_url") == module_repo_url:
                         branch = r.get("branch", "main")
                         modules_path = r.get("modules_path", "backend/modules_catalog")
                         break
 
         update_info = await _check_module_update_from_repo(
-            name, repo_url, repo_id, branch, modules_path, installed_version
+            name,
+            module_repo_url,
+            module_repo_id,
+            branch,
+            modules_path,
+            installed_version,
         )
 
         results.append(
@@ -358,7 +361,7 @@ async def check_plugin_updates(request: Request) -> JSONResponse:
                 "installed_version": installed_version,
                 "repo_version": update_info.get("repo_version", ""),
                 "update_available": update_info.get("update_available", False),
-                "repo_url": repo_url,
+                "repo_url": module_repo_url,
             }
         )
 
