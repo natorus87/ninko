@@ -335,6 +335,7 @@ async def check_plugin_updates(request: Request) -> JSONResponse:
         meta = plugin_meta.get(name, {})
         module_repo_url = meta.get("repo_url", repo_url)
         module_repo_id = meta.get("repo_id", _OFFICIAL_REPO_ID)
+        is_plugin = name in plugin_meta
 
         if module_repo_url:
             parsed = _parse_github_url(module_repo_url)
@@ -360,8 +361,10 @@ async def check_plugin_updates(request: Request) -> JSONResponse:
                 "name": name,
                 "installed_version": installed_version,
                 "repo_version": update_info.get("repo_version", ""),
-                "update_available": update_info.get("update_available", False),
+                "update_available": update_info.get("update_available", False)
+                and is_plugin,
                 "repo_url": module_repo_url,
+                "is_plugin": is_plugin,
             }
         )
 
@@ -1107,8 +1110,11 @@ async def reinstall_plugin(request: Request, plugin_name: str) -> JSONResponse:
         import stat
 
         def handle_remove_readonly(func, path, exc):
-            os.chmod(path, stat.S_IWUSR | stat.S_IRUSR | stat.S_IXUSR)
-            func(path)
+            try:
+                os.chmod(path, stat.S_IWUSR | stat.S_IRUSR | stat.S_IXUSR)
+                func(path)
+            except Exception:
+                pass
 
         try:
             shutil.rmtree(plugin_dir, onerror=handle_remove_readonly)
@@ -1135,7 +1141,7 @@ async def reinstall_plugin(request: Request, plugin_name: str) -> JSONResponse:
     if plugin_dir.exists():
         return JSONResponse(
             content={
-                "detail": f"Kann Plugin '{plugin_name}' nicht löschen. Bitte manuell via kubectl exec -it -n ninko -- rm -rf /app/plugins/{plugin_name}"
+                "detail": f"Plugin '{plugin_name}' ist Teil des Docker-Images und kann nicht via UI aktualisiert werden. Bitte via Docker-Image-Update neu deployen oder im Kubernetes das PersistentVolume manuell bereinigen."
             },
             status_code=500,
         )
