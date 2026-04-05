@@ -1107,18 +1107,35 @@ async def reinstall_plugin(request: Request, plugin_name: str) -> JSONResponse:
         import stat
 
         def handle_remove_readonly(func, path, exc):
-            os.chmod(path, stat.S_IWUSR | stat.S_IRUSR)
+            os.chmod(path, stat.S_IWUSR | stat.S_IRUSR | stat.S_IXUSR)
             func(path)
 
         try:
             shutil.rmtree(plugin_dir, onerror=handle_remove_readonly)
-        except PermissionError:
+        except Exception:
+            pass
+
+    if plugin_dir.exists():
+        try:
+            for root, dirs, files in os.walk(plugin_dir):
+                for d in dirs:
+                    try:
+                        os.chmod(os.path.join(root, d), 0o755)
+                    except:
+                        pass
+                for f in files:
+                    try:
+                        os.chmod(os.path.join(root, f), 0o644)
+                    except:
+                        pass
+            shutil.rmtree(plugin_dir)
+        except Exception:
             pass
 
     if plugin_dir.exists():
         return JSONResponse(
             content={
-                "detail": f"Kann Plugin '{plugin_name}' nicht aktualisieren: Berechtigungsfehler. Bitte manuell im Dateisystem löschen."
+                "detail": f"Kann Plugin '{plugin_name}' nicht löschen. Bitte manuell via kubectl exec -it -n ninko -- rm -rf /app/plugins/{plugin_name}"
             },
             status_code=500,
         )
