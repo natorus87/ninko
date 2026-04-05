@@ -1106,17 +1106,19 @@ async def reinstall_plugin(request: Request, plugin_name: str) -> JSONResponse:
 
     if plugin_dir.exists():
         try:
-            subprocess.run(["rm", "-rf", str(plugin_dir)], check=True)
-        except Exception:
-            pass
-
-    if plugin_dir.exists():
-        return JSONResponse(
-            content={
-                "detail": f"Plugin '{plugin_name}' konnte nicht gelöscht werden. Bitte manuell via kubectl exec -n ninko -- rm -rf /app/plugins/{plugin_name} löschen."
-            },
-            status_code=500,
-        )
+            result = subprocess.run(
+                ["rm", "-rf", str(plugin_dir)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except Exception as e:
+            return JSONResponse(
+                content={
+                    "detail": f"Plugin '{plugin_name}' konnte nicht gelöscht werden. Bitte PVC bereinigen: kubectl delete pvc backend-data -n ninko (alle Plugin-Daten werden gelöscht)."
+                },
+                status_code=500,
+            )
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
