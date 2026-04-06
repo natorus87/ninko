@@ -457,7 +457,7 @@ async def upload_plugin(request: Request, file: UploadFile = File(...)) -> JSONR
                     detail=f"ZIP-Archiv zu groß: {total_size // (1024 * 1024)} MB (max. 100 MB unkomprimiert).",
                 )
             for member in members:
-                if member.is_symlink():
+                if hasattr(member, "is_symlink") and member.is_symlink():
                     raise HTTPException(
                         status_code=400,
                         detail="ZIP-Archiv enthält symbolische Links (nicht erlaubt).",
@@ -905,7 +905,7 @@ async def install_from_repo(
                     status_code=400, detail="Modul zu groß (max. 100 MB)."
                 )
             for member in members:
-                if member.is_symlink():
+                if hasattr(member, "is_symlink") and member.is_symlink():
                     raise HTTPException(
                         status_code=400,
                         detail="ZIP-Archiv enthält symbolische Links (nicht erlaubt).",

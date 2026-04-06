@@ -5207,6 +5207,7 @@ const Ninko = {
         try {
             const res = await fetch(`/api/plugins/reinstall/${name}`, { 
                 method: 'POST',
+                credentials: 'include',
                 headers: { 'Content-Type': 'application/json' }
             });
             if (res.ok) {
@@ -5493,7 +5494,10 @@ const Ninko = {
         if (btn) { btn.disabled = true; btn.textContent = t('marketplace.installing'); }
 
         try {
-            const res = await fetch(`/api/plugins/install-from-repo/${moduleName}?repo_id=${encodeURIComponent(repoId)}`, { method: 'POST' });
+            const res = await fetch(`/api/plugins/install-from-repo/${moduleName}?repo_id=${encodeURIComponent(repoId)}`, { 
+                method: 'POST',
+                credentials: 'include'
+            });
             const data = await res.json();
 
             if (res.ok) {

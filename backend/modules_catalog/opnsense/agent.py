@@ -21,6 +21,10 @@ from .tools import (
     get_opnsense_virtual_ips,
     create_opnsense_virtual_ip,
     delete_opnsense_virtual_ip,
+    create_opnsense_firewall_rule,
+    delete_opnsense_firewall_rule,
+    create_opnsense_nat_rule,
+    delete_opnsense_nat_rule,
 )
 
 logger = logging.getLogger("ninko.modules.opnsense.agent")
