@@ -105,7 +105,7 @@ class ModuleRegistry:
         # 2. Plugins Scannen (aus ./plugins) -> Dynamisch gemountetes Verzeichnis
         plugins_dir = Path(__file__).resolve().parent.parent / "plugins"
         if plugins_dir.is_dir():
-            # Füge den Parent-Ordner (backend) in sys.path ein, falls nicht vorhanden, 
+            # Füge den Parent-Ordner (backend) in sys.path ein, falls nicht vorhanden,
             # um 'plugins.xyz' importieren zu können.
             backend_dir = str(plugins_dir.parent)
             if backend_dir not in sys.path:
@@ -117,12 +117,21 @@ class ModuleRegistry:
                 try:
                     self._load_module(modname, plugins_dir, is_plugin=True)
                 except _REGISTRY_EXCEPTIONS as exc:
-                    logger.error("Fehler beim Laden von Plugin '%s': %s", modname, exc, exc_info=True)
+                    logger.error(
+                        "Fehler beim Laden von Plugin '%s': %s",
+                        modname,
+                        exc,
+                        exc_info=True,
+                    )
 
         loaded = [m.manifest.display_name for m in self._modules.values()]
-        logger.info("Module/Plugins geladen (%d): %s", len(loaded), ", ".join(loaded) or "–")
+        logger.info(
+            "Module/Plugins geladen (%d): %s", len(loaded), ", ".join(loaded) or "–"
+        )
 
-    def _load_module(self, modname: str, base_dir: Path, is_plugin: bool = False) -> None:
+    def _load_module(
+        self, modname: str, base_dir: Path, is_plugin: bool = False
+    ) -> None:
         """Einzelnes Modul oder Plugin laden und registrieren."""
         package_prefix = "plugins" if is_plugin else "modules"
         package_path = f"{package_prefix}.{modname}"
@@ -130,7 +139,7 @@ class ModuleRegistry:
         # Vor dem Import sicherstellen, dass wir es neu laden, falls es schon existiert (Hot-Reload)
         if package_path in sys.modules:
             importlib.reload(sys.modules[package_path])
-        
+
         package = importlib.import_module(package_path)
 
         # Manifest holen
@@ -208,7 +217,14 @@ class ModuleRegistry:
         try:
             self._load_module(modname, plugins_dir, is_plugin=True)
         except _REGISTRY_EXCEPTIONS as exc:
-            logger.error("Hot-Load gescheitert für '%s': %s", modname, exc)
+            import traceback
+
+            logger.error(
+                "Hot-Load gescheitert für '%s': %s\n%s",
+                modname,
+                exc,
+                traceback.format_exc(),
+            )
             return False
 
         # Wenn erfolgreich geladen, Route direkt an app hängen
@@ -227,9 +243,14 @@ class ModuleRegistry:
             if new_routes:
                 from starlette.routing import Mount
                 from fastapi.staticfiles import StaticFiles
+
                 static_idx = next(
-                    (i for i, r in enumerate(app.router.routes)
-                     if isinstance(r, Mount) and isinstance(getattr(r, "app", None), StaticFiles)),
+                    (
+                        i
+                        for i, r in enumerate(app.router.routes)
+                        if isinstance(r, Mount)
+                        and isinstance(getattr(r, "app", None), StaticFiles)
+                    ),
                     None,
                 )
                 if static_idx is not None:
@@ -244,6 +265,7 @@ class ModuleRegistry:
         if mod:
             try:
                 from core.soul_manager import get_soul_manager
+
                 soul_manager = get_soul_manager()
                 if not soul_manager.has_soul(mod.manifest.name):
                     tool_names = [t.name for t in mod.agent.tools] if mod.agent else []
@@ -256,26 +278,28 @@ class ModuleRegistry:
                     await soul_manager.save_soul(mod.manifest.name, soul_md)
                     logger.info("Soul für Plugin '%s' generiert.", modname)
             except _REGISTRY_EXCEPTIONS as exc:
-                logger.warning("Soul-Generierung für Plugin '%s' fehlgeschlagen: %s", modname, exc)
+                logger.warning(
+                    "Soul-Generierung für Plugin '%s' fehlgeschlagen: %s", modname, exc
+                )
 
         return True
 
     def remove_plugin(self, modname: str) -> None:
         """
         Entfernt das Plugin intern aus der Registry.
-        Achtung: Die FastAPI Routen bleiben im Memory der laufenden App aktiv, 
-        geben aber idealerweise Fehler oder werden ignoriert. 
+        Achtung: Die FastAPI Routen bleiben im Memory der laufenden App aktiv,
+        geben aber idealerweise Fehler oder werden ignoriert.
         Ein echter Neustart ist für sauberen Garbage Collect nötig.
         """
         if modname in self._modules:
             del self._modules[modname]
         if modname in self._disabled_manifests:
             del self._disabled_manifests[modname]
-            
+
         package_path = f"plugins.{modname}"
         if package_path in sys.modules:
             del sys.modules[package_path]
-            
+
         logger.info("Plugin '%s' aus Registry unmounted.", modname)
 
     # ── Abfragen ────────────────────────────────────────
@@ -338,7 +362,10 @@ class ModuleRegistry:
                 except _REGISTRY_EXCEPTIONS as exc:
                     results[name] = {"status": "error", "detail": str(exc)}
             else:
-                results[name] = {"status": "ok", "detail": "Kein Health-Check definiert"}
+                results[name] = {
+                    "status": "ok",
+                    "detail": "Kein Health-Check definiert",
+                }
         return results
 
     def get_registered_modules(self) -> dict[str, RegisteredModule]:
