@@ -1133,37 +1133,49 @@ async def reinstall_plugin(request: Request, plugin_name: str) -> JSONResponse:
             manifest_info = _extract_manifest_info(resp.text)
             repo_version = manifest_info.get("version", "")
 
-            tar_url = f"{raw_base}/{modules_path}/{plugin_name}.tar.gz"
-            tar_resp = await client.get(tar_url)
+            tarball_url = f"https://github.com/{owner}/{repo_name}/archive/refs/heads/{branch}.tar.gz"
+            tar_resp = await client.get(
+                tarball_url, timeout=60.0, follow_redirects=True
+            )
             if tar_resp.status_code != 200:
-                tar_url = f"{raw_base}/{modules_path}/{plugin_name}.zip"
-                tar_resp = await client.get(tar_url)
-                if tar_resp.status_code != 200:
-                    raise HTTPException(
-                        status_code=404, detail="Konnte Modul nicht herunterladen."
-                    )
-
-            is_tar = tar_url.endswith(".tar.gz")
-            extract_dir = Path(mkdtemp())
-            if is_tar:
-                with tarfile.open(fileobj=io.BytesIO(tar_resp.content)) as tar:
-                    tar.extractall(extract_dir)
-            else:
-                with zipfile.ZipFile(io.BytesIO(tar_resp.content)) as zip_ref:
-                    zip_ref.extractall(extract_dir)
-
-            contents = list(extract_dir.iterdir())
-            if len(contents) != 1 or not contents[0].is_dir():
                 raise HTTPException(
-                    status_code=500, detail="Unerwartete Archiv-Struktur."
+                    status_code=404, detail="Konnte Modul nicht herunterladen."
                 )
 
-            plugin_source_dir = contents[0]
+            prefix = f"{modules_path}/{plugin_name}/"
+            tar_root = f"{repo_name}-{branch}/"
+
+            extract_dir = Path(mkdtemp())
+            with tarfile.open(fileobj=io.BytesIO(tar_resp.content), mode="r:gz") as tar:
+                for member in tar.getmembers():
+                    if not member.isfile():
+                        continue
+                    rel_to_root = (
+                        member.name[len(tar_root) :]
+                        if member.name.startswith(tar_root)
+                        else member.name
+                    )
+                    if not rel_to_root.startswith(prefix):
+                        continue
+                    rel = rel_to_root[len(prefix) :]
+                    if not rel:
+                        continue
+                    f = tar.extractfile(member)
+                    if f is None:
+                        continue
+                    target_dir = extract_dir / plugin_name
+                    target_dir.mkdir(parents=True, exist_ok=True)
+                    (target_dir / rel).parent.mkdir(parents=True, exist_ok=True)
+                    (target_dir / rel).write_bytes(f.read())
+
+            plugin_source_dir = extract_dir / plugin_name
             if not (plugin_source_dir / "__init__.py").exists():
                 raise HTTPException(
                     status_code=400, detail="Kein __init__.py im Modul gefunden."
                 )
 
+            if plugin_dir.exists():
+                shutil.rmtree(plugin_dir)
             shutil.move(str(plugin_source_dir), str(plugin_dir))
 
             success = await install_requirements_if_exist(plugin_dir)
