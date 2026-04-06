@@ -534,6 +534,8 @@ def _required_role_for_request(path: str, method: str) -> str | None:
     if path.startswith("/api/ws"):
         return ROLE_READ
     if path.startswith("/api/plugins"):
+        if method_u == "GET" and path == "/api/plugins/check-updates":
+            return None
         return ROLE_ADMIN
     if path.startswith("/api/safeguard"):
         return ROLE_ADMIN if is_mutating else ROLE_READ
