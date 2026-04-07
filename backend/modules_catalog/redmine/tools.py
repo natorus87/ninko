@@ -260,8 +260,24 @@ async def get_redmine_projects(connection_id: str = "") -> dict:
 @tool
 async def get_redmine_project(project_id: str, connection_id: str = "") -> dict:
     """
-    Get details of a specific project.
-    Use this when the user asks for details about a specific project.
+    Get total hours for a specific user in a date range with pagination.
+    Use this for 'hours in month' questions to get accurate totals.
+
+    DE: Stunden-Report für einen Benutzer im Zeitraum. Nutze dies für "Stunden im Monat" Fragen.
+    EN: Hours report for a user in a date range. Use this for "hours in month" questions.
+    FR: Rapport d'heures pour un utilisateur sur une période. Utilisez pour les questions "heures dans le mois".
+    ES: Informe de horas para un usuario en un rango de fechas. Úselo para preguntas "horas en el mes".
+
+    Parameters:
+    - user_id: User ID (e.g., "32")
+    - from_date: Start date (YYYY-MM-DD, e.g., "2026-03-01")
+    - to_date: End date (YYYY-MM-DD, e.g., "2026-03-31")
+    - project_id: Optional project filter
+
+    Returns:
+    - total_hours: Sum of all hours
+    - entry_count: Number of entries
+    - entries: List with date, hours, project, issue_id
     """
     try:
         client = await _get_api_client(connection_id)
@@ -460,182 +476,27 @@ async def get_redmine_users(connection_id: str = "") -> dict:
             "total": result.get("total_count", 0),
         }
     except _REDMINE_TOOL_EXCEPTIONS as e:
-        logger.error("get_redmine_users failed: %s", e)
-        return _public_error()
-
-
-@tool
-async def get_redmine_time_entries(
-    project_id: str = "",
-    user_id: str = "",
-    from_date: str = "",
-    to_date: str = "",
-    connection_id: str = "",
-) -> dict:
-    """
-    Retrieve time entries from Redmine (first 100 only, no pagination).
-    Use this when the user asks for time entries, logged hours, or time tracking.
-    For monthly totals with many entries, use get_redmine_user_hours_report instead.
-
-    Parameters:
-    - user_id: Filter by user ID (e.g., "32" for Sebastian Broers)
-    - from_date: Start date (YYYY-MM-DD)
-    - to_date: End date (YYYY-MM-DD)
-    - project_id: Optional project filter
-    """
-    try:
-        client = await _get_api_client(connection_id)
-        params = {"limit": 100}
-        if project_id:
-            params["project_id"] = project_id
-        if user_id:
-            params["user_id"] = user_id
-        if from_date:
-            params["from"] = from_date
-        if to_date:
-            params["to"] = to_date
-
-        result = await _redmine_request(
-            client["base_url"],
-            client["api_key"],
-            "GET",
-            "time_entries.json",
-            params,
-            verify_ssl=client["verify_ssl"],
-        )
-        return {
-            "status": "success",
-            "time_entries": result.get("time_entries", []),
-            "total": result.get("total_count", 0),
-        }
-    except _REDMINE_TOOL_EXCEPTIONS as e:
-        logger.error("get_redmine_time_entries failed: %s", e)
-        return _public_error()
-
-
-@tool
-async def get_redmine_user_hours_report(
-    user_id: str,
-    from_date: str,
-    to_date: str,
-    project_id: str = "",
-    connection_id: str = "",
-) -> dict:
-    """
-    Get total hours for a specific user in a date range.
-    Automatically paginates through all time entries and sums the hours.
-    Use this when the user asks 'how many hours did X book in month Y'.
-
-    Parameters:
-    - user_id: The user ID (e.g., "32")
-    - from_date: Start date (YYYY-MM-DD, e.g., "2026-03-01")
-    - to_date: End date (YYYY-MM-DD, e.g., "2026-03-31")
-    - project_id: Optional project filter
-
-    Returns:
-    - total_hours: Sum of all hours in the date range
-    - entry_count: Number of time entries
-    - entries: List of time entries (date, hours, project, issue)
-    """
-    try:
-        client = await _get_api_client(connection_id)
-
-        all_entries = []
-        offset = 0
-        limit = 100
-        total_count = None
-
-        # Paginate through all results
-        while True:
-            params = {
-                "limit": limit,
-                "offset": offset,
-                "user_id": user_id,
-                "from": from_date,
-                "to": to_date,
-            }
-            if project_id:
-                params["project_id"] = project_id
-
-            result = await _redmine_request(
-                client["base_url"],
-                client["api_key"],
-                "GET",
-                "time_entries.json",
-                params,
-                verify_ssl=client["verify_ssl"],
-            )
-
-            entries = result.get("time_entries", [])
-            if not entries:
-                break
-
-            all_entries.extend(entries)
-
-            # Check if we've got all entries
-            if total_count is None:
-                total_count = result.get("total_count", 0)
-
-            offset += len(entries)
-
-            # Safety check: if we got less than limit, we're done
-            if len(entries) < limit:
-                break
-
-            # Safety check: prevent infinite loops
-            if offset >= 10000:
-                logger.warning("Too many time entries, stopping at 10000")
-                break
-
-        # Sum hours
-        total_hours = sum(float(entry.get("hours", 0)) for entry in all_entries)
-
-        # Format entries for display
-        formatted_entries = []
-        for entry in all_entries:
-            try:
-                project_name = ""
-                if entry.get("project") and isinstance(entry["project"], dict):
-                    project_name = entry["project"].get("name", "")
-
-                issue_id = ""
-                if entry.get("issue") and isinstance(entry["issue"], dict):
-                    issue_id = str(entry["issue"].get("id", ""))
-
-                formatted_entries.append(
-                    {
-                        "date": entry.get("spent_on", ""),
-                        "hours": float(entry.get("hours", 0)),
-                        "project": project_name,
-                        "issue_id": issue_id,
-                        "comments": entry.get("comments", ""),
-                    }
-                )
-            except (AttributeError, TypeError, ValueError) as e:
-                logger.warning(
-                    "Skipping malformed time entry: %s - Error: %s", entry, e
-                )
-                continue
-
-        return {
-            "status": "success",
-            "user_id": user_id,
-            "from_date": from_date,
-            "to_date": to_date,
-            "total_hours": total_hours,
-            "entry_count": len(all_entries),
-            "entries": formatted_entries,
-        }
-    except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error(
-            "get_redmine_user_hours_report failed for user_id=%s from=%s to=%s: %s",
+            _t(
+                de="get_redmine_user_hours_report fehlgeschlagen für user_id=%s von=%s bis=%s: %s",
+                en="get_redmine_user_hours_report failed for user_id=%s from=%s to=%s: %s",
+                fr="get_redmine_user_hours_report échoué pour user_id=%s de=%s à=%s: %s",
+                es="get_redmine_user_hours_report falló para user_id=%s desde=%s hasta=%s: %s",
+            ),
             user_id,
             from_date,
             to_date,
             e,
             exc_info=True,
         )
-        return {"error": f"Time entries query failed: {str(e)}"}
+        return {
+            "error": _t(
+                de=f"Zeiteinträge-Abfrage fehlgeschlagen: {str(e)}",
+                en=f"Time entries query failed: {str(e)}",
+                fr=f"Échec de la requête des entrées de temps: {str(e)}",
+                es=f"Error en la consulta de entradas de tiempo: {str(e)}",
+            )
+        }
 
 
 @tool
