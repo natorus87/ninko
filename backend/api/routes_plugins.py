@@ -76,7 +76,8 @@ def _extract_manifest_info(content: str) -> dict[str, str]:
     """Extrahiert key-Felder aus einer manifest.py per Regex."""
 
     def get(field: str) -> str:
-        match = re.search(rf'{field}\s*=\s*["\']([^"\']+)["\']', content)
+        # Match both: version="1.0.0", and version = "1.0.0" (with optional comma)
+        match = re.search(rf'{field}\s*=\s*["\']([^"\']+)["\']\s*,?', content)
         return match.group(1) if match else ""
 
     return {
