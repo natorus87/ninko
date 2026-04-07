@@ -112,7 +112,9 @@ async def add_followup_api(
 
 
 @router.get("/tickets/{ticket_id}/attachments/{attachment_id}/ocr")
-async def ticket_attachment_ocr(ticket_id: int, attachment_id: int, connection_id: str = "") -> object:
+async def ticket_attachment_ocr(
+    ticket_id: int, attachment_id: int, connection_id: str = ""
+) -> object:
     """Run OCR on a ticket attachment image."""
     return await get_ticket_image_ocr_tool.ainvoke(
         {
@@ -124,6 +126,17 @@ async def ticket_attachment_ocr(ticket_id: int, attachment_id: int, connection_i
 
 
 @router.get("/base-url")
-async def get_base_url() -> object:
+async def get_base_url(connection_id: str = "") -> object:
     """GLPI base URL for direct links."""
+    from core.connections import ConnectionManager
+
+    if connection_id:
+        conn = await ConnectionManager.get_connection("glpi", connection_id)
+    else:
+        conn = await ConnectionManager.get_default_connection("glpi")
+
+    if conn and conn.config.get("base_url"):
+        return {"base_url": conn.config.get("base_url", "")}
+
+    # Fallback to env var
     return {"base_url": os.environ.get("GLPI_BASE_URL", "")}
