@@ -52,12 +52,12 @@ Deine Fähigkeiten:
 - AlphaNodes Reporting API-Endpunkte lesen/schreiben (Budgets, Time Logs)
 
 Wichtige Regeln:
-- Für "Stunden im Monat" Fragen: NUTZE get_redmine_user_hours_report (nicht get_redmine_time_entries)
-  - Dieses Tool paginiert automatisch durch ALLE Einträge und summiert korrekt
-  - Format: from_date="2026-03-01", to_date="2026-03-31"
+- Für "Stunden im Monat": NUTZE get_redmine_user_hours_report
+  - Format: user_id="32", from_date="2026-03-01", to_date="2026-03-31"
+  - Das Tool gibt zurück: total_hours, entry_count, entries (Liste mit date, hours, project, issue_id)
+  - Antworte formatiert: "User: X Stunden im Monat Y (N Einträge)" dann die Liste der Einträge
 - Für "Tickets von User X": Nutze get_redmine_issues mit assigned_to_id
-- Antworte prägnant und sachlich, keine Emojis
-- Nur die reine Summe angeben, keine wiederholenden Erklärungen""",
+- Keine Emojis, prägnante Antworten""",
     en="""You are Ninko's Redmine specialist.
 
 Your capabilities:

@@ -593,17 +593,29 @@ async def get_redmine_user_hours_report(
         # Format entries for display
         formatted_entries = []
         for entry in all_entries:
-            formatted_entries.append(
-                {
-                    "date": entry.get("spent_on", ""),
-                    "hours": entry.get("hours", 0),
-                    "project": entry.get("project", {}).get("name", ""),
-                    "issue_id": entry.get("issue", {}).get("id", "")
-                    if entry.get("issue")
-                    else "",
-                    "comments": entry.get("comments", ""),
-                }
-            )
+            try:
+                project_name = ""
+                if entry.get("project") and isinstance(entry["project"], dict):
+                    project_name = entry["project"].get("name", "")
+
+                issue_id = ""
+                if entry.get("issue") and isinstance(entry["issue"], dict):
+                    issue_id = str(entry["issue"].get("id", ""))
+
+                formatted_entries.append(
+                    {
+                        "date": entry.get("spent_on", ""),
+                        "hours": float(entry.get("hours", 0)),
+                        "project": project_name,
+                        "issue_id": issue_id,
+                        "comments": entry.get("comments", ""),
+                    }
+                )
+            except (AttributeError, TypeError, ValueError) as e:
+                logger.warning(
+                    "Skipping malformed time entry: %s - Error: %s", entry, e
+                )
+                continue
 
         return {
             "status": "success",
@@ -615,8 +627,15 @@ async def get_redmine_user_hours_report(
             "entries": formatted_entries,
         }
     except _REDMINE_TOOL_EXCEPTIONS as e:
-        logger.error("get_redmine_user_hours_report failed: %s", e)
-        return _public_error()
+        logger.error(
+            "get_redmine_user_hours_report failed for user_id=%s from=%s to=%s: %s",
+            user_id,
+            from_date,
+            to_date,
+            e,
+            exc_info=True,
+        )
+        return {"error": f"Time entries query failed: {str(e)}"}
 
 
 @tool
