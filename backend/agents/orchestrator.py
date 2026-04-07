@@ -547,8 +547,7 @@ class OrchestratorAgent(BaseAgent):
             else "kubernetes, linux_server, docker"
         )
 
-        prompt = f"""Du bist ein Agent-Builder für Ninko.
-Erzeuge aus der User-Anfrage ein JSON für create_custom_agent.
+        prompt = f"""Du bist ein Agent-Builder für Ninko. Analysiere die User-Anfrage und erzeuge eine vollständige Agent-Spezifikation.
 
 USER-ANFRAGE:
 {message}
@@ -556,24 +555,48 @@ USER-ANFRAGE:
 VERFÜGBARE MODULE:
 {module_line}
 
-ANFORDERUNGEN:
-- Gib NUR ein JSON-Objekt zurück.
-- Felder: "name", "description", "system_prompt"
-- name: max 5 Wörter, klarer Funktionsname
-- description: 1 präziser Satz
-- system_prompt: Deutsch, strukturiert mit Abschnitten:
-  ## Aufgaben
-  ## Arbeitsweise
-  ## Kritische Aktionen
-  ## Eskalation
-- Bei destruktiven Aktionen immer Bestätigung verlangen.
-- Wenn Module sinnvoll sind, nenne call_module_agent("<modul>", "...") explizit.
+=== BEISPIELE FÜR GUTE AGENTEN ===
 
-JSON-SCHEMA:
+Beispiel 1 - Kubernetes Monitoring:
 {{
-  "name": "string",
-  "description": "string",
-  "system_prompt": "string"
+  "name": "k8s-failing-pod-restarter",
+  "description": "Überwacht Kubernetes Cluster auf failing Pods und restartet Deployments/StatefulSets bei Bedarf",
+  "system_prompt": "# K8s Failing Pod Restarter\\n\\nDu bist ein Kubernetes-Überwachungsagent.\\n\\n## Aufgaben\\n1. Prüfe auf failing Pods (Error, CrashLoopBackOff, Evicted)\\n2. Identifiziere Deployment/StatefulSet\\n3. Führe Rollout-Restart durch\\n4. Dokumentiere Aktionen\\n\\n## Arbeitsweise\\n- Nutze call_module_agent('kubernetes', 'Prüfe failing Pods...')\\n- Gruppiere Pods nach Deployment\\n- Prüfe Logs vor Restart\\n\\n## Kritische Aktionen (Bestätigung nötig)\\n- Restart von >3 Deployments gleichzeitig\\n- Löschen von Ressourcen\\n\\n## Eskalation\\n→ Wenn >10 Pods failing oder 3x Restart erfolglos, an Ninko zurückgeben"
+}}
+
+Beispiel 2 - GLPI Ticket Bearbeitung:
+{{
+  "name": "glpi-ticket-assistant", 
+  "description": "Bearbeitet GLPI Tickets automatisch: antwortet, setzt Beobachter, ändert Status",
+  "system_prompt": "# GLPI Ticket Assistant\\n\\nDu automatisierst GLPI Ticket-Workflows.\\n\\n## Aufgaben\\n1. Suche neue Tickets (Status=1)\\n2. Füge Beobachter hinzu\\n3. Schreibe professionelle Antworten\\n4. Aktualisiere Status\\n\\n## Arbeitsweise\\n- Nutze call_module_agent('glpi', 'Suche Tickets...')\\n- Für User-Infos: call_module_agent('glpi', 'Suche Benutzer...')\\n- Füge Followups mit Lösungsvorschlägen hinzu\\n\\n## Kritische Aktionen (Bestätigung nötig)\\n- Schließen von Tickets ohne Lösung\\n- Löschen von Tickets\\n\\n## Eskalation\\n→ Bei komplexen technischen Problemen an Ninko zurückgeben"
+}}
+
+Beispiel 3 - Docker Container Manager:
+{{
+  "name": "docker-container-manager",
+  "description": "Verwaltet Docker Container: prüft Status, restartet, bereinigt",
+  "system_prompt": "# Docker Container Manager\\n\\nDu verwaltest Docker Container und Images.\\n\\n## Aufgaben\\n1. Liste Container mit Status\\n2. Prüfe auf exited/restarting Container\\n3. Restarte bei Bedarf\\n4. Bereinige ungenutzte Images\\n\\n## Arbeitsweise\\n- Nutze call_module_agent('docker', 'Liste Container...')\\n- Nutze call_module_agent('docker', 'Prüfe Logs...')\\n\\n## Kritische Aktionen (Bestätigung nötig)\\n- Stoppen von Produktiv-Containern\\n- Löschen von Volumes\\n- Prune-Operationen\\n\\n## Eskalation\\n→ Bei Persistenz-Problemen oder Datenverlust-Risiko an Ninko zurückgeben"
+}}
+
+=== DEINE AUFGABE ===
+
+Analysiere die User-Anfrage oben und erzeuge ein JSON mit diesen Feldern:
+- "name": 2-5 Wörter, snake_case, kein "Agent" im Namen
+- "description": 1 Satz, konkrete Aufgaben
+- "system_prompt": Strukturiert mit ## Aufgaben, ## Arbeitsweise, ## Kritische Aktionen, ## Eskalation
+
+WICHTIG:
+1. Das System-Prompt MUSS call_module_agent() Aufrufe enthalten für relevante Module
+2. Kritische Aktionen müssen explizit erwähnt werden
+3. Die Eskalations-Bedingung muss klar sein
+4. Mindestens 500 Zeichen für system_prompt
+
+ANTWORTE NUR MIT JSON, keine Erklärungen davor oder danach:
+
+{{
+  "name": "...",
+  "description": "...",
+  "system_prompt": "..."
 }}"""
 
         try:
@@ -594,68 +617,78 @@ JSON-SCHEMA:
             )
             return _t(
                 de="Fehler: Die Agent-Spezifikation konnte nicht erzeugt werden. "
-                "Bitte beschreibe Zweck, Module und gewünschtes Output-Format präziser.",
+                "Mögliche Ursachen:\n"
+                "• Die Beschreibung ist zu unklar\n"
+                "• Es fehlen Angaben zu den zu nutzenden Modulen\n"
+                "• Es fehlen konkrete Aufgaben oder Ziele\n\n"
+                "Bitte beschreibe:\n"
+                "1. WAS soll der Agent tun? (konkrete Aufgaben)\n"
+                "2. WELCHE Module soll er nutzen? (z.B. kubernetes, docker, glpi)\n"
+                "3. WIE soll er sich verhalten? (autonom, nur melden, immer bestätigen lassen)",
                 en="Error: Failed to generate the agent specification. "
-                "Please describe purpose, modules, and expected output format more precisely.",
-                fr="Erreur : La spécification de l'agent n'a pas pu être générée. "
-                "Veuillez décrire plus précisément l'objectif, les modules et le format de sortie attendu.",
-                es="Error: No se pudo generar la especificación del agente. "
-                "Por favor, describe con más precisión el propósito, los módulos y el formato de salida esperado.",
-                it="Errore: impossibile generare la specifica dell'agente. "
-                "Descrivi più precisamente lo scopo, i moduli e il formato di output previsto.",
-                nl="Fout: De agentspecificatie kon niet worden gegenereerd. "
-                "Beschrijf doel, modules en verwachte output-formaat nauwkeuriger.",
-                pl="Błąd: Nie można wygenerować specyfikacji agenta. "
-                "Opisz dokładniej cel, moduły i oczekiwany format wyjściowy.",
-                pt="Erro: Falha ao gerar a especificação do agente. "
-                "Por favor, descreva com mais precisão o objetivo, módulos e formato de saída esperado.",
-                ja="エラー：エージェント仕様を生成できませんでした。"
-                "目的、モジュール、出力形式をより正確に説明してください。",
-                zh="错误：无法生成代理规范。请更准确地描述目标、模块和预期输出格式。",
+                "Possible causes:\n"
+                "• Description is too unclear\n"
+                "• Missing information about which modules to use\n"
+                "• Missing concrete tasks or goals\n\n"
+                "Please describe:\n"
+                "1. WHAT should the agent do? (concrete tasks)\n"
+                "2. WHICH modules should it use? (e.g. kubernetes, docker, glpi)\n"
+                "3. HOW should it behave? (autonomous, report only, always ask for confirmation)",
             ), False
 
         name = str(spec.get("name", "")).strip()[:80]
         description = str(spec.get("description", "")).strip()[:400]
         system_prompt = str(spec.get("system_prompt", "")).strip()
 
-        if not name or not system_prompt:
-            return _t(
-                de="Fehler: Die erzeugte Agent-Spezifikation ist unvollständig (Name/System-Prompt).",
-                en="Error: The generated agent specification is incomplete (name/system_prompt).",
-                fr="Erreur : La spécification de l'agent générée est incomplète (nom/system_prompt).",
-                es="Error: La especificación del agente generada está incompleta (nombre/system_prompt).",
-                it="Errore: La specifica dell'agente generata è incompleta (nome/system_prompt).",
-                nl="Fout: De gegenereerde agentspecificatie is onvolledig (naam/system_prompt).",
-                pl="Błąd: Wygenerowana specyfikacja agenta jest niekompletna (nazwa/system_prompt).",
-                pt="Erro: A especificação do agente gerada está incompleta (nome/system_prompt).",
-                ja="エラー：生成されたエージェント仕様が不完全です（名前/system_prompt）。",
-                zh="错误：生成代理规范不完整（名称/system_prompt）。",
-            ), False
+        # Validierung mit detaillierten Fehlermeldungen
+        validation_errors = []
 
-        if len(system_prompt) < 120:
+        if not name:
+            validation_errors.append("Name fehlt")
+        elif len(name) < 3:
+            validation_errors.append("Name zu kurz (min. 3 Zeichen)")
+        elif "agent" in name.lower() and len(name.split()) > 1:
+            # Warnung aber nicht blockieren
+            name = name.lower().replace("agent", "").strip(" -_")
+
+        if not system_prompt:
+            validation_errors.append("System-Prompt fehlt")
+        elif len(system_prompt) < 300:
+            validation_errors.append(
+                f"System-Prompt zu kurz ({len(system_prompt)} Zeichen, min. 300)"
+            )
+        elif "##" not in system_prompt:
+            validation_errors.append("System-Prompt muss ## Abschnitte enthalten")
+        elif "call_module_agent" not in system_prompt:
+            validation_errors.append(
+                "System-Prompt sollte call_module_agent() Aufrufe enthalten"
+            )
+
+        if not description:
+            validation_errors.append("Beschreibung fehlt")
+        elif len(description) < 20:
+            validation_errors.append("Beschreibung zu kurz (min. 20 Zeichen)")
+
+        if validation_errors:
+            error_msg = "; ".join(validation_errors)
+            logger.warning("Agent-Validierung fehlgeschlagen: %s", error_msg)
             return _t(
-                de="Fehler: Die erzeugte Agent-Spezifikation ist zu kurz. "
-                "Bitte beschreibe den Use-Case genauer.",
-                en="Error: The generated agent specification is too short. "
-                "Please provide a more detailed use case.",
-                fr="Erreur : La spécification de l'agent générée est trop courte. "
-                "Veuillez fournir un cas d'utilisation plus détaillé.",
-                es="Error: La especificación del agente generada es demasiado corta. "
-                "Por favor, proporciona un caso de uso más detallado.",
-                it="Errore: La specifica dell'agente generata è troppo breve. "
-                "Fornisci un caso d'uso più dettagliato.",
-                nl="Fout: De gegenereerde agentspecificatie is te kort. "
-                "Geef een meer gedetailleerd gebruiksscenario.",
-                pl="Błąd: Wygenerowana specyfikacja agenta jest zbyt krótka. "
-                "Podaj bardziej szczegółowy przypadek użycia.",
-                pt="Erro: A especificação do agente gerada é muito curta. "
-                "Por favor, forneça um caso de uso mais detalhado.",
-                ja="エラー：生成されたエージェント仕様が短すぎます。"
-                "より詳細なユースケースを説明してください。",
-                zh="错误：生成的代理规范太短。请提供更详细的用例。",
+                de=f"Fehler: Die Agent-Spezifikation hat folgende Probleme: {error_msg}. "
+                "Bitte beschreibe den Use-Case detaillierter.",
+                en=f"Error: Agent specification has these issues: {error_msg}. "
+                "Please describe the use case in more detail.",
             ), False
 
         pool = get_agent_pool()
+
+        # Prüfen ob Agent mit gleichem Namen bereits existiert
+        existing = pool._meta.get(name.lower().replace(" ", "-"))
+        if existing:
+            # Füge Zahl hinzu um Eindeutigkeit zu garantieren
+            import time
+
+            name = f"{name}-{int(time.time()) % 1000}"
+
         agent_id, _ = await pool.register(
             name=name, system_prompt=system_prompt, description=description
         )
