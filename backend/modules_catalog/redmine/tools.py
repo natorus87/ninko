@@ -263,10 +263,10 @@ async def get_redmine_project(project_id: str, connection_id: str = "") -> dict:
     Get total hours for a specific user in a date range with pagination.
     Use this for 'hours in month' questions to get accurate totals.
 
-    DE: Stunden-Report für einen Benutzer im Zeitraum. Nutze dies für "Stunden im Monat" Fragen.
-    EN: Hours report for a user in a date range. Use this for "hours in month" questions.
-    FR: Rapport d'heures pour un utilisateur sur une période. Utilisez pour les questions "heures dans le mois".
-    ES: Informe de horas para un usuario en un rango de fechas. Úselo para preguntas "horas en el mes".
+    DE: Stunden-Report für einen Benutzer im Zeitraum. Nutze dies für 'Stunden im Monat' Fragen.
+    EN: Hours report for a user in a date range. Use this for 'hours in month' questions.
+    FR: Rapport d\'heures pour un utilisateur sur une période. Utilisez pour les questions 'heures dans le mois'.
+    ES: Informe de horas para un usuario en un rango de fechas. Úselo para preguntas 'horas en el mes'.
 
     Parameters:
     - user_id: User ID (e.g., "32")
@@ -553,16 +553,32 @@ async def get_redmine_user_hours_report(
     Get total hours for a specific user in a date range with pagination.
     Use this for 'hours in month' questions to get accurate totals.
 
-    DE: Stunden-Report für einen Benutzer im Zeitraum. Nutze dies für "Stunden im Monat" Fragen.
-    EN: Hours report for a user in a date range. Use this for "hours in month" questions.
-    FR: Rapport d'heures pour un utilisateur sur une période. Utilisez pour "heures dans le mois".
-    ES: Informe de horas para un usuario en un rango de fechas. Úselo para "horas en el mes".
-    IT: Report ore per un utente in un intervallo di date. Usa per "ore nel mese".
-    NL: Urenrapport voor een gebruiker in een datumbereik. Gebruik voor "uren in de maand".
-    PL: Raport godzin dla użytkownika w zakresie dat. Użyj dla "godziny w miesiącu".
-    PT: Relatório de horas para um usuário em um intervalo de datas. Use para "horas no mês".
-    JA: 日付範囲内のユーザーの時間レポート。「月内の時間」に使用。
-    ZH: 用户在日期范围内的小时报告。用于
+    DE: Stunden-Report für einen Benutzer im Zeitraum. Nutze dies für 'Stunden im Monat' Fragen.
+    EN: Hours report for a user in a date range. Use this for 'hours in month' questions.
+    FR: Rapport d\'heures pour un utilisateur sur une période. Utilisez pour 'heures dans le mois'.
+    ES: Informe de horas para un usuario en un rango de fechas. Úselo para 'horas en el mes'.
+    IT: Report ore per un utente in un intervallo di date. Usa per 'ore nel mese'.
+    NL: Urenrapport voor een gebruiker in een datumbereik. Gebruik voor 'uren in de maand'.
+    PL: Raport godzin dla użytkownika w zakresie dat. Użyj dla 'godziny w miesiącu'.
+    PT: Relatório de horas para um usuário em um intervalo de datas. Use para 'horas no mês'.
+    JA: 日付範囲内のユーザーの時間レポート。月内の時間に使用。
+    ZH: 用户在日期范围内的小时报告。用于月内小时数。
+
+    Parameters:
+    - user_id: User ID (e.g., "32")
+    - from_date: Start date (YYYY-MM-DD, e.g., "2026-03-01")
+    - to_date: End date (YYYY-MM-DD, e.g., "2026-03-31")
+    - project_id: Optional project filter
+    - max_detail_entries: Max entries to return in details (default 20)
+
+    Returns:
+    - total_hours: Sum of all hours
+    - days_count: Number of unique days
+    - entry_count: Total number of entries
+    - summary_by_day: List of {date, total_hours, entry_count}
+    - entries: Detailed entries (max max_detail_entries)
+    - has_more_entries: Boolean if more entries exist
+    """
     try:
         client = await _get_api_client(connection_id)
 
@@ -670,15 +686,16 @@ async def get_redmine_user_hours_report(
 
         # Group by day for compact summary (prevents LLM overload)
         from collections import defaultdict
+
         summary_by_day = defaultdict(lambda: {"hours": 0.0, "entries": []})
         for entry in formatted_entries:
             date = entry["date"]
             summary_by_day[date]["hours"] += entry["hours"]
             summary_by_day[date]["entries"].append(entry)
-        
+
         # Sort by date
         sorted_days = sorted(summary_by_day.items(), reverse=True)
-        
+
         # Limit detailed entries to prevent context overflow
         limited_entries = formatted_entries[:max_detail_entries]
         has_more = len(formatted_entries) > max_detail_entries
@@ -692,7 +709,11 @@ async def get_redmine_user_hours_report(
             "entry_count": len(all_entries),
             "days_count": len(sorted_days),
             "summary_by_day": [
-                {"date": date, "total_hours": data["hours"], "entry_count": len(data["entries"])}
+                {
+                    "date": date,
+                    "total_hours": data["hours"],
+                    "entry_count": len(data["entries"]),
+                }
                 for date, data in sorted_days
             ],
             "entries": limited_entries,
@@ -1252,7 +1273,7 @@ async def get_redmine_hrm_attendance_types(connection_id: str = "") -> dict:
 
     DE: Abwesenheitstypen abrufen (Urlaub, Krankheit, etc.)
     EN: Get attendance types (vacation, sick leave, etc.)
-    FR: Types d'absence (congés, maladie, etc.)
+    FR: Types d\'absence (congés, maladie, etc.)
     ES: Tipos de asistencia (vacaciones, enfermedad, etc.)
     """
     try:
@@ -1280,7 +1301,7 @@ async def update_redmine_hrm_attendance(
 
     DE: Abwesenheitseintrag bearbeiten (Urlaub, Krankheit)
     EN: Update attendance entry (vacation, sick leave)
-    FR: Modifier une entrée d'absence (congés, maladie)
+    FR: Modifier une entrée d\'absence (congés, maladie)
     ES: Actualizar entrada de asistencia (vacaciones, enfermedad)
 
     Example payload: {"attendance": {"status": "sick", "date": "2026-04-03"}}
@@ -1311,7 +1332,7 @@ async def delete_redmine_hrm_attendance(
 
     DE: Abwesenheitseintrag löschen
     EN: Delete attendance entry
-    FR: Supprimer une entrée d'absence
+    FR: Supprimer une entrée d\'absence
     ES: Eliminar entrada de asistencia
     """
     try:
