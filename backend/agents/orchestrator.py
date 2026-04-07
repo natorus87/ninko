@@ -634,6 +634,78 @@ ANTWORTE NUR MIT JSON, keine Erklärungen davor oder danach:
                 "1. WHAT should the agent do? (concrete tasks)\n"
                 "2. WHICH modules should it use? (e.g. kubernetes, docker, glpi)\n"
                 "3. HOW should it behave? (autonomous, report only, always ask for confirmation)",
+                fr="Erreur: Échec de la génération de la spécification de l'agent. "
+                "Causes possibles:\n"
+                "• La description est trop vague\n"
+                "• Informations manquantes sur les modules à utiliser\n"
+                "• Tâches ou objectifs concrets manquants\n\n"
+                "Veuillez décrire:\n"
+                "1. CE QUE l'agent doit faire? (tâches concrètes)\n"
+                "2. QUELS modules doit-il utiliser? (ex. kubernetes, docker, glpi)\n"
+                "3. COMMENT doit-il se comporter? (autonome, rapport seulement, toujours demander confirmation)",
+                es="Error: No se pudo generar la especificación del agente. "
+                "Causas posibles:\n"
+                "• La descripción es demasiado poco clara\n"
+                "• Falta información sobre qué módulos usar\n"
+                "• Faltan tareas u objetivos concretos\n\n"
+                "Por favor describe:\n"
+                "1. QUÉ debe hacer el agente? (tareas concretas)\n"
+                "2. QUÉ módulos debe usar? (ej. kubernetes, docker, glpi)\n"
+                "3. CÓMO debe comportarse? (autónomo, solo informar, siempre pedir confirmación)",
+                it="Errore: Impossibile generare la specifica dell'agente. "
+                "Cause possibili:\n"
+                "• La descrizione è troppo poco chiara\n"
+                "• Mancano informazioni su quali moduli usare\n"
+                "• Mancano compiti o obiettivi concreti\n\n"
+                "Per favore descrivi:\n"
+                "1. COSA dovrebbe fare l'agente? (compiti concreti)\n"
+                "2. QUALI moduli dovrebbe usare? (es. kubernetes, docker, glpi)\n"
+                "3. COME dovrebbe comportarsi? (autonomo, solo rapporto, chiedi sempre conferma)",
+                nl="Fout: De agentspecificatie kon niet worden gegenereerd. "
+                "Mogelijke oorzaken:\n"
+                "• Beschrijving is te onduidelijk\n"
+                "• Ontbrekende informatie over welke modules te gebruiken\n"
+                "• Ontbrekende concrete taken of doelen\n\n"
+                "Beschrijf alstublieft:\n"
+                "1. WAT moet de agent doen? (concrete taken)\n"
+                "2. WELKE modules moet hij gebruiken? (bijv. kubernetes, docker, glpi)\n"
+                "3. HOE moet hij zich gedragen? (autonoom, alleen rapporteren, altijd om bevestiging vragen)",
+                pl="Błąd: Nie udało się wygenerować specyfikacji agenta. "
+                "Możliwe przyczyny:\n"
+                "• Opis jest zbyt niejasny\n"
+                "• Brak informacji o modułach do użycia\n"
+                "• Brak konkretnych zadań lub celów\n\n"
+                "Opisz proszę:\n"
+                "1. CO powinien robić agent? (konkretne zadania)\n"
+                "2. JAKIE moduły powinien używać? (np. kubernetes, docker, glpi)\n"
+                "3. JAK powinien się zachowywać? (autonomiczny, tylko raport, zawsze proś o potwierdzenie)",
+                pt="Erro: Falha ao gerar a especificação do agente. "
+                "Causas possíveis:\n"
+                "• A descrição é muito pouco clara\n"
+                "• Falta informação sobre quais módulos usar\n"
+                "• Faltam tarefas ou objetivos concretos\n\n"
+                "Por favor descreva:\n"
+                "1. O QUE o agente deve fazer? (tarefas concretas)\n"
+                "2. QUAIS módulos deve usar? (ex. kubernetes, docker, glpi)\n"
+                "3. COMO deve se comportar? (autônomo, apenas relatar, sempre pedir confirmação)",
+                ja="エラー：エージェント仕様を生成できませんでした。"
+                "可能な原因：\n"
+                "• 説明が不明確すぎます\n"
+                "• 使用するモジュールに関する情報が不足しています\n"
+                "• 具体的なタスクや目標が不足しています\n\n"
+                "説明してください：\n"
+                "1. エージェントは何をすべきですか？（具体的なタスク）\n"
+                "2. どのモジュールを使用すべきですか？（例：kubernetes、docker、glpi）\n"
+                "3. どのように振る舞うべきですか？（自律的、報告のみ、常に確認を求める）",
+                zh="错误：无法生成代理规范。"
+                "可能的原因：\n"
+                "• 描述不够清楚\n"
+                "• 缺少关于使用哪些模块的信息\n"
+                "• 缺少具体的任务或目标\n\n"
+                "请描述：\n"
+                "1. 代理应该做什么？（具体任务）\n"
+                "2. 应该使用哪些模块？（例如 kubernetes、docker、glpi）\n"
+                "3. 应该如何表现？（自主、仅报告、始终要求确认）",
             ), False
 
         name = str(spec.get("name", "")).strip()[:80]
@@ -644,30 +716,130 @@ ANTWORTE NUR MIT JSON, keine Erklärungen davor oder danach:
         validation_errors = []
 
         if not name:
-            validation_errors.append("Name fehlt")
+            validation_errors.append(
+                _t(
+                    de="Name fehlt",
+                    en="Name missing",
+                    fr="Nom manquant",
+                    es="Nombre faltante",
+                    it="Nome mancante",
+                    nl="Naam ontbreekt",
+                    pl="Brak nazwy",
+                    pt="Nome faltando",
+                    ja="名前がありません",
+                    zh="缺少名称",
+                )
+            )
         elif len(name) < 3:
-            validation_errors.append("Name zu kurz (min. 3 Zeichen)")
+            validation_errors.append(
+                _t(
+                    de="Name zu kurz (min. 3 Zeichen)",
+                    en="Name too short (min. 3 chars)",
+                    fr="Nom trop court (min. 3 caractères)",
+                    es="Nombre demasiado corto (mín. 3 caracteres)",
+                    it="Nome troppo breve (min. 3 caratteri)",
+                    nl="Naam te kort (min. 3 tekens)",
+                    pl="Nazwa za krótka (min. 3 znaki)",
+                    pt="Nome muito curto (mín. 3 caracteres)",
+                    ja="名前が短すぎます（最小3文字）",
+                    zh="名称太短（最少3个字符）",
+                )
+            )
         elif "agent" in name.lower() and len(name.split()) > 1:
             # Warnung aber nicht blockieren
             name = name.lower().replace("agent", "").strip(" -_")
 
         if not system_prompt:
-            validation_errors.append("System-Prompt fehlt")
+            validation_errors.append(
+                _t(
+                    de="System-Prompt fehlt",
+                    en="System prompt missing",
+                    fr="Prompt système manquant",
+                    es="Prompt de sistema faltante",
+                    it="Prompt di sistema mancante",
+                    nl="Systeemprompt ontbreekt",
+                    pl="Brak promptu systemowego",
+                    pt="Prompt de sistema faltando",
+                    ja="システムプロンプトがありません",
+                    zh="缺少系统提示",
+                )
+            )
         elif len(system_prompt) < 300:
             validation_errors.append(
-                f"System-Prompt zu kurz ({len(system_prompt)} Zeichen, min. 300)"
+                _t(
+                    de=f"System-Prompt zu kurz ({len(system_prompt)} Zeichen, min. 300)",
+                    en=f"System prompt too short ({len(system_prompt)} chars, min. 300)",
+                    fr=f"Prompt système trop court ({len(system_prompt)} caractères, min. 300)",
+                    es=f"Prompt de sistema demasiado corto ({len(system_prompt)} caracteres, mín. 300)",
+                    it=f"Prompt di sistema troppo breve ({len(system_prompt)} caratteri, min. 300)",
+                    nl=f"Systeemprompt te kort ({len(system_prompt)} tekens, min. 300)",
+                    pl=f"Prompt systemowy za krótki ({len(system_prompt)} znaków, min. 300)",
+                    pt=f"Prompt de sistema muito curto ({len(system_prompt)} caracteres, mín. 300)",
+                    ja=f"システムプロンプトが短すぎます（{len(system_prompt)}文字、最小300文字）",
+                    zh=f"系统提示太短（{len(system_prompt)}个字符，最少300个）",
+                )
             )
         elif "##" not in system_prompt:
-            validation_errors.append("System-Prompt muss ## Abschnitte enthalten")
+            validation_errors.append(
+                _t(
+                    de="System-Prompt muss ## Abschnitte enthalten",
+                    en="System prompt must contain ## sections",
+                    fr="Le prompt système doit contenir des sections ##",
+                    es="El prompt de sistema debe contener secciones ##",
+                    it="Il prompt di sistema deve contenere sezioni ##",
+                    nl="Systeemprompt moet ## secties bevatten",
+                    pl="Prompt systemowy musi zawierać sekcje ##",
+                    pt="Prompt de sistema deve conter seções ##",
+                    ja="システムプロンプトには##セクションが必要です",
+                    zh="系统提示必须包含##章节",
+                )
+            )
         elif "call_module_agent" not in system_prompt:
             validation_errors.append(
-                "System-Prompt sollte call_module_agent() Aufrufe enthalten"
+                _t(
+                    de="System-Prompt sollte call_module_agent() Aufrufe enthalten",
+                    en="System prompt should contain call_module_agent() calls",
+                    fr="Le prompt système devrait contenir des appels call_module_agent()",
+                    es="El prompt de sistema debería contener llamadas call_module_agent()",
+                    it="Il prompt di sistema dovrebbe contenere chiamate call_module_agent()",
+                    nl="Systeemprompt zou call_module_agent() oproepen moeten bevatten",
+                    pl="Prompt systemowy powinien zawierać wywołania call_module_agent()",
+                    pt="Prompt de sistema deve conter chamadas call_module_agent()",
+                    ja="システムプロンプトにはcall_module_agent()呼び出しを含める必要があります",
+                    zh="系统提示应包含call_module_agent()调用",
+                )
             )
 
         if not description:
-            validation_errors.append("Beschreibung fehlt")
+            validation_errors.append(
+                _t(
+                    de="Beschreibung fehlt",
+                    en="Description missing",
+                    fr="Description manquante",
+                    es="Descripción faltante",
+                    it="Descrizione mancante",
+                    nl="Beschrijving ontbreekt",
+                    pl="Brak opisu",
+                    pt="Descrição faltando",
+                    ja="説明がありません",
+                    zh="缺少描述",
+                )
+            )
         elif len(description) < 20:
-            validation_errors.append("Beschreibung zu kurz (min. 20 Zeichen)")
+            validation_errors.append(
+                _t(
+                    de="Beschreibung zu kurz (min. 20 Zeichen)",
+                    en="Description too short (min. 20 chars)",
+                    fr="Description trop courte (min. 20 caractères)",
+                    es="Descripción demasiado corta (mín. 20 caracteres)",
+                    it="Descrizione troppo breve (min. 20 caratteri)",
+                    nl="Beschrijving te kort (min. 20 tekens)",
+                    pl="Opis za krótki (min. 20 znaków)",
+                    pt="Descrição muito curta (mín. 20 caracteres)",
+                    ja="説明が短すぎます（最小20文字）",
+                    zh="描述太短（最少20个字符）",
+                )
+            )
 
         if validation_errors:
             error_msg = "; ".join(validation_errors)
@@ -677,6 +849,21 @@ ANTWORTE NUR MIT JSON, keine Erklärungen davor oder danach:
                 "Bitte beschreibe den Use-Case detaillierter.",
                 en=f"Error: Agent specification has these issues: {error_msg}. "
                 "Please describe the use case in more detail.",
+                fr=f"Erreur: La spécification de l'agent a ces problèmes: {error_msg}. "
+                "Veuillez décrire le cas d'utilisation plus en détail.",
+                es=f"Error: La especificación del agente tiene estos problemas: {error_msg}. "
+                "Por favor, describe el caso de uso con más detalle.",
+                it=f"Errore: La specifica dell'agente ha questi problemi: {error_msg}. "
+                "Per favore descrivi il caso d'uso in modo più dettagliato.",
+                nl=f"Fout: De agentspecificatie heeft deze problemen: {error_msg}. "
+                "Beschrijf het gebruiksscenario gedetailleerder.",
+                pl=f"Błąd: Specyfikacja agenta ma te problemy: {error_msg}. "
+                "Opisz przypadek użycia bardziej szczegółowo.",
+                pt=f"Erro: A especificação do agente tem estes problemas: {error_msg}. "
+                "Por favor, descreva o caso de uso com mais detalhes.",
+                ja=f"エラー：エージェント仕様にこれらの問題があります：{error_msg}。"
+                "ユースケースをより詳しく説明してください。",
+                zh=f"错误：代理规范存在这些问题：{error_msg}。请更详细地描述用例。",
             ), False
 
         pool = get_agent_pool()
