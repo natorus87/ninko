@@ -1604,8 +1604,13 @@ JSON-SCHEMA:
                                 force_module,
                                 False,
                             )
-                except _ORCH_RECOVERABLE_EXCEPTIONS:
-                    pass
+                except _ORCH_RECOVERABLE_EXCEPTIONS as pool_exc:
+                    logger.warning(
+                        "Custom-Agent '%s' aus Pool konnte nicht geladen werden: %s",
+                        force_module,
+                        pool_exc,
+                    )
+                    # Nicht ignorieren - wir wissen jetzt, dass es ein Pool-Problem gab
             if agent is None:
                 return (
                     _t(
