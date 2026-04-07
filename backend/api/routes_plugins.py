@@ -1122,16 +1122,9 @@ async def reinstall_plugin(request: Request, plugin_name: str) -> JSONResponse:
     plugins_dir.mkdir(parents=True, exist_ok=True)
     plugin_dir = plugins_dir / plugin_name
 
-    import subprocess
-
     if plugin_dir.exists():
         try:
-            result = subprocess.run(
-                ["rm", "-rf", str(plugin_dir)],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
+            shutil.rmtree(plugin_dir, ignore_errors=False)
         except Exception as e:
             return JSONResponse(
                 content={

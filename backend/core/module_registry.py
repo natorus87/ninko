@@ -208,11 +208,27 @@ class ModuleRegistry:
     async def hot_load_plugin(self, modname: str, app: FastAPI) -> bool:
         """
         Lädt ein Plugin dynamisch zur Laufzeit nach und hängt seinen Router an die laufende FastAPI-Instanz.
+        Entfernt zuerst das alte Plugin falls vorhanden, um sauberes Update zu gewährleisten.
         """
         plugins_dir = Path(__file__).resolve().parent.parent / "plugins"
         backend_dir = str(plugins_dir.parent)
         if backend_dir not in sys.path:
             sys.path.insert(0, backend_dir)
+
+        # Erst altes Plugin entfernen falls vorhanden (für sauberes Update)
+        if modname in self._modules:
+            logger.info("Entferne altes Plugin '%s' vor Hot-Reload...", modname)
+            self.remove_plugin(modname)
+            # Auch aus sys.modules alle Submodule entfernen
+            package_path = f"plugins.{modname}"
+            modules_to_remove = [
+                name
+                for name in sys.modules.keys()
+                if name == package_path or name.startswith(f"{package_path}.")
+            ]
+            for name in modules_to_remove:
+                del sys.modules[name]
+                logger.debug("Entfernt aus sys.modules: %s", name)
 
         try:
             self._load_module(modname, plugins_dir, is_plugin=True)
