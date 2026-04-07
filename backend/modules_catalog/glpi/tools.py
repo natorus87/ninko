@@ -384,6 +384,91 @@ async def add_solution(
 
 
 @tool
+async def add_watcher(ticket_id: int, user_id: int, connection_id: str = "") -> dict:
+    """
+    Adds a watcher (observer) to a GLPI ticket.
+    Use this to add someone as CC/observer to track ticket progress.
+
+    DE: Fügt einen Beobachter zu einem GLPI-Ticket hinzu.
+    FR: Ajoute un observateur à un ticket GLPI.
+    ES: Agrega un observador a un ticket GLPI.
+    """
+    async with glpi_session(connection_id) as (client, base_url, headers):
+        resp = await client.post(
+            f"{base_url}/apirest.php/Ticket/{ticket_id}/Ticket_User",
+            json={
+                "input": {
+                    "tickets_id": ticket_id,
+                    "users_id": user_id,
+                    "type": 3,  # 3 = Watcher/Observer (Beobachter)
+                }
+            },
+            headers=headers,
+        )
+        resp.raise_for_status()
+
+        return {
+            "action": "add_watcher",
+            "ticket_id": ticket_id,
+            "user_id": user_id,
+            "status": "success",
+            "detail": f"User {user_id} added as watcher to ticket #{ticket_id}.",
+        }
+
+
+@tool
+async def assign_ticket(
+    ticket_id: int, user_id: int = 0, group_id: int = 0, connection_id: str = ""
+) -> dict:
+    """
+    Assigns a GLPI ticket to a user or group.
+    Use type=2 for assigned users/groups.
+
+    DE: Weist ein GLPI-Ticket einem Benutzer oder Gruppe zu.
+    FR: Attribue un ticket à un utilisateur ou groupe.
+    ES: Asigna un ticket a un usuario o grupo.
+    """
+    async with glpi_session(connection_id) as (client, base_url, headers):
+        if user_id:
+            resp = await client.post(
+                f"{base_url}/apirest.php/Ticket/{ticket_id}/Ticket_User",
+                json={
+                    "input": {
+                        "tickets_id": ticket_id,
+                        "users_id": user_id,
+                        "type": 2,  # 2 = Assigned
+                    }
+                },
+                headers=headers,
+            )
+        elif group_id:
+            resp = await client.post(
+                f"{base_url}/apirest.php/Ticket/{ticket_id}/Group_Ticket",
+                json={
+                    "input": {
+                        "tickets_id": ticket_id,
+                        "groups_id": group_id,
+                        "type": 2,
+                    }
+                },
+                headers=headers,
+            )
+        else:
+            return {"error": "Either user_id or group_id required"}
+
+        resp.raise_for_status()
+
+        return {
+            "action": "assign_ticket",
+            "ticket_id": ticket_id,
+            "user_id": user_id if user_id else None,
+            "group_id": group_id if group_id else None,
+            "status": "success",
+            "detail": f"Ticket #{ticket_id} assigned.",
+        }
+
+
+@tool
 async def search_users(keyword: str, connection_id: str = "") -> list[dict]:
     """Searches GLPI users by name."""
     async with glpi_session(connection_id) as (client, base_url, headers):
@@ -549,11 +634,17 @@ async def _download_attachment_for_ticket(
         documents = docs_resp.json()
 
         target_doc = next(
-            (doc for doc in documents if isinstance(doc, dict) and int(doc.get("id", 0)) == int(attachment_id)),
+            (
+                doc
+                for doc in documents
+                if isinstance(doc, dict) and int(doc.get("id", 0)) == int(attachment_id)
+            ),
             None,
         )
         if not target_doc:
-            raise ValueError(f"Attachment {attachment_id} nicht im Ticket {ticket_id} gefunden.")
+            raise ValueError(
+                f"Attachment {attachment_id} nicht im Ticket {ticket_id} gefunden."
+            )
 
         filename = target_doc.get("filename", "")
         mime = target_doc.get("mime", "") or "application/octet-stream"
@@ -595,7 +686,12 @@ async def get_ticket_image_ocr(
         connection_id=connection_id,
     )
 
-    if not (mime.startswith("image/") or filename.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"))):
+    if not (
+        mime.startswith("image/")
+        or filename.lower().endswith(
+            (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff")
+        )
+    ):
         raise ValueError(
             f"Attachment {attachment_id} ist kein unterstütztes Bild (mime={mime}, file={filename})."
         )

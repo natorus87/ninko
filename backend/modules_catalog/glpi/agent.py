@@ -20,6 +20,8 @@ from .tools import (
     close_ticket,
     add_followup,
     add_solution,
+    add_watcher,
+    assign_ticket,
     search_users,
     list_groups,
     list_categories,
@@ -42,6 +44,15 @@ Deine Fähigkeiten:
 - Tickets schließen mit Lösungsbeschreibung
 - Benutzer- und Gruppensuche
 - Ticket-Statistiken
+- Beobachter zu Tickets hinzufügen (add_watcher)
+- Tickets zuweisen (assign_ticket)
+
+WICHTIG - Bearbeitung neuer Tickets (Status=NEU):
+1. Suche zuerst Benutzer "Sophy" mit search_users("Sophy")
+2. Füge Sophy als Beobachter hinzu mit add_watcher(ticket_id, sophy_user_id)
+3. Schreibe eine hilfreiche Antwort/Followup mit add_followup()
+4. Setze Status auf "Wartend" (4) mit update_ticket(status=4)
+5. NICHT direkt schließen - erst auf User-Antwort warten!
 
 Verhaltensregeln:
 - Erstelle Tickets mit klaren, aussagekräftigen Titeln
@@ -69,6 +80,15 @@ Your capabilities:
 - Closing tickets with resolution descriptions
 - User and group search
 - Ticket statistics
+- Add watchers to tickets (add_watcher)
+- Assign tickets (assign_ticket)
+
+IMPORTANT - Handling NEW tickets (Status=NEW):
+1. First search for user "Sophy" with search_users("Sophy")
+2. Add Sophy as watcher with add_watcher(ticket_id, sophy_user_id)
+3. Write a helpful response/followup with add_followup()
+4. Set status to "Pending" (4) with update_ticket(status=4)
+5. DO NOT close immediately - wait for user response first!
 
 Behavior rules:
 - Create tickets with clear, meaningful titles
@@ -102,6 +122,8 @@ class GlpiAgent(BaseAgent):
                 close_ticket,
                 add_followup,
                 add_solution,
+                add_watcher,
+                assign_ticket,
                 search_users,
                 list_groups,
                 list_categories,
@@ -146,7 +168,14 @@ class GlpiAgent(BaseAgent):
 
                 await asyncio.sleep(0.5)
 
-            except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+            except (
+                RuntimeError,
+                ValueError,
+                TypeError,
+                KeyError,
+                OSError,
+                ImportError,
+            ) as exc:
                 logger.error("GLPI event listener error: %s", exc)
                 await asyncio.sleep(5)
 
@@ -183,5 +212,12 @@ class GlpiAgent(BaseAgent):
                     title,
                     result.get("ticket_id", "?"),
                 )
-            except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+            except (
+                RuntimeError,
+                ValueError,
+                TypeError,
+                KeyError,
+                OSError,
+                ImportError,
+            ) as exc:
                 logger.error("Auto-ticket creation failed: %s", exc)
