@@ -285,6 +285,7 @@ async def get_redmine_project(project_id: str, connection_id: str = "") -> dict:
 @tool
 async def get_redmine_issues(
     project_id: str = "",
+    assigned_to_id: str = "",
     status: str = "open",
     limit: int = 25,
     connection_id: str = "",
@@ -292,13 +293,20 @@ async def get_redmine_issues(
     """
     Retrieve issues (tickets) from Redmine.
     Use this when the user asks for tickets, issues, or bugs.
-    Can filter by project and status (open/closed/all).
+    Can filter by project, assigned user, and status (open/closed/all).
+
+    Parameters:
+    - assigned_to_id: Filter by assigned user ID (e.g., "32")
+    - status: "open", "closed", or "*" for all
+    - project_id: Optional project filter
     """
     try:
         client = await _get_api_client(connection_id)
         params = {"limit": min(limit, 100), "sort": "updated_on:desc"}
         if project_id:
             params["project_id"] = project_id
+        if assigned_to_id:
+            params["assigned_to_id"] = assigned_to_id
         if status:
             params["status_id"] = status
 
@@ -308,6 +316,7 @@ async def get_redmine_issues(
             "GET",
             "issues.json",
             params,
+            verify_ssl=client["verify_ssl"],
         )
         return {
             "status": "success",
@@ -458,6 +467,7 @@ async def get_redmine_users(connection_id: str = "") -> dict:
 @tool
 async def get_redmine_time_entries(
     project_id: str = "",
+    user_id: str = "",
     from_date: str = "",
     to_date: str = "",
     connection_id: str = "",
@@ -465,12 +475,20 @@ async def get_redmine_time_entries(
     """
     Retrieve time entries from Redmine.
     Use this when the user asks for time entries, logged hours, or time tracking.
+
+    Parameters:
+    - user_id: Filter by user ID (e.g., "32" for Sebastian Broers)
+    - from_date: Start date (YYYY-MM-DD)
+    - to_date: End date (YYYY-MM-DD)
+    - project_id: Optional project filter
     """
     try:
         client = await _get_api_client(connection_id)
         params = {"limit": 100}
         if project_id:
             params["project_id"] = project_id
+        if user_id:
+            params["user_id"] = user_id
         if from_date:
             params["from"] = from_date
         if to_date:
@@ -490,7 +508,7 @@ async def get_redmine_time_entries(
             "total": result.get("total_count", 0),
         }
     except _REDMINE_TOOL_EXCEPTIONS as e:
-        logger.error("get_redamine_time_entries failed: %s", e)
+        logger.error("get_redmine_time_entries failed: %s", e)
         return _public_error()
 
 
