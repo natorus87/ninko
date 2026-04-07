@@ -546,6 +546,7 @@ async def get_redmine_user_hours_report(
     from_date: str,
     to_date: str,
     project_id: str = "",
+    max_detail_entries: int = 20,
     connection_id: str = "",
 ) -> dict:
     """
@@ -561,19 +562,7 @@ async def get_redmine_user_hours_report(
     PL: Raport godzin dla użytkownika w zakresie dat. Użyj dla "godziny w miesiącu".
     PT: Relatório de horas para um usuário em um intervalo de datas. Use para "horas no mês".
     JA: 日付範囲内のユーザーの時間レポート。「月内の時間」に使用。
-    ZH: 用户在日期范围内的小时报告。用于"月内小时数"。
-
-    Parameters:
-    - user_id: User ID (e.g., "32")
-    - from_date: Start date (YYYY-MM-DD, e.g., "2026-03-01")
-    - to_date: End date (YYYY-MM-DD, e.g., "2026-03-31")
-    - project_id: Optional project filter
-
-    Returns:
-    - total_hours: Sum of all hours
-    - entry_count: Number of entries
-    - entries: List with date, hours, project, issue_id
-    """
+    ZH: 用户在日期范围内的小时报告。用于
     try:
         client = await _get_api_client(connection_id)
 
@@ -679,6 +668,21 @@ async def get_redmine_user_hours_report(
                 )
                 continue
 
+        # Group by day for compact summary (prevents LLM overload)
+        from collections import defaultdict
+        summary_by_day = defaultdict(lambda: {"hours": 0.0, "entries": []})
+        for entry in formatted_entries:
+            date = entry["date"]
+            summary_by_day[date]["hours"] += entry["hours"]
+            summary_by_day[date]["entries"].append(entry)
+        
+        # Sort by date
+        sorted_days = sorted(summary_by_day.items(), reverse=True)
+        
+        # Limit detailed entries to prevent context overflow
+        limited_entries = formatted_entries[:max_detail_entries]
+        has_more = len(formatted_entries) > max_detail_entries
+
         return {
             "status": "success",
             "user_id": user_id,
@@ -686,7 +690,14 @@ async def get_redmine_user_hours_report(
             "to_date": to_date,
             "total_hours": total_hours,
             "entry_count": len(all_entries),
-            "entries": formatted_entries,
+            "days_count": len(sorted_days),
+            "summary_by_day": [
+                {"date": date, "total_hours": data["hours"], "entry_count": len(data["entries"])}
+                for date, data in sorted_days
+            ],
+            "entries": limited_entries,
+            "has_more_entries": has_more,
+            "total_entries": len(formatted_entries),
         }
     except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error(

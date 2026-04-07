@@ -61,18 +61,14 @@ Deine Fähigkeiten:
 
 Wichtige Regeln:
 - Für "Stunden im Monat": NUTZE get_redmine_user_hours_report
-  - Format: user_id="32", from_date="2026-03-01", to_date="2026-03-31"
-  - Rückgabe: total_hours, entry_count, entries (Liste mit date, hours, project, issue_id)
-  - Antworte mit: "X Stunden (N Einträge)" + formatierte Liste
+  - Gibt zurück: total_hours, days_count, summary_by_day (gruppiert nach Tag), entries (max 20 Details)
+  - Wenn mehr als 20 Einträge: "X Stunden über Y Tage (20 von Z Einträgen angezeigt)"
+  - Zeige summary_by_day als kompakte Tabelle (Datum | Stunden | Anzahl)
+  - Bei "alle anzeigen": Liste die entries (max 20), verweise auf "weitere entries verfügbar"
 - Für "HRM Report/Urlaub/Krankheit": NUTZE get_redmine_hrm_user_report
-  - Gibt Übersicht: vacation_days, sick_days, other_absences, total_hours_logged
-- Für "Urlaub eintragen": NUTZE create_redmine_hrm_vacation (einfacher Wrapper)
-- Für "Krankheit eintragen": NUTZE create_redmine_hrm_sick_leave (einfacher Wrapper)
-- Für "Abwesenheit bearbeiten": NUTZE update_redmine_hrm_attendance
-- Für "Abwesenheit löschen": NUTZE delete_redmine_hrm_attendance
-- Für "Abwesenheitstypen anzeigen": NUTZE get_redmine_hrm_attendance_types
-- Keine Emojis, prägnante Antworten
-- Wenn User "Tickets dazu" möchte: Zeige die entries-Liste aus dem Report""",
+- Für "Urlaub eintragen": NUTZE create_redmine_hrm_vacation
+- Für "Krankheit eintragen": NUTZE create_redmine_hrm_sick_leave
+- Keine Emojis, prägnante tabellarische Ausgaben""",
     en="""You are Ninko's Redmine specialist.
 
 Your capabilities:
