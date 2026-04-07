@@ -5,7 +5,7 @@
         connectionId: ""
     };
 
-    // Helper for i18n with fallback
+    // Helper for i18n with fallback (English)
     function t(key, fallback) {
         if (typeof I18n !== 'undefined' && I18n.t) {
             const val = I18n.t(key);
@@ -23,7 +23,7 @@
 
             // System Info
             document.getElementById('fritzbox-model-info').textContent =
-                `${t('fritzbox.model', 'Modell:')} ${data.system.model} | ${t('fritzbox.firmware', 'Firmware:')} ${data.system.firmware_version} | ${t('fritzbox.uptime', 'Uptime:')} ${Math.floor(data.system.uptime / 3600)}h`;
+                `${t('fritzbox.model', 'Model:')} ${data.system.model} | ${t('fritzbox.firmware', 'Firmware:')} ${data.system.firmware_version} | ${t('fritzbox.uptime', 'Uptime:')} ${Math.floor(data.system.uptime / 3600)}h`;
 
             // WAN
             const stBadge = document.getElementById('fritzbox-wan-status');
@@ -52,20 +52,20 @@
                     <tr>
                         <td>${w.ssid || (t('fritzbox.wlanService', 'WLAN Service ') + (i + 1))}</td>
                         <td>${w.channel || "-"}</td>
-                        <td>${w.enabled ? '<span class="status-badge status-ok">' + t('fritzbox.on', 'An') + '</span>' : '<span class="status-badge status-unknown">' + t('fritzbox.off', 'Aus') + '</span>'}</td>
+                        <td>${w.enabled ? '<span class="status-badge status-ok">' + t('fritzbox.on', 'On') + '</span>' : '<span class="status-badge status-unknown">' + t('fritzbox.off', 'Off') + '</span>'}</td>
                     </tr>
                 `;
             });
 
         } catch (e) {
             console.error("FritzBox Load Status failed", e);
-            document.getElementById('fritzbox-model-info').textContent = t('fritzbox.loadError', 'Fehler beim Laden der FritzBox Daten.');
+            document.getElementById('fritzbox-model-info').textContent = t('fritzbox.loadError', 'Error loading FritzBox data.');
         }
     }
 
     async function loadDevices() {
         const tbody = document.getElementById('fritzbox-devices-list');
-        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">' + t('fritzbox.loadingDevices', 'Lade Geräte...') + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">' + t('fritzbox.loadingDevices', 'Loading devices...') + '</td></tr>';
 
         try {
             const res = await fetch(`/api/fritzbox/devices?connection_id=${state.connectionId}`);
@@ -99,7 +99,7 @@
 
         } catch (e) {
             console.error("FritzBox Load Devices failed", e);
-            tbody.innerHTML = '<tr><td colspan="5" class="empty-state" style="color: var(--accent-red);">' + t('fritzbox.devicesLoadError', 'Geräte konnten nicht geladen werden.') + '</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="empty-state" style="color: var(--accent-red);">' + t('fritzbox.devicesLoadError', 'Could not load devices.') + '</td></tr>';
         }
     }
 
