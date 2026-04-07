@@ -476,12 +476,231 @@ async def get_redmine_users(connection_id: str = "") -> dict:
             "total": result.get("total_count", 0),
         }
     except _REDMINE_TOOL_EXCEPTIONS as e:
+        logger.error("get_redmine_users failed: %s", e)
+        return _public_error()
+
+
+@tool
+async def get_redmine_time_entries(
+    project_id: str = "",
+    user_id: str = "",
+    from_date: str = "",
+    to_date: str = "",
+    connection_id: str = "",
+) -> dict:
+    """
+    Retrieve time entries from Redmine (first 100 only, no pagination).
+    Use this when the user asks for time entries, logged hours, or time tracking.
+    For monthly totals with many entries, use get_redmine_user_hours_report instead.
+
+    DE: Zeiteinträge abrufen (nur erste 100). Nutze get_redmine_user_hours_report für Monatssummen.
+    EN: Retrieve time entries (first 100 only). Use get_redmine_user_hours_report for monthly totals.
+    FR: Récupérer les entrées de temps (100 premières seulement). Utilisez get_redmine_user_hours_report pour les totaux mensuels.
+    ES: Recuperar entradas de tiempo (solo primeras 100). Use get_redmine_user_hours_report para totales mensuales.
+    IT: Recupera voci temporali (solo prime 100). Usa get_redmine_user_hours_report per totali mensili.
+    NL: Time entries ophalen (alleen eerste 100). Gebruik get_redmine_user_hours_report voor maandtotalen.
+    PL: Pobierz wpisy czasu (tylko pierwsze 100). Użyj get_redmine_user_hours_report dla sum miesięcznych.
+    PT: Recuperar entradas de tempo (apenas primeiras 100). Use get_redmine_user_hours_report para totais mensais.
+    JA: 時間エントリを取得（最初の100のみ）。月次合計にはget_redmine_user_hours_reportを使用。
+    ZH: 检索时间条目（仅前100个）。月度总计请使用get_redmine_user_hours_report。
+
+    Parameters:
+    - user_id: Filter by user ID (e.g., "32" for Sebastian Broers)
+    - from_date: Start date (YYYY-MM-DD)
+    - to_date: End date (YYYY-MM-DD)
+    - project_id: Optional project filter
+    """
+    try:
+        client = await _get_api_client(connection_id)
+        params = {"limit": 100}
+        if project_id:
+            params["project_id"] = project_id
+        if user_id:
+            params["user_id"] = user_id
+        if from_date:
+            params["from"] = from_date
+        if to_date:
+            params["to"] = to_date
+
+        result = await _redmine_request(
+            client["base_url"],
+            client["api_key"],
+            "GET",
+            "time_entries.json",
+            params,
+            verify_ssl=client["verify_ssl"],
+        )
+        return {
+            "status": "success",
+            "time_entries": result.get("time_entries", []),
+            "total": result.get("total_count", 0),
+        }
+    except _REDMINE_TOOL_EXCEPTIONS as e:
+        logger.error("get_redmine_time_entries failed: %s", e)
+        return _public_error()
+
+
+@tool
+async def get_redmine_user_hours_report(
+    user_id: str,
+    from_date: str,
+    to_date: str,
+    project_id: str = "",
+    connection_id: str = "",
+) -> dict:
+    """
+    Get total hours for a specific user in a date range with pagination.
+    Use this for 'hours in month' questions to get accurate totals.
+
+    DE: Stunden-Report für einen Benutzer im Zeitraum. Nutze dies für "Stunden im Monat" Fragen.
+    EN: Hours report for a user in a date range. Use this for "hours in month" questions.
+    FR: Rapport d'heures pour un utilisateur sur une période. Utilisez pour "heures dans le mois".
+    ES: Informe de horas para un usuario en un rango de fechas. Úselo para "horas en el mes".
+    IT: Report ore per un utente in un intervallo di date. Usa per "ore nel mese".
+    NL: Urenrapport voor een gebruiker in een datumbereik. Gebruik voor "uren in de maand".
+    PL: Raport godzin dla użytkownika w zakresie dat. Użyj dla "godziny w miesiącu".
+    PT: Relatório de horas para um usuário em um intervalo de datas. Use para "horas no mês".
+    JA: 日付範囲内のユーザーの時間レポート。「月内の時間」に使用。
+    ZH: 用户在日期范围内的小时报告。用于"月内小时数"。
+
+    Parameters:
+    - user_id: User ID (e.g., "32")
+    - from_date: Start date (YYYY-MM-DD, e.g., "2026-03-01")
+    - to_date: End date (YYYY-MM-DD, e.g., "2026-03-31")
+    - project_id: Optional project filter
+
+    Returns:
+    - total_hours: Sum of all hours
+    - entry_count: Number of entries
+    - entries: List with date, hours, project, issue_id
+    """
+    try:
+        client = await _get_api_client(connection_id)
+
+        all_entries = []
+        offset = 0
+        limit = 100
+        total_count = None
+
+        # Paginate through all results
+        while True:
+            params = {
+                "limit": limit,
+                "offset": offset,
+                "user_id": user_id,
+                "from": from_date,
+                "to": to_date,
+            }
+            if project_id:
+                params["project_id"] = project_id
+
+            result = await _redmine_request(
+                client["base_url"],
+                client["api_key"],
+                "GET",
+                "time_entries.json",
+                params,
+                verify_ssl=client["verify_ssl"],
+            )
+
+            entries = result.get("time_entries", [])
+            if not entries:
+                break
+
+            all_entries.extend(entries)
+
+            # Check if we've got all entries
+            if total_count is None:
+                total_count = result.get("total_count", 0)
+
+            offset += len(entries)
+
+            # Safety check: if we got less than limit, we're done
+            if len(entries) < limit:
+                break
+
+            # Safety check: prevent infinite loops
+            if offset >= 10000:
+                logger.warning(
+                    _t(
+                        de="Zu viele Zeiteinträge, stoppe bei 10000",
+                        en="Too many time entries, stopping at 10000",
+                        fr="Trop d'entrées de temps, arrêt à 10000",
+                        es="Demasiadas entradas de tiempo, deteniendo en 10000",
+                        it="Troppe voci temporali, arresto a 10000",
+                        nl="Te veel tijditems, stoppen bij 10000",
+                        pl="Zbyt wiele wpisów czasu, zatrzymanie przy 10000",
+                        pt="Muitas entradas de tempo, parando em 10000",
+                        ja="時間エントリが多すぎます、10000で停止",
+                        zh="时间条目太多，在10000处停止",
+                    )
+                )
+                break
+
+        # Sum hours
+        total_hours = sum(float(entry.get("hours", 0)) for entry in all_entries)
+
+        # Format entries for display
+        formatted_entries = []
+        for entry in all_entries:
+            try:
+                project_name = ""
+                if entry.get("project") and isinstance(entry["project"], dict):
+                    project_name = entry["project"].get("name", "")
+
+                issue_id = ""
+                if entry.get("issue") and isinstance(entry["issue"], dict):
+                    issue_id = str(entry["issue"].get("id", ""))
+
+                formatted_entries.append(
+                    {
+                        "date": entry.get("spent_on", ""),
+                        "hours": float(entry.get("hours", 0)),
+                        "project": project_name,
+                        "issue_id": issue_id,
+                        "comments": entry.get("comments", ""),
+                    }
+                )
+            except (AttributeError, TypeError, ValueError) as e:
+                logger.warning(
+                    _t(
+                        de="Fehlerhafter Time Entry übersprungen: %s",
+                        en="Skipping malformed time entry: %s",
+                        fr="Entrée de temps incorrecte ignorée: %s",
+                        es="Entrada de tiempo malformada omitida: %s",
+                        it="Voce temporale malformata saltata: %s",
+                        nl="Malformed time entry overgeslagen: %s",
+                        pl="Pominięto błędny wpis czasu: %s",
+                        pt="Ignorando entrada de tempo malformada: %s",
+                        ja="不正な時間エントリをスキップ: %s",
+                        zh="跳过格式错误的时间条目: %s",
+                    ),
+                    entry,
+                )
+                continue
+
+        return {
+            "status": "success",
+            "user_id": user_id,
+            "from_date": from_date,
+            "to_date": to_date,
+            "total_hours": total_hours,
+            "entry_count": len(all_entries),
+            "entries": formatted_entries,
+        }
+    except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error(
             _t(
                 de="get_redmine_user_hours_report fehlgeschlagen für user_id=%s von=%s bis=%s: %s",
                 en="get_redmine_user_hours_report failed for user_id=%s from=%s to=%s: %s",
                 fr="get_redmine_user_hours_report échoué pour user_id=%s de=%s à=%s: %s",
                 es="get_redmine_user_hours_report falló para user_id=%s desde=%s hasta=%s: %s",
+                it="get_redmine_user_hours_report fallito per user_id=%s da=%s a=%s: %s",
+                nl="get_redmine_user_hours_report mislukt voor user_id=%s van=%s tot=%s: %s",
+                pl="get_redmine_user_hours_report nie powiodło się dla user_id=%s od=%s do=%s: %s",
+                pt="get_redmine_user_hours_report falhou para user_id=%s de=%s até=%s: %s",
+                ja="get_redmine_user_hours_report が user_id=%s の %s から %s までで失敗: %s",
+                zh="get_redmine_user_hours_report 失败 user_id=%s 从=%s 到=%s: %s",
             ),
             user_id,
             from_date,
@@ -495,6 +714,12 @@ async def get_redmine_users(connection_id: str = "") -> dict:
                 en=f"Time entries query failed: {str(e)}",
                 fr=f"Échec de la requête des entrées de temps: {str(e)}",
                 es=f"Error en la consulta de entradas de tiempo: {str(e)}",
+                it=f"Query delle voci temporali fallita: {str(e)}",
+                nl=f"Tijditems query mislukt: {str(e)}",
+                pl=f"Zapytanie o wpisy czasu nie powiodło się: {str(e)}",
+                pt=f"Consulta de entradas de tempo falhou: {str(e)}",
+                ja=f"時間エントリのクエリに失敗しました: {str(e)}",
+                zh=f"时间条目查询失败: {str(e)}",
             )
         }
 
