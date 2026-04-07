@@ -153,9 +153,21 @@ const OPNsenseTab = {
             const container = document.getElementById('opnsense-content');
             if (!container) return;
 
+            // Prüfe auf API-Fehler
+            if (statusData.status === 'error') {
+                container.innerHTML = `<p class="empty-state text-error">Status Fehler: ${statusData.detail || 'Unbekannter Fehler'}</p>`;
+                return;
+            }
+
             const status = statusData.data || {};
             const interfaces = interfacesData.data || [];
             const services = servicesData.data || [];
+
+            // Prüfe auf Tool-Fehler in den Daten
+            if (status.error) {
+                container.innerHTML = `<p class="empty-state text-error">OPNsense Fehler: ${status.error}</p>`;
+                return;
+            }
 
             const getStatusClass = (st) => {
                 if (st === 'online' || st === 'up') return 'status-online';

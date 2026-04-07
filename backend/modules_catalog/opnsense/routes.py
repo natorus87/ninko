@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import httpx
 from fastapi import APIRouter
 from pydantic import BaseModel
 
@@ -32,9 +33,23 @@ class ApiResponse(BaseModel):
 async def get_status(connection_id: str = "") -> ApiResponse:
     """REST endpoint for the UI frontend — system status."""
     try:
-        result = await get_opnsense_system_status.ainvoke({"connection_id": connection_id})
+        result = await get_opnsense_system_status.ainvoke(
+            {"connection_id": connection_id}
+        )
+        if isinstance(result, dict) and result.get("error"):
+            logger.warning("OPNsense status returned error: %s", result.get("error"))
+            return ApiResponse(status="error", detail=result.get("error"))
         return ApiResponse(status="ok", data=result)
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        httpx.HTTPError,
+    ) as exc:
+        logger.error("OPNsense status endpoint error: %s", exc, exc_info=True)
         return ApiResponse(status="error", detail=str(exc))
 
 
@@ -43,8 +58,22 @@ async def get_interfaces(connection_id: str = "") -> ApiResponse:
     """REST endpoint for interfaces."""
     try:
         result = await get_opnsense_interfaces.ainvoke({"connection_id": connection_id})
+        if isinstance(result, dict) and result.get("error"):
+            logger.warning(
+                "OPNsense interfaces returned error: %s", result.get("error")
+            )
+            return ApiResponse(status="error", detail=result.get("error"))
         return ApiResponse(status="ok", data=result)
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        httpx.HTTPError,
+    ) as exc:
+        logger.error("OPNsense interfaces endpoint error: %s", exc, exc_info=True)
         return ApiResponse(status="error", detail=str(exc))
 
 
@@ -53,8 +82,20 @@ async def get_services(connection_id: str = "") -> ApiResponse:
     """REST endpoint for services."""
     try:
         result = await get_opnsense_services.ainvoke({"connection_id": connection_id})
+        if isinstance(result, dict) and result.get("error"):
+            logger.warning("OPNsense services returned error: %s", result.get("error"))
+            return ApiResponse(status="error", detail=result.get("error"))
         return ApiResponse(status="ok", data=result)
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        httpx.HTTPError,
+    ) as exc:
+        logger.error("OPNsense services endpoint error: %s", exc, exc_info=True)
         return ApiResponse(status="error", detail=str(exc))
 
 
@@ -66,21 +107,37 @@ async def create_firewall_rule(
     source: str,
     destination: str,
     description: str = "",
-    connection_id: str = ""
+    connection_id: str = "",
 ) -> ApiResponse:
     """REST endpoint to create a firewall rule."""
     try:
-        result = await create_opnsense_firewall_rule.ainvoke({
-            "interface": interface,
-            "action": action,
-            "protocol": protocol,
-            "source": source,
-            "destination": destination,
-            "description": description,
-            "connection_id": connection_id
-        })
+        result = await create_opnsense_firewall_rule.ainvoke(
+            {
+                "interface": interface,
+                "action": action,
+                "protocol": protocol,
+                "source": source,
+                "destination": destination,
+                "description": description,
+                "connection_id": connection_id,
+            }
+        )
+        if isinstance(result, str) and result.startswith("Fehler"):
+            logger.warning("OPNsense create firewall rule returned error: %s", result)
+            return ApiResponse(status="error", detail=result)
         return ApiResponse(status="ok", data={"message": result})
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        httpx.HTTPError,
+    ) as exc:
+        logger.error(
+            "OPNsense create firewall rule endpoint error: %s", exc, exc_info=True
+        )
         return ApiResponse(status="error", detail=str(exc))
 
 
@@ -88,12 +145,25 @@ async def create_firewall_rule(
 async def delete_firewall_rule(rule_uuid: str, connection_id: str = "") -> ApiResponse:
     """REST endpoint to delete a firewall rule."""
     try:
-        result = await delete_opnsense_firewall_rule.ainvoke({
-            "rule_uuid": rule_uuid,
-            "connection_id": connection_id
-        })
+        result = await delete_opnsense_firewall_rule.ainvoke(
+            {"rule_uuid": rule_uuid, "connection_id": connection_id}
+        )
+        if isinstance(result, str) and result.startswith("Fehler"):
+            logger.warning("OPNsense delete firewall rule returned error: %s", result)
+            return ApiResponse(status="error", detail=result)
         return ApiResponse(status="ok", data={"message": result})
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        httpx.HTTPError,
+    ) as exc:
+        logger.error(
+            "OPNsense delete firewall rule endpoint error: %s", exc, exc_info=True
+        )
         return ApiResponse(status="error", detail=str(exc))
 
 
@@ -106,22 +176,36 @@ async def create_nat_rule(
     target: str,
     target_port: str,
     description: str = "",
-    connection_id: str = ""
+    connection_id: str = "",
 ) -> ApiResponse:
     """REST endpoint to create a NAT rule."""
     try:
-        result = await create_opnsense_nat_rule.ainvoke({
-            "interface": interface,
-            "protocol": protocol,
-            "source": source,
-            "destination": destination,
-            "target": target,
-            "target_port": target_port,
-            "description": description,
-            "connection_id": connection_id
-        })
+        result = await create_opnsense_nat_rule.ainvoke(
+            {
+                "interface": interface,
+                "protocol": protocol,
+                "source": source,
+                "destination": destination,
+                "target": target,
+                "target_port": target_port,
+                "description": description,
+                "connection_id": connection_id,
+            }
+        )
+        if isinstance(result, str) and result.startswith("Fehler"):
+            logger.warning("OPNsense create NAT rule returned error: %s", result)
+            return ApiResponse(status="error", detail=result)
         return ApiResponse(status="ok", data={"message": result})
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        httpx.HTTPError,
+    ) as exc:
+        logger.error("OPNsense create NAT rule endpoint error: %s", exc, exc_info=True)
         return ApiResponse(status="error", detail=str(exc))
 
 
@@ -129,10 +213,21 @@ async def create_nat_rule(
 async def delete_nat_rule(rule_uuid: str, connection_id: str = "") -> ApiResponse:
     """REST endpoint to delete a NAT rule."""
     try:
-        result = await delete_opnsense_nat_rule.ainvoke({
-            "rule_uuid": rule_uuid,
-            "connection_id": connection_id
-        })
+        result = await delete_opnsense_nat_rule.ainvoke(
+            {"rule_uuid": rule_uuid, "connection_id": connection_id}
+        )
+        if isinstance(result, str) and result.startswith("Fehler"):
+            logger.warning("OPNsense delete NAT rule returned error: %s", result)
+            return ApiResponse(status="error", detail=result)
         return ApiResponse(status="ok", data={"message": result})
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        httpx.HTTPError,
+    ) as exc:
+        logger.error("OPNsense delete NAT rule endpoint error: %s", exc, exc_info=True)
         return ApiResponse(status="error", detail=str(exc))

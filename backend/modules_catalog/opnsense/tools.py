@@ -89,6 +89,7 @@ async def _opnsense_request(
         raise ValueError("No OPNsense host address provided.")
 
     url = f"https://{host}{endpoint}"
+    logger.debug("OPNsense API Request: %s %s", method, url)
 
     try:
         async with httpx.AsyncClient(timeout=30.0, verify=verify) as client:
@@ -101,8 +102,18 @@ async def _opnsense_request(
             else:
                 raise ValueError(f"Unsupported method: {method}")
 
+            logger.debug(
+                "OPNsense API Response: %s %s", resp.status_code, resp.text[:200]
+            )
             resp.raise_for_status()
             return resp.json()
+    except httpx.HTTPStatusError as e:
+        logger.error(
+            "OPNsense API HTTP Error: %s - Response: %s", e, e.response.text[:500]
+        )
+        raise ValueError(
+            f"OPNsense API error (HTTP {e.response.status_code}): {e.response.text[:200]}"
+        )
     except httpx.HTTPError as e:
         logger.error("OPNsense API Error: %s", e)
         raise ValueError(f"OPNsense API error: {e}")
