@@ -32,6 +32,14 @@ from .tools import (
     get_redmine_reporting_budgets,
     get_redmine_project_budgets,
     get_redmine_reporting_time_logs,
+    # HRM Erweiterte Tools
+    get_redmine_hrm_attendance_types,
+    update_redmine_hrm_attendance,
+    delete_redmine_hrm_attendance,
+    get_redmine_time_entry_activities,
+    get_redmine_hrm_user_report,
+    create_redmine_hrm_vacation,
+    create_redmine_hrm_sick_leave,
 )
 
 logger = logging.getLogger("ninko.modules.redmine.agent")
@@ -56,6 +64,13 @@ Wichtige Regeln:
   - Format: user_id="32", from_date="2026-03-01", to_date="2026-03-31"
   - Rückgabe: total_hours, entry_count, entries (Liste mit date, hours, project, issue_id)
   - Antworte mit: "X Stunden (N Einträge)" + formatierte Liste
+- Für "HRM Report/Urlaub/Krankheit": NUTZE get_redmine_hrm_user_report
+  - Gibt Übersicht: vacation_days, sick_days, other_absences, total_hours_logged
+- Für "Urlaub eintragen": NUTZE create_redmine_hrm_vacation (einfacher Wrapper)
+- Für "Krankheit eintragen": NUTZE create_redmine_hrm_sick_leave (einfacher Wrapper)
+- Für "Abwesenheit bearbeiten": NUTZE update_redmine_hrm_attendance
+- Für "Abwesenheit löschen": NUTZE delete_redmine_hrm_attendance
+- Für "Abwesenheitstypen anzeigen": NUTZE get_redmine_hrm_attendance_types
 - Keine Emojis, prägnante Antworten
 - Wenn User "Tickets dazu" möchte: Zeige die entries-Liste aus dem Report""",
     en="""You are Ninko's Redmine specialist.
@@ -114,5 +129,13 @@ class RedmineAgent(BaseAgent):
                 get_redmine_reporting_budgets,
                 get_redmine_project_budgets,
                 get_redmine_reporting_time_logs,
+                # HRM Erweiterte Tools
+                get_redmine_hrm_attendance_types,
+                update_redmine_hrm_attendance,
+                delete_redmine_hrm_attendance,
+                get_redmine_time_entry_activities,
+                get_redmine_hrm_user_report,
+                create_redmine_hrm_vacation,
+                create_redmine_hrm_sick_leave,
             ],
         )

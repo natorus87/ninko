@@ -1226,3 +1226,348 @@ async def get_redmine_reporting_time_logs(
     except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error("get_redmine_reporting_time_logs failed: %s", e)
         return _public_error()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# HRM Erweiterte Tools - Abwesenheiten, Kapazitäten, Feiertage verwalten
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@tool
+async def get_redmine_hrm_attendance_types(connection_id: str = "") -> dict:
+    """
+    Get all HRM attendance types/statuses (vacation, sick, etc.).
+    Use this before creating attendance entries to know available types.
+
+    DE: Abwesenheitstypen abrufen (Urlaub, Krankheit, etc.)
+    EN: Get attendance types (vacation, sick leave, etc.)
+    FR: Types d'absence (congés, maladie, etc.)
+    ES: Tipos de asistencia (vacaciones, enfermedad, etc.)
+    """
+    try:
+        return await call_redmine_hrm_api.ainvoke(
+            {
+                "method": "GET",
+                "endpoint": "attendance_types.json",
+                "connection_id": connection_id,
+            }
+        )
+    except _REDMINE_TOOL_EXCEPTIONS as e:
+        logger.error("get_redmine_hrm_attendance_types failed: %s", e)
+        return _public_error()
+
+
+@tool
+async def update_redmine_hrm_attendance(
+    attendance_id: str,
+    attendance_payload: Any,
+    connection_id: str = "",
+) -> dict:
+    """
+    Update an existing HRM attendance entry.
+    Use this to edit vacation, sick leave, or other attendance entries.
+
+    DE: Abwesenheitseintrag bearbeiten (Urlaub, Krankheit)
+    EN: Update attendance entry (vacation, sick leave)
+    FR: Modifier une entrée d'absence (congés, maladie)
+    ES: Actualizar entrada de asistencia (vacaciones, enfermedad)
+
+    Example payload: {"attendance": {"status": "sick", "date": "2026-04-03"}}
+    """
+    try:
+        payload = _coerce_dict(attendance_payload, "attendance_payload")
+        return await call_redmine_hrm_api.ainvoke(
+            {
+                "method": "PUT",
+                "endpoint": f"attendances/{attendance_id}.json",
+                "payload": payload,
+                "connection_id": connection_id,
+            }
+        )
+    except _REDMINE_TOOL_EXCEPTIONS as e:
+        logger.error("update_redmine_hrm_attendance failed: %s", e)
+        return _public_error()
+
+
+@tool
+async def delete_redmine_hrm_attendance(
+    attendance_id: str,
+    connection_id: str = "",
+) -> dict:
+    """
+    Delete an HRM attendance entry.
+    Use this to remove vacation, sick leave, or other attendance entries.
+
+    DE: Abwesenheitseintrag löschen
+    EN: Delete attendance entry
+    FR: Supprimer une entrée d'absence
+    ES: Eliminar entrada de asistencia
+    """
+    try:
+        return await call_redmine_hrm_api.ainvoke(
+            {
+                "method": "DELETE",
+                "endpoint": f"attendances/{attendance_id}.json",
+                "connection_id": connection_id,
+            }
+        )
+    except _REDMINE_TOOL_EXCEPTIONS as e:
+        logger.error("delete_redmine_hrm_attendance failed: %s", e)
+        return _public_error()
+
+
+@tool
+async def get_redmine_time_entry_activities(connection_id: str = "") -> dict:
+    """
+    Get all time entry activities (development, meeting, etc.).
+    Use this before logging time to know available activity types.
+
+    DE: Aktivitäten für Zeiterfassung abrufen
+    EN: Get time entry activities
+    FR: Activités de saisie du temps
+    ES: Actividades de registro de tiempo
+    """
+    try:
+        client = await _get_api_client(connection_id)
+        result = await _redmine_request(
+            client["base_url"],
+            client["api_key"],
+            "GET",
+            "enumerations/time_entry_activities.json",
+            verify_ssl=client["verify_ssl"],
+        )
+        return {
+            "status": "success",
+            "activities": result.get("time_entry_activities", []),
+        }
+    except _REDMINE_TOOL_EXCEPTIONS as e:
+        logger.error("get_redmine_time_entry_activities failed: %s", e)
+        return _public_error()
+
+
+@tool
+async def get_redmine_hrm_user_report(
+    user_id: str,
+    year: str,
+    month: str,
+    connection_id: str = "",
+) -> dict:
+    """
+    Get comprehensive HRM report for a user including:
+    - Total vacation days
+    - Sick days
+    - Other absences
+    - Working days
+    - Capacity/utilization
+
+    DE: HRM Monatsreport für Benutzer (Urlaub, Krankheit, Abwesenheiten)
+    EN: HRM monthly report for user (vacation, sick, absences)
+    FR: Rapport HRM mensuel (congés, maladie, absences)
+    ES: Informe HRM mensual (vacaciones, enfermedad, ausencias)
+
+    Parameters:
+    - user_id: User ID (e.g., "32")
+    - year: Year (e.g., "2026")
+    - month: Month (e.g., "03" for March)
+    """
+    try:
+        # Calculate date range for the month
+        from_date = f"{year}-{month}-01"
+        # Simple month length calculation (doesn't handle all edge cases but sufficient)
+        month_lengths = {
+            "01": 31,
+            "02": 28,
+            "03": 31,
+            "04": 30,
+            "05": 31,
+            "06": 30,
+            "07": 31,
+            "08": 31,
+            "09": 30,
+            "10": 31,
+            "11": 30,
+            "12": 31,
+        }
+        last_day = month_lengths.get(month, 30)
+        to_date = f"{year}-{month}-{last_day}"
+
+        # Get all attendances for the user in the month
+        attendances_result = await get_redmine_hrm_attendances.ainvoke(
+            {
+                "from_date": from_date,
+                "to_date": to_date,
+                "user_id": user_id,
+                "limit": 500,
+                "connection_id": connection_id,
+            }
+        )
+
+        if attendances_result.get("status") != "success":
+            return {"error": "Failed to fetch attendances"}
+
+        # Get capacity for the user
+        capacity_result = await get_redmine_hrm_user_capacity.ainvoke(
+            {
+                "user_id": user_id,
+                "from_date": from_date,
+                "to_date": to_date,
+                "connection_id": connection_id,
+            }
+        )
+
+        # Analyze attendances
+        attendances = attendances_result.get("data", {}).get("attendances", [])
+
+        vacation_days = 0
+        sick_days = 0
+        other_absences = 0
+        attendance_details = []
+
+        for att in attendances:
+            att_type = att.get("type", "").lower()
+            status = att.get("status", "").lower()
+            date = att.get("date", "")
+
+            if "vacation" in att_type or "urlaub" in att_type:
+                vacation_days += 1
+                attendance_details.append(
+                    {"date": date, "type": "vacation", "status": status}
+                )
+            elif "sick" in att_type or "krank" in att_type:
+                sick_days += 1
+                attendance_details.append(
+                    {"date": date, "type": "sick", "status": status}
+                )
+            elif status not in ["present", "anwesend", "working"]:
+                other_absences += 1
+                attendance_details.append(
+                    {"date": date, "type": "other", "status": status}
+                )
+
+        # Get time entries for the month
+        time_result = await get_redmine_user_hours_report.ainvoke(
+            {
+                "user_id": user_id,
+                "from_date": from_date,
+                "to_date": to_date,
+                "connection_id": connection_id,
+            }
+        )
+
+        total_hours = (
+            time_result.get("total_hours", 0)
+            if time_result.get("status") == "success"
+            else 0
+        )
+
+        return {
+            "status": "success",
+            "user_id": user_id,
+            "year": year,
+            "month": month,
+            "summary": {
+                "vacation_days": vacation_days,
+                "sick_days": sick_days,
+                "other_absences": other_absences,
+                "total_absence_days": vacation_days + sick_days + other_absences,
+                "total_hours_logged": total_hours,
+            },
+            "capacity": capacity_result.get("data", {})
+            if capacity_result.get("status") == "success"
+            else {},
+            "attendance_details": attendance_details,
+            "attendance_raw": attendances,
+        }
+    except _REDMINE_TOOL_EXCEPTIONS as e:
+        logger.error("get_redmine_hrm_user_report failed: %s", e)
+        return _public_error()
+
+
+@tool
+async def create_redmine_hrm_vacation(
+    user_id: str,
+    date: str,
+    half_day: bool = False,
+    comments: str = "",
+    connection_id: str = "",
+) -> dict:
+    """
+    Create a vacation entry for a user.
+    Simplified wrapper for creating vacation attendance.
+
+    DE: Urlaub eintragen für Benutzer
+    EN: Create vacation entry for user
+    FR: Créer une entrée de congés
+    ES: Crear entrada de vacaciones
+
+    Parameters:
+    - user_id: User ID (e.g., "32")
+    - date: Date (YYYY-MM-DD)
+    - half_day: True for half day vacation
+    - comments: Optional comments
+    """
+    try:
+        payload = {
+            "attendance": {
+                "user_id": user_id,
+                "date": date,
+                "status": "vacation_half_day" if half_day else "vacation",
+            }
+        }
+        if comments:
+            payload["attendance"]["comments"] = comments
+
+        return await create_redmine_hrm_attendance.ainvoke(
+            {
+                "attendance_payload": payload,
+                "connection_id": connection_id,
+            }
+        )
+    except _REDMINE_TOOL_EXCEPTIONS as e:
+        logger.error("create_redmine_hrm_vacation failed: %s", e)
+        return _public_error()
+
+
+@tool
+async def create_redmine_hrm_sick_leave(
+    user_id: str,
+    date: str,
+    half_day: bool = False,
+    comments: str = "",
+    connection_id: str = "",
+) -> dict:
+    """
+    Create a sick leave entry for a user.
+    Simplified wrapper for creating sick leave attendance.
+
+    DE: Krankheit eintragen für Benutzer
+    EN: Create sick leave entry for user
+    FR: Créer une entrée de maladie
+    ES: Crear entrada de baja por enfermedad
+
+    Parameters:
+    - user_id: User ID (e.g., "32")
+    - date: Date (YYYY-MM-DD)
+    - half_day: True for half day sick leave
+    - comments: Optional comments (e.g., doctor's note number)
+    """
+    try:
+        payload = {
+            "attendance": {
+                "user_id": user_id,
+                "date": date,
+                "status": "sick_half_day" if half_day else "sick",
+            }
+        }
+        if comments:
+            payload["attendance"]["comments"] = comments
+
+        return await create_redmine_hrm_attendance.ainvoke(
+            {
+                "attendance_payload": payload,
+                "connection_id": connection_id,
+            }
+        )
+    except _REDMINE_TOOL_EXCEPTIONS as e:
+        logger.error("create_redmine_hrm_sick_leave failed: %s", e)
+        return _public_error()
