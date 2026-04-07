@@ -337,13 +337,14 @@
                         <h2>Neue Aufgabe</h2>
                         <div style="display:flex;gap:0.5rem;">
                             <button class="btn btn-outline" onclick="Ninko.closeTaskEditor()">Abbrechen</button>
-                            <button class="btn btn-primary" id="sched-save-btn" onclick="Ninko.addScheduledTask()">Speichern</button>
+                            <button class="btn btn-primary" id="sched-save-btn" onclick="Ninko.saveScheduledTask()">Speichern</button>
                         </div>
                     </div>
                     <div class="editor-grid">
                         <div class="editor-main">
                             <div class="setting-group">
                                 <h4>Allgemein</h4>
+                                <input type="hidden" id="sched-task-id" value="">
                                 <div class="form-row">
                                     <label class="form-label" for="sched-name">Name <span style="color:var(--error-color)">*</span></label>
                                     <input id="sched-name" type="text" class="form-input" placeholder="K8s Health Report">
@@ -364,6 +365,12 @@
                                             <option value="0 8 * * 1">Montags 08:00</option>
                                         </select>
                                     </div>
+                                </div>
+                                <div class="form-row">
+                                    <label class="form-label" style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
+                                        <input type="checkbox" id="sched-enabled" checked>
+                                        Aktiviert
+                                    </label>
                                 </div>
                             </div>
                             <div class="setting-group">

@@ -4880,6 +4880,7 @@ const Ninko = {
         document.getElementById('tasks-logs')?.classList.add('hidden');
         document.getElementById('tasks-editor')?.classList.remove('hidden');
         // Formular zurücksetzen
+        document.getElementById('sched-task-id').value = ''; // Reset task ID (neue Aufgabe)
         document.getElementById('sched-name').value = '';
         document.getElementById('sched-cron').value = '';
         document.getElementById('sched-prompt').value = '';
@@ -4888,10 +4889,17 @@ const Ninko = {
         if (document.getElementById('sched-agent')) document.getElementById('sched-agent').value = '';
         if (document.getElementById('sched-workflow')) document.getElementById('sched-workflow').value = '';
         if (document.getElementById('sched-module')) document.getElementById('sched-module').value = '';
+        document.getElementById('sched-enabled').checked = true; // Default enabled
         const typePrompt = document.querySelector('input[name="sched-type"][value="prompt"]');
         if (typePrompt) { typePrompt.checked = true; this.toggleSchedType(); }
         const status = document.getElementById('sched-save-status');
         if (status) status.textContent = '';
+        // Save Button zurücksetzen
+        const saveBtn = document.getElementById('sched-save-btn');
+        if (saveBtn) {
+            saveBtn.textContent = '➕ Erstellen';
+            saveBtn.onclick = () => this.saveScheduledTask();
+        }
         // Dropdowns immer frisch befüllen wenn der Editor geöffnet wird
         this._loadSchedDropdowns();
     },
@@ -4998,6 +5006,7 @@ const Ninko = {
                             <div class="task-card-actions">
                                 <button class="btn-icon-sm" data-action="run" title="Jetzt ausführen">${this._ic.play}</button>
                                 <button class="btn-icon-sm" data-action="toggle" title="${task.enabled ? 'Deaktivieren' : 'Aktivieren'}">${task.enabled ? this._ic.pause : this._ic.play}</button>
+                                <button class="btn-icon-sm" data-action="edit" title="Bearbeiten">✎</button>
                                 <button class="btn-icon-sm" data-action="logs" data-task-name="${this._escapeHtml(task.name)}" title="Logs">${this._ic.list}</button>
                                 <button class="btn-icon-sm btn-danger-sm" data-action="delete" title="Löschen">${this._ic.trash}</button>
                             </div>
@@ -5019,6 +5028,7 @@ const Ninko = {
                 const id = card.dataset.taskId;
                 card.querySelector('[data-action="run"]')?.addEventListener('click', () => this.runScheduledTask(id));
                 card.querySelector('[data-action="toggle"]')?.addEventListener('click', () => this.toggleScheduledTask(id));
+                card.querySelector('[data-action="edit"]')?.addEventListener('click', () => this.editScheduledTask(id));
                 card.querySelector('[data-action="logs"]')?.addEventListener('click', e => {
                     const name = e.currentTarget.dataset.taskName || '';
                     this.viewTaskLogs(id, name);
@@ -5031,7 +5041,7 @@ const Ninko = {
         }
     },
 
-    async addScheduledTask() {
+    async saveScheduledTask() {
         const name = document.getElementById('sched-name')?.value?.trim();
         const cron = document.getElementById('sched-cron')?.value?.trim();
         const status = document.getElementById('sched-save-status');
@@ -5121,6 +5131,107 @@ const Ninko = {
             await this.loadScheduledTasks();
         } catch (err) {
             showNotification(`Fehler: ${err.message}`, 'error');
+        }
+    },
+
+    async editScheduledTask(id) {
+        try {
+            // Fetch task details
+            const res = await fetch('/api/scheduler/tasks');
+            if (!res.ok) throw new Error(res.statusText);
+            const data = await res.json();
+            const task = data.tasks?.find(t => t.id === id);
+            if (!task) throw new Error('Aufgabe nicht gefunden');
+
+            // Show editor
+            this.openTaskEditor();
+
+            // Fill form with task data
+            document.getElementById('sched-task-id').value = task.id;
+            document.getElementById('sched-name').value = task.name || '';
+            document.getElementById('sched-cron').value = task.cron || '';
+            document.getElementById('sched-module').value = task.target_module || '';
+            document.getElementById('sched-enabled').checked = task.enabled !== false;
+
+            // Determine type and fill accordingly
+            let type = 'prompt';
+            if (task.workflow_id) type = 'workflow';
+            else if (task.agent_id) type = 'agent';
+
+            // Set radio button
+            const radio = document.querySelector(`input[name="sched-type"][value="${type}"]`);
+            if (radio) radio.checked = true;
+            this.toggleSchedType();
+
+            // Fill type-specific fields
+            if (type === 'prompt') {
+                document.getElementById('sched-prompt').value = task.prompt || '';
+            } else if (type === 'agent') {
+                document.getElementById('sched-agent').value = task.agent_id || '';
+                document.getElementById('sched-agent-prompt').value = task.prompt || '';
+            } else {
+                document.getElementById('sched-workflow').value = task.workflow_id || '';
+            }
+
+            // Update save button
+            const saveBtn = document.getElementById('sched-save-btn');
+            if (saveBtn) {
+                saveBtn.textContent = '💾 Aktualisieren';
+                saveBtn.onclick = () => this.updateScheduledTask(id);
+            }
+        } catch (err) {
+            showNotification(`Fehler beim Laden: ${err.message}`, 'error');
+        }
+    },
+
+    async updateScheduledTask(id) {
+        const status = document.getElementById('sched-status');
+        if (status) status.textContent = 'Speichere…';
+
+        try {
+            const name = document.getElementById('sched-name').value.trim();
+            const cron = document.getElementById('sched-cron').value.trim();
+            const targetModule = document.getElementById('sched-module').value.trim();
+            const enabled = document.getElementById('sched-enabled').checked;
+            const type = document.querySelector('input[name="sched-type"]:checked')?.value;
+
+            if (!name || !cron) {
+                if (status) status.textContent = 'Name und Cron-Ausdruck erforderlich.';
+                return;
+            }
+
+            const body = {
+                name,
+                cron,
+                target_module: targetModule || null,
+                enabled,
+            };
+
+            if (type === 'prompt') {
+                body.prompt = document.getElementById('sched-prompt').value.trim();
+            } else if (type === 'agent') {
+                body.agent_id = document.getElementById('sched-agent').value;
+                body.prompt = document.getElementById('sched-agent-prompt').value.trim();
+            } else {
+                body.workflow_id = document.getElementById('sched-workflow').value;
+            }
+
+            const res = await fetch(`/api/scheduler/tasks/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || 'Fehler beim Aktualisieren');
+            }
+
+            showNotification('Aufgabe aktualisiert!', 'success');
+            this.closeTaskEditor();
+            await this.loadScheduledTasks();
+        } catch (err) {
+            if (status) status.textContent = err.message || 'Fehler';
         }
     },
 
