@@ -2438,6 +2438,39 @@ body.light-mode .btn-primary:hover {
     transform: none;
 }
 
+/* Update button for modules */
+.btn-update {
+    background: var(--bg-active);
+    border-color: var(--accent-blue);
+    color: var(--accent-blue);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-weight: 500;
+}
+
+.btn-update:hover {
+    background: var(--accent-blue);
+    border-color: var(--accent-blue);
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(92, 158, 235, 0.3);
+}
+
+/* Version update indicator */
+.version-update-indicator {
+    color: var(--accent-blue);
+    font-weight: 600;
+    background: rgba(92, 158, 235, 0.1);
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.85em;
+}
+
+body.light-mode .version-update-indicator {
+    background: rgba(59, 125, 216, 0.1);
+}
+
 .btn-refresh {
     border-color: var(--border-color);
 }

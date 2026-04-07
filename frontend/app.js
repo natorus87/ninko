@@ -4240,10 +4240,10 @@ const Ninko = {
                     <div class="module-config-header">
                         <div class="module-config-info">
                             <span class="module-config-name">${mod.display_name}</span>
-                            <span class="module-config-version">v${mod.version}${hasUpdate ? ' <span style="color: var(--accent-color); font-weight: bold;">→ ' + updateInfo.repo_version + '</span>' : ''}</span>
+                            <span class="module-config-version">v${mod.version}${hasUpdate ? ' <span class="version-update-indicator">→ ' + updateInfo.repo_version + '</span>' : ''}</span>
                         </div>
                         <div style="display: flex; gap: 0.5rem; align-items: center; flex-shrink: 0;">
-                            ${hasUpdate ? `<button class="btn-sm" style="background: var(--accent-color); color: white;" onclick="Ninko.updatePlugin('${mod.name}')" title="Auf Version ${updateInfo.repo_version} aktualisieren">Update</button>` : ''}
+                            ${hasUpdate ? `<button class="btn-primary btn-sm btn-update" onclick="Ninko.updatePlugin('${mod.name}')" title="Auf Version ${updateInfo.repo_version} aktualisieren"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: middle;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Update</button>` : ''}
                             <label class="toggle-switch" title="Aktivieren/Deaktivieren">
                                 <input type="checkbox" ${mod.enabled ? 'checked' : ''}
                                     id="mod-toggle-${mod.name}"
