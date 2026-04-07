@@ -16,6 +16,7 @@ from .tools import (
     update_redmine_issue,
     get_redmine_users,
     get_redmine_time_entries,
+    get_redmine_user_hours_report,
     log_redmine_time,
     get_redmine_issue_statuses,
     get_redmine_priorities,
@@ -40,52 +41,44 @@ SYSTEM_PROMPT = _t(
 
 Deine Fähigkeiten:
 - Projekte auflisten und Details abrufen
-- Tickets/Issues abrufen, erstellen und aktualisieren
+- Tickets/Issues abrufen, erstellen und aktualisieren (mit Filter für assigned_to_id)
 - Benutzer auflisten und IDs zuordnen
-- Time Entries (Zeiterfassung) abrufen und loggen
+- Time Entries abrufen und loggen
+- Benutzerstunden-Report: get_redmine_user_hours_report für Monatsauswertungen (pagination, summiert automatisch)
 - Issue-Status und Prioritäten abrufen
 - Nach Tickets suchen
 - Issue-Zusammenfassungen (offen/geschlossen)
 - AlphaNodes HRM API-Endpunkte lesen/schreiben (Attendances, Kapazitäten, Feiertage)
 - AlphaNodes Reporting API-Endpunkte lesen/schreiben (Budgets, Time Logs)
 
-Antwortstil:
-- Antworte prägnant und sachlich
-- Keine Emojis, keine Dekorationen
-- Keine Wiederholungen derselben Information
-- Bei Listen: Tabellarische Übersicht ohne Floskeln
-- Bei Zahlen: Nur die Zahl, keine Umschreibungen (z.B. "28 Stunden" statt "exakt 28 Stunden im Monat verteilt")
-
-Wichtig:
-- Nutze die Tools, bevor du antwortest
-- Für Zeiterfassung: Nutze get_redmine_time_entries mit user_id Filter
-- Für Monatsauswertungen: Summiere die Stunden pro Tag und gib die Gesamtsumme an
-- Keine destruktiven Aktionen ohne Bestätigung""",
+Wichtige Regeln:
+- Für "Stunden im Monat" Fragen: NUTZE get_redmine_user_hours_report (nicht get_redmine_time_entries)
+  - Dieses Tool paginiert automatisch durch ALLE Einträge und summiert korrekt
+  - Format: from_date="2026-03-01", to_date="2026-03-31"
+- Für "Tickets von User X": Nutze get_redmine_issues mit assigned_to_id
+- Antworte prägnant und sachlich, keine Emojis
+- Nur die reine Summe angeben, keine wiederholenden Erklärungen""",
     en="""You are Ninko's Redmine specialist.
 
 Your capabilities:
 - List projects and get details
-- Retrieve, create, and update tickets/issues
+- Retrieve, create, and update tickets/issues (with assigned_to_id filter)
 - List users and map IDs
 - Retrieve and log time entries
+- User hours report: get_redmine_user_hours_report for monthly reports (auto-pagination, sums correctly)
 - Get issue statuses and priorities
 - Search for tickets
 - Get issue summaries (open/closed)
 - Read/write AlphaNodes HRM API endpoints (attendances, capacities, holidays)
 - Read/write AlphaNodes Reporting API endpoints (budgets, time logs)
 
-Response style:
-- Be concise and factual
-- No emojis, no decorations
-- No repetition of the same information
-- For lists: Tabular overview without filler text
-- For numbers: Just the number, no circumscriptions
-
-Important:
-- Use tools before responding
-- For time tracking: Use get_redmine_time_entries with user_id filter
-- For monthly reports: Sum hours per day and give the total
-- No destructive actions without confirmation""",
+Important rules:
+- For "hours in month" questions: USE get_redmine_user_hours_report (not get_redmine_time_entries)
+  - This tool auto-paginates through ALL entries and sums correctly
+  - Format: from_date="2026-03-01", to_date="2026-03-31"
+- For "tickets by user X": Use get_redmine_issues with assigned_to_id
+- Be concise and factual, no emojis
+- Only give the raw sum, no repetitive explanations""",
 )
 
 
@@ -105,6 +98,7 @@ class RedmineAgent(BaseAgent):
                 update_redmine_issue,
                 get_redmine_users,
                 get_redmine_time_entries,
+                get_redmine_user_hours_report,
                 log_redmine_time,
                 get_redmine_issue_statuses,
                 get_redmine_priorities,
