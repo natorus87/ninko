@@ -4078,6 +4078,7 @@ const Ninko = {
         redmine: [
             { key: 'url', label: 'Redmine URL', placeholder: 'https://redmine.example.com' },
             { key: 'REDMINE_API_KEY', label: 'API-Key', placeholder: '••••••••••••••••', type: 'password', isSecret: true },
+            { key: 'verify_ssl', label: 'SSL verifizieren (Nein bei selbst-signierten Zertifikaten)', type: 'checkbox' },
         ],
         teams: [
             { key: 'MICROSOFT_APP_ID', label: 'Microsoft App ID', placeholder: 'e.g. 1234abcd-1234-abcd-1234-abcd1234abcd' },
@@ -4588,7 +4589,8 @@ const Ninko = {
                 const el = document.getElementById(`conn-new-${moduleName}-${f.key}`);
                 const val = conn.config ? conn.config[f.key] : '';
                 if (f.type === 'checkbox') {
-                    el.checked = val === 'true';
+                    // Default to true (checked) unless explicitly set to false
+                    el.checked = val === undefined ? true : val === true || val === 'true';
                 } else if (f.type !== 'file' && !f.isSecret) {
                     el.value = val || '';
                 } else if (f.isSecret) {
