@@ -101,4 +101,7 @@
     if (typeof Ninko !== 'undefined') {
         Ninko._pluginTabs['redmine'] = RedmineTab;
     }
+    
+    // Global expose for inline onclick handlers
+    window.RedmineTab = RedmineTab;
 })();

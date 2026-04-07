@@ -58,8 +58,13 @@ def _parse_github_url(url: str) -> tuple[str, str] | None:
 
 
 def _version_tuple(v: str) -> tuple[int, ...]:
+    """Convert version string to tuple for comparison. Returns (0,) for empty/invalid versions."""
+    if not v or not isinstance(v, str):
+        return (0,)
     try:
-        return tuple(int(x) for x in v.strip().lstrip("v").split("."))
+        # Remove leading 'v' and split by dots, filter out empty parts
+        parts = v.strip().lstrip("v").split(".")
+        return tuple(int(x) for x in parts if x.isdigit())
     except (
         RuntimeError,
         ValueError,
@@ -76,11 +81,13 @@ def _extract_manifest_info(content: str) -> dict[str, str]:
     """Extrahiert key-Felder aus einer manifest.py per Regex."""
 
     def get(field: str) -> str:
-        # Match both: version="1.0.0", and version = "1.0.0" (with optional comma)
+        # Match: field="value", field = "value", field='value', field = 'value' (with optional comma)
+        # Support both single and double quotes
         match = re.search(rf'{field}\s*=\s*["\']([^"\']+)["\']\s*,?', content)
         return match.group(1) if match else ""
 
     return {
+        "name": get("name"),
         "display_name": get("display_name"),
         "description": get("description"),
         "version": get("version"),
@@ -236,12 +243,24 @@ def _build_module_list(
             new_modules.append(mod)
         elif (plugins_dir / name).is_dir():
             installed_version = installed_map[name]
+            # Debug logging for version comparison
+            repo_v_tuple = _version_tuple(repo_version)
+            inst_v_tuple = _version_tuple(installed_version)
+            is_update = repo_v_tuple > inst_v_tuple
+            logger.debug(
+                "Module %s: repo=%s (tuple=%s), installed=%s (tuple=%s), update=%s",
+                name,
+                repo_version,
+                repo_v_tuple,
+                installed_version,
+                inst_v_tuple,
+                is_update,
+            )
             updates.append(
                 {
                     **mod,
                     "installed_version": installed_version,
-                    "update_available": _version_tuple(repo_version)
-                    > _version_tuple(installed_version),
+                    "update_available": is_update,
                     "installed_source": meta.get("source", ""),
                     "installed_updated_at": meta.get("updated_at", 0),
                 }
@@ -1207,6 +1226,8 @@ async def reinstall_plugin(request: Request, plugin_name: str) -> JSONResponse:
                     "updated_at": now,
                 },
             )
+
+            _marketplace_cache.clear()
 
             return JSONResponse(
                 content={

@@ -7,7 +7,11 @@ import asyncio
 import logging
 from langchain_core.tools import tool
 from core.task_registry import get_task_registry
-from core.tool_permissions import PermissionDeniedError, validate_cli_command, validate_tool_permission
+from core.tool_permissions import (
+    PermissionDeniedError,
+    validate_cli_command,
+    validate_tool_permission,
+)
 
 # Strong references to background tasks to prevent premature GC
 _background_tasks: set[asyncio.Task] = set()
@@ -1486,4 +1490,276 @@ async def wait(seconds: int, reason: str = "") -> str:
         return _t(
             f"Fehler während der Wartezeit: {exc}",
             f"Error during wait: {exc}",
+        )
+
+
+# ── Knowledge Graph Tools ────────────────────────────────────────────────────
+
+
+@tool
+async def kg_find_related(entity_type: str, entity_name: str) -> str:
+    """
+    Findet verwandte Entitäten im Knowledge Graph zu einem gegebenen Entity.
+
+    Nutze dieses Tool um Abhängigkeiten, verwandte Systeme oder ähnliche Incidents
+    zu entdecken. Das hilft bei Troubleshooting und Impact-Analyse.
+
+    Args:
+        entity_type: Typ der Entität (module, service, host, incident, configuration)
+        entity_name: Name der Entität (z.B. "proxmox", "pihole", "nginx-proxy")
+
+    Returns:
+        Liste verwandter Entitäten mit Beziehungstyp und Grund
+
+    Beispiele:
+    - kg_find_related("module", "proxmox") → Systeme, die von Proxmox abhängen
+    - kg_find_related("incident", "2024-01-dns-ausfall") → Ähnliche vergangene Incidents
+    """
+    try:
+        from core.knowledge_graph import get_knowledge_graph
+
+        kg = await get_knowledge_graph()
+
+        # Versuche direkte ID oder suche nach Namen
+        entity_id = f"{entity_type}:{entity_name}"
+
+        # Falls nicht gefunden, suche nach Name-Property
+        if entity_id not in kg._graph:
+            all_entities = await kg.find_by_type(entity_type)
+            for ent in all_entities:
+                if ent.get("name") == entity_name or entity_name in ent.get("id", ""):
+                    entity_id = ent.get("id")
+                    break
+
+        if entity_id not in kg._graph:
+            return _t(
+                f"Entität '{entity_name}' ({entity_type}) nicht im Knowledge Graph gefunden.",
+                f"Entity '{entity_name}' ({entity_type}) not found in Knowledge Graph.",
+            )
+
+        related = await kg.suggest_related(entity_id)
+
+        if not related:
+            return _t(
+                f"Keine verwandten Entitäten für '{entity_name}' gefunden.",
+                f"No related entities found for '{entity_name}'.",
+            )
+
+        lines = [
+            _t(
+                f"Verwandte Entitäten zu '{entity_name}':\n",
+                f"Related entities to '{entity_name}':\n",
+            )
+        ]
+
+        for item in related[:8]:
+            ent = item.get("entity", {})
+            reason = item.get("reason", "")
+            score = item.get("score", 0)
+            ent_type = ent.get("type", "unknown")
+            ent_name = ent.get("name", ent.get("id", "unknown"))
+            lines.append(f"• [{ent_type}] {ent_name} (Score: {score:.2f}) – {reason}")
+
+        return "\n".join(lines)
+
+    except _CORE_TOOL_EXCEPTIONS as exc:
+        logger.error("Knowledge Graph Fehler: %s", exc)
+        return _t(
+            f"Fehler beim Knowledge Graph Lookup: {exc}",
+            f"Error during Knowledge Graph lookup: {exc}",
+        )
+
+
+@tool
+async def kg_find_path(source: str, target: str) -> str:
+    """
+    Findet den Pfad (Ketten von Beziehungen) zwischen zwei Entitäten im Knowledge Graph.
+
+    Nützlich für Impact-Analysen: "Was hängt alles an diesem System?"
+    oder Root-Cause-Analysen: "Welches System könnte den Fehler verursacht haben?"
+
+    Args:
+        source: Start-Entität (z.B. "module:proxmox" oder "service:nginx")
+        target: Ziel-Entität (z.B. "host:pve1" oder "module:pihole")
+
+    Returns:
+        Liste möglicher Pfade mit Beziehungen
+
+    Beispiele:
+    - kg_find_path("module:proxmox", "module:pihole") → Finde Verbindung zwischen Systemen
+    - kg_find_path("host:pve1", "service:dns") → Welche DNS-Abhängigkeiten hat dieser Host?
+    """
+    try:
+        from core.knowledge_graph import get_knowledge_graph
+
+        kg = await get_knowledge_graph()
+        paths = await kg.get_path(source, target, max_depth=5)
+
+        if not paths:
+            return _t(
+                f"Kein Pfad zwischen '{source}' und '{target}' gefunden.",
+                f"No path found between '{source}' and '{target}'.",
+            )
+
+        lines = [
+            _t(
+                f"Gefundene Pfade von '{source}' zu '{target}':\n",
+                f"Found paths from '{source}' to '{target}':\n",
+            )
+        ]
+
+        for i, path in enumerate(paths[:3], 1):
+            lines.append(f"\nPfad {i}:")
+            for j, node_id in enumerate(path):
+                node = kg._graph.nodes.get(node_id, {})
+                node_name = node.get("name", node_id)
+                if j < len(path) - 1:
+                    edge = kg._graph.edges.get((node_id, path[j + 1]), {})
+                    rel = edge.get("relation", "→")
+                    lines.append(f"  [{node_name}] --({rel})-->")
+                else:
+                    lines.append(f"  [{node_name}]")
+
+        return "\n".join(lines)
+
+    except _CORE_TOOL_EXCEPTIONS as exc:
+        logger.error("Knowledge Graph Pfad-Fehler: %s", exc)
+        return _t(
+            f"Fehler beim Pfad-Suchen: {exc}",
+            f"Error finding path: {exc}",
+        )
+
+
+@tool
+async def kg_analyze_dependencies(module_name: str) -> str:
+    """
+    Analysiert alle Abhängigkeiten (inbound und outbound) eines Moduls/Systems.
+
+    Args:
+        module_name: Name des Moduls (z.B. "proxmox", "kubernetes", "pihole")
+
+    Returns:
+        Dependency-Analyse mit Impact-Bewertung
+    """
+    try:
+        from core.knowledge_graph import get_knowledge_graph, RelationType
+
+        kg = await get_knowledge_graph()
+        module_id = f"module:{module_name}"
+
+        if module_id not in kg._graph:
+            return _t(
+                f"Modul '{module_name}' nicht im Knowledge Graph gefunden.",
+                f"Module '{module_name}' not found in Knowledge Graph.",
+            )
+
+        # Outgoing: Was hängt an diesem Modul?
+        outgoing = await kg.get_neighbors(module_id, RelationType.DEPENDS_ON)
+        outgoing_targets = [n for n in outgoing if n.get("direction") == "out"]
+
+        # Incoming: Was hängt von diesem Modul ab?
+        incoming = await kg.get_neighbors(module_id, RelationType.DEPENDS_ON)
+        incoming_sources = [n for n in incoming if n.get("direction") == "in"]
+
+        lines = [
+            _t(
+                f"Abhängigkeits-Analyse für '{module_name}':\n",
+                f"Dependency analysis for '{module_name}':\n",
+            )
+        ]
+
+        if outgoing_targets:
+            lines.append(
+                _t("\nDieses Modul hängt ab von:\n", "\nThis module depends on:\n")
+            )
+            for n in outgoing_targets[:10]:
+                ent = n.get("entity", {})
+                lines.append(
+                    f"  • {ent.get('name', 'unknown')} ({ent.get('type', 'unknown')})"
+                )
+        else:
+            lines.append(
+                _t("\nKeine ausgehenden Abhängigkeiten.", "\nNo outgoing dependencies.")
+            )
+
+        if incoming_sources:
+            lines.append(
+                _t("\nVon diesem Modul hängen ab:\n", "\nSystems depending on this:\n")
+            )
+            for n in incoming_sources[:10]:
+                ent = n.get("entity", {})
+                lines.append(
+                    f"  • {ent.get('name', 'unknown')} ({ent.get('type', 'unknown')})"
+                )
+            lines.append(
+                _t(
+                    f"\n⚠️ Impact: Ein Ausfall betrifft {len(incoming_sources)} Systeme!",
+                    f"\n⚠️ Impact: An outage affects {len(incoming_sources)} systems!",
+                )
+            )
+        else:
+            lines.append(
+                _t("\nKeine eingehenden Abhängigkeiten.", "\nNo incoming dependencies.")
+            )
+
+        return "\n".join(lines)
+
+    except _CORE_TOOL_EXCEPTIONS as exc:
+        logger.error("Knowledge Graph Analyse-Fehler: %s", exc)
+        return _t(
+            f"Fehler bei der Abhängigkeits-Analyse: {exc}",
+            f"Error in dependency analysis: {exc}",
+        )
+
+
+@tool
+async def kg_record_incident(
+    module: str,
+    summary: str,
+    details: str,
+    resolution: str = "",
+) -> str:
+    """
+    Speichert einen Incident im Knowledge Graph für zukünftige Analysen.
+
+    Automatisch extrahiert: Entitäten, Beziehungen und speichert im Semantic Memory.
+    Der Incident ist danach über kg_find_related() auffindbar.
+
+    Args:
+        module: Betroffenes Modul (z.B. "proxmox", "kubernetes")
+        summary: Kurze Zusammenfassung des Problems
+        details: Detaillierte Beschreibung
+        resolution: Lösung/Resolution (optional)
+
+    Returns:
+        Bestätigung mit extrahierten Entitäten
+    """
+    try:
+        from core.knowledge_graph import get_knowledge_graph
+
+        kg = await get_knowledge_graph()
+        result = await kg.extract_from_incident(
+            module=module,
+            summary=summary,
+            details=details,
+            resolution=resolution or None,
+        )
+
+        entities = result.get("entities", [])
+        relationships = result.get("relationships", [])
+
+        return _t(
+            f"✅ Incident aufgezeichnet: {len(entities)} Entitäten, {len(relationships)} Beziehungen.\n"
+            f"ID: {entities[-1] if entities else 'n/a'}\n"
+            f"Verfügbar für zukünftige Analysen via kg_find_related().",
+            f"✅ Incident recorded: {len(entities)} entities, {len(relationships)} relationships.\n"
+            f"ID: {entities[-1] if entities else 'n/a'}\n"
+            f"Available for future analysis via kg_find_related().",
+        )
+
+    except _CORE_TOOL_EXCEPTIONS as exc:
+        logger.error("Knowledge Graph Incident-Fehler: %s", exc)
+        return _t(
+            f"Fehler beim Speichern des Incidents: {exc}",
+            f"Error recording incident: {exc}",
         )

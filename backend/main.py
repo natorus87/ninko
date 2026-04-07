@@ -47,6 +47,7 @@ from api.routes_safeguard_audit import router as safeguard_audit_router
 from api.routes_auth import router as auth_router
 from api.routes_themes import router as themes_router
 from api.routes_operations import router as operations_router
+from api.routes_knowledge_graph import router as knowledge_graph_router
 
 # Logging konfigurieren
 settings = get_settings()
@@ -322,6 +323,17 @@ async def lifespan(app: FastAPI) -> object:
         )
         app.state.safeguard = None
 
+    # ── Knowledge Graph initialisieren ────────────────
+    from core.knowledge_graph import get_knowledge_graph
+
+    kg = await get_knowledge_graph()
+    kg_stats = await kg.get_stats()
+    logger.info(
+        "Knowledge Graph bereit: %d nodes, %d edges",
+        kg_stats.get("nodes", 0),
+        kg_stats.get("edges", 0),
+    )
+
     # ── Dynamischer Agenten-Pool laden ────────────────
     from core.agent_pool import get_agent_pool
 
@@ -584,6 +596,7 @@ _CORE_API_PREFIXES = {
     "operations",
     "chat",
     "images",
+    "knowledge-graph",
 }
 
 
@@ -768,6 +781,7 @@ app.include_router(safeguard_router)
 app.include_router(safeguard_profiles_router)
 app.include_router(safeguard_audit_router)
 app.include_router(operations_router)
+app.include_router(knowledge_graph_router)
 
 
 # ── Health Endpoint ──────────────────────────────────

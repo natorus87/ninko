@@ -932,6 +932,48 @@ class BaseAgent:
         except _BASE_AGENT_RECOVERABLE_EXCEPTIONS as exc:
             logger.debug("Memory-Suche fehlgeschlagen: %s", exc)
 
+        # Knowledge Graph RAG-Erweiterung
+        try:
+            from core.knowledge_graph import get_knowledge_graph
+
+            kg = await get_knowledge_graph()
+
+            # Suche nach Entitäten, die zum Modul/Agent passen könnten
+            module_entity_id = f"module:{self.name}"
+            if module_entity_id in kg._graph:
+                # Verwandte Entitäten vorschlagen
+                related = await kg.suggest_related(module_entity_id)
+                if related:
+                    kg_context = _t(
+                        "Verwandte Systeme aus dem Knowledge Graph:\n",
+                        "Related systems from Knowledge Graph:\n",
+                    )
+                    for item in related[:5]:
+                        ent = item.get("entity", {})
+                        reason = item.get("reason", "")
+                        kg_context += f"- {ent.get('name', ent.get('id'))} ({reason})\n"
+                    final_system_prompt += "\n\n" + kg_context
+
+            # Falls es Incidents gibt, die zu diesem Modul gehören
+            incidents = await kg.find_by_type("incident")
+            module_incidents = [
+                i
+                for i in incidents
+                if i.get("properties", {}).get("module") == self.name
+            ]
+            if module_incidents:
+                incident_context = _t(
+                    "Relevante vergangene Incidents:\n",
+                    "Relevant past incidents:\n",
+                )
+                for inc in module_incidents[:3]:
+                    props = inc.get("properties", {})
+                    incident_context += f"- {props.get('summary', inc.get('name'))}\n"
+                final_system_prompt += "\n\n" + incident_context
+
+        except _BASE_AGENT_RECOVERABLE_EXCEPTIONS as exc:
+            logger.debug("Knowledge Graph RAG fehlgeschlagen: %s", exc)
+
         # Skills-Injection in den System-Prompt integrieren
         try:
             from core.skills_manager import get_skills_manager

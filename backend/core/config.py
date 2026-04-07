@@ -20,7 +20,9 @@ class CoreSettings(BaseSettings):
     )
 
     # ── LLM Backend ────────────────────────────────────
-    LLM_BACKEND: Literal["ollama", "lmstudio", "openai_compatible", "litellm"] = "lmstudio"
+    LLM_BACKEND: Literal["ollama", "lmstudio", "openai_compatible", "litellm"] = (
+        "lmstudio"
+    )
     # LM Studio / OpenAI-kompatibler Provider (Standard)
     LMSTUDIO_BASE_URL: str = "http://192.168.1.100:1234/v1"
     LMSTUDIO_MODEL: str = "local-model"
@@ -63,6 +65,7 @@ class CoreSettings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     LANGUAGE: str = "de"
     TIMEZONE: str = "Europe/Berlin"
+    DATA_DIR: str = "/app/data"
     LLM_VERIFY_SSL: bool = True  # False = self-signed Zertifikate erlauben
 
     # ── API Security ───────────────────────────────────
