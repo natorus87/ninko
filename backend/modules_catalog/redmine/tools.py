@@ -97,6 +97,10 @@ async def _get_api_client(connection_id: str = "") -> dict:
             "reporting_api_prefix",
             os.environ.get("REDMINE_REPORTING_API_PREFIX", "reporting"),
         )
+        # SSL verification - default True, can be disabled for self-signed certs
+        verify_ssl = conn.config.get("verify_ssl", True)
+        if isinstance(verify_ssl, str):
+            verify_ssl = verify_ssl.lower() not in ("false", "0", "no", "off")
         vault = get_vault()
         api_key = None
         api_key_path = conn.vault_keys.get("REDMINE_API_KEY")
@@ -107,12 +111,20 @@ async def _get_api_client(connection_id: str = "") -> dict:
             "api_key": api_key,
             "hrm_api_prefix": str(hrm_prefix or "hrm"),
             "reporting_api_prefix": str(reporting_prefix or "reporting"),
+            "verify_ssl": bool(verify_ssl),
         }
 
     base_url = os.environ.get("REDMINE_URL", "")
     api_key = os.environ.get("REDMINE_API_KEY", "")
     hrm_prefix = os.environ.get("REDMINE_HRM_API_PREFIX", "hrm")
     reporting_prefix = os.environ.get("REDMINE_REPORTING_API_PREFIX", "reporting")
+    # Env var for SSL verification - default True
+    verify_ssl = os.environ.get("REDMINE_VERIFY_SSL", "true").lower() not in (
+        "false",
+        "0",
+        "no",
+        "off",
+    )
 
     if not base_url:
         raise ValueError(
@@ -175,6 +187,7 @@ async def _get_api_client(connection_id: str = "") -> dict:
         "api_key": api_key,
         "hrm_api_prefix": hrm_prefix,
         "reporting_api_prefix": reporting_prefix,
+        "verify_ssl": bool(verify_ssl),
     }
 
 
@@ -185,6 +198,7 @@ async def _redmine_request(
     endpoint: str,
     params: dict | None = None,
     data: dict | None = None,
+    verify_ssl: bool = True,
 ) -> dict:
     """Make a request to the Redmine API."""
     headers = {
@@ -193,7 +207,7 @@ async def _redmine_request(
     }
 
     url = f"{base_url}/{endpoint.lstrip('/')}"
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=30.0, verify=verify_ssl) as client:
         if method.upper() == "GET":
             resp = await client.get(url, params=params, headers=headers)
         elif method.upper() == "POST":
@@ -231,6 +245,7 @@ async def get_redmine_projects(connection_id: str = "") -> dict:
             "GET",
             "projects.json",
             {"limit": 100},
+            verify_ssl=client["verify_ssl"],
         )
         return {
             "status": "success",
@@ -254,7 +269,9 @@ async def get_redmine_project(project_id: str, connection_id: str = "") -> dict:
             client["base_url"],
             client["api_key"],
             "GET",
-            f"projects/{project_id}.json",
+            "issues.json",
+            params,
+            verify_ssl=client["verify_ssl"],
         )
         return {
             "status": "success",
@@ -316,6 +333,7 @@ async def get_redmine_issue(issue_id: str, connection_id: str = "") -> dict:
             "GET",
             f"issues/{issue_id}.json",
             {"include": "journals,attachments,changesets"},
+            verify_ssl=client["verify_ssl"],
         )
         return {
             "status": "success",
@@ -358,6 +376,7 @@ async def create_redmine_issue(
             "POST",
             "issues.json",
             data={"issue": issue},
+            verify_ssl=client["verify_ssl"],
         )
         return {
             "status": "success",
@@ -398,6 +417,7 @@ async def update_redmine_issue(
             "PUT",
             f"issues/{issue_id}.json",
             data={"issue": issue, "notes": notes} if notes else {"issue": issue},
+            verify_ssl=client["verify_ssl"],
         )
         return {
             "status": "success",
@@ -423,6 +443,7 @@ async def get_redmine_users(connection_id: str = "") -> dict:
             "GET",
             "users.json",
             {"limit": 100},
+            verify_ssl=client["verify_ssl"],
         )
         return {
             "status": "success",
@@ -461,6 +482,7 @@ async def get_redmine_time_entries(
             "GET",
             "time_entries.json",
             params,
+            verify_ssl=client["verify_ssl"],
         )
         return {
             "status": "success",
@@ -501,6 +523,7 @@ async def log_redmine_time(
             "POST",
             "time_entries.json",
             data={"time_entry": entry},
+            verify_ssl=client["verify_ssl"],
         )
         return {
             "status": "success",
@@ -525,6 +548,7 @@ async def get_redmine_issue_statuses(connection_id: str = "") -> dict:
             client["api_key"],
             "GET",
             "issue_statuses.json",
+            verify_ssl=client["verify_ssl"],
         )
         return {
             "status": "success",
@@ -548,6 +572,7 @@ async def get_redmine_priorities(connection_id: str = "") -> dict:
             client["api_key"],
             "GET",
             "enumerations/issue_priorities.json",
+            verify_ssl=client["verify_ssl"],
         )
         return {
             "status": "success",
@@ -575,6 +600,7 @@ async def search_redmine_issues(
             "GET",
             "issues.json",
             {"search": query, "limit": 50},
+            verify_ssl=client["verify_ssl"],
         )
         return {
             "status": "success",
@@ -659,6 +685,7 @@ async def call_redmine_hrm_api(
             full_endpoint,
             params=query_params if query_params else None,
             data=body if body else None,
+            verify_ssl=client["verify_ssl"],
         )
         return {
             "status": "success",
@@ -703,6 +730,7 @@ async def call_redmine_reporting_api(
             full_endpoint,
             params=query_params if query_params else None,
             data=body if body else None,
+            verify_ssl=client["verify_ssl"],
         )
         return {
             "status": "success",
@@ -920,6 +948,7 @@ async def get_redmine_project_budgets(
             "GET",
             f"projects/{project_id}/budgets.json",
             params=params if params else None,
+            verify_ssl=client["verify_ssl"],
         )
         return {
             "status": "success",

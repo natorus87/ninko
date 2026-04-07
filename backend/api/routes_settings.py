@@ -698,7 +698,7 @@ def _get_env_connection(module_name: str, prefix: str) -> dict:
         "wordpress": ["WORDPRESS_URL", "WORDPRESS_USERNAME"],
         "checkmk": ["CHECKMK_URL", "CHECKMK_SITE", "CHECKMK_API_USERNAME"],
         "synology": ["SYNOLOGY_URL", "SYNOLOGY_USERNAME"],
-        "redmine": ["REDMINE_URL"],
+        "redmine": ["REDMINE_URL", "REDMINE_VERIFY_SSL"],
         "confluence": ["CONFLUENCE_URL", "CONFLUENCE_EMAIL"],
         "jira": ["JIRA_URL", "JIRA_EMAIL"],
         "zabbix": ["ZABBIX_URL", "ZABBIX_USER"],
