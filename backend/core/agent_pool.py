@@ -65,6 +65,7 @@ class DynamicAgentPool:
         """
         try:
             from core.redis_client import get_redis
+
             redis = get_redis()
             loaded = 0
 
@@ -75,7 +76,9 @@ class DynamicAgentPool:
                 tenant_loaded = 0
                 agents = json.loads(raw)
                 for agent_def in agents:
-                    if not agent_def.get("enabled", True) or not agent_def.get("system_prompt"):
+                    if not agent_def.get("enabled", True) or not agent_def.get(
+                        "system_prompt"
+                    ):
                         continue
                     try:
                         self._instantiate({**agent_def, "tenant_id": tenant_id})
@@ -83,7 +86,8 @@ class DynamicAgentPool:
                     except _AGENT_POOL_EXCEPTIONS as exc:
                         logger.warning(
                             "Agent '%s' konnte nicht instanziiert werden: %s",
-                            agent_def.get("name"), exc,
+                            agent_def.get("name"),
+                            exc,
                         )
                 return tenant_loaded
 
@@ -104,7 +108,13 @@ class DynamicAgentPool:
     @staticmethod
     def _get_dynamic_tools() -> list:
         """Gibt die Basis-Tools zurück, die allen dynamischen Agenten zur Verfügung stehen."""
-        from agents.core_tools import execute_cli_command, call_module_agent, recall_memory, remember_fact
+        from agents.core_tools import (
+            execute_cli_command,
+            call_module_agent,
+            recall_memory,
+            remember_fact,
+        )
+
         return [execute_cli_command, call_module_agent, recall_memory, remember_fact]
 
     def _instantiate(self, agent_def: dict) -> "BaseAgent":
@@ -125,9 +135,14 @@ class DynamicAgentPool:
         )
         self._live_agents[scoped_id] = agent
         self._meta[scoped_id] = normalized_def
-        logger.debug(
-            "Dynamischer Agent instanziiert: '%s' (id=%s)",
-            normalized_def["name"], agent_id,
+        logger.info(
+            "Dynamischer Agent instanziiert: '%s' (id=%s, scoped_id=%s, tenant=%s), "
+            "Pool-Größe jetzt: %d",
+            normalized_def["name"],
+            agent_id,
+            scoped_id,
+            tenant_id,
+            len(self._live_agents),
         )
         return agent
 
@@ -161,11 +176,13 @@ class DynamicAgentPool:
                 continue
 
             # Suchraum: Name + Description + erste 300 Zeichen System-Prompt
-            search_text = " ".join([
-                meta.get("name", ""),
-                meta.get("description", ""),
-                meta.get("system_prompt", "")[:300],
-            ])
+            search_text = " ".join(
+                [
+                    meta.get("name", ""),
+                    meta.get("description", ""),
+                    meta.get("system_prompt", "")[:300],
+                ]
+            )
             search_words = set(_tokenize(search_text))
 
             if not search_words:
@@ -182,7 +199,8 @@ class DynamicAgentPool:
             agent_name = self._meta[best_id].get("name", best_id)
             logger.debug(
                 "DynamicAgentPool: Bester Match '%s' mit Score %.2f",
-                agent_name, best_score,
+                agent_name,
+                best_score,
             )
             return self._live_agents[best_id], agent_name
 
@@ -192,16 +210,38 @@ class DynamicAgentPool:
         """Gibt einen Agenten anhand seiner ID zurück, oder (None, '') wenn nicht gefunden."""
         tenant = _effective_tenant_id()
         scoped = _scoped_id(tenant, agent_id)
+
+        logger.debug(
+            "get_agent_by_id: Suche agent_id='%s', tenant='%s', scoped='%s', "
+            "verfügbare_live=%d, keys=%s",
+            agent_id,
+            tenant,
+            scoped,
+            len(self._live_agents),
+            list(self._live_agents.keys()),
+        )
+
         agent = self._live_agents.get(scoped)
         if agent:
             name = self._meta.get(scoped, {}).get("name", agent_id)
+            logger.debug("get_agent_by_id: Gefunden mit scoped_id, name='%s'", name)
             return agent, name
 
         # Fallback: für Legacy-/System-Kontexte nicht tenant-scoped suchen
         for sid, a in self._live_agents.items():
             if sid.endswith(f":{agent_id}"):
                 name = self._meta.get(sid, {}).get("name", agent_id)
+                logger.debug(
+                    "get_agent_by_id: Gefunden mit Fallback endsWith, name='%s'", name
+                )
                 return a, name
+
+        logger.warning(
+            "get_agent_by_id: NICHT GEFUNDEN agent_id='%s', tenant='%s', verfügbare=%s",
+            agent_id,
+            tenant,
+            list(self._live_agents.keys()),
+        )
         return None, ""
 
     # ──────────────────────────────────────────────────────────────────────
@@ -254,6 +294,7 @@ class DynamicAgentPool:
         # Soul MD automatisch generieren und persistent speichern
         try:
             from core.soul_manager import get_soul_manager
+
             sm = get_soul_manager()
             capabilities = _extract_capabilities(system_prompt)
             soul_md = sm.generate_soul(
@@ -262,14 +303,19 @@ class DynamicAgentPool:
                 capabilities=capabilities or None,
             )
             await sm.save_soul(name, soul_md)
-            logger.debug("Soul MD für dynamischen Agent '%s' generiert und gespeichert.", name)
+            logger.debug(
+                "Soul MD für dynamischen Agent '%s' generiert und gespeichert.", name
+            )
         except _AGENT_POOL_EXCEPTIONS as exc:
-            logger.warning("Soul-Generierung für Agent '%s' fehlgeschlagen: %s", name, exc)
+            logger.warning(
+                "Soul-Generierung für Agent '%s' fehlgeschlagen: %s", name, exc
+            )
 
         agent = self._instantiate(agent_def)
         logger.info(
             "DynamicAgentPool: Neuer Agent registriert: '%s' (id=%s)",
-            name, agent_id,
+            name,
+            agent_id,
         )
         return agent_id, agent
 
@@ -336,17 +382,21 @@ class DynamicAgentPool:
         if name is not None or description is not None:
             try:
                 from core.soul_manager import get_soul_manager
+
                 sm = get_soul_manager()
                 meta = self._meta[scoped_id]
                 caps = _extract_capabilities(meta.get("system_prompt", ""))
                 soul_md = sm.generate_soul(
                     name=meta["name"],
-                    purpose=meta.get("description") or f"Spezialisierter Agent für: {meta['name']}",
+                    purpose=meta.get("description")
+                    or f"Spezialisierter Agent für: {meta['name']}",
                     capabilities=caps or None,
                 )
                 await sm.save_soul(meta["name"], soul_md)
             except _AGENT_POOL_EXCEPTIONS as exc:
-                logger.warning("Soul-Update für Agent '%s' fehlgeschlagen: %s", agent_id, exc)
+                logger.warning(
+                    "Soul-Update für Agent '%s' fehlgeschlagen: %s", agent_id, exc
+                )
 
         logger.info("DynamicAgentPool: Agent '%s' aktualisiert.", agent_id)
         return True
@@ -355,12 +405,14 @@ class DynamicAgentPool:
         """Gibt alle Agent-Metadaten als Liste zurück."""
         tenant = _effective_tenant_id()
         return [
-            m for m in self._meta.values()
+            m
+            for m in self._meta.values()
             if _normalize_tenant(m.get("tenant_id", "default")) == tenant
         ]
 
 
 # ── Hilfsfunktion ────────────────────────────────────────────────────────
+
 
 def _tokenize(text: str) -> list[str]:
     """Zerlegt Text in bereinige Tokens (mind. 3 Zeichen)."""
@@ -407,6 +459,7 @@ def _effective_tenant_id(tenant_id: str = "") -> str:
         return _normalize_tenant(tenant_id)
     try:
         from core import status_bus
+
         sid = status_bus.get_session_id().strip()
     except _AGENT_POOL_EXCEPTIONS:
         sid = ""
@@ -424,7 +477,7 @@ def _tenant_from_key(key: str) -> str:
     prefix = f"{REDIS_KEY}:"
     if not raw.startswith(prefix):
         return ""
-    return _normalize_tenant(raw[len(prefix):])
+    return _normalize_tenant(raw[len(prefix) :])
 
 
 def _scoped_id(tenant_id: str, agent_id: str) -> str:
