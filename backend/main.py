@@ -352,34 +352,6 @@ async def lifespan(app: FastAPI) -> object:
     await agent_pool.load_from_redis()
     app.state.agent_pool = agent_pool
 
-    # ── Sophy-GLPI Hybrid Agent registrieren ───────────
-    try:
-        from agents.sophy_glpi_agent import SophyGLPIAgent
-
-        sophy_glpi = SophyGLPIAgent()
-        await agent_pool.register(
-            agent_id="sophy-glpi",
-            name="Sophy GLPI Support",
-            system_prompt=sophy_glpi.system_prompt,
-            description="IT-Support Chatbot mit GLPI Ticket-Automatisierung. Antwortet im Sophy-Stil und bearbeitet GLPI-Tickets automatisch.",
-        )
-        # Direkt die live Instanz auch speichern
-        agent_pool._live_agents["sophy-glpi"] = sophy_glpi
-
-        # Soul MD speichern
-        soul_mgr = get_soul_manager()
-        if not soul_mgr.has_soul("sophy-glpi"):
-            await soul_mgr.save_soul(
-                "sophy-glpi",
-                "# Sophy-GLPI\n\nDu bist Sophy, ein regelbasierter IT-Support-Chatassistent mit GLPI-Integration. Du automatisierst Ticket-Bearbeitung im Sophy-Stil.",
-            )
-
-        logger.info("Sophy-GLPI Hybrid Agent registriert.")
-    except _MAIN_RECOVERABLE_EXCEPTIONS as _sophy_exc:
-        logger.warning(
-            "Sophy-GLPI Agent konnte nicht registriert werden: %s", _sophy_exc
-        )
-
     # ── Orchestrator ──────────────────────────────────
     orchestrator = OrchestratorAgent(registry)
     app.state.orchestrator = orchestrator
