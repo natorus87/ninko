@@ -238,7 +238,10 @@ class WorkflowEngine:
                             and edge["label"] != next_label
                         ):
                             target = edge["target_id"]
-                            if target in step_map and step_map[target]["status"] == "pending":
+                            if (
+                                target in step_map
+                                and step_map[target]["status"] == "pending"
+                            ):
                                 step_map[target]["status"] = "skipped"
                             continue
                         target_id = edge["target_id"]
@@ -342,9 +345,11 @@ class WorkflowEngine:
                 variables,
             )
             if self.orchestrator:
+                # Wenn agent_id gesetzt, route direkt zu diesem Agenten
                 response_text, _, _ = await self.orchestrator.route(
                     message=prompt,
                     chat_history=[],
+                    force_module=agent_id if agent_id else None,
                 )
                 variables["previous_output"] = response_text
                 return response_text, None
@@ -394,7 +399,9 @@ class WorkflowEngine:
             scoped_sub_id = f"{tenant_id}::{sub_workflow_public_id}"
             sub_wf = next((w for w in workflows if w.get("id") == scoped_sub_id), None)
             if not sub_wf:
-                raise ValueError(f"Sub-Workflow '{sub_workflow_public_id}' nicht gefunden")
+                raise ValueError(
+                    f"Sub-Workflow '{sub_workflow_public_id}' nicht gefunden"
+                )
 
             sub_run_id = str(uuid.uuid4())
             sub_engine = WorkflowEngine(self.redis, self.orchestrator)
@@ -404,7 +411,9 @@ class WorkflowEngine:
                 triggered_by="subflow",
                 parent_run_id=parent_run_id,
             )
-            variables["previous_output"] = f"Subflow {sub_workflow_public_id} abgeschlossen"
+            variables["previous_output"] = (
+                f"Subflow {sub_workflow_public_id} abgeschlossen"
+            )
             variables["subflow_run_id"] = sub_run_id
             return f"Subflow '{sub_workflow_public_id}' ausgeführt", None
 
@@ -550,7 +559,9 @@ class WorkflowEngine:
         runs.append(
             {
                 "id": run_id,
-                "workflow_id": workflow_id.split("::", 1)[1] if "::" in workflow_id else workflow_id,
+                "workflow_id": workflow_id.split("::", 1)[1]
+                if "::" in workflow_id
+                else workflow_id,
                 "workflow_name": workflow_name,
                 "workflow_version": workflow_version,
                 "status": "running",
