@@ -5108,6 +5108,84 @@ a:hover {
     flex-shrink: 0;
 }
 
+/* ─── Alerts Panel ─── */
+
+.alerts-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.alerts-table th {
+    text-align: left;
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.alerts-table td {
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+    vertical-align: top;
+}
+
+.alerts-table tbody tr:hover {
+    background-color: var(--hover-bg);
+}
+
+/* Severity Badges */
+.alert-severity {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+}
+
+.alert-severity-critical {
+    background-color: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+.alert-severity-warning {
+    background-color: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+}
+
+.alert-severity-info {
+    background-color: rgba(59, 130, 246, 0.15);
+    color: #3b82f6;
+}
+
+/* Subnav Badge */
+.subnav-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    margin-left: 6px;
+    background-color: #ef4444;
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 700;
+    border-radius: 9px;
+}
+
+/* Empty State */
+#alerts-empty-state svg {
+    opacity: 0.8;
+}
+
+#alerts-empty-state p {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+}
+
 /* ─── Accessibility: Reduced Motion ─── */
 @media (prefers-reduced-motion: reduce) {
     /* Globale Transitions und Animationen deaktivieren */
