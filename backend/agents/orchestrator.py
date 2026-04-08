@@ -41,6 +41,11 @@ from agents.core_tools import (
     get_routing_info,
     wait,
 )
+from agents.alert_tools import (
+    check_alert_state,
+    record_alert,
+    resolve_alert,
+)
 from modules.image_gen.tools import generate_image
 from core import status_bus
 
@@ -306,6 +311,9 @@ class OrchestratorAgent(BaseAgent):
                 run_pipeline,
                 run_parallel_pipeline,
                 generate_image,
+                check_alert_state,
+                record_alert,
+                resolve_alert,
                 configure_routing,
                 get_routing_info,
                 wait,

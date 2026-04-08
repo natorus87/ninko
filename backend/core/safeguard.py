@@ -215,6 +215,7 @@ class ActionCategory(str, Enum):
 @dataclass
 class PrefilterResult:
     """Result from the keyword prefilter with confidence score."""
+
     hit: bool
     category: ActionCategory | None
     confidence: float  # 0.0–1.0
@@ -895,6 +896,8 @@ _TOOL_READONLY: frozenset[str] = frozenset(
         "remember_fact",
         "forget_fact",
         "confirm_forget",
+        # Alert state (read-only check)
+        "check_alert_state",
         # Orchestration / meta
         "create_custom_agent",
         "update_custom_agent",
@@ -1044,36 +1047,49 @@ _TOOL_READONLY: frozenset[str] = frozenset(
         "get_synology_users",
         "get_synology_groups",
         # Redmine read-only
-        "get_redmine_projects", "get_redmine_project", "get_redmine_issues",
-        "get_redmine_issue", "get_redmine_users", "get_redmine_time_entries",
-        "get_redmine_issue_statuses", "get_redmine_priorities", "search_redmine_issues",
+        "get_redmine_projects",
+        "get_redmine_project",
+        "get_redmine_issues",
+        "get_redmine_issue",
+        "get_redmine_users",
+        "get_redmine_time_entries",
+        "get_redmine_issue_statuses",
+        "get_redmine_priorities",
+        "search_redmine_issues",
         "get_redmine_issue_counts",
-    # GLPI read-only
-    "get_ticket", "search_tickets", "search_users", "list_groups",
-    "list_categories", "get_ticket_stats", "get_ticket_attachments",
-    "get_ticket_followups", "get_ticket_solutions",
-    # Confluence read-only
-    "get_confluence_spaces",
-    "get_confluence_space",
-    "get_confluence_pages",
-    "get_confluence_page",
-    "get_confluence_blog_posts",
-    "search_confluence",
-    "get_confluence_labels",
-    "get_confluence_page_history",
-    # Jira read-only
-    "get_jira_projects",
-    "get_jira_project",
-    "get_jira_issues",
-    "get_jira_issue",
-    "get_jira_boards",
-    "get_jira_sprints",
-    "get_jira_sprint",
-    "search_jira",
-    "get_jira_issue_transitions",
-    "get_jira_priorities",
-    "get_jira_issue_counts",
-})
+        # GLPI read-only
+        "get_ticket",
+        "search_tickets",
+        "search_users",
+        "list_groups",
+        "list_categories",
+        "get_ticket_stats",
+        "get_ticket_attachments",
+        "get_ticket_followups",
+        "get_ticket_solutions",
+        # Confluence read-only
+        "get_confluence_spaces",
+        "get_confluence_space",
+        "get_confluence_pages",
+        "get_confluence_page",
+        "get_confluence_blog_posts",
+        "search_confluence",
+        "get_confluence_labels",
+        "get_confluence_page_history",
+        # Jira read-only
+        "get_jira_projects",
+        "get_jira_project",
+        "get_jira_issues",
+        "get_jira_issue",
+        "get_jira_boards",
+        "get_jira_sprints",
+        "get_jira_sprint",
+        "search_jira",
+        "get_jira_issue_transitions",
+        "get_jira_priorities",
+        "get_jira_issue_counts",
+    }
+)
 
 
 # High-confidence CLI/SQL patterns that are unambiguously destructive/state-changing.
@@ -1307,7 +1323,9 @@ class SafeguardMiddleware:
         try:
             from core.redis_client import get_redis
 
-            entry = json.dumps({"ms": round(latency_ms, 2), "path": path_used, "ts": time.time()})
+            entry = json.dumps(
+                {"ms": round(latency_ms, 2), "path": path_used, "ts": time.time()}
+            )
             redis = get_redis()
             pipe = redis.connection.pipeline()
             pipe.lpush(self.LATENCY_KEY, entry)
@@ -1321,10 +1339,18 @@ class SafeguardMiddleware:
         from core.redis_client import get_redis
 
         redis = get_redis()
-        raw_entries = await redis.connection.lrange(self.LATENCY_KEY, 0, self.MAX_LATENCY_ENTRIES - 1)
+        raw_entries = await redis.connection.lrange(
+            self.LATENCY_KEY, 0, self.MAX_LATENCY_ENTRIES - 1
+        )
 
         if not raw_entries:
-            return {"p50_ms": 0, "p95_ms": 0, "p99_ms": 0, "path_breakdown": {}, "total_checks": 0}
+            return {
+                "p50_ms": 0,
+                "p95_ms": 0,
+                "p99_ms": 0,
+                "path_breakdown": {},
+                "total_checks": 0,
+            }
 
         latencies: list[float] = []
         path_counts: dict[str, int] = {}
@@ -1338,7 +1364,13 @@ class SafeguardMiddleware:
                 continue
 
         if not latencies:
-            return {"p50_ms": 0, "p95_ms": 0, "p99_ms": 0, "path_breakdown": {}, "total_checks": 0}
+            return {
+                "p50_ms": 0,
+                "p95_ms": 0,
+                "p99_ms": 0,
+                "path_breakdown": {},
+                "total_checks": 0,
+            }
 
         latencies.sort()
         n = len(latencies)
@@ -1584,8 +1616,7 @@ class SafeguardMiddleware:
             inj = _check_injection_prefilter(user_input)
             if inj is not None:
                 req_conf = (
-                    ActionCategory.PROMPT_INJECTION.value
-                    in profile.confirm_categories
+                    ActionCategory.PROMPT_INJECTION.value in profile.confirm_categories
                 )
                 latency = (time.monotonic() - t0) * 1000
                 result = SafeguardResult(
@@ -1606,9 +1637,7 @@ class SafeguardMiddleware:
                     outcome="auto_approved"
                     if result.auto_decided
                     else (
-                        "confirmed"
-                        if not result.requires_confirmation
-                        else "pending"
+                        "confirmed" if not result.requires_confirmation else "pending"
                     ),
                     rationale=result.rationale,
                     profile_id=profile.id,

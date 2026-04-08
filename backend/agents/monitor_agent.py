@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from core.config import get_settings
 from core.redis_client import get_redis
 from core.memory import get_memory
+from core.alert_state import AlertStateManager
 
 if TYPE_CHECKING:
     from core.module_registry import ModuleRegistry
@@ -42,6 +43,7 @@ class MonitorAgent:
         self._settings = get_settings()
         self._redis = get_redis()
         self._memory = get_memory()
+        self._alert_mgr = AlertStateManager()
         self._running = False
         self._task: asyncio.Task | None = None
 
@@ -89,38 +91,83 @@ class MonitorAgent:
             results[module_name] = status
 
             if status.get("status") == "error":
-                alert = {
-                    "type": "alert",
-                    "module": module_name,
-                    "severity": "critical",
-                    "message": (
-                        f"Modul '{module_name}' meldet Fehler: "
-                        f"{status.get('detail', 'Unbekannt')}"
-                    ),
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                }
-                alerts.append(alert)
-
-                # Alert via Redis PubSub (→ WebSocket → Dashboard)
-                await self._redis.publish_event(alert)
-
-                # Incident im Memory speichern
-                await self._memory.store_incident(
-                    module="monitor",
-                    summary=f"Health-Check fehlgeschlagen: {module_name}",
-                    details=json.dumps(status, default=str),
-                    severity="critical",
+                # Alert-Deduplication via AlertStateManager
+                alert_id = self._alert_mgr.make_id(
+                    module=module_name,
+                    resource=module_name,
+                    reason=status.get("detail", "error")[:50],
                 )
 
-                logger.warning(
-                    "ALERT: Modul '%s' – %s",
-                    module_name,
-                    status.get("detail", "Unbekannt"),
-                )
+                is_new = not await self._alert_mgr.is_active(alert_id)
 
-                # Auto-Remediation (wenn aktiviert)
+                if is_new:
+                    # Neuer Alert - aufzeichnen und publizieren
+                    await self._alert_mgr.record(
+                        alert_id=alert_id,
+                        module=module_name,
+                        severity="critical",
+                        summary=f"Health-Check fehlgeschlagen: {module_name}",
+                        resource=module_name,
+                        reason=status.get("detail", "error")[:50],
+                    )
+
+                    alert = {
+                        "type": "alert",
+                        "alert_id": alert_id,
+                        "module": module_name,
+                        "severity": "critical",
+                        "message": (
+                            f"Modul '{module_name}' meldet Fehler: "
+                            f"{status.get('detail', 'Unbekannt')}"
+                        ),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                    alerts.append(alert)
+
+                    # Alert via Redis PubSub (→ WebSocket → Dashboard)
+                    await self._redis.publish_event(alert)
+
+                    # Incident im Memory speichern
+                    await self._memory.store_incident(
+                        module="monitor",
+                        summary=f"Health-Check fehlgeschlagen: {module_name}",
+                        details=json.dumps(status, default=str),
+                        severity="critical",
+                    )
+
+                    logger.warning(
+                        "ALERT: Modul '%s' – %s",
+                        module_name,
+                        status.get("detail", "Unbekannt"),
+                    )
+                else:
+                    # Bestehender Alert - nur last_seen aktualisieren
+                    await self._alert_mgr.record(
+                        alert_id=alert_id,
+                        module=module_name,
+                        severity="critical",
+                        summary=f"Health-Check fehlgeschlagen: {module_name}",
+                    )
+                    logger.debug(
+                        "Alert %s bereits aktiv (last_seen aktualisiert)", alert_id
+                    )
+
+                # Auto-Remediation (wenn aktiviert) - immer versuchen, unabhängig von Dedup
                 if self._settings.MONITOR_AUTO_REMEDIATE:
                     await self._attempt_remediation(module_name, status)
+
+        # Auto-Resolve: Prüfe welche aktiven Alerts wieder OK sind
+        active_alerts = await self._alert_mgr.list_active()
+        for alert in active_alerts:
+            m = alert.get("module", "")
+            if m in results and results[m].get("status") != "error":
+                await self._alert_mgr.resolve(
+                    alert["alert_id"],
+                    resolution="Health-Check wieder OK",
+                )
+                logger.info(
+                    "Alert %s auto-resolved (Modul wieder OK)", alert["alert_id"]
+                )
 
         # Cycle-Zusammenfassung
         total = len(results)
@@ -143,9 +190,7 @@ class MonitorAgent:
             "alerts": alerts,
         }
 
-    async def _attempt_remediation(
-        self, module_name: str, status: dict
-    ) -> None:
+    async def _attempt_remediation(self, module_name: str, status: dict) -> None:
         """
         Versucht eine automatische Remediation.
         Aktuell: Loggt den Versuch und publisht ein Event.
