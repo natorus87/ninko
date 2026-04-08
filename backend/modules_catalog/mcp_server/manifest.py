@@ -47,7 +47,7 @@ module_manifest = ModuleManifest(
     dashboard_tab={
         "id": "mcp_server",
         "label": "MCP Server",
-        "icon": "🔌",
+        "icon": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="10" rx="2"/><path d="M9 12v2"/><path d="M15 12v2"/><rect x="3" y="14" width="18" height="8" rx="2"/><circle cx="8" cy="18" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="18" r="1" fill="currentColor" stroke="none"/><circle cx="16" cy="18" r="1" fill="currentColor" stroke="none"/></svg>',
     },
     health_check=check_mcp_server_health,
 )

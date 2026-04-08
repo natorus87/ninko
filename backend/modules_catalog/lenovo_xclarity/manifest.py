@@ -101,7 +101,7 @@ module_manifest = ModuleManifest(
     dashboard_tab={
         "id": "lenovo_xclarity",
         "label": "XClarity",
-        "icon": "🖥️",
+        "icon": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M7 5V3"/><path d="M17 5V3"/><path d="M9 15l2 2 5-5"/></svg>',
     },
     health_check=check_lenovo_xclarity_health,
 )

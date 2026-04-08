@@ -104,7 +104,7 @@ module_manifest = ModuleManifest(
     dashboard_tab={
         "id": "hpe_ilo",
         "label": "HPE iLO",
-        "icon": "🖥️",
+        "icon": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor" stroke="none"/><line x1="10" y1="6" x2="19" y2="6"/><circle cx="6" cy="18" r="1" fill="currentColor" stroke="none"/><line x1="10" y1="18" x2="19" y2="18"/></svg>',
     },
     health_check=check_hpe_ilo_health,
 )

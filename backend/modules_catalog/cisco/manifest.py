@@ -99,7 +99,7 @@ module_manifest = ModuleManifest(
     dashboard_tab={
         "id": "cisco",
         "label": "Cisco",
-        "icon": "🔀",
+        "icon": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="8" rx="2"/><circle cx="7.5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="11.5" cy="12" r="1.5" fill="currentColor" stroke="none"/><path d="M16 10h3"/><path d="M16 14h3"/><path d="M7.5 8V5"/><path d="M12 8V5"/><path d="M16.5 8V5"/><path d="M7.5 16v3"/><path d="M16.5 16v3"/></svg>',
     },
     health_check=check_cisco_health,
 )

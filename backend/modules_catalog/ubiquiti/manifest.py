@@ -101,7 +101,7 @@ module_manifest = ModuleManifest(
     dashboard_tab={
         "id": "ubiquiti",
         "label": "Ubiquiti",
-        "icon": "📡",
+        "icon": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M6.3 6.3a8 8 0 0 0 0 11.4"/><path d="M17.7 6.3a8 8 0 0 1 0 11.4"/><path d="M3.5 3.5a14 14 0 0 0 0 17"/><path d="M20.5 3.5a14 14 0 0 1 0 17"/></svg>',
     },
     health_check=check_ubiquiti_health,
 )
