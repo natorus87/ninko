@@ -11,7 +11,7 @@ import logging
 from fastapi import APIRouter, HTTPException, status
 
 from core.alert_state import get_alert_manager
-from schemas.common import ApiResponse
+from core.schemas import ApiResponse
 
 logger = logging.getLogger("ninko.api.alerts")
 
