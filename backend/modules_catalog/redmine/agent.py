@@ -40,6 +40,19 @@ from .tools import (
     get_redmine_hrm_user_report,
     create_redmine_hrm_vacation,
     create_redmine_hrm_sick_leave,
+    # User Administration Tools
+    create_redmine_user,
+    get_redmine_user_details,
+    update_redmine_user,
+    delete_redmine_user,
+    lock_redmine_user,
+    unlock_redmine_user,
+    reset_redmine_user_password,
+    add_redmine_user_to_group,
+    remove_redmine_user_from_group,
+    get_redmine_groups,
+    create_redmine_group,
+    delete_redmine_group,
 )
 
 logger = logging.getLogger("ninko.modules.redmine.agent")
@@ -50,7 +63,10 @@ SYSTEM_PROMPT = _t(
 Deine Fähigkeiten:
 - Projekte auflisten und Details abrufen
 - Tickets/Issues abrufen, erstellen und aktualisieren (mit Filter für assigned_to_id)
-- Benutzer auflisten und IDs zuordnen
+- Benutzer auflisten, erstellen, aktualisieren, deaktivieren (lock/unlock), löschen
+- Benutzerdetails mit Gruppen und Mitgliedschaften abrufen
+- Passwörter zurücksetzen
+- Gruppen verwalten (erstellen, löschen, Benutzer hinzufügen/entfernen)
 - Time Entries abrufen und loggen
 - Benutzerstunden-Report: get_redmine_user_hours_report für Monatsauswertungen (pagination, summiert automatisch)
 - Issue-Status und Prioritäten abrufen
@@ -68,13 +84,18 @@ Wichtige Regeln:
 - Für "HRM Report/Urlaub/Krankheit": NUTZE get_redmine_hrm_user_report
 - Für "Urlaub eintragen": NUTZE create_redmine_hrm_vacation
 - Für "Krankheit eintragen": NUTZE create_redmine_hrm_sick_leave
+- Für Benutzer-Administration: Nutze lock_redmine_user zum Sperren, unlock_redmine_user zum Entsperren
+- Für Passwort-Reset: Nutze reset_redmine_user_password
 - Keine Emojis, prägnante tabellarische Ausgaben""",
     en="""You are Ninko's Redmine specialist.
 
 Your capabilities:
 - List projects and get details
 - Retrieve, create, and update tickets/issues (with assigned_to_id filter)
-- List users and map IDs
+- List, create, update, lock/unlock, and delete users
+- Get user details with groups and memberships
+- Reset passwords
+- Manage groups (create, delete, add/remove users)
 - Retrieve and log time entries
 - User hours report: get_redmine_user_hours_report for monthly reports (auto-pagination, sums correctly)
 - Get issue statuses and priorities
@@ -88,6 +109,8 @@ Important rules:
   - This tool auto-paginates through ALL entries and sums correctly
   - Format: from_date="2026-03-01", to_date="2026-03-31"
 - For "tickets by user X": Use get_redmine_issues with assigned_to_id
+- For user admin: Use lock_redmine_user to deactivate, unlock_redmine_user to reactivate
+- For password reset: Use reset_redmine_user_password
 - Be concise and factual, no emojis
 - Only give the raw sum, no repetitive explanations""",
 )
@@ -133,5 +156,18 @@ class RedmineAgent(BaseAgent):
                 get_redmine_hrm_user_report,
                 create_redmine_hrm_vacation,
                 create_redmine_hrm_sick_leave,
+                # User Administration
+                create_redmine_user,
+                get_redmine_user_details,
+                update_redmine_user,
+                delete_redmine_user,
+                lock_redmine_user,
+                unlock_redmine_user,
+                reset_redmine_user_password,
+                add_redmine_user_to_group,
+                remove_redmine_user_from_group,
+                get_redmine_groups,
+                create_redmine_group,
+                delete_redmine_group,
             ],
         )

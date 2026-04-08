@@ -7,6 +7,27 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.0] – 2026-04-08
+
+### Added
+
+- **Claude Code Inspired Improvements** (Phase 1-3 complete):
+  - **Multi-Agent Parallelisierung**: Pipeline steps can now run in parallel with `depends_on` support. New `run_parallel_pipeline` tool for fan-out/fan-in execution.
+  - **Safeguard Improvements**: Confidence scoring (0.0-1.0) in prefilter, latency tracking with `latency_ms` and `path_used` fields, new `/api/safeguard/metrics` endpoint.
+  - **Skill-Marketplace**: Remote skill repositories with `catalog.json` support. 13 built-in skills available. Frontend marketplace panel with Installiert/Marketplace/Repos tabs.
+- **Redmine User Administration**: 13 new administrative tools for complete user and group management:
+  - User CRUD: create, update, delete, lock/unlock, password reset
+  - Group management: create, delete, add/remove members
+  - User details with groups and memberships
+- **Code Review Documentation**: Comprehensive TODO.md update with status tracking (4 FIXED, 2 PARTIALLY_FIXED, 13 STILL_EXISTS, 1 NEW).
+
+### Changed
+
+- **Redmine module version** bumped to `1.1.0` for new admin tools.
+- **PLAN.md** created with detailed implementation roadmap for all three phases.
+
+---
+
 ## [1.1.0] – 2026-04-05
 
 ### Added

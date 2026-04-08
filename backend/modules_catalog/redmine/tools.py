@@ -1603,3 +1603,470 @@ async def create_redmine_hrm_sick_leave(
     except _REDMINE_TOOL_EXCEPTIONS as e:
         logger.error("create_redmine_hrm_sick_leave failed: %s", e)
         return _public_error()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# User Administration Tools - Benutzerverwaltung
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@tool
+async def create_redmine_user(
+    login: str,
+    firstname: str,
+    lastname: str,
+    mail: str,
+    password: str = "",
+    admin: bool = False,
+    connection_id: str = "",
+) -> dict:
+    """
+    Create a new user in Redmine.
+    Use this when the user asks to create a new Redmine account or add a user.
+
+    DE: Neuen Redmine-Benutzer erstellen
+    EN: Create new Redmine user
+    FR: Créer un nouvel utilisateur Redmine
+    ES: Crear nuevo usuario Redmine
+
+    Parameters:
+    - login: Username/login (required, unique)
+    - firstname: First name
+    - lastname: Last name
+    - mail: Email address
+    - password: Initial password (if empty, user must set via email)
+    - admin: Grant administrator privileges (default: False)
+
+    Returns:
+    - Created user details including ID
+    """
+    try:
+        client = await _get_api_client(connection_id)
+        user_data = {
+            "login": login,
+            "firstname": firstname,
+            "lastname": lastname,
+            "mail": mail,
+            "admin": admin,
+        }
+        if password:
+            user_data["password"] = password
+
+        result = await _redmine_request(
+            client["base_url"],
+            client["api_key"],
+            "POST",
+            "users.json",
+            data={"user": user_data},
+            verify_ssl=client["verify_ssl"],
+        )
+        return {
+            "status": "success",
+            "message": f"User created: {login} (ID: {result.get('user', {}).get('id')})",
+            "user": result.get("user", {}),
+        }
+    except _REDMINE_TOOL_EXCEPTIONS as e:
+        logger.error("create_redmine_user failed: %s", e)
+        return _public_error()
+
+
+@tool
+async def get_redmine_user_details(user_id: str, connection_id: str = "") -> dict:
+    """
+    Get detailed information about a specific Redmine user.
+    Use this to retrieve user details including email, groups, and permissions.
+
+    DE: Benutzerdetails abrufen
+    EN: Get user details
+    FR: Détails de l'utilisateur
+    ES: Detalles del usuario
+
+    Parameters:
+    - user_id: User ID (e.g., "32")
+
+    Returns:
+    - User details including groups, memberships, and API key presence
+    """
+    try:
+        client = await _get_api_client(connection_id)
+        result = await _redmine_request(
+            client["base_url"],
+            client["api_key"],
+            "GET",
+            f"users/{user_id}.json",
+            {"include": "groups,memberships"},
+            verify_ssl=client["verify_ssl"],
+        )
+        return {
+            "status": "success",
+            "user": result.get("user", {}),
+        }
+    except _REDMINE_TOOL_EXCEPTIONS as e:
+        logger.error("get_redmine_user_details failed: %s", e)
+        return _public_error()
+
+
+@tool
+async def update_redmine_user(
+    user_id: str,
+    firstname: str = "",
+    lastname: str = "",
+    mail: str = "",
+    admin: bool | None = None,
+    status: str = "",  # "1" = active, "3" = locked
+    connection_id: str = "",
+) -> dict:
+    """
+    Update an existing Redmine user's information.
+    Use this to change user details, email, admin status, or activate/deactivate.
+
+    DE: Benutzer aktualisieren (Status, Admin, E-Mail ändern)
+    EN: Update user (status, admin, email)
+    FR: Mettre à jour l'utilisateur
+    ES: Actualizar usuario
+
+    Parameters:
+    - user_id: User ID to update (required)
+    - firstname: New first name (optional)
+    - lastname: New last name (optional)
+    - mail: New email address (optional)
+    - admin: Set admin privileges True/False (optional)
+    - status: "1" for active, "3" for locked/inactive (optional)
+
+    Returns:
+    - Updated user details
+    """
+    try:
+        client = await _get_api_client(connection_id)
+        user_data = {}
+        if firstname:
+            user_data["firstname"] = firstname
+        if lastname:
+            user_data["lastname"] = lastname
+        if mail:
+            user_data["mail"] = mail
+        if admin is not None:
+            user_data["admin"] = admin
+        if status:
+            user_data["status"] = status
+
+        if not user_data:
+            return {"error": "No fields to update provided"}
+
+        result = await _redmine_request(
+            client["base_url"],
+            client["api_key"],
+            "PUT",
+            f"users/{user_id}.json",
+            data={"user": user_data},
+            verify_ssl=client["verify_ssl"],
+        )
+        return {
+            "status": "success",
+            "message": f"User #{user_id} updated successfully.",
+            "user": result.get("user", {}),
+        }
+    except _REDMINE_TOOL_EXCEPTIONS as e:
+        logger.error("update_redmine_user failed: %s", e)
+        return _public_error()
+
+
+@tool
+async def delete_redmine_user(user_id: str, connection_id: str = "") -> dict:
+    """
+    Delete a Redmine user permanently.
+    Use with caution - this cannot be undone!
+
+    DE: Benutzer löschen (unwiderruflich!)
+    EN: Delete user (permanent!)
+    FR: Supprimer l'utilisateur (définitif!)
+    ES: Eliminar usuario (¡permanente!)
+
+    Parameters:
+    - user_id: User ID to delete
+
+    Returns:
+    - Success confirmation
+    """
+    try:
+        client = await _get_api_client(connection_id)
+        await _redmine_request(
+            client["base_url"],
+            client["api_key"],
+            "DELETE",
+            f"users/{user_id}.json",
+            verify_ssl=client["verify_ssl"],
+        )
+        return {
+            "status": "success",
+            "message": f"User #{user_id} deleted successfully.",
+        }
+    except _REDMINE_TOOL_EXCEPTIONS as e:
+        logger.error("delete_redmine_user failed: %s", e)
+        return _public_error()
+
+
+@tool
+async def lock_redmine_user(user_id: str, connection_id: str = "") -> dict:
+    """
+    Lock/Deactivate a Redmine user (status = 3).
+    Locked users cannot log in but their data is preserved.
+
+    DE: Benutzer sperren (kann sich nicht mehr anmelden)
+    EN: Lock user (cannot login anymore)
+    FR: Verrouiller l'utilisateur
+    ES: Bloquear usuario
+
+    Parameters:
+    - user_id: User ID to lock
+
+    Returns:
+    - Success confirmation
+    """
+    return await update_redmine_user.ainvoke(
+        {"user_id": user_id, "status": "3", "connection_id": connection_id}
+    )
+
+
+@tool
+async def unlock_redmine_user(user_id: str, connection_id: str = "") -> dict:
+    """
+    Unlock/Reactivate a locked Redmine user (status = 1).
+    Restores user login capability.
+
+    DE: Benutzer entsperren (Login wieder möglich)
+    EN: Unlock user (login restored)
+    FR: Déverrouiller l'utilisateur
+    ES: Desbloquear usuario
+
+    Parameters:
+    - user_id: User ID to unlock
+
+    Returns:
+    - Success confirmation
+    """
+    return await update_redmine_user.ainvoke(
+        {"user_id": user_id, "status": "1", "connection_id": connection_id}
+    )
+
+
+@tool
+async def reset_redmine_user_password(
+    user_id: str, new_password: str, connection_id: str = ""
+) -> dict:
+    """
+    Reset/change a user's password in Redmine.
+    Use this for password resets or forced password changes.
+
+    DE: Passwort zurücksetzen/ändern
+    EN: Reset/change password
+    FR: Réinitialiser le mot de passe
+    ES: Restablecer contraseña
+
+    Parameters:
+    - user_id: User ID
+    - new_password: New password (must meet Redmine password policy)
+
+    Returns:
+    - Success confirmation
+    """
+    try:
+        client = await _get_api_client(connection_id)
+        result = await _redmine_request(
+            client["base_url"],
+            client["api_key"],
+            "PUT",
+            f"users/{user_id}.json",
+            data={"user": {"password": new_password}},
+            verify_ssl=client["verify_ssl"],
+        )
+        return {
+            "status": "success",
+            "message": f"Password reset for user #{user_id}.",
+        }
+    except _REDMINE_TOOL_EXCEPTIONS as e:
+        logger.error("reset_redmine_user_password failed: %s", e)
+        return _public_error()
+
+
+@tool
+async def add_redmine_user_to_group(
+    user_id: str, group_id: str, connection_id: str = ""
+) -> dict:
+    """
+    Add a user to a Redmine group.
+    Use this to assign group memberships for permissions.
+
+    DE: Benutzer zur Gruppe hinzufügen
+    EN: Add user to group
+    FR: Ajouter l'utilisateur au groupe
+    ES: Agregar usuario al grupo
+
+    Parameters:
+    - user_id: User ID
+    - group_id: Group ID
+
+    Returns:
+    - Success confirmation
+    """
+    try:
+        client = await _get_api_client(connection_id)
+        await _redmine_request(
+            client["base_url"],
+            client["api_key"],
+            "POST",
+            f"groups/{group_id}/users.json",
+            data={"user_id": user_id},
+            verify_ssl=client["verify_ssl"],
+        )
+        return {
+            "status": "success",
+            "message": f"User #{user_id} added to group #{group_id}.",
+        }
+    except _REDMINE_TOOL_EXCEPTIONS as e:
+        logger.error("add_redmine_user_to_group failed: %s", e)
+        return _public_error()
+
+
+@tool
+async def remove_redmine_user_from_group(
+    user_id: str, group_id: str, connection_id: str = ""
+) -> dict:
+    """
+    Remove a user from a Redmine group.
+    Use this to revoke group memberships.
+
+    DE: Benutzer aus Gruppe entfernen
+    EN: Remove user from group
+    FR: Retirer l'utilisateur du groupe
+    ES: Eliminar usuario del grupo
+
+    Parameters:
+    - user_id: User ID
+    - group_id: Group ID
+
+    Returns:
+    - Success confirmation
+    """
+    try:
+        client = await _get_api_client(connection_id)
+        await _redmine_request(
+            client["base_url"],
+            client["api_key"],
+            "DELETE",
+            f"groups/{group_id}/users/{user_id}.json",
+            verify_ssl=client["verify_ssl"],
+        )
+        return {
+            "status": "success",
+            "message": f"User #{user_id} removed from group #{group_id}.",
+        }
+    except _REDMINE_TOOL_EXCEPTIONS as e:
+        logger.error("remove_redmine_user_from_group failed: %s", e)
+        return _public_error()
+
+
+@tool
+async def get_redmine_groups(connection_id: str = "") -> dict:
+    """
+    List all Redmine groups.
+    Use this to see available groups for user assignments.
+
+    DE: Alle Gruppen auflisten
+    EN: List all groups
+    FR: Lister tous les groupes
+    ES: Listar todos los grupos
+
+    Returns:
+    - List of groups with IDs
+    """
+    try:
+        client = await _get_api_client(connection_id)
+        result = await _redmine_request(
+            client["base_url"],
+            client["api_key"],
+            "GET",
+            "groups.json",
+            {"limit": 100},
+            verify_ssl=client["verify_ssl"],
+        )
+        return {
+            "status": "success",
+            "groups": result.get("groups", []),
+            "total": result.get("total_count", 0),
+        }
+    except _REDMINE_TOOL_EXCEPTIONS as e:
+        logger.error("get_redmine_groups failed: %s", e)
+        return _public_error()
+
+
+@tool
+async def create_redmine_group(name: str, connection_id: str = "") -> dict:
+    """
+    Create a new user group in Redmine.
+    Use this to organize users into permission groups.
+
+    DE: Neue Gruppe erstellen
+    EN: Create new group
+    FR: Créer un nouveau groupe
+    ES: Crear nuevo grupo
+
+    Parameters:
+    - name: Group name (required, unique)
+
+    Returns:
+    - Created group details
+    """
+    try:
+        client = await _get_api_client(connection_id)
+        result = await _redmine_request(
+            client["base_url"],
+            client["api_key"],
+            "POST",
+            "groups.json",
+            data={"group": {"name": name}},
+            verify_ssl=client["verify_ssl"],
+        )
+        return {
+            "status": "success",
+            "message": f"Group created: {name} (ID: {result.get('group', {}).get('id')})",
+            "group": result.get("group", {}),
+        }
+    except _REDMINE_TOOL_EXCEPTIONS as e:
+        logger.error("create_redmine_group failed: %s", e)
+        return _public_error()
+
+
+@tool
+async def delete_redmine_group(group_id: str, connection_id: str = "") -> dict:
+    """
+    Delete a Redmine group.
+    Use this to remove empty or unused groups.
+
+    DE: Gruppe löschen
+    EN: Delete group
+    FR: Supprimer le groupe
+    ES: Eliminar grupo
+
+    Parameters:
+    - group_id: Group ID to delete
+
+    Returns:
+    - Success confirmation
+    """
+    try:
+        client = await _get_api_client(connection_id)
+        await _redmine_request(
+            client["base_url"],
+            client["api_key"],
+            "DELETE",
+            f"groups/{group_id}.json",
+            verify_ssl=client["verify_ssl"],
+        )
+        return {
+            "status": "success",
+            "message": f"Group #{group_id} deleted.",
+        }
+    except _REDMINE_TOOL_EXCEPTIONS as e:
+        logger.error("delete_redmine_group failed: %s", e)
+        return _public_error()
