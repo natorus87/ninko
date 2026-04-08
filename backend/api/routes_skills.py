@@ -21,6 +21,7 @@ router = APIRouter(prefix="/api/skills", tags=["skills"])
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
+
 class SkillCreate(BaseModel):
     name: str
     description: str
@@ -48,6 +49,7 @@ class RepoCreate(BaseModel):
 
 # ── Endpunkte ─────────────────────────────────────────────────────────────────
 
+
 @router.get("/")
 async def list_skills() -> list[dict]:
     """Gibt alle geladenen Skills zurück (Katalog ohne Content)."""
@@ -68,9 +70,14 @@ async def create_skill(body: SkillCreate) -> dict:
     """Erstellt einen neuen Skill und persistiert ihn in data/skills/."""
     mgr = get_skills_manager()
     if mgr.get_skill(body.name):
-        raise HTTPException(status_code=409, detail=f"Skill '{body.name}' existiert bereits. Nutze PUT zum Aktualisieren.")
+        raise HTTPException(
+            status_code=409,
+            detail=f"Skill '{body.name}' existiert bereits. Nutze PUT zum Aktualisieren.",
+        )
     try:
-        path = mgr.install_skill(body.name, body.description, body.content, body.modules)
+        path = mgr.install_skill(
+            body.name, body.description, body.content, body.modules
+        )
         return {"status": "created", "name": body.name, "path": str(path)}
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         logger.error("Skill-Erstellung fehlgeschlagen: %s", exc)
@@ -96,7 +103,9 @@ async def delete_skill(name: str) -> dict:
     try:
         success = mgr.delete_skill(name)
         if not success:
-            raise HTTPException(status_code=404, detail=f"Skill '{name}' nicht gefunden.")
+            raise HTTPException(
+                status_code=404, detail=f"Skill '{name}' nicht gefunden."
+            )
         return {"deleted": name}
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
@@ -106,7 +115,8 @@ async def delete_skill(name: str) -> dict:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-# ── Marketplace ──────────────────────────────────────────────────────────────
+# ── Marketplace (MUSS vor /{name} kommen, sonst wird "marketplace" als Skill-Name interpretiert) ──
+
 
 @router.get("/marketplace")
 async def get_marketplace() -> list[dict]:
@@ -140,6 +150,7 @@ async def install_from_marketplace(body: MarketplaceInstall) -> dict:
 
 # ── Repos ────────────────────────────────────────────────────────────────────
 
+
 @router.get("/repos")
 async def list_repos() -> list[dict]:
     """Konfigurierte Skill-Repositories auflisten."""
@@ -152,12 +163,14 @@ async def add_repo(body: RepoCreate) -> dict:
     """Neues Skill-Repository hinzufügen."""
     mp = get_skill_marketplace()
     try:
-        await mp.add_repo({
-            "id": body.id,
-            "name": body.name or body.id,
-            "catalog_url": body.catalog_url,
-            "builtin": False,
-        })
+        await mp.add_repo(
+            {
+                "id": body.id,
+                "name": body.name or body.id,
+                "catalog_url": body.catalog_url,
+                "builtin": False,
+            }
+        )
         return {"status": "added", "id": body.id}
     except (ValueError, PermissionError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -174,3 +187,65 @@ async def remove_repo(repo_id: str) -> dict:
         raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+
+
+# ── CRUD für Skills (nach Marketplace, damit /{name} nicht "marketplace" fängt) ──
+
+
+@router.get("/{name}")
+async def get_skill(name: str) -> dict:
+    """Gibt einen einzelnen Skill inkl. vollem Content zurück."""
+    skill = get_skills_manager().get_skill_full(name)
+    if not skill:
+        raise HTTPException(status_code=404, detail=f"Skill '{name}' nicht gefunden.")
+    return skill
+
+
+@router.post("/", status_code=201)
+async def create_skill(body: SkillCreate) -> dict:
+    """Erstellt einen neuen Skill und persistiert ihn in data/skills/."""
+    mgr = get_skills_manager()
+    if mgr.get_skill(body.name):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Skill '{body.name}' existiert bereits. Nutze PUT zum Aktualisieren.",
+        )
+    try:
+        path = mgr.install_skill(
+            body.name, body.description, body.content, body.modules
+        )
+        return {"status": "created", "name": body.name, "path": str(path)}
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        logger.error("Skill-Erstellung fehlgeschlagen: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.put("/{name}")
+async def update_skill(name: str, body: SkillUpdate) -> dict:
+    """Aktualisiert einen bestehenden Skill (Runtime-Override für Built-ins möglich)."""
+    mgr = get_skills_manager()
+    try:
+        path = mgr.update_skill(name, body.description, body.content, body.modules)
+        return {"status": "updated", "name": name, "path": str(path)}
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        logger.error("Skill-Update fehlgeschlagen: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.delete("/{name}", status_code=200)
+async def delete_skill(name: str) -> dict:
+    """Löscht einen Runtime-Skill. Built-in Skills können nicht gelöscht werden."""
+    mgr = get_skills_manager()
+    try:
+        success = mgr.delete_skill(name)
+        if not success:
+            raise HTTPException(
+                status_code=404, detail=f"Skill '{name}' nicht gefunden."
+            )
+        return {"deleted": name}
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except HTTPException:
+        raise
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
