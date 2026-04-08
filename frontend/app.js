@@ -2493,6 +2493,7 @@ const Ninko = {
         // Load content when switching tabs
         if (tabId === 'llm') { this.loadLlmSettings(); this.loadLlmProviders(); this.loadEmbedModel(); }
         if (tabId === 'modules') { this.loadModulesSettings(); this.loadMarketplaceConfig(); }
+        if (tabId === 'skills') { this.loadSettingsSkillsList(); }
         if (tabId === 'system') this.loadBrandingForm();
         if (tabId === 'themes') this.loadThemesSettings();
         if (tabId === 'k8s') this.loadK8sClusters();
@@ -5956,6 +5957,57 @@ const Ninko = {
                         <div class="agent-card-actions">
                             ${!s.builtin ? `<button class="btn-icon btn-icon-sm" onclick="Ninko.openSkillEditor('${s.name}')" title="Bearbeiten">${this._ic.edit}</button>` : `<button class="btn-icon btn-icon-sm" onclick="Ninko.openSkillEditor('${s.name}')" title="Ansehen/Override">${this._ic.edit}</button>`}
                             ${!s.builtin ? `<button class="btn-icon btn-icon-sm" onclick="Ninko.deleteSkill('${s.name}')" title="Löschen" style="color:var(--error-color);">${this._ic.trash}</button>` : ''}
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-top:0.5rem;">
+                        ${s.builtin ? '<span class="status-badge status-unknown" style="font-size:0.7rem;">built-in</span>' : '<span class="status-badge status-ok" style="font-size:0.7rem;">custom</span>'}
+                        ${s.modules.length ? s.modules.map(m => `<span class="status-badge" style="font-size:0.7rem;background:rgba(92,158,235,0.15);color:var(--accent-blue);border:1px solid var(--accent-blue);">${m}</span>`).join('') : '<span class="status-badge status-unknown" style="font-size:0.7rem;">alle Agenten</span>'}
+                    </div>
+                </div>
+            `).join('');
+        } catch {
+            container.innerHTML = '<p class="empty-state text-error">Fehler beim Laden.</p>';
+        }
+    },
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Skills aus Settings
+    // ═══════════════════════════════════════════════════════════════════
+
+    openSkillsPanelFromSettings() {
+        this.switchTab('automatisierung');
+        this._showOnlyPanel('agenten-skills');
+        this.switchSkillTab('installed');
+        this.loadSkillsList();
+    },
+
+    openSkillMarketplaceFromSettings() {
+        this.switchTab('automatisierung');
+        this._showOnlyPanel('agenten-skills');
+        this.switchSkillTab('marketplace');
+        this.loadSkillMarketplace();
+    },
+
+    async loadSettingsSkillsList() {
+        const container = document.getElementById('settings-skills-list');
+        if (!container) return;
+        container.innerHTML = '<p class="empty-state">Lade…</p>';
+        try {
+            const res = await fetch('/api/skills/');
+            const skills = await res.json();
+            if (!skills.length) {
+                container.innerHTML = '<p class="empty-state">Keine Skills vorhanden.</p>';
+                return;
+            }
+            container.innerHTML = skills.map(s => `
+                <div class="agent-card" style="position:relative;">
+                    <div class="agent-card-header">
+                        <div style="display:flex;align-items:center;gap:0.5rem;flex:1;min-width:0;">
+                            <span style="font-size:1.1rem;">${s.builtin ? '🔒' : '📝'}</span>
+                            <div style="min-width:0;">
+                                <div class="agent-card-name">${s.name}</div>
+                                <div class="agent-card-desc">${s.description}</div>
+                            </div>
                         </div>
                     </div>
                     <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-top:0.5rem;">
