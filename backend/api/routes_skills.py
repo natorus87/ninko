@@ -1,5 +1,6 @@
 """
-Ninko Skills API – CRUD für das prozeduale Domänenwissen der Agenten.
+Ninko Skills API – CRUD für das prozeduale Domänenwissen der Agenten
++ Skill-Marketplace (Remote Skill-Repositories).
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from core.skills_manager import get_skills_manager
+from core.skill_marketplace import get_skill_marketplace
 
 logger = logging.getLogger("ninko.api.skills")
 
@@ -30,6 +32,18 @@ class SkillUpdate(BaseModel):
     description: str
     content: str
     modules: Optional[list[str]] = None
+
+
+class MarketplaceInstall(BaseModel):
+    name: str
+    skill_url: str
+    modules: Optional[list[str]] = None
+
+
+class RepoCreate(BaseModel):
+    id: str
+    name: str = ""
+    catalog_url: str
 
 
 # ── Endpunkte ─────────────────────────────────────────────────────────────────
@@ -90,3 +104,73 @@ async def delete_skill(name: str) -> dict:
         raise
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Marketplace ──────────────────────────────────────────────────────────────
+
+@router.get("/marketplace")
+async def get_marketplace() -> list[dict]:
+    """Aggregierter Katalog aller konfigurierten Skill-Repos."""
+    mp = get_skill_marketplace()
+    installed = {s["name"] for s in get_skills_manager().get_catalog()}
+    skills = await mp.fetch_all_catalogs()
+    # Mark installed skills
+    for s in skills:
+        s["installed"] = s.get("name", "") in installed
+    return skills
+
+
+@router.post("/marketplace/install", status_code=201)
+async def install_from_marketplace(body: MarketplaceInstall) -> dict:
+    """Installiert einen Skill aus dem Marketplace."""
+    mp = get_skill_marketplace()
+    try:
+        path = await mp.install_from_remote(
+            skill_url=body.skill_url,
+            name=body.name,
+            modules=body.modules,
+        )
+        return {"status": "installed", "name": body.name, "path": str(path)}
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        logger.error("Marketplace-Install fehlgeschlagen: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Repos ────────────────────────────────────────────────────────────────────
+
+@router.get("/repos")
+async def list_repos() -> list[dict]:
+    """Konfigurierte Skill-Repositories auflisten."""
+    mp = get_skill_marketplace()
+    return await mp.get_repos()
+
+
+@router.post("/repos", status_code=201)
+async def add_repo(body: RepoCreate) -> dict:
+    """Neues Skill-Repository hinzufügen."""
+    mp = get_skill_marketplace()
+    try:
+        await mp.add_repo({
+            "id": body.id,
+            "name": body.name or body.id,
+            "catalog_url": body.catalog_url,
+            "builtin": False,
+        })
+        return {"status": "added", "id": body.id}
+    except (ValueError, PermissionError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.delete("/repos/{repo_id}")
+async def remove_repo(repo_id: str) -> dict:
+    """Skill-Repository entfernen (builtin-Repos geschützt)."""
+    mp = get_skill_marketplace()
+    try:
+        await mp.remove_repo(repo_id)
+        return {"status": "removed", "id": repo_id}
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))

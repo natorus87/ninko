@@ -36,6 +36,7 @@ from agents.core_tools import (
     confirm_forget,
     call_module_agent,
     run_pipeline,
+    run_parallel_pipeline,
     configure_routing,
     get_routing_info,
     wait,
@@ -246,6 +247,10 @@ ENTSCHEIDUNGS-LOGIK:
    → `call_module_agent("<modul>", "<vollständige Aufgabe>")` aufrufen.
 2. Erfordert die Anfrage mehrere Module nacheinander?
    → `run_pipeline([{"module":"...", "task":"..."}])` — Ergebnisse werden automatisch weitergegeben.
+   → Für PARALLELE Ausführung: `run_parallel_pipeline(groups=[[{...}, {...}], [{...}]])` —
+     Steps in einer Gruppe laufen gleichzeitig, Gruppen nacheinander.
+   → Alternativ: `run_pipeline` mit `"depends_on": []` für parallele Steps
+     (z.B. `[{"module":"kubernetes","task":"..."}, {"module":"pihole","task":"...","depends_on":[]}, {"module":"glpi","task":"...","depends_on":[0,1]}]`).
 3. Braucht der User ein spezialisiertes KI-Profil das kein Modul abdeckt?
    → `create_custom_agent` aufrufen. WICHTIG: Vor dem Erstellen Use-Case klären (Zweck, Module,
      Output, Kritikalität). System-Prompt strukturiert aufbauen: ## Aufgaben / ## Arbeitsweise /
@@ -267,7 +272,7 @@ WEITERE FÄHIGKEITEN:
 
 VERFÜGBARE MODULE: Siehe VERFÜGBARE MODULE weiter unten — nutze `call_module_agent` mit exaktem Modulnamen.
 
-WICHTIG: `call_module_agent` für EINZELNE Modul-Aufrufe. `run_pipeline` wenn Ergebnisse zwischen Modulen fließen müssen. Multi-Modul-Anfragen mit explizit sequentiellem Intent (z.B. "restart X und schick dann Telegram-Nachricht") werden automatisch als Tier-4-Pipeline erkannt und benötigen KEIN manuelles `run_pipeline` im ReAct-Loop — vermeide Doppel-Routing.
+WICHTIG: `call_module_agent` für EINZELNE Modul-Aufrufe. `run_pipeline` wenn Ergebnisse zwischen Modulen fließen müssen (sequenziell oder mit depends_on für Parallelisierung). `run_parallel_pipeline` wenn mehrere Module GLEICHZEITIG abgefragt werden sollen und die Ergebnisse danach zusammenfließen. Multi-Modul-Anfragen mit explizit sequentiellem Intent (z.B. "restart X und schick dann Telegram-Nachricht") werden automatisch als Tier-4-Pipeline erkannt und benötigen KEIN manuelles `run_pipeline` im ReAct-Loop — vermeide Doppel-Routing.
 
 BILD-TAGS: Wenn ein Tool-Ergebnis `[NINKO_IMAGE:url]` enthält, übernimm diesen Tag EXAKT und UNVERÄNDERT in deine Antwort. Ersetze ihn NIEMALS durch einen Markdown-Link, eine URL oder ein Emoji. Der Tag muss wörtlich `[NINKO_IMAGE:https://...]` im Antworttext erscheinen.
 
@@ -299,6 +304,7 @@ class OrchestratorAgent(BaseAgent):
                 confirm_forget,
                 call_module_agent,
                 run_pipeline,
+                run_parallel_pipeline,
                 generate_image,
                 configure_routing,
                 get_routing_info,

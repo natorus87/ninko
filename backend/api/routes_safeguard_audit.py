@@ -75,6 +75,15 @@ async def get_audit_log(
     return {"entries": entries, "total": len(entries)}
 
 
+@router.get("/metrics")
+async def get_safeguard_metrics(request: Request) -> dict:
+    """Return safeguard latency percentiles and path breakdown from recent checks."""
+    sg: SafeguardMiddleware | None = getattr(request.app.state, "safeguard", None)
+    if sg is None:
+        return {"p50_ms": 0, "p95_ms": 0, "p99_ms": 0, "path_breakdown": {}, "total_checks": 0}
+    return await sg.get_metrics()
+
+
 @router.delete("/")
 async def clear_audit_log(request: Request) -> dict:
     """Clear the safeguard audit log."""

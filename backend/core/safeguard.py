@@ -213,6 +213,15 @@ class ActionCategory(str, Enum):
 
 
 @dataclass
+class PrefilterResult:
+    """Result from the keyword prefilter with confidence score."""
+    hit: bool
+    category: ActionCategory | None
+    confidence: float  # 0.0–1.0
+    rationale: str = ""
+
+
+@dataclass
 class SafeguardResult:
     requires_confirmation: bool
     category: ActionCategory
@@ -221,6 +230,8 @@ class SafeguardResult:
     profile_id: str = ""
     auto_decided: bool = False  # True when auto-mode LLM made the decision
     auto_decision: str = ""  # "allow" or "deny" (only set when auto_decided=True)
+    latency_ms: float = 0.0  # Duration of the entire check
+    path_used: str = ""  # "prefilter_safe" | "prefilter_block" | "llm" | "disabled"
 
     def to_dict(self) -> dict:
         d = {
@@ -232,6 +243,10 @@ class SafeguardResult:
         if self.auto_decided:
             d["auto_decided"] = True
             d["auto_decision"] = self.auto_decision
+        if self.latency_ms > 0:
+            d["latency_ms"] = round(self.latency_ms, 2)
+        if self.path_used:
+            d["path_used"] = self.path_used
         return d
 
 
@@ -888,6 +903,7 @@ _TOOL_READONLY: frozenset[str] = frozenset(
         "create_linear_workflow",
         "execute_workflow",
         "run_pipeline",
+        "run_parallel_pipeline",
         "get_task",
         "list_tasks",
         "task_output",
@@ -1060,15 +1076,48 @@ _TOOL_READONLY: frozenset[str] = frozenset(
 })
 
 
-def _keyword_prefilter(text: str) -> SafeguardResult | None:
+# High-confidence CLI/SQL patterns that are unambiguously destructive/state-changing.
+# These get confidence ≥ 0.95 and can skip the LLM call entirely.
+_HIGH_CONFIDENCE_DESTRUCTIVE: tuple[str, ...] = (
+    "rm -rf",
+    "rm -r",
+    "kubectl delete",
+    "drop table",
+    "drop database",
+    "terraform destroy",
+    "pvremove",
+    "wipefs",
+    "mkfs",
+    "格式化",  # format (ZH)
+    "削除して",  # please delete (JA)
+)
+
+_HIGH_CONFIDENCE_STATE: tuple[str, ...] = (
+    "kubectl apply",
+    "kubectl create",
+    "kubectl scale",
+    "helm install",
+    "helm upgrade",
+    "terraform apply",
+    "ansible-playbook",
+)
+
+
+def _keyword_prefilter(text: str) -> PrefilterResult:
     """
-    Fast-path classifier that skips the LLM call for short, unambiguous messages.
+    Fast-path classifier with confidence scoring.
+
+    Returns a PrefilterResult with:
+    - confidence ≥ 0.95: unambiguous match (CLI/SQL patterns) → skip LLM
+    - confidence ≥ 0.70: keyword match → LLM with shortened prompt
+    - confidence < 0.70: no match → full LLM path
 
     Priority order:
-      1. Safe pattern match  → SAFE (violation=0)
-      2. Destructive keyword → DESTRUCTIVE (violation=1)
-      3. State-changing keyword → STATE_CHANGING (violation=1)
-      4. No match → None (fall through to LLM classifier)
+      1. Safe pattern match  → SAFE (confidence 0.80)
+      2. High-confidence CLI → DESTRUCTIVE/STATE_CHANGING (confidence 0.98)
+      3. Destructive keyword → DESTRUCTIVE (confidence 0.80)
+      4. State-changing keyword → STATE_CHANGING (confidence 0.75)
+      5. No match → hit=False (confidence 0.0)
     """
     lower = text.lower().strip()
     spaced = f" {lower} "  # wrap for word-boundary substring matching
@@ -1076,39 +1125,63 @@ def _keyword_prefilter(text: str) -> SafeguardResult | None:
     # 1. Clearly read-only — no confirmation needed
     for pat in _SAFE_PATTERNS:
         if lower.startswith(pat) or pat in spaced:
-            return SafeguardResult(
-                requires_confirmation=False,
+            return PrefilterResult(
+                hit=True,
                 category=ActionCategory.SAFE,
+                confidence=0.80,
                 rationale="Read-only keyword detected — safe to execute directly.",
             )
 
-    # 2. Destructive keywords
+    # 2. High-confidence destructive CLI/SQL patterns (skip LLM)
+    for pat in _HIGH_CONFIDENCE_DESTRUCTIVE:
+        if pat in lower:
+            return PrefilterResult(
+                hit=True,
+                category=ActionCategory.DESTRUCTIVE,
+                confidence=0.98,
+                rationale=f"High-confidence destructive pattern '{pat}' — LLM skipped.",
+            )
+
+    # 3. High-confidence state-changing CLI patterns (skip LLM)
+    for pat in _HIGH_CONFIDENCE_STATE:
+        if pat in lower:
+            return PrefilterResult(
+                hit=True,
+                category=ActionCategory.STATE_CHANGING,
+                confidence=0.98,
+                rationale=f"High-confidence state-changing pattern '{pat}' — LLM skipped.",
+            )
+
+    # 4. Destructive keywords (moderate confidence)
     for kw, need_wb in _DESTRUCTIVE_TERMS:
         if need_wb:
             hit = bool(re.search(rf"\b{re.escape(kw.strip())}\b", lower))
         else:
             hit = kw in lower
         if hit:
-            return SafeguardResult(
-                requires_confirmation=True,
+            return PrefilterResult(
+                hit=True,
                 category=ActionCategory.DESTRUCTIVE,
-                rationale=f"Destructive keyword '{kw.strip()}' detected — confirmation required.",
+                confidence=0.80,
+                rationale=f"Destructive keyword '{kw.strip()}' detected.",
             )
 
-    # 3. State-changing keywords
+    # 5. State-changing keywords (moderate confidence)
     for kw, need_wb in _STATE_TERMS:
         if need_wb:
             hit = bool(re.search(rf"\b{re.escape(kw.strip())}\b", lower))
         else:
             hit = kw in lower
         if hit:
-            return SafeguardResult(
-                requires_confirmation=True,
+            return PrefilterResult(
+                hit=True,
                 category=ActionCategory.STATE_CHANGING,
-                rationale=f"State-changing keyword '{kw.strip()}' detected — confirmation required.",
+                confidence=0.75,
+                rationale=f"State-changing keyword '{kw.strip()}' detected.",
             )
 
-    return None
+    # 6. No match
+    return PrefilterResult(hit=False, category=None, confidence=0.0)
 
 
 # ─── Safeguard middleware ─────────────────────────────────────────────────────
@@ -1223,6 +1296,64 @@ class SafeguardMiddleware:
             await pipe.execute()
         except _SAFEGUARD_EXCEPTIONS as exc:
             logger.warning("[Safeguard/Audit] Failed to write audit entry: %s", exc)
+
+    # ── Latency recording ───────────────────────────────────────────────────────
+
+    LATENCY_KEY = "ninko:safeguard:latency"
+    MAX_LATENCY_ENTRIES = 100
+
+    async def _record_latency(self, latency_ms: float, path_used: str) -> None:
+        """Record latency + path to a capped Redis list for metrics."""
+        try:
+            from core.redis_client import get_redis
+
+            entry = json.dumps({"ms": round(latency_ms, 2), "path": path_used, "ts": time.time()})
+            redis = get_redis()
+            pipe = redis.connection.pipeline()
+            pipe.lpush(self.LATENCY_KEY, entry)
+            pipe.ltrim(self.LATENCY_KEY, 0, self.MAX_LATENCY_ENTRIES - 1)
+            await pipe.execute()
+        except _SAFEGUARD_EXCEPTIONS as exc:
+            logger.debug("[Safeguard] Failed to record latency: %s", exc)
+
+    async def get_metrics(self) -> dict:
+        """Return latency percentiles and path breakdown from recent checks."""
+        from core.redis_client import get_redis
+
+        redis = get_redis()
+        raw_entries = await redis.connection.lrange(self.LATENCY_KEY, 0, self.MAX_LATENCY_ENTRIES - 1)
+
+        if not raw_entries:
+            return {"p50_ms": 0, "p95_ms": 0, "p99_ms": 0, "path_breakdown": {}, "total_checks": 0}
+
+        latencies: list[float] = []
+        path_counts: dict[str, int] = {}
+        for raw in raw_entries:
+            try:
+                entry = json.loads(raw)
+                latencies.append(float(entry.get("ms", 0)))
+                path = entry.get("path", "unknown")
+                path_counts[path] = path_counts.get(path, 0) + 1
+            except (json.JSONDecodeError, TypeError, ValueError):
+                continue
+
+        if not latencies:
+            return {"p50_ms": 0, "p95_ms": 0, "p99_ms": 0, "path_breakdown": {}, "total_checks": 0}
+
+        latencies.sort()
+        n = len(latencies)
+
+        def _percentile(p: float) -> float:
+            idx = int(p / 100 * (n - 1))
+            return round(latencies[min(idx, n - 1)], 2)
+
+        return {
+            "p50_ms": _percentile(50),
+            "p95_ms": _percentile(95),
+            "p99_ms": _percentile(99),
+            "path_breakdown": path_counts,
+            "total_checks": n,
+        }
 
     # ── LLM generation re-init ────────────────────────────────────────────────
 
@@ -1368,33 +1499,47 @@ class SafeguardMiddleware:
         Classify a user message against the active profile.
 
         Stage 1 — scope check: profile.check_user_messages=False → SAFE
-        Stage 2 — keyword prefilter (< 200 chars)
+        Stage 2 — keyword prefilter (always, no length limit)
+                  confidence ≥ 0.95 → skip LLM entirely
+                  confidence ≥ 0.70 → LLM with shortened prompt (max_tokens=50)
+                  confidence < 0.70 → fall through to full LLM
         Stage 3 — injection prefilter (if profile.detect_prompt_injection)
         Stage 4 — LLM classifier
 
         Always returns a SafeguardResult — never raises.
         """
+        t0 = time.monotonic()
         self.check_llm_generation()
         profile = await self.resolve_profile(agent_id, session_id)
 
         if not profile.check_user_messages:
-            return SafeguardResult(
+            latency = (time.monotonic() - t0) * 1000
+            result = SafeguardResult(
                 requires_confirmation=False,
                 category=ActionCategory.SAFE,
                 rationale="Profil prüft keine Benutzernachrichten.",
                 profile_id=profile.id,
+                latency_ms=latency,
+                path_used="disabled",
             )
+            await self._record_latency(latency, "disabled")
+            return result
 
-        if len(user_input) < 200:
-            # Keyword prefilter
-            pre = _keyword_prefilter(user_input)
-            if pre is not None:
+        # Stage 2 — Keyword prefilter (no length limit)
+        pre = _keyword_prefilter(user_input)
+        if pre.hit and pre.category is not None:
+            if pre.confidence >= 0.95:
+                # High confidence — skip LLM entirely
                 req_conf = pre.category.value in profile.confirm_categories
+                path = "prefilter_block" if req_conf else "prefilter_safe"
+                latency = (time.monotonic() - t0) * 1000
                 result = SafeguardResult(
                     requires_confirmation=req_conf,
                     category=pre.category,
                     rationale=pre.rationale,
                     profile_id=profile.id,
+                    latency_ms=latency,
+                    path_used=path,
                 )
                 result = await self._apply_auto_mode(user_input, result, profile)
                 if result.category != ActionCategory.SAFE:
@@ -1414,48 +1559,74 @@ class SafeguardMiddleware:
                         rationale=result.rationale,
                         profile_id=profile.id,
                     )
+                await self._record_latency(latency, path)
                 return result
 
-            # Prompt injection prefilter
-            if profile.detect_prompt_injection:
-                inj = _check_injection_prefilter(user_input)
-                if inj is not None:
-                    req_conf = (
-                        ActionCategory.PROMPT_INJECTION.value
-                        in profile.confirm_categories
-                    )
-                    result = SafeguardResult(
-                        requires_confirmation=req_conf,
-                        category=ActionCategory.PROMPT_INJECTION,
-                        rationale=inj.rationale,
-                        profile_id=profile.id,
-                    )
-                    result = await self._apply_auto_mode(user_input, result, profile)
-                    await self._audit_log(
-                        action="user_message",
-                        category=result.category,
-                        text=user_input,
-                        session_id=session_id,
-                        agent_id=agent_id,
-                        outcome="auto_approved"
-                        if result.auto_decided
-                        else (
-                            "confirmed"
-                            if not result.requires_confirmation
-                            else "pending"
-                        ),
-                        rationale=result.rationale,
-                        profile_id=profile.id,
-                    )
-                    return result
+            if pre.category == ActionCategory.SAFE:
+                # Safe prefilter hit — no LLM needed
+                latency = (time.monotonic() - t0) * 1000
+                result = SafeguardResult(
+                    requires_confirmation=False,
+                    category=ActionCategory.SAFE,
+                    rationale=pre.rationale,
+                    profile_id=profile.id,
+                    latency_ms=latency,
+                    path_used="prefilter_safe",
+                )
+                await self._record_latency(latency, "prefilter_safe")
+                return result
 
-        # LLM classifier
+            # 0.70 ≤ confidence < 0.95 — use shortened LLM prompt (max_tokens=50)
+            # Falls through to LLM section below with shortened_llm=True
+
+        # Stage 3 — Prompt injection prefilter
+        if profile.detect_prompt_injection:
+            inj = _check_injection_prefilter(user_input)
+            if inj is not None:
+                req_conf = (
+                    ActionCategory.PROMPT_INJECTION.value
+                    in profile.confirm_categories
+                )
+                latency = (time.monotonic() - t0) * 1000
+                result = SafeguardResult(
+                    requires_confirmation=req_conf,
+                    category=ActionCategory.PROMPT_INJECTION,
+                    rationale=inj.rationale,
+                    profile_id=profile.id,
+                    latency_ms=latency,
+                    path_used="prefilter_block",
+                )
+                result = await self._apply_auto_mode(user_input, result, profile)
+                await self._audit_log(
+                    action="user_message",
+                    category=result.category,
+                    text=user_input,
+                    session_id=session_id,
+                    agent_id=agent_id,
+                    outcome="auto_approved"
+                    if result.auto_decided
+                    else (
+                        "confirmed"
+                        if not result.requires_confirmation
+                        else "pending"
+                    ),
+                    rationale=result.rationale,
+                    profile_id=profile.id,
+                )
+                await self._record_latency(latency, "prefilter_block")
+                return result
+
+        # Stage 4 — LLM classifier
+        # Use shortened prompt (max_tokens=50) when prefilter had moderate confidence
+        shortened_llm = pre.hit and pre.confidence >= 0.70
+
         # Fetch agent-specific classifier policy (if any)
         agent_policy = ""
         if agent_id and self.agent_store:
             agent_policy = await self.agent_store.get_classifier_policy(agent_id) or ""
 
         system_prompt = self._build_policy(profile, agent_policy=agent_policy)
+        max_tokens = 50 if shortened_llm else 150
         try:
             response = await self.client.chat.completions.create(
                 model=self.model,
@@ -1464,18 +1635,21 @@ class SafeguardMiddleware:
                     {"role": "user", "content": user_input},
                 ],
                 temperature=0.0,
-                max_tokens=150,
+                max_tokens=max_tokens,
                 timeout=self.timeout,
             )
             raw = response.choices[0].message.content.strip()
             parsed = self._parse(raw)
             req_conf = parsed.category.value in profile.confirm_categories
+            latency = (time.monotonic() - t0) * 1000
             result = SafeguardResult(
                 requires_confirmation=req_conf,
                 category=parsed.category,
                 rationale=parsed.rationale,
                 raw_response=parsed.raw_response,
                 profile_id=profile.id,
+                latency_ms=latency,
+                path_used="llm",
             )
             result = await self._apply_auto_mode(user_input, result, profile)
             if result.category != ActionCategory.SAFE:
@@ -1493,9 +1667,11 @@ class SafeguardMiddleware:
                     rationale=result.rationale,
                     profile_id=profile.id,
                 )
+            await self._record_latency(latency, "llm")
             return result
 
         except _SAFEGUARD_EXCEPTIONS as exc:
+            latency = (time.monotonic() - t0) * 1000
             logger.warning(
                 "[Safeguard] Classifier call failed: %s — fail-%s.",
                 exc,
@@ -1510,6 +1686,8 @@ class SafeguardMiddleware:
                 ),
                 raw_response=str(exc),
                 profile_id=profile.id,
+                latency_ms=latency,
+                path_used="llm",
             )
             await self._audit_log(
                 action="classifier_error",
@@ -1521,6 +1699,7 @@ class SafeguardMiddleware:
                 rationale=result.rationale,
                 profile_id=profile.id,
             )
+            await self._record_latency(latency, "llm")
             return result
 
     # ── Tool-call classifier ───────────────────────────────────────────────────

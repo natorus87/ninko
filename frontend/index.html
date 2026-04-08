@@ -491,8 +491,19 @@
                             <button class="btn btn-primary" onclick="Ninko.openSkillEditor(null)">+ Neuer Skill</button>
                         </div>
                     </div>
+                    <div style="display:flex;gap:0.5rem;margin-bottom:1rem;">
+                        <button class="btn btn-outline skill-subtab active" id="skill-tab-installed" onclick="Ninko.switchSkillTab('installed')">Installiert</button>
+                        <button class="btn btn-outline skill-subtab" id="skill-tab-marketplace" onclick="Ninko.switchSkillTab('marketplace')">Marketplace</button>
+                        <button class="btn btn-outline skill-subtab" id="skill-tab-repos" onclick="Ninko.switchSkillTab('repos')">Repos</button>
+                    </div>
                     <div id="skills-list" class="agents-grid">
                         <p class="empty-state">Lade Skills…</p>
+                    </div>
+                    <div id="skills-marketplace" class="agents-grid hidden">
+                        <p class="empty-state">Lade Marketplace…</p>
+                    </div>
+                    <div id="skills-repos" class="hidden" style="max-width:600px;">
+                        <p class="empty-state">Lade Repos…</p>
                     </div>
                 </div>
 

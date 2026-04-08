@@ -1,0 +1,121 @@
+{
+  "skills": [
+    {
+      "name": "agent-builder",
+      "description": "Agenten erstellen, bauen, anlegen, konfigurieren, optimieren, verbessern",
+      "modules": [],
+      "skill_url": "https://raw.githubusercontent.com/natorus87/ninko/main/backend/skills/agent-builder/SKILL.md",
+      "version": "1.0.0",
+      "author": "natorus87",
+      "tags": ["agent", "builder", "orchestration"]
+    },
+    {
+      "name": "email-alert-templates",
+      "description": "E-Mail Alert Benachrichtigung IT-Alarm Vorlage Format",
+      "modules": ["email"],
+      "skill_url": "https://raw.githubusercontent.com/natorus87/ninko/main/backend/skills/email-alert-templates/SKILL.md",
+      "version": "1.0.0",
+      "author": "natorus87",
+      "tags": ["email", "alert", "monitoring"]
+    },
+    {
+      "name": "fritzbox-network-diagnostics",
+      "description": "FritzBox Netzwerk-Diagnose, WLAN-Probleme, Portweiterleitung, DNS",
+      "modules": ["fritzbox"],
+      "skill_url": "https://raw.githubusercontent.com/natorus87/ninko/main/backend/skills/fritzbox-network-diagnostics/SKILL.md",
+      "version": "1.0.0",
+      "author": "natorus87",
+      "tags": ["fritzbox", "network", "diagnostics"]
+    },
+    {
+      "name": "glpi-ticket-workflow",
+      "description": "GLPI Ticket erstellen, Incident, Service Request, Priorität, Helpdesk",
+      "modules": ["glpi"],
+      "skill_url": "https://raw.githubusercontent.com/natorus87/ninko/main/backend/skills/glpi-ticket-workflow/SKILL.md",
+      "version": "1.0.0",
+      "author": "natorus87",
+      "tags": ["glpi", "ticket", "helpdesk", "itsm"]
+    },
+    {
+      "name": "homeassistant-automation",
+      "description": "Home Assistant Automationen, Szenen, Entitäten, Lichter steuern",
+      "modules": ["homeassistant"],
+      "skill_url": "https://raw.githubusercontent.com/natorus87/ninko/main/backend/skills/homeassistant-automation/SKILL.md",
+      "version": "1.0.0",
+      "author": "natorus87",
+      "tags": ["homeassistant", "automation", "smarthome"]
+    },
+    {
+      "name": "ionos-dns-quirks",
+      "description": "IONOS DNS API Eigenheiten, Records, Zone-Abfrage, API-Key Format",
+      "modules": ["ionos"],
+      "skill_url": "https://raw.githubusercontent.com/natorus87/ninko/main/backend/skills/ionos-dns-quirks/SKILL.md",
+      "version": "1.0.0",
+      "author": "natorus87",
+      "tags": ["ionos", "dns", "api"]
+    },
+    {
+      "name": "knowledge-graph-querying",
+      "description": "Knowledge Graph Abfragen, Entity-Beziehungen, Infrastruktur-Abhängigkeiten",
+      "modules": [],
+      "skill_url": "https://raw.githubusercontent.com/natorus87/ninko/main/backend/skills/knowledge-graph-querying/SKILL.md",
+      "version": "1.0.0",
+      "author": "natorus87",
+      "tags": ["knowledge", "graph", "rag"]
+    },
+    {
+      "name": "kubernetes-incident-response",
+      "description": "Systematische Diagnose von K8s Pod-Fehlern, CrashLoopBackOff, OOMKilled",
+      "modules": ["kubernetes"],
+      "skill_url": "https://raw.githubusercontent.com/natorus87/ninko/main/backend/skills/kubernetes-incident-response/SKILL.md",
+      "version": "1.0.0",
+      "author": "natorus87",
+      "tags": ["kubernetes", "incident", "ops", "troubleshooting"]
+    },
+    {
+      "name": "pihole-session-management",
+      "description": "Pi-hole v6 Session-Authentifizierung, Rate-Limiting, Token-Caching",
+      "modules": ["pihole"],
+      "skill_url": "https://raw.githubusercontent.com/natorus87/ninko/main/backend/skills/pihole-session-management/SKILL.md",
+      "version": "1.0.0",
+      "author": "natorus87",
+      "tags": ["pihole", "dns", "session"]
+    },
+    {
+      "name": "proxmox-troubleshooting",
+      "description": "Proxmox VM-Diagnose, Container-Fehler, Storage-Probleme, Cluster-Status",
+      "modules": ["proxmox"],
+      "skill_url": "https://raw.githubusercontent.com/natorus87/ninko/main/backend/skills/proxmox-troubleshooting/SKILL.md",
+      "version": "1.0.0",
+      "author": "natorus87",
+      "tags": ["proxmox", "vm", "troubleshooting"]
+    },
+    {
+      "name": "web-search-strategy",
+      "description": "Websuche Recherche Suchanfrage optimieren, aktuelle Informationen",
+      "modules": ["web_search"],
+      "skill_url": "https://raw.githubusercontent.com/natorus87/ninko/main/backend/skills/web-search-strategy/SKILL.md",
+      "version": "1.0.0",
+      "author": "natorus87",
+      "tags": ["search", "web", "research"]
+    },
+    {
+      "name": "wordpress-publishing",
+      "description": "WordPress Beitrag erstellen, veröffentlichen, Seite, SEO, Medien",
+      "modules": ["wordpress"],
+      "skill_url": "https://raw.githubusercontent.com/natorus87/ninko/main/backend/skills/wordpress-publishing/SKILL.md",
+      "version": "1.0.0",
+      "author": "natorus87",
+      "tags": ["wordpress", "cms", "publishing"]
+    },
+    {
+      "name": "workflow-builder",
+      "description": "Workflow erstellen, bauen, DAG-Workflow, Automatisierung mit Bedingungen",
+      "modules": [],
+      "skill_url": "https://raw.githubusercontent.com/natorus87/ninko/main/backend/skills/workflow-builder/SKILL.md",
+      "version": "1.0.0",
+      "author": "natorus87",
+      "tags": ["workflow", "automation", "dag"]
+    }
+  ]
+}

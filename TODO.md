@@ -6,76 +6,183 @@ Last updated: 2026-04-07
 
 ## NEW: Code Review Findings (2026-04-07)
 
+**Status-Zusammenfassung:**
+- ✅ FIXED: 4 Issues behoben
+- ⚠️ PARTIALLY_FIXED: 2 Issues teilweise behoben
+- ❌ STILL_EXISTS: 13 Issues noch offen
+- 🔍 NEW: 1 neues Issue gefunden
+
 ### Security Issues (P0)
 
-- [ ] **CRITICAL: Replace `subprocess.run(["rm", "-rf", ...])` with `shutil.rmtree()`**
+- [x] **CRITICAL: Replace `subprocess.run(["rm", "-rf", ...])` with `shutil.rmtree()`**
   - Datei: `backend/api/routes_plugins.py:1129-1134`
-  - Problem: `subprocess.run(["rm", "-rf", str(plugin_dir)])` ist unnötig gefährlich
-  - Fix: `shutil.rmtree(plugin_dir, ignore_errors=False)` verwenden
+  - Status: ✅ **FIXED** - Code verwendet jetzt `shutil.rmtree(plugin_dir, ignore_errors=False)` in Zeile 1127
+  - Letzte Änderung: 2026-04-07
 
-- [ ] **HIGH: CLI Command Argument Validation**
+- [x] **HIGH: CLI Command Argument Validation**
   - Datei: `backend/agents/core_tools.py:187-193`
-  - Problem: `execute_cli_command` validiert nur Command-Name whitelist, nicht Argumente
-  - Fix: Argumente mit `shlex.quote()` escapen oder validieren
+  - Status: ✅ **FIXED** - `execute_cli_command` nutzt Whitelist-Validierung via `validate_cli_command()` und `create_subprocess_exec` mit Liste (kein Shell-Interpolation)
+  - Letzte Änderung: 2026-04-07
 
 - [ ] **MEDIUM: Path Traversal Validation**
   - Datei: `backend/api/routes_plugins.py:485-489`
-  - Problem: `".." in member.filename` check kann umgangen werden (encoded paths)
-  - Fix: `pathlib.Path.resolve()` verwenden für canonical path validation
+  - Status: ⚠️ **PARTIALLY_FIXED** - Prüft `".." in member.filename`, aber kein `pathlib.Path.resolve()` für canonical path validation
+  - Problem: Encoded Pfade könnten umgangen werden (z.B. `%2e%2e`, Unicode-Äquivalente)
+  - Fix: `Path(dest).resolve()` verwenden und prüfen ob Ergebnis im erlaubten Verzeichnis bleibt
+  - Code-Beispiel:
+    ```python
+    dest_path = extracted_dir / member.filename
+    canonical_dest = Path(dest_path).resolve()
+    if not str(canonical_dest).startswith(str(extracted_dir.resolve())):
+        raise HTTPException(status_code=400, detail="Invalid path")
+    ```
+  - Letzte Änderung: 2026-04-07
 
 ### Exception Handling Issues (P1)
 
 - [ ] **HIGH: Bare `except Exception:` in Auth Path**
-  - Datei: `backend/main.py:655`
-  - Problem: `_is_active_user_api_token` gibt False bei Exception ohne Logging
-  - Fix: Spezifische Exceptions catchen + logging
+  - Datei: `backend/main.py:666` (aktualisiert von :655)
+  - Status: ❌ **STILL_BROKEN**
+  - Problem: `_is_active_user_api_token` gibt False bei Exception zurück, **ohne Logging**
+  - Code:
+    ```python
+    except Exception:
+        return False
+    ```
+  - Risiko: Versteckt Fehlerursachen, erschwert Debugging von Authentifizierungsproblemen
+  - Fix: Spezifische Exceptions catchen + `logger.exception()` hinzufügen
+  - Letzte Änderung: 2026-04-07
 
 - [ ] **HIGH: Silent Exception in Update Check**
-  - Datei: `backend/api/routes_plugins.py:332`
-  - Problem: `except Exception:` ohne Logging - Update-Fehler werden ignoriert
-  - Fix: Logging + spezifische Exception-Typen
+  - Datei: `backend/api/routes_plugins.py:332-333`
+  - Status: ❌ **STILL_BROKEN**
+  - Problem: `except Exception: return {"update_available": False}` ohne Logging
+  - Code:
+    ```python
+    except Exception:
+        return {"update_available": False}
+    ```
+  - Risiko: Versteckt Netzwerk/Manifest-Fehler, User sieht keine Updates obwohl Fehler vorliegt
+  - Fix: `logger.exception()` hinzufügen vor dem Return
+  - Letzte Änderung: 2026-04-07
 
-- [ ] **MEDIUM: Silent `pass` in Exception Handlers**
-  - Dateien: 
-    - `backend/modules_catalog/telegram/bot.py:646` (voice transcription)
-    - `backend/api/routes_settings.py:148, 273, 519, 1118, 1315, 1418`
+- [ ] **MEDIUM: Silent `pass` in Exception Handlers (9 Stellen)**
+  - Status: ❌ **STILL_BROKEN**
+  - Dateien und Zeilen:
+    1. `backend/api/routes_settings.py:148` - `except (...): pass`
+    2. `backend/api/routes_settings.py:273` - `except (...): pass`
+    3. `backend/api/routes_settings.py:519` - `except (...): pass`
+    4. `backend/api/routes_settings.py:1118` - `except (...): pass`
+    5. `backend/api/routes_settings.py:1315` - `except (...): pass`
+    6. `backend/api/routes_settings.py:1418` - `except (...): pass`
+    7. `backend/modules_catalog/telegram/bot.py:646-647` - `except Exception: pass`
+    8. `backend/modules/knowledge_graph/manifest.py:29-30` - `except Exception as exc:` ohne Logging
   - Problem: Fehler werden stillschweigend ignoriert
-  - Fix: Mindestens logging, besser spezifische Fehlerbehandlung
+  - Fix: Mindestens `logger.warning()` oder `logger.exception()` hinzufügen
+  - Letzte Änderung: 2026-04-07
+
+### Resource Management (P2)
+
+- [ ] **MEDIUM: Subprocess Resource Leak in MCP Registry**
+  - Datei: `backend/core/mcp_registry.py:232-271`
+  - Status: ❌ **STILL_LEAKS**
+  - Problem: `stdout` Pipe wird nicht geschlossen (nur stdin). Code liest nur stderr, stdout bleibt offen.
+  - Code:
+    ```python
+    finally:
+        if process.stdin:
+            process.stdin.close()
+        # stdout wird nie geschlossen!
+        stderr = await process.stderr.read() if process.stderr else b""
+    ```
+  - Fix: `stdout` schließen oder `process.communicate()` verwenden (wie in `task_registry.py`)
+  - Letzte Änderung: 2026-04-07
+
+- [x] **MEDIUM: Subprocess Resource Leak in Task Registry**
+  - Datei: `backend/core/task_registry.py:134-165`
+  - Status: ✅ **FIXED** - Nutzt `process.communicate()` für sauberes Cleanup
+  - Letzte Änderung: 2026-04-07
+
+- [ ] **MEDIUM: Background Task Tracking in Telegram Bot**
+  - Datei: `backend/modules_catalog/telegram/bot.py:131, 177, 618`
+  - Status: ❌ **NEEDS_ATTENTION**
+  - Problem: Tasks werden als "Fire-and-forget" gestartet, kein Tracking, keine Cleanup-Logik bei Shutdown
+  - Code-Beispiele:
+    ```python
+    # Zeile 131
+    self.task = asyncio.create_task(self._poll_loop())
+    # Zeile 177
+    asyncio.create_task(self.handle_update(update, token))
+    # Zeile 618
+    typing_task = asyncio.create_task(self._keep_typing(token, chat_id))
+    ```
+  - Risiko: Memory-Leak bei hoher Last oder unkontrolliertes Herunterfahren
+  - Fix: Tracking-Set implementieren (wie in `core_tools.py` und `base_agent.py`)
+  - Letzte Änderung: 2026-04-07
+
+- [x] **MEDIUM: Background Task Tracking in Core Tools & Base Agent**
+  - Dateien: `backend/agents/core_tools.py:704`, `backend/agents/base_agent.py:1113`
+  - Status: ✅ **FIXED** - Verwenden `_background_tasks: set[asyncio.Task]` mit `add_done_callback(_background_tasks.discard)`
+  - Letzte Änderung: 2026-04-07
+
+- [x] **MEDIUM: HTTP Client Session Management**
+  - Dateien: `backend/modules_catalog/ubiquiti/tools.py:103`, `backend/modules_catalog/mikrotik/tools.py:101`, `backend/modules_catalog/linux_server/tools.py:195`
+  - Status: ✅ **FIXED** - Alle Module nutzen async context manager (`__aenter__`/`__aexit__`) oder `try/finally`
+  - Letzte Änderung: 2026-04-07
 
 ### Code Quality (P2)
 
 - [ ] **MEDIUM: Magic Numbers zentralisieren**
+  - Status: ⚠️ **PARTIALLY_CENTRALIZED**
+  - Bemerkung: `core/config.py` existiert mit `CoreSettings`, aber folgende bleiben inline:
   - Dateien:
     - `backend/agents/core_tools.py:122-123` - `_MAX_OUTPUT_CHARS = 4000`, `_MAX_OUTPUT_LINES = 200`
-    - `backend/api/routes_plugins.py:391, 47` - `100 * 1024 * 1024`, `_CACHE_TTL = 300`
-    - `backend/modules/codelab/tools.py:20-26` - Resource limits
-  - Fix: In `core/config.py` als Settings mit Erklärung
+    - `backend/api/routes_plugins.py:47` - `_CACHE_TTL = 300`
+    - `backend/modules/codelab/tools.py:20-26` - 7 Resource limits (`_MAX_CODE_CHARS`, `_MAX_STDOUT_CHARS`, etc.)
+  - Fix: Verbleibende Konstanten in `CoreSettings` verschieben
+  - Letzte Änderung: 2026-04-07
 
 - [ ] **LOW: Test Files use `print()` instead of logging**
-  - Dateien: Alle `test*.py` files (37 matches)
-  - Problem: `print()` statt `logging` in Test-Dateien
-  - Note: Könnte intentional sein für Test-Output, aber konsistentes Logging wäre besser
+  - Status: ❌ **STILL_EXISTS**
+  - Treffer: 44× in 11 Dateien
+  - Dateien: `test_services.py`, `test_pihole.py`, `test_monitor.py`, `test_fritz.py`, `test_wan.py`, `test.py`, `test_tts.py`, `test_routing.py`, `test_e2e_critical_paths.py`, `test_wan_tool.py`
+  - Letzte Änderung: 2026-04-07
 
 - [ ] **LOW: Inconsistent Timeout Values**
-  - Problem: Verschiedene Timeouts über Codebase (10s, 15s, 30s, 60s, 120s)
-  - Dateien: `routes_plugins.py`, `core/mcp_registry.py`, `image_provider.py`, `telegram/bot.py`
-  - Fix: Timeout-Defaults in Config zentralisieren
+  - Status: ❌ **STILL_EXISTS**
+  - Gefundene Werte:
+    - `routes_plugins.py`: 120.0, 10.0, 15.0, 60.0, 30.0
+    - `mcp_registry.py`: 20.0 (default)
+    - `image_provider.py`: 120, 180
+    - `telegram/bot.py`: 30, 10, 5, 35 (berechnet)
+  - Fix: Zentrale Timeout-Defaults in `core/config.py` definieren
+  - Letzte Änderung: 2026-04-07
 
-### Resource Management (P2)
+### Type Annotations (P3)
 
-- [ ] **MEDIUM: Subprocess Resource Leaks**
+- [ ] **LOW: Missing/Incomplete Type Hints**
   - Dateien:
-    - `backend/core/mcp_registry.py:232-270` - Manuelles close statt context manager
-    - `backend/core/task_registry.py:134-165` - Subprocess ohne context manager
-  - Fix: `async with` oder `try/finally` für cleanup
+    - `backend/agents/core_tools.py:56-88` - `_t()` Funktion ohne type hints
+    - `backend/modules_catalog/fritzbox/tools.py:202` - `_exec` returns `object`
+  - Status: ❌ **STILL_MISSING**
+  - Letzte Änderung: 2026-04-07
 
-- [ ] **MEDIUM: HTTP Client Session Management**
+### Concurrency (P2)
+
+- [ ] **LOW: `while True:` Loops ohne Exit-Condition**
   - Dateien:
-    - `backend/modules_catalog/ubiquiti/tools.py:103`
-    - `backend/modules_catalog/mikrotik/tools.py:101`
-    - `backend/modules_catalog/linux_server/tools.py:195`
-  - Problem: Manuelles `session.close()` statt context manager
-  - Fix: `async with` Pattern für Session-Management
+    - `backend/agents/base_agent.py:1188`
+    - `backend/main.py:364`
+    - `backend/core/mcp_registry.py:302, 415, 457`
+    - `backend/modules_catalog/telegram/bot.py:328`
+    - `backend/modules_catalog/glpi/agent.py:134`
+  - Status: ❌ **STILL_EXISTS**
+  - Fix: Exit-Condition oder `asyncio.Event` für graceful shutdown implementieren
+  - Letzte Änderung: 2026-04-07
+
+---
+
+## Completed this session (2026-04-07)
 
 ### Concurrency Issues (P2)
 

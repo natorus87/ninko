@@ -286,6 +286,12 @@ async def lifespan(app: FastAPI) -> object:
     skills_manager.load()
     app.state.skills_manager = skills_manager
 
+    # ── Skill-Marketplace ────────────────────────────
+    from core.skill_marketplace import get_skill_marketplace
+
+    app.state.skill_marketplace = get_skill_marketplace()
+    logger.info("SkillMarketplace initialisiert.")
+
     # ── Safeguard-Middleware ───────────────────────────
     try:
         from core.safeguard import SafeguardMiddleware

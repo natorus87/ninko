@@ -5969,6 +5969,155 @@ const Ninko = {
         }
     },
 
+    // ── Skill Sub-Tabs ────────────────────────────────────────────────────
+
+    switchSkillTab(tab) {
+        document.querySelectorAll('.skill-subtab').forEach(b => b.classList.remove('active'));
+        const btn = document.getElementById(`skill-tab-${tab}`);
+        if (btn) btn.classList.add('active');
+
+        const panels = { installed: 'skills-list', marketplace: 'skills-marketplace', repos: 'skills-repos' };
+        Object.values(panels).forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.classList.add('hidden');
+        });
+        const active = document.getElementById(panels[tab]);
+        if (active) active.classList.remove('hidden');
+
+        if (tab === 'marketplace') this.loadSkillMarketplace();
+        else if (tab === 'repos') this.loadSkillRepos();
+    },
+
+    async loadSkillMarketplace() {
+        const container = document.getElementById('skills-marketplace');
+        if (!container) return;
+        container.innerHTML = '<p class="empty-state">Lade Marketplace…</p>';
+        try {
+            const res = await fetch('/api/skills/marketplace');
+            const skills = await res.json();
+            if (!skills.length) {
+                container.innerHTML = '<p class="empty-state">Keine Skills im Marketplace verfügbar.</p>';
+                return;
+            }
+            container.innerHTML = skills.map(s => `
+                <div class="agent-card" style="position:relative;">
+                    <div class="agent-card-header">
+                        <div style="display:flex;align-items:center;gap:0.5rem;flex:1;min-width:0;">
+                            <span style="font-size:1.1rem;">${s.installed ? '✅' : '📦'}</span>
+                            <div style="min-width:0;">
+                                <div class="agent-card-name">${this._esc(s.name)}</div>
+                                <div class="agent-card-desc">${this._esc(s.description || '')}</div>
+                            </div>
+                        </div>
+                        <div class="agent-card-actions">
+                            ${s.installed
+                                ? '<span class="status-badge status-ok" style="font-size:0.7rem;">installiert</span>'
+                                : `<button class="btn btn-primary" style="font-size:0.8rem;padding:0.3rem 0.7rem;" onclick="Ninko.installMarketplaceSkill('${this._esc(s.name)}', '${this._esc(s.skill_url)}', ${JSON.stringify(s.modules || []).replace(/"/g, '&quot;')})">Installieren</button>`
+                            }
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-top:0.5rem;">
+                        ${(s.tags || []).map(t => `<span class="status-badge" style="font-size:0.65rem;background:rgba(92,158,235,0.1);color:var(--accent-blue);border:1px solid rgba(92,158,235,0.3);">${this._esc(t)}</span>`).join('')}
+                        ${(s.modules || []).map(m => `<span class="status-badge" style="font-size:0.65rem;background:rgba(168,85,247,0.1);color:var(--purple,#a855f7);border:1px solid rgba(168,85,247,0.3);">${this._esc(m)}</span>`).join('')}
+                        <span class="status-badge status-unknown" style="font-size:0.65rem;">${this._esc(s.repo_name || 'unknown')}</span>
+                    </div>
+                </div>
+            `).join('');
+        } catch {
+            container.innerHTML = '<p class="empty-state text-error">Fehler beim Laden des Marketplace.</p>';
+        }
+    },
+
+    async installMarketplaceSkill(name, skillUrl, modules) {
+        try {
+            showNotification('Installiere Skill…', 'info');
+            const res = await fetch('/api/skills/marketplace/install', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, skill_url: skillUrl, modules: modules || [] }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.detail || `HTTP ${res.status}`);
+            }
+            showNotification(`Skill "${name}" installiert!`, 'success');
+            this.loadSkillMarketplace();
+            this.loadSkillsList();
+        } catch (e) {
+            showNotification(`Installation fehlgeschlagen: ${e.message}`, 'error');
+        }
+    },
+
+    async loadSkillRepos() {
+        const container = document.getElementById('skills-repos');
+        if (!container) return;
+        container.innerHTML = '<p class="empty-state">Lade Repos…</p>';
+        try {
+            const res = await fetch('/api/skills/repos');
+            const repos = await res.json();
+            let html = repos.map(r => `
+                <div class="agent-card" style="margin-bottom:0.5rem;">
+                    <div class="agent-card-header">
+                        <div style="flex:1;min-width:0;">
+                            <div class="agent-card-name">${this._esc(r.name || r.id)} ${r.builtin ? '🔒' : ''}</div>
+                            <div class="agent-card-desc" style="word-break:break-all;">${this._esc(r.catalog_url || '')}</div>
+                        </div>
+                        ${!r.builtin ? `<button class="btn-icon btn-icon-sm" onclick="Ninko.removeSkillRepo('${this._esc(r.id)}')" title="Entfernen" style="color:var(--error-color);">${this._ic.trash}</button>` : ''}
+                    </div>
+                </div>
+            `).join('');
+            html += `
+                <div style="margin-top:1rem;display:flex;flex-direction:column;gap:0.5rem;">
+                    <h4>Neues Repo hinzufügen</h4>
+                    <input type="text" id="new-repo-id" placeholder="ID (z.B. community)" class="form-control" style="max-width:300px;">
+                    <input type="text" id="new-repo-name" placeholder="Name (optional)" class="form-control" style="max-width:300px;">
+                    <input type="text" id="new-repo-url" placeholder="catalog.json URL" class="form-control" style="max-width:500px;">
+                    <button class="btn btn-primary" style="max-width:200px;" onclick="Ninko.addSkillRepo()">Repo hinzufügen</button>
+                </div>
+            `;
+            container.innerHTML = html;
+        } catch {
+            container.innerHTML = '<p class="empty-state text-error">Fehler beim Laden.</p>';
+        }
+    },
+
+    async addSkillRepo() {
+        const id = document.getElementById('new-repo-id')?.value?.trim();
+        const name = document.getElementById('new-repo-name')?.value?.trim();
+        const url = document.getElementById('new-repo-url')?.value?.trim();
+        if (!id || !url) { showNotification('ID und URL sind erforderlich.', 'error'); return; }
+        try {
+            const res = await fetch('/api/skills/repos', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, name: name || id, catalog_url: url }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.detail || `HTTP ${res.status}`);
+            }
+            showNotification(`Repo "${id}" hinzugefügt!`, 'success');
+            this.loadSkillRepos();
+        } catch (e) {
+            showNotification(`Fehler: ${e.message}`, 'error');
+        }
+    },
+
+    async removeSkillRepo(repoId) {
+        if (!confirm(`Repo "${repoId}" wirklich entfernen?`)) return;
+        try {
+            const res = await fetch(`/api/skills/repos/${encodeURIComponent(repoId)}`, { method: 'DELETE' });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.detail || `HTTP ${res.status}`);
+            }
+            showNotification(`Repo "${repoId}" entfernt.`, 'success');
+            this.loadSkillRepos();
+        } catch (e) {
+            showNotification(`Fehler: ${e.message}`, 'error');
+        }
+    },
+
     async openSkillEditor(name) {
         this._agentEditorContext = null;
         await this._showSkillEditorPanel(name);
@@ -7230,6 +7379,10 @@ const Ninko = {
 
     _escapeHtml(str) {
         return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    },
+
+    _esc(str) {
+        return this._escapeHtml(str);
     },
 
     toggleLogAutoScroll(enabled) { this._logAutoScroll = enabled; },
