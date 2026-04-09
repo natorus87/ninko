@@ -7,50 +7,7 @@ Nur Punkte die echten Mehrwert liefern, keine Architektur-Aufblähung.
 
 ## Phase 1 — Muss haben
 
-### 1. Skills: `allowed_tools` Whitelist
-
-**Warum:** Sicherheitslücke. Ein Skill "Kubernetes-Diagnose" sollte nicht plötzlich `delete_pod` aufrufen können, auch wenn der SafeGuard es global erlaubt. Defense-in-Depth.
-
-**Implementierung:**
-
-`SKILL.md` Frontmatter erweitern:
-```yaml
----
-name: kubernetes-incident-response
-description: Kubernetes Incident Response Playbook
-modules: [kubernetes]
-allowed_tools: [list_pods, get_pod_logs, describe_deployment, get_events]
----
-```
-
-`core/skills_manager.py` — `SkillInfo` Dataclass:
-```python
-@dataclass
-class SkillInfo:
-    name: str
-    description: str
-    modules: list[str]
-    body: str
-    allowed_tools: list[str] = field(default_factory=list)  # NEU — leer = keine Einschränkung
-```
-
-`agents/base_agent.py` — Tool-Filterung bei Skill-Injection:
-
-Wenn ein Skill `allowed_tools` deklariert, werden die Agent-Tools für diesen Invoke-Kontext auf diese Liste eingeschränkt. **Wichtig:** Die Filterung passiert beim Tool-Dispatch (LangGraph `interrupt_before`), nicht erst beim SafeGuard — sonst ist es zu spät.
-
-```python
-# In invoke() nach Skill-Match:
-if matched_skill.allowed_tools:
-    effective_tools = [t for t in self.tools if t.name in matched_skill.allowed_tools]
-else:
-    effective_tools = self.tools  # kein Skill oder Skill ohne Whitelist → alle Tools
-```
-
-**Registrierung in SafeGuard:** Skills mit `allowed_tools` werden als implizit read-safe behandelt — kein zusätzlicher LLM-Check nötig wenn alle Tools in `_TOOL_READONLY` liegen.
-
----
-
-### 2. Tool-Usage Events & Audit Trail
+### 1. Tool-Usage Events & Audit Trail
 
 **Warum:** Heute keine Ahnung was wann aufgerufen wurde. "Wer hat Pod X gelöscht?" → unlösbar. Basis für Cost Tracking (Phase 2).
 
@@ -266,6 +223,7 @@ return f"{name}: {desc}\n  Fähigkeiten: {caps}\n  Keywords: {keywords}"
 
 | Punkt | Grund |
 |-------|-------|
+| Skills `allowed_tools` | Vermischt Wissen (Skills = SystemMessage) mit Permissions (SafeGuard). Modul-Agenten haben bereits nur ihre eigenen Tools — die Isolation existiert schon. Whitelist würde autonomes Handeln blockieren (Skill sagt "starte Pod neu", Tool ist aber gesperrt). |
 | Knowledge Base | Redundant — Skills + Soul + Tools decken das bereits ab. Wer pflegt statische Kubernetes-Docs? |
 | Workflow DSL (`@router`/`@listen`) | Zweites Workflow-System neben dem Canvas-Editor. Wartungssplit. |
 | Async Context Management | ContextVars in asyncio sind tricky bei concurrent Requests — Context-Bleeding-Risiko. Aktueller expliziter Parameter-Passing funktioniert. |
