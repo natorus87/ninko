@@ -219,6 +219,76 @@ return f"{name}: {desc}\n  Fähigkeiten: {caps}\n  Keywords: {keywords}"
 
 ---
 
+## Phase 3 — Später (konkrete Use-Cases)
+
+### OpenProject + Redmine: Management-Report-Workflow
+
+**Use-Case:** Agent analysiert ein Projekt (OpenProject), erstellt Sub-Tasks, spiegelt Tickets nach Redmine, generiert einen Management-Summary als PDF und sendet ihn per E-Mail. Aktualisiert das Gantt basierend auf eingetragenen Zeiten.
+
+**Was heute funktioniert (Tier-4 Pipeline):**
+- Sub-Tasks aus Projektbeschreibung vorschlagen → `create_openproject_work_package`
+- Tickets in Redmine erstellen → `create_redmine_issue`
+- Auslastung Teammitglieder analysieren → `get_redmine_user_hours_report` + `list_openproject_time_entries` (guter DataAnalysisSubagent-Kandidat)
+- Bericht per E-Mail senden → `send_email` mit `attachments=[...]`
+
+**Was fehlt — 2 Lücken:**
+
+**Lücke 1: PDF-Generierung**
+
+Keine PDF-Bibliothek im Backend. `send_email` kann PDFs anhängen, aber niemand erstellt sie.
+
+Neues Core-Tool in `agents/core_tools.py`:
+
+```python
+@tool
+async def generate_pdf_report(
+    title: str,
+    content_markdown: str,
+    output_path: str = "/tmp/ninko-reports/report.pdf",
+) -> str:
+    """
+    Erstellt ein PDF aus Markdown-Inhalt.
+    Gibt den absoluten Pfad zur PDF-Datei zurück (für send_email attachments).
+    Nutzt weasyprint (Markdown → HTML → PDF).
+    """
+```
+
+`backend/Dockerfile` — Abhängigkeit hinzufügen:
+```dockerfile
+RUN pip install weasyprint markdown
+# weasyprint braucht auch: apt-get install -y libpango-1.0-0 libpangoft2-1.0-0
+```
+
+Output-Verzeichnis: `/tmp/ninko-reports/` — kein PVC nötig, Files leben nur für den Send-Vorgang.
+
+**Lücke 2: OpenProject Gantt-Aktualisierung**
+
+`update_openproject_work_package` kennt nur `status` und `subject`. Gantt braucht `start_date`, `due_date`, `done_ratio`.
+
+Erweiterung in `modules_catalog/openproject/tools.py`:
+
+```python
+async def update_openproject_work_package(
+    work_package_id: int,
+    status: str = "",
+    subject: str = "",
+    start_date: str = "",   # ISO 8601: "2026-04-10"
+    due_date: str = "",     # ISO 8601: "2026-04-30"
+    done_ratio: int = -1,   # 0–100, -1 = nicht ändern
+    connection_id: str = "",
+) -> str:
+```
+
+OpenProject berechnet das Gantt-Diagramm aus genau diesen Feldern — ohne sie bleibt das Gantt statisch.
+
+Außerdem `lockVersion` beachten: OpenProject's PATCH-Endpoint erfordert die aktuelle `lockVersion` um Konflikte zu erkennen. Vor dem Update `get_openproject_work_package` aufrufen und `lockVersion` aus der Response lesen.
+
+**Aufwand:** Klein (2–3 Tage). Kein neues Modul — nur Tool-Erweiterungen + Dockerfile-Zeile.
+
+**Kein neues Modul nötig:** Der Workflow läuft als Tier-4 Pipeline. Orchestrator erkennt multi-step (OpenProject + Redmine + Email) → plant Sub-Steps → ruft die jeweiligen Module-Agents auf. Kein separater "Report-Agent" erforderlich.
+
+---
+
 ## Entschieden: Weglassen
 
 | Punkt | Grund |
