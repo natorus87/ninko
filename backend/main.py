@@ -49,6 +49,7 @@ from api.routes_themes import router as themes_router
 from api.routes_operations import router as operations_router
 from api.routes_knowledge_graph import router as knowledge_graph_router
 from api.routes_alerts import router as alerts_router
+from api.routes_subagent import router as subagent_router
 
 # Logging konfigurieren
 settings = get_settings()
@@ -801,6 +802,7 @@ app.include_router(safeguard_audit_router)
 app.include_router(operations_router)
 app.include_router(knowledge_graph_router)
 app.include_router(alerts_router)
+app.include_router(subagent_router, prefix="/api/subagent")
 
 
 # ── Health Endpoint ──────────────────────────────────

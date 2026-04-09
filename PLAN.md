@@ -1,517 +1,612 @@
-# Plan: Alert-State-Tracking & Deduplication System
+# Plan: Intelligente Task-Decomposition mit Read-Only Subagents
 
-## TL;DR
+## Core-Idee
 
-> **Neues Core-Feature:** Redis-basiertes Alert-State-Tracking mit Deduplication im Monitor-Agent und LLM-Tools für Workflows.
->
-> **Problem gelöst:** Monitor-Agent (`run_cycle`) erzeugt bei jedem Intervall identische Alerts/Incidents ohne Prüfung ob bereits gemeldet. Bei 60s-Intervall = 1440 Duplikate/Tag. Dasselbe gilt für periodische Scheduler-Tasks mit Remediation-Workflows.
->
-> **Scope:** Alle Module — Kubernetes, Proxmox, Linux, Docker, OPNsense, etc. — jedes Modul kann durch die Kombination `module:resource:reason` einen determinstischen Alert generieren.
->
-> **Deliverables:**
-> - `backend/core/alert_state.py` — `AlertStateManager` mit atomarem `check_and_record` (Redis `SET NX EX`)
-> - 3 neue Core-Tools: `check_alert_state`, `record_alert`, `resolve_alert`
-> - Monitor-Agent Deduplication (programmatisch, kein LLM-Call)
-> - Safeguard-Registrierung der read-only Tools
-> - Generischer Skill: `smart-alerts` mit Beispiel-Patterns für K8s, Proxmox, Linux
->
-> **Effort:** Medium (3-4 Stunden)
-> **Critical Path:** AlertStateManager → Monitor-Integration → Tools → Tests → Generische Skills
+Das 4-Tier-Routing bekommt einen neuen Schritt: **LLM-basierte Komplexitätsbewertung**. Erkennt das LLM eine datenintensive Aufgabe, delegiert der Orchestrator an einen **generischen Read-Only Subagent**. Dieser arbeitet in einem **isolierten Context**, sammelt und aggregiert Daten iterativ und gibt nur eine kompakte Zusammenfassung an den Orchestrator zurück.
+
+**Warum?** Module wie Redmine, Jira, GLPI liefern bei `list_issues()` oft 50-200 KB JSON. Das füllt das Context-Window nach 2-3 Zyklen. Der User bekommt dann abgeschnittene oder generalisierte Antworten.
+
+**Lösung:** Der Subagent absorbiert die großen Datenmengen in seinem eigenen Context. Der Orchestrator erhält nur ~300 Tokens statt ~15.000.
 
 ---
 
-## Context
+## Architektur
 
-### Original Request
-
-User möchte folgende Workflows automatisieren:
-1. Ninko überwacht verschiedene Systeme (Monitor-Agent / Scheduler)
-   - Kubernetes: Pod-Failure, Deployment nicht ready
-   - Proxmox: VMs stopped/crashed
-   - Linux: Disk space, CPU, Memory
-   - Docker: Container exited, health-check failed
-   - OPNsense: Service stopped, Firewall alert
-   - Pi-hole: Gravity update failed
-   - etc.
-2. Fehler wird erkannt
-3. Automatische Remediation-Versuche schlagen fehl (oder sind nicht konfiguriert)
-4. Email/Ticket wird gesendet → Incident erstellt
-5. Workflow läuft periodisch wieder an
-6. **Problem:** Ohne Deduplication werden bei jedem Zyklus neue Alerts + Incidents erzeugt
-
-### Aktuelle Architektur (Code-Analyse)
-
-**Monitor-Agent** (`backend/agents/monitor_agent.py:88-123`):
-```python
-# run_cycle() — KEIN Dedup-Check:
-for module_name, status in health.items():
-    if status.get("status") == "error":
-        alert = { "type": "alert", "module": module_name, ... }
-        await self._redis.publish_event(alert)       # Jedes Mal
-        await self._memory.store_incident(...)        # Jedes Mal neue UUID
-```
-
-**Scheduler-Agent** (`backend/agents/scheduler_agent.py:114-247`):
-- Führt Tasks via `orchestrator.route()` aus
-- Workflows können Module-Agents aufrufen
-- Kein Alert-Tracking — gleiche Remediation läuft endlos
-
-**Semantic Memory** (`backend/core/memory.py:124-137`):
-- `store_incident()` speichert in ChromaDB mit neuer UUID
-- Kein Key-basiertes Lookup, nur semantische Suche
-- Ungeeignet für deterministische Deduplication
-
-**Redis Client** (`backend/core/redis_client.py`):
-- `publish_event()` — fire-and-forget, kein State
-- `cache_set/get` — einfaches Key-Value, aber kein Alert-Schema
-- `connection` Property gibt raw `aioredis.Redis` zurück — direkte `SET NX EX` möglich
-
-**Was fehlt:**
-- Kein strukturiertes Alert-State-Tracking (active/resolved)
-- Keine deterministische Alert-ID (Module + Resource + Reason)
-- Kein zeitbasierter Cooldown für Notifications
-- Keine atomare "check-and-set" Operation vor dem Senden
-
-### Design-Entscheidungen
-
-1. **Redis statt ChromaDB** — deterministisches Key-Value Lookup, nicht semantische Suche. Alert-IDs sind bekannt, nicht "ähnlich".
-2. **Atomares `SET NX EX`** — Race-Condition-frei. Wenn zwei Zyklen gleichzeitig prüfen, gewinnt nur einer.
-3. **Monitor-Agent nutzt AlertStateManager direkt** — programmatisch, kein LLM-Call. Das ist der primäre Consumer.
-4. **LLM-Tools für Workflows** — `check_alert_state`, `record_alert`, `resolve_alert` als `@tool` für Tier-4 Pipelines und Scheduler-Workflows.
-5. **Alert-ID wird programmatisch generiert** — `AlertStateManager.make_id(module, resource, reason)` statt LLM-generierte Strings.
-6. **Module-agnostisch** — Alert-Schema ist unabhängig vom spezifischen Modul. Jedes Modul definiert seine eigenen Resource/Reason-Werte.
-
----
-
-## Work Objectives
-
-### Concrete Deliverables
-- `backend/core/alert_state.py` — AlertStateManager Klasse
-- `backend/agents/alert_tools.py` — 3 LLM-Tools (`@tool`)
-- Patch: `backend/agents/monitor_agent.py` — Deduplication in `run_cycle()`
-- Patch: `backend/agents/orchestrator.py` — Tool-Import + Registration
-- Patch: `backend/core/safeguard.py` — `check_alert_state` in `_TOOL_READONLY`
-- `backend/skills/smart-alerts/SKILL.md` — Generisches Skill mit Multi-Module-Patterns
-- `backend/test_alert_state.py` — Unit + Integration Tests
-
-### Definition of Done
-- [ ] Monitor-Agent erzeugt keine Duplikate mehr (gleicher Modul-Fehler = 1 Alert)
-- [ ] `check_alert_state("kubernetes:nginx-deployment:crashloopbackoff")` gibt korrekten Status zurück
-- [ ] Alerts funktionieren für K8s, Proxmox, Linux, Docker, OPNsense gleichermassen
-- [ ] `resolve_alert()` markiert Alerts als gelöst + archiviert
-- [ ] Alerts haben 7-Tage TTL (automatisches Cleanup)
-- [ ] Read-only Tools in `_TOOL_READONLY` registriert
-- [ ] Alle Tests passieren
-- [ ] Docker Build erfolgreich
-
-### Guardrails
-- Keine Änderungen an ChromaDB/Memory-System
-- Keine neuen externen Dependencies
-- Keine UI-Changes (nur Backend)
-- Keine Breaking Changes in bestehenden Tool-APIs
-- Monitor-Agent Dedup ist programmatisch — kein LLM-Call im Hot-Path
-
----
-
-## Redis Key-Schema
+### Erweitertes Tier-Routing
 
 ```
-ninko:alerts:active:{alert_id}    → JSON, TTL 7d (604800s)
-ninko:alerts:history:{alert_id}   → JSON, TTL 30d (optional)
-ninko:alerts:notify:{alert_id}    → empty, TTL = cooldown (z.B. 24h)
+Tier 1: Simple Questions (< 120 chars, keine Action-Verbs)
+        → Direct LLM answer
+
+Tier 2: Module erkannt (Keyword-Match)
+        ↓
+        LLM Complexity-Check: "Ist das datenintensiv?"
+        ├─ NEIN → Tier 2: Direct Module Agent (wie bisher)
+        └─ JA   → Tier 2.5: DataAnalysisSubagent (NEU)
+                   → isolierter Context
+                   → nur read-only Tools
+                   → gibt Summary zurück
+
+Tier 3: Dynamic Agent (kein Modul match)
+Tier 4: Multi-Step Workflow Pipeline
 ```
 
-**Alert-ID Konvention:** `{module}:{resource}:{reason}` (lowercase, sanitized)
+### Complexity-Check (LLM-basiert)
 
-**Beispiele pro Modul:**
-- Kubernetes: `kubernetes:nginx-deployment:crashloopbackoff`
-- Proxmox: `proxmox:vm-100:stopped`
-- Linux: `linux:server-prod:disk-usage-high`
-- Docker: `docker:api-container:exited`
-- OPNsense: `opnsense:firewall-service:stopped`
-- Pi-hole: `pihole:gravity:update-failed`
+**Wo:** Nach `_detect_module()`, vor Agent-Invocation
 
-**Generiert via** `AlertStateManager.make_id(module, resource, reason)` — lowercase, Sonderzeichen entfernt
+**Prompt:**
+```markdown
+Analysiere diese Aufgabe für Modul "{module}":
 
-**Active-Alert JSON:**
-```json
+User-Query: {user_message}
+
+Wird diese Aufgabe wahrscheinlich viele Datensätze zurückliefern
+(> 20 Ergebnisse, komplexe Filterung, Aggregation)?
+
+Indikatoren für JA:
+- "alle/list all/show all" → viele Ergebnisse erwartet
+- "gruppiert nach/group by" → Aggregation über große Menge
+- "vergleiche/compare" → muss viele Daten durchgehen
+- Keine explizite Limitierung ("die letzten 5")
+
+Indikatoren für NEIN:
+- "Ticket #123" → einzelne Ressource
+- "erstelle/create" → Schreiboperation, keine Datenabfrage
+- Explizites Limit ("zeige 3")
+
+Antworte NUR mit JSON:
 {
-  "alert_id": "kubernetes:nginx-deployment:crashloopbackoff",
-  "module": "kubernetes",
-  "resource": "nginx-deployment",
-  "reason": "crashloopbackoff",
-  "severity": "critical",
-  "summary": "Pod nginx-deployment crashed",
-  "ticket_id": "",
-  "status": "active",
-  "first_seen": "2026-04-08T10:00:00Z",
-  "last_seen": "2026-04-08T12:00:00Z",
-  "last_notified": "2026-04-08T10:00:00Z",
-  "notify_count": 1
+  "is_complex": true/false,
+  "sub_tasks": ["task1", "task2"],
+  "suggested_subagent_count": 1-2,
+  "reasoning": "..."
 }
 ```
 
-**Notification-Cooldown via `ninko:alerts:notify:{alert_id}`:**
-- `SET ... NX EX {cooldown_seconds}` — atomar
-- Wenn Key existiert → Cooldown aktiv → nicht erneut notifizieren
-- Wenn Key nicht existiert → SET gelingt → Notification erlaubt
+**Timeout:** 2 Sekunden. Bei Timeout → `is_complex = false` (Fallback zu normalem Agent).
+
+### Orchestrator-Integration
+
+```python
+# orchestrator.py — in route()
+
+TIER_SUBAGENT = "2.5"  # String, nicht int
+
+async def route(self, message, session_id="", ...):
+    tier = await self._classify_tier(message)
+    
+    if tier == 1:
+        # Direct LLM
+        ...
+    
+    elif tier == 2:
+        module, _ = await self._detect_module(message)
+        
+        # NEU: Complexity-Check
+        complexity = await self._check_task_complexity(message, module)
+        
+        if complexity and complexity.get("is_complex"):
+            # Tier 2.5: Subagent
+            subagent = self._get_or_create_subagent(session_id, module)
+            summary, did_compact = await subagent.invoke(
+                task=message,
+                module=module,
+                sub_tasks=complexity.get("sub_tasks", []),
+            )
+            return summary, module, did_compact
+        else:
+            # Tier 2: Normal
+            agent = self.registry.get_agent(module)
+            response, did_compact = await agent.invoke(message)
+            return response, module, did_compact
+    ...
+```
 
 ---
 
-## Execution
+## DataAnalysisSubagent
 
-### Task 1: AlertStateManager erstellen
-
-**Datei:** `backend/core/alert_state.py`
-
-**Implementierung:**
-```python
-class AlertStateManager:
-    ACTIVE_PREFIX = "ninko:alerts:active:"
-    HISTORY_PREFIX = "ninko:alerts:history:"
-    NOTIFY_PREFIX = "ninko:alerts:notify:"
-    DEFAULT_TTL = 604800      # 7 Tage
-    HISTORY_TTL = 2592000     # 30 Tage
-    DEFAULT_COOLDOWN = 86400  # 24 Stunden
-
-    @staticmethod
-    def make_id(module: str, resource: str, reason: str) -> str:
-        """Deterministische Alert-ID: lowercase, nur alphanumerisch + Bindestrich."""
-
-    async def get_state(self, alert_id: str) -> dict | None:
-        """Gibt den aktiven Alert zurück oder None."""
-
-    async def is_active(self, alert_id: str) -> bool:
-        """Schneller Existenz-Check (Redis EXISTS)."""
-
-    async def record(self, alert_id: str, *, module: str, severity: str,
-                     summary: str, resource: str = "", reason: str = "",
-                     ticket_id: str = "") -> dict:
-        """Speichert oder aktualisiert einen Alert. Atomar via SET NX für Erstanlage."""
-
-    async def resolve(self, alert_id: str, resolution: str = "") -> bool:
-        """Verschiebt Alert von active -> history. Idempotent."""
-
-    async def should_notify(self, alert_id: str, cooldown_seconds: int = DEFAULT_COOLDOWN) -> bool:
-        """Atomarer Cooldown-Check via SET NX EX. True = darf notifizieren."""
-
-    async def list_active(self, module: str | None = None) -> list[dict]:
-        """Alle aktiven Alerts (optional gefiltert nach Modul)."""
-```
-
-**Akzeptanzkriterien:**
-- [ ] `make_id("kubernetes", "nginx-deployment", "CrashLoopBackOff")` → `"kubernetes:nginx-deployment:crashloopbackoff"`
-- [ ] `record()` erstellt Alert mit allen Metadaten + TTL
-- [ ] `is_active()` gibt `True` für existierenden Alert
-- [ ] `should_notify()` gibt `True` beim ersten Mal, `False` innerhalb Cooldown
-- [ ] `resolve()` löscht aus active, archiviert in history
-- [ ] `list_active()` gibt alle aktiven Alerts zurück
-
----
-
-### Task 2: Monitor-Agent Deduplication
-
-**Datei:** `backend/agents/monitor_agent.py`
-
-**Änderungen:**
-1. Import `AlertStateManager` + Singleton in `__init__`
-2. In `run_cycle()`, vor `publish_event`:
+### Konzept
 
 ```python
-# Neu: Dedup-Check
-alert_id = AlertStateManager.make_id(
-    module=module_name,
-    resource=module_name,  # Health-Check hat keine feinere Resource
-    reason=status.get("detail", "error")[:50],
-)
-
-if await self._alert_mgr.is_active(alert_id):
-    # Alert bereits getrackt — nur last_seen aktualisieren
-    await self._alert_mgr.record(
-        alert_id, module=module_name, severity="critical",
-        summary=f"Health-Check fehlgeschlagen: {module_name}",
-    )
-    logger.debug("Alert %s bereits aktiv, überspringe.", alert_id)
-    continue
-
-# Neuer Alert — normal weiterverarbeiten
-await self._alert_mgr.record(
-    alert_id, module=module_name, severity="critical",
-    summary=f"Health-Check fehlgeschlagen: {module_name}",
-)
-await self._redis.publish_event(alert)
-await self._memory.store_incident(...)
-```
-
-3. Nach der Health-Check-Schleife: aktive Alerts prüfen ob Module wieder OK sind → auto-resolve:
-
-```python
-# Auto-Resolve: Module die wieder OK sind
-active_alerts = await self._alert_mgr.list_active(module=None)
-for active in active_alerts:
-    m = active.get("module", "")
-    if m in results and results[m].get("status") != "error":
-        await self._alert_mgr.resolve(active["alert_id"], resolution="Health-Check OK")
-        logger.info("Alert %s auto-resolved.", active["alert_id"])
-```
-
-**Wichtig:** `_attempt_remediation()` soll NICHT durch Dedup blockiert werden — Remediation-Versuche sollen weiterlaufen. Nur `publish_event` + `store_incident` werden dedupliziert.
-
-**Akzeptanzkriterien:**
-- [ ] Erster Fehler eines Moduls → Alert + PubSub + Incident (wie bisher)
-- [ ] Folge-Zyklen mit gleichem Fehler → kein neuer PubSub, kein neuer Incident
-- [ ] Modul wird wieder OK → Alert auto-resolved
-
----
-
-### Task 3: LLM-Tools implementieren
-
-**Datei:** `backend/agents/alert_tools.py` (neue Datei)
-
-3 Tools als `@tool` dekorierte async Funktionen:
-
-**Tool 1: `check_alert_state`**
-```python
-@tool
-async def check_alert_state(alert_id: str) -> str:
+class DataAnalysisSubagent(BaseAgent):
     """
-    Prueft den Status eines Alerts anhand seiner ID.
-    Gibt zurueck ob der Alert aktiv ist, wann er zuerst gesehen wurde,
-    und wie oft bereits benachrichtigt wurde.
-    Parameter: alert_id — z.B. 'kubernetes:nginx-deployment:crashloopbackoff'
+    Generischer Subagent für datenintensive Aufgaben.
+    
+    - Eigener isolierter Context (belastet Orchestrator nicht)
+    - Nur read-only Tools (list_*, search_*, get_*, check_*)
+    - Gibt kompakte Summary zurück, keine Rohdaten
     """
 ```
-- Rein lesend, keine Seiteneffekte
-- Returns: JSON-String mit `exists`, `state`, `first_seen`, `notify_count`
 
-**Tool 2: `record_alert`**
+### Tool-Zugriff: Nur Read-Only vom erkannten Modul
+
+**Problem:** Module-Tools sind pro Agent registriert, nicht zentral verfügbar.
+
+**Lösung:** `ModuleRegistry` hat `get_agent(module_name)` → der Agent hat `.tools`. Filtern nach `_TOOL_READONLY` aus `safeguard.py`:
+
 ```python
-@tool
-async def record_alert(
-    alert_id: str, module: str, severity: str, summary: str,
-    ticket_id: str = "",
-) -> str:
-    """
-    Zeichnet einen neuen Alert auf oder aktualisiert einen bestehenden.
-    Verwende dieses Tool um ein erkanntes Problem zu dokumentieren,
-    bevor eine Benachrichtigung gesendet wird.
-    """
+def _get_readonly_tools_for_module(self, module: str) -> list:
+    """Hole read-only Tools vom erkannten Modul."""
+    module_agent = self.registry.get_agent(module)
+    if not module_agent:
+        return []
+    
+    from core.safeguard import _TOOL_READONLY
+    return [t for t in module_agent.tools if t.name in _TOOL_READONLY]
 ```
-- Schreibend — NICHT in `_TOOL_READONLY`
-- Prüft Cooldown intern: gibt `should_notify: true/false` im Response mit zurück
-- Returns: JSON-String mit Alert-State + `should_notify` Flag
 
-**Tool 3: `resolve_alert`**
+Der Subagent bekommt **nur** die Tools des erkannten Moduls, nicht aller Module. Das verhindert Verwirrung und hält den Tool-Namespace klein.
+
+### System-Prompt
+
+```markdown
+# Data Analysis Subagent
+
+Du analysierst große Datenmengen für das Modul "{module}".
+
+## Strategie
+
+1. **Verstehe die Anfrage:** Welche Filter, Gruppierung, Sortierung?
+2. **Iterativ abfragen:** Nutze limit-Parameter, nicht alles auf einmal
+3. **Lokal aggregieren:** Zähle, gruppiere, sortiere in deinem Context
+4. **Kompakt zusammenfassen:**
+   - Statistiken (total, Verteilung)
+   - Top-N Items (nach Relevanz/Alter/Priorität)
+   - Insights (Auffälligkeiten, Trends)
+   - NIEMALS vollständige Listen (max 10-20 Items)
+
+## Wichtig
+- Gib NUR die Zusammenfassung zurück, keine Rohdaten
+- Max 500 Tokens Output
+- Wenn > 100 Ergebnisse: aggregiere statt aufzulisten
+```
+
+### Subagent-Skalierung (Lokales LLM)
+
+⚠️ **Constraint:** Bei einem lokalen LLM (LM Studio, Ollama) können LLM-Requests nicht parallel laufen (GPU ist Bottleneck). Mehrere Subagents parallel = Queue-Effekt = nur Overhead.
+
+**Strategie: Sequenzielles Batching**
+
+| Aufgabe | Subagents | Strategie |
+|---------|-----------|-----------|
+| 1-3 Queries | 1 | Ein Subagent, iterativ |
+| 4-5 Queries | 1 | Ein Subagent, batcht alle Sub-Tasks |
+| 6+ Queries (stark unterschiedlich) | 2 | Sequenziell, jeder batcht 2-3 |
+
+Bei Cloud-APIs (OpenAI, OpenRouter): Parallelisierung möglich, aber nicht als Basis-Annahme.
+
+---
+
+## Step-Visualization im Dashboard
+
+### Problemstellung
+
+Aktuell sieht der User nur einen Spinner. Was macht der Subagent? Funktioniert es? Wo hängt es?
+
+### Lösung: WebSocket Step-Streaming
+
+**Backend sendet 4 Event-Typen über den bestehenden WebSocket-Kanal:**
+
 ```python
-@tool
-async def resolve_alert(alert_id: str, resolution: str = "") -> str:
-    """
-    Markiert einen Alert als gelöst. Der Alert wird aus den aktiven Alerts entfernt
-    und in die Historie verschoben. Idempotent — kein Fehler wenn Alert nicht existiert.
-    """
+# Event-Typen
+"step_start"   # Neuer Schritt beginnt
+"step_update"  # Text-Update während Schritt läuft (optional)
+"step_done"    # Schritt erfolgreich abgeschlossen
+"step_error"   # Schritt fehlgeschlagen + Error-Details + Retry-Flag
 ```
-- Schreibend — NICHT in `_TOOL_READONLY`
-- Returns: JSON-String mit `resolved: true/false`, `was_active: true/false`
 
----
+**Wichtig:** Der Subagent ist ein ReAct-Agent — die Steps kommen **dynamisch** aus den Tool-Calls, nicht vordefiniert. Integration in `base_agent.py`:
 
-### Task 4: Orchestrator + Safeguard Integration
-
-**Datei:** `backend/agents/orchestrator.py`
-
-**Änderungen:**
-1. Import der 3 Tools aus `agents.alert_tools`:
 ```python
-from agents.alert_tools import (
-    check_alert_state,
-    record_alert,
-    resolve_alert,
-)
+# In BaseAgent._run_agent() oder dem Tool-Execution-Hook:
+
+# Vor Tool-Call:
+await self._emit_step({
+    "type": "step_start",
+    "step_id": tool_call.id,
+    "title": tool_call.name,  # z.B. "list_issues"
+    "description": str(tool_call.args)[:200],  # Argumente gekürzt
+    "status": "running"
+})
+
+# Nach Tool-Call:
+await self._emit_step({
+    "type": "step_done",
+    "step_id": tool_call.id,
+    "title": tool_call.name,
+    "details": {
+        "result_size": len(result),
+        "duration_ms": elapsed_ms,
+    },
+    "status": "done"
+})
 ```
 
-2. Tools zur `tools=[...]` Liste in `__init__` hinzufügen
+So erscheint jeder Tool-Call als expandierbarer Schritt — egal welches Tool der Agent wählt.
 
-**Datei:** `backend/core/safeguard.py`
+### Frontend: Step-Tree (Claude Code Stil)
 
-**Änderungen:**
-- `check_alert_state` zu `_TOOL_READONLY` hinzufügen (read-only)
-- `record_alert` und `resolve_alert` NICHT hinzufügen (schreibend)
-
-**Akzeptanzkriterien:**
-- [ ] Alle 3 Tools sind im Orchestrator registriert
-- [ ] `check_alert_state` ist in `_TOOL_READONLY`
-
----
-
-### Task 5: Tests
-
-**Datei:** `backend/test_alert_state.py`
-
-**Unit-Tests (mit Mock-Redis):**
-- `test_make_id_deterministic` — gleiche Inputs = gleiche ID
-- `test_make_id_sanitization` — Sonderzeichen werden entfernt
-- `test_record_new_alert` — Alert wird korrekt gespeichert
-- `test_record_existing_alert_updates_last_seen` — last_seen wird aktualisiert
-- `test_is_active_true` / `test_is_active_false`
-- `test_resolve_active_alert` — verschiebt von active zu history
-- `test_resolve_nonexistent_idempotent` — kein Fehler
-- `test_should_notify_first_time` — True (kein Cooldown-Key)
-- `test_should_notify_within_cooldown` — False
-- `test_list_active_all` / `test_list_active_filtered`
-
-**Integration-Test (gegen laufenden Redis):**
-- Full-Flow: `record` → `is_active` → `should_notify(True)` → `should_notify(False)` → `resolve` → `is_active(False)`
-
----
-
-### Task 6: Generischer Smart-Alerts Skill
-
-**Datei:** `backend/skills/smart-alerts/SKILL.md`
-
-**Frontmatter:**
-```yaml
----
-name: smart-alerts
-description: Alert-Deduplication für alle Module - Kubernetes Pod-Failures Proxmox VMs Docker Container Linux Systemfehler Benachrichtigung Cooldown Remediation
-modules: [kubernetes, proxmox, linux, docker, opnsense, pihole, email]
----
+**Während Execution:**
+```
+●●● list_issues...                    (animated dots)
+●●● Filtering results...              (animated dots)
+●●● Aggregating by assignee...        (animated dots)
 ```
 
-**Inhalt — Generische Patterns:**
-
-1. **Kubernetes Deployment Failure**
-   - Alert-ID: `kubernetes:{deployment_name}:{reason}` (Deployment-Level, nicht Pod-Instance!)
-   - `{reason}` = `CrashLoopBackOff`, `ImagePullBackOff`, `NotReady`, etc.
-   - Workflow: check → remediation (rolling restart) → notify if `should_notify` → resolve on recovery
-
-2. **Proxmox VM Stopped**
-   - Alert-ID: `proxmox:vm-{vmid}:stopped`
-   - Workflow: check VM status → attempt restart → notify → resolve when running
-
-3. **Linux Server — Disk Usage**
-   - Alert-ID: `linux:server-{hostname}:disk-usage-{threshold}` (z.B. `disk-usage-90`)
-   - Workflow: check usage → cleanup attempts → notify → resolve when below threshold
-
-4. **Docker Container Exit**
-   - Alert-ID: `docker:container-{name}:{exit_code}`
-   - Workflow: check container status → restart → notify → resolve when healthy
-
-5. **OPNsense Service Down**
-   - Alert-ID: `opnsense:service-{name}:stopped`
-   - Workflow: check service → restart attempt → notify → resolve when running
-
-6. **Pi-hole Gravity Update Failed**
-   - Alert-ID: `pihole:gravity:update-failed`
-   - Workflow: check gravity status → attempt update → notify → resolve
-
-**Gemeinsames Pattern:**
+**Nach Completion:**
 ```
-1. Erkennung (Monitor oder Scheduler)
-2. check_alert_state(alert_id) — existiert bereits?
-3. if new: record_alert(...) mit Cooldown-Check
-4. if should_notify: Email/Ticket versenden
-5. Remediation-Versuch starten (parallel, nicht blockierend)
-6. Auf Recovery warten → resolve_alert()
+▶ ✓ list_issues                        500ms
+    API: list_issues(status="Open", type="Bug")
+    Results: 347 issues
+
+▶ ✓ Filter by age                       50ms
+    Input → Output: 347 → 67
+
+▶ ✓ Group by assignee                   30ms
+    Alice: 23, Bob: 18, Unassigned: 26
+
+▶ ✓ Summary generated                  200ms
+    12,500 → 125 tokens (1:100)
 ```
 
-**Referenz:** `backend/skills/kubernetes-incident-response/SKILL.md` — bestehendes Skill-Format
+Klick auf `▶` expandiert die Details.
 
----
+### Animated Step-Text
 
-### Task 7: REST-API Endpoint für aktive Alerts (Frontend Phase)
+Der Schritt-Text animiert sich während er läuft:
 
-**Datei:** `backend/api/routes_alerts.py` (neue Datei)
+**CSS Animated Dots:**
+```css
+.step-title.running::after {
+  content: "";
+  animation: dots 1.5s infinite;
+}
 
-**Endpoints:**
-```
-GET  /api/alerts           → Liste aller aktiven Alerts
-POST /api/alerts/{id}/resolve  → Manuelles Resolven aus dem Dashboard
-```
-
-**Response-Format (GET /api/alerts):**
-```json
-{
-  "alerts": [
-    {
-      "alert_id": "kubernetes:nginx-deployment:crashloopbackoff",
-      "module": "kubernetes",
-      "severity": "critical",
-      "summary": "Pod nginx crashed",
-      "status": "active",
-      "first_seen": "2026-04-08T10:00:00Z",
-      "last_seen": "2026-04-08T12:00:00Z",
-      "notify_count": 3
-    }
-  ],
-  "total": 1
+@keyframes dots {
+  0%, 20% { content: ""; }
+  40% { content: "."; }
+  60% { content: ".."; }
+  80%, 100% { content: "..."; }
 }
 ```
 
-**Router-Registrierung:** In `main.py` — `app.include_router(alerts_router)` vor dem StaticFiles-Mount.
+**Optionale Progress-Updates via WebSocket:**
+```python
+# Backend sendet step_update mit neuem Text
+await self._emit_step({
+    "type": "step_update",
+    "step_id": tool_call.id,
+    "title": f"list_issues ({len(partial_results)} received)"
+})
+```
 
----
+Frontend aktualisiert den Text, die Dots-Animation läuft weiter.
 
-### Task 8: Frontend — Settings-Panel "Alerts"
+### CSS-Regeln
 
-**Datei:** `frontend/index.html`
+```css
+.steps-tree {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 0.875rem;
+}
 
-Neuen Alert-Tab in `#subnav-settings` + `#settings-panel-alerts` mit Tabelle.
+.step {
+  border-left: 2px solid var(--border);
+  padding-left: 12px;
+  margin-bottom: 4px;
+}
 
-**Datei:** `frontend/app.js`
+.step-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 6px 0;
+  user-select: none;
+}
 
-- `_alertsCache: []` — in-memory Store
-- `loadAlerts()` — fetcht `GET /api/alerts`, renders Tabelle
-- `resolveAlert(alertId)` — `POST /api/alerts/{id}/resolve`
-- `_handleWsAlert()` — WebSocket live-update Handler
+.step-status.running {
+  color: var(--accent-blue);
+  animation: pulse-dots 1.2s infinite;
+}
 
-**Datei:** `frontend/style.css`
+.step-status.done { color: var(--success-green); }
+.step-status.error { color: var(--error-red); }
 
-CSS-Klassen für `.alerts-table`, `.alert-severity-*` Badges, etc.
+@keyframes pulse-dots {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
 
----
+.step-details {
+  display: none;
+  padding: 8px 0 8px 12px;
+  border-left: 2px solid var(--accent-blue);
+  color: var(--text-muted);
+}
 
-### Task 9: Frontend i18n
+.step-details.open { display: block; }
 
-**Dateien:** `frontend/i18n/*.json` (alle 10 Sprachen)
+/* Error State */
+.step.error { border-left-color: var(--error-red); }
 
-Alert-bezogene Keys: `alerts.title`, `alerts.critical`, `alerts.warning`, etc.
+.error-container {
+  background: rgba(239, 68, 68, 0.05);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 6px;
+  padding: 12px;
+}
 
----
+.error-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
 
-## Commit-Strategie
+.btn-retry {
+  background: var(--accent-blue);
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background-color 0.15s, opacity 0.15s;
+}
 
-| Commit | Message | Dateien |
-|--------|---------|---------|
-| 1 | `feat(core): Add AlertStateManager for Redis-based alert tracking` | `backend/core/alert_state.py` |
-| 2 | `feat(monitor): Add alert deduplication to health-check cycle` | `backend/agents/monitor_agent.py` |
-| 3 | `feat(tools): Add alert state tools for workflow deduplication` | `backend/agents/alert_tools.py`, `backend/agents/orchestrator.py`, `backend/core/safeguard.py` |
-| 4 | `test(alerts): Add unit and integration tests` | `backend/test_alert_state.py` |
-| 5 | `docs(skills): Add generic smart-alerts skill` | `backend/skills/smart-alerts/SKILL.md` |
-| 6 | `feat(api): Add REST endpoints for alert management` | `backend/api/routes_alerts.py`, `backend/main.py` |
-| 7 | `feat(frontend): Add alerts table to Settings panel` | `frontend/index.html`, `frontend/app.js`, `frontend/style.css`, `frontend/i18n/*.json` |
-
----
-
-## Verifikation
-
-```bash
-# 1. Unit-Tests
-cd /home/sb/github/ninko/backend && python -m pytest test_alert_state.py -v
-
-# 2. Linting
-cd /home/sb/github/ninko/backend && ruff check core/alert_state.py agents/alert_tools.py
-
-# 3. Docker Build
-cd /home/sb/github/ninko && docker compose build backend
-
-# 4. Manueller Redis-Check (nach einem Monitor-Zyklus)
-redis-cli KEYS "ninko:alerts:*"
+.btn-retry:disabled { opacity: 0.5; cursor: not-allowed; }
 ```
 
 ---
 
-## Was dieser Plan NICHT macht
+## Error Recovery & Retry
 
-- **Kein Kubernetes-spezifischer Skill** — der `smart-alerts` Skill ist modul-agnostisch mit Beispielen für alle unterstützten Module
-- **Keine REST-API Endpoints für LLM-Tools** — `@tool`-Funktionen sind LangChain-Tools, keine HTTP-Endpoints
-- **Keine separate Notification-Queue** — Cooldown-Management ist atomar via Redis `SET NX EX`
+### Error-Klassifizierung
+
+```python
+class ErrorType(str, Enum):
+    RETRYABLE = "retryable"   # Timeout, Connection, Rate-Limit
+    PERMANENT = "permanent"    # Auth, Invalid Parameter, 404
+    PARTIAL   = "partial"      # Teilresultate ok, weitermachen
+```
+
+Bei `step_error` sendet das Backend:
+```python
+await self._emit_step({
+    "type": "step_error",
+    "step_id": tool_call.id,
+    "error": str(e),
+    "error_type": "retryable",       # oder "permanent"
+    "suggested_retry": True,          # Frontend zeigt Retry-Button
+    "status": "error"
+})
+```
+
+### Retry-Mechanismus
+
+**Frontend:**
+- `RETRYABLE` → Zeige Retry-Button + Skip-Button + Abort-Button
+- `PERMANENT` → Zeige nur Error + Abort-Button (kein Retry)
+- Exponential Backoff: 1s, 2s, 4s (max 3 Versuche)
+
+**Backend braucht in-memory State** für den pausierten Subagent — ähnliches Pattern wie `_paused_sg_agents` in `base_agent.py` für Safeguard-Tool-Pending:
+
+```python
+# Module-level dict in data_analysis_subagent.py
+_active_subagents: dict[str, DataAnalysisSubagent] = {}
+
+def _get_or_create_subagent(session_id: str, module: str) -> DataAnalysisSubagent:
+    if session_id not in _active_subagents:
+        _active_subagents[session_id] = DataAnalysisSubagent(module)
+    return _active_subagents[session_id]
+
+def _cleanup_subagent(session_id: str):
+    _active_subagents.pop(session_id, None)
+```
+
+**Retry-Endpoint:**
+
+```python
+@app.post("/api/subagent/retry-step")
+async def retry_step(body: RetryStepRequest):
+    subagent = _active_subagents.get(body.session_id)
+    if not subagent:
+        return {"status": "error", "error": "No active subagent"}
+    
+    result = await subagent.retry_step(body.step_id)
+    return result
+```
+
+**Subagent muss fehlgeschlagene Steps tracken:**
+
+```python
+class DataAnalysisSubagent(BaseAgent):
+    def __init__(self, module: str):
+        super().__init__(name="data_analysis_subagent")
+        self.module = module
+        self.tools = self._get_readonly_tools_for_module(module)
+        self._failed_steps: dict[str, dict] = {}  # step_id → {executor, args, ...}
+    
+    async def retry_step(self, step_id: str) -> dict:
+        if step_id not in self._failed_steps:
+            return {"status": "error", "error": "Step not found or already completed"}
+        
+        step = self._failed_steps[step_id]
+        try:
+            result = await step["tool"].ainvoke(step["args"])
+            del self._failed_steps[step_id]
+            # emit step_done
+            return {"status": "success"}
+        except Exception as e:
+            is_retryable = isinstance(e, (TimeoutError, ConnectionError))
+            # emit step_error
+            return {"status": "error", "suggested_retry": is_retryable}
+```
+
+---
+
+## Chat-History Verhalten
+
+Wenn der Orchestrator an einen Subagent delegiert:
+
+1. **Chat-History bekommt nur die Summary** (nicht die internen Steps)
+2. **Steps sind transient** — sichtbar im Dashboard während der Execution, aber nicht in der gespeicherten History
+3. **Grund:** Die Steps sind Debugging-Info, nicht Konversations-Kontext. Sie in die History zu packen würde das Context-Problem nur verschieben.
+
+```python
+# In orchestrator.route():
+summary, did_compact = await subagent.invoke(task=message, module=module)
+
+# Summary geht in die Chat-History (wie jede andere Agent-Antwort)
+# Steps waren live via WebSocket sichtbar, werden nicht gespeichert
+return summary, module, did_compact
+```
+
+---
+
+## Fallback: Was wenn Complexity-Check falsch liegt?
+
+**False Positive** (LLM sagt "komplex", aber es sind nur 5 Tickets):
+- Subagent funktioniert trotzdem, nur minimaler Overhead (~1-2s extra LLM-Call)
+- Akzeptabler Trade-off
+
+**False Negative** (LLM sagt "nicht komplex", aber Module-Agent liefert 50 KB):
+- `_truncate_output()` in `core_tools.py` greift bereits (200 Zeilen / 4000 Chars)
+- Kein katastrophaler Fehler, nur suboptimale Antwort
+- Langfristig: Feedback-Loop (wenn `_truncate_output()` triggert → nächstes Mal Subagent nutzen)
+
+---
+
+## Workflow-Beispiele
+
+### Jira — "Alle kritischen Bugs älter als 2 Wochen"
+
+```
+User: "Zeige mir alle kritischen Bugs in Jira älter als 2 Wochen, gruppiert nach Assignee"
+
+1. _detect_module() → "jira"
+2. _check_task_complexity() → {is_complex: true, reasoning: "alle + älter als + gruppiert"}
+3. DataAnalysisSubagent startet:
+   - Tool: list_issues(type="Bug", priority="Critical", limit=100)
+     ●●● list_issues...
+     ✓ 67 Bugs (500ms)
+   - Lokal: filter age > 14 days → 67 bleiben
+   - Lokal: group by assignee → Alice: 23, Bob: 18, Unassigned: 26
+   - Summary generieren
+     ✓ Summary (200ms)
+4. Orchestrator erhält: "67 kritische alte Bugs. Alice: 23, Bob: 18, Unassigned: 26."
+   (~300 Tokens statt ~15.000)
+```
+
+### Redmine — "Wie viele offene Tickets für Projekt XYZ?"
+
+```
+User: "Wie viele offene Tickets haben wir für Projekt XYZ?"
+
+1. _detect_module() → "redmine"
+2. _check_task_complexity() → {is_complex: false, reasoning: "Einfache Zählung"}
+3. Tier 2: Direct Redmine Agent (wie bisher)
+```
+
+### GLPI — "Überblick: Status-Verteilung + Überfällige + Assignees"
+
+```
+User: "Gib mir einen Überblick über alle Tickets: Status, Überfällige, Top Assignees"
+
+1. _detect_module() → "glpi"
+2. _check_task_complexity() → {
+     is_complex: true,
+     sub_tasks: ["Status-Verteilung", "Überfällige", "Assignee-Ranking"],
+     suggested_subagent_count: 1
+   }
+3. DataAnalysisSubagent startet (1 Subagent, batcht alle 3 Sub-Tasks):
+   - Tool: get_tickets(status="all", limit=100)
+   - Lokal: group by status → Open: 47, In Progress: 23, Review: 8
+   - Tool: get_tickets(filter="overdue")
+   - Lokal: count → 5 überfällige
+   - Lokal: group by assignee (aus erstem Abruf) → Alice: 28, Bob: 19
+   - Summary
+4. Orchestrator erhält kompakte Zusammenfassung
+```
+
+---
+
+## Implementierungs-Phasen
+
+### Phase 1: Core (2-3 Tage)
+
+- [ ] `DataAnalysisSubagent` Klasse (`backend/agents/data_analysis_subagent.py`)
+- [ ] `_check_task_complexity()` in Orchestrator
+- [ ] `_get_readonly_tools_for_module()` — Tool-Filterung
+- [ ] System-Prompt für Aggregation/Summarization
+- [ ] Integration in `route()` (Tier 2.5)
+
+### Phase 2: Step-Visualization (2-3 Tage)
+
+- [ ] `_emit_step()` in BaseAgent (Hook bei Tool-Execution)
+- [ ] WebSocket Event-Handling im Frontend (`subagent_step`)
+- [ ] Step-Tree HTML + CSS (expandierbar, animated dots)
+- [ ] `step_update` für Progress-Text während Execution
+
+### Phase 3: Error Recovery (1-2 Tage)
+
+- [ ] Error-Klassifizierung (`retryable` / `permanent` / `partial`)
+- [ ] `_active_subagents` dict + `retry_step()` Methode
+- [ ] `/api/subagent/retry-step` Endpoint
+- [ ] Frontend: Retry/Skip/Abort Buttons + Exponential Backoff
+
+### Phase 4: Testing & Tuning (1-2 Tage)
+
+- [ ] Complexity-Check Prompt testen (10+ Queries, >80% Accuracy)
+- [ ] Token-Zählung: messen ob Context tatsächlich gespart wird
+- [ ] Integration Tests: Jira, Redmine, GLPI (je 3-5 Queries)
+- [ ] Performance: Subagent-Overhead messen
+
+---
+
+## Entscheidungen (Finalisiert)
+
+| # | Entscheidung | Begründung |
+|---|-------------|-----------|
+| 1 | **LLM-basierte Komplexitätsbewertung** (kein Keyword-Fallback) | LLM versteht Kontext, Keywords sind fragile. Timeout 2s → Fallback zu normalem Agent. |
+| 2 | **Read-Only Tools** vom erkannten Modul | Subagent braucht nur Lesezugriff. Kein Safeguard nötig. |
+| 3 | **Kein Safeguard-Check** für Subagent | Read-Only = sicher. Keine Bestätigung nötig. |
+| 4 | **Sequenzielles Batching** (1-2 Subagents) | Lokales LLM = GPU Bottleneck. Parallelisierung nur mit Cloud-API. |
+| 5 | **Steps = dynamisch aus Tool-Calls** | ReAct-Agent entscheidet selbst. Steps sind nicht vordefiniert. |
+| 6 | **Summary in Chat-History**, Steps transient | Steps sind Debugging-Info, nicht Konversations-Kontext. |
+
+---
+
+## Datei-Struktur
+
+```
+backend/
+├─ agents/
+│  ├─ data_analysis_subagent.py  ← NEU
+│  ├─ orchestrator.py            ← Modified (_check_task_complexity, Tier 2.5)
+│  └─ base_agent.py              ← Modified (_emit_step Hook)
+│
+├─ api/
+│  └─ routes_subagent.py         ← NEU (retry-step, abort Endpoints)
+│
+frontend/
+├─ app.js                        ← Modified (Step-Tree Rendering, WebSocket Handler)
+├─ style.css                     ← Modified (Steps CSS)
+└─ i18n/*.json                   ← Modified (Step-Labels)
+```
+
+---
+
+## Success-Kriterien
+
+- [ ] Complexity-Check >80% Accuracy (10+ Test-Queries)
+- [ ] Context-Ersparnis: Subagent-Summary <5% der Original-Datenmenge
+- [ ] Performance: Subagent-Overhead <2s bei einfachen Queries
+- [ ] Steps sichtbar, expandierbar, animiert im Dashboard
+- [ ] Retry funktioniert für transiente Fehler (Timeout, Connection)
+- [ ] Keine Regression: einfache Queries funktionieren wie bisher (Tier 2 unverändert)

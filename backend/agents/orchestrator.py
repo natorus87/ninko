@@ -46,6 +46,11 @@ from agents.alert_tools import (
     record_alert,
     resolve_alert,
 )
+from agents.data_analysis_subagent import (
+    DataAnalysisSubagent,
+    _get_or_create_subagent,
+    _cleanup_subagent,
+)
 from modules.image_gen.tools import generate_image
 from core import status_bus
 
@@ -101,6 +106,7 @@ _MULTISTEP_PATTERNS: list[re.Pattern] = [
 
 # Timeout für den Pipeline-Planner-LLM-Call
 _LLM_ROUTING_TIMEOUT: float = 10.0
+_COMPLEXITY_CHECK_TIMEOUT: float = 2.0
 
 # ── Routing-Konfiguration ─────────────────────────────────────────────────────
 
@@ -505,6 +511,97 @@ class OrchestratorAgent(BaseAgent):
             len(self._routing_map),
             len(set(self._routing_map.values())),
         )
+
+    def _get_readonly_tools_for_module(self, module: str) -> list:
+        from core.safeguard import _TOOL_READONLY
+
+        module_agent = self.registry.get_agent(module)
+        if not module_agent:
+            return []
+        return [t for t in module_agent.tools if t.name in _TOOL_READONLY]
+
+    async def _check_task_complexity(self, message: str, module: str) -> dict | None:
+        from core.llm_factory import get_llm
+        from langchain_core.messages import HumanMessage
+
+        prompt = f"""Analysiere diese Aufgabe für Modul "{module}":
+
+User-Query: {message}
+
+Wird diese Aufgabe wahrscheinlich viele Datensätze zurückliefern
+(> 20 Ergebnisse, komplexe Filterung, Aggregation)?
+
+Indikatoren für JA (is_complex: true):
+- "alle/list all/show all" → viele Ergebnisse erwartet
+- "gruppiert nach/group by" → Aggregation über große Menge
+- "vergleiche/compare" → muss viele Daten durchgehen
+- Keine explizite Limitierung ("die letzten 5")
+- "Überblick/overview" über viele Ressourcen
+- "Statistik/statistics" über große Mengen
+- "älter als/older than" kombiniert mit "alle/all"
+
+Indikatoren für NEIN (is_complex: false):
+- "Ticket #123" → einzelne Ressource
+- "erstelle/create" → Schreiboperation, keine Datenabfrage
+- Explizites Limit ("zeige 3", "letzte 5")
+- "Status von/status of" einzelner Ressource
+- "Details" zu spezifischer Ressource
+
+Antworte NUR mit JSON:
+{{
+  "is_complex": true/false,
+  "sub_tasks": ["task1", "task2"],
+  "suggested_subagent_count": 1-2,
+  "reasoning": "kurze Begründung"
+}}"""
+
+        try:
+            llm = get_llm()
+            response = await asyncio.wait_for(
+                llm.ainvoke([HumanMessage(content=prompt)]),
+                timeout=_COMPLEXITY_CHECK_TIMEOUT,
+            )
+            raw = response.content if hasattr(response, "content") else str(response)
+            raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
+
+            m = re.search(r"\{[\s\S]*\}", raw)
+            if not m:
+                logger.debug("Complexity-Check: Kein JSON gefunden, Fallback zu Tier 2")
+                return None
+
+            result = _json.loads(m.group(0))
+
+            is_complex = bool(result.get("is_complex", False))
+            sub_tasks = (
+                result.get("sub_tasks", [])
+                if isinstance(result.get("sub_tasks"), list)
+                else []
+            )
+            suggested_count = max(
+                1, min(2, int(result.get("suggested_subagent_count", 1)))
+            )
+            reasoning = str(result.get("reasoning", ""))[:200]
+
+            logger.info(
+                "Complexity-Check für '%s': is_complex=%s, reasoning='%s'",
+                module,
+                is_complex,
+                reasoning,
+            )
+
+            return {
+                "is_complex": is_complex,
+                "sub_tasks": sub_tasks,
+                "suggested_subagent_count": suggested_count,
+                "reasoning": reasoning,
+            }
+
+        except asyncio.TimeoutError:
+            logger.debug("Complexity-Check Timeout → Fallback zu Tier 2")
+            return None
+        except Exception as e:
+            logger.warning("Complexity-Check Fehler: %s → Fallback zu Tier 2", e)
+            return None
 
     @staticmethod
     def _wants_agent_creation(message: str) -> bool:
@@ -1737,6 +1834,38 @@ JSON-SCHEMA:
         if tier == 2 and target_module:
             agent = self.registry.get_agent(target_module)
             if agent is not None:
+                readonly_tools = self._get_readonly_tools_for_module(target_module)
+                if readonly_tools:
+                    complexity = await self._check_task_complexity(message, target_module)
+                    if complexity and complexity.get("is_complex"):
+                        logger.info(
+                            "Tier 2.5: DataAnalysisSubagent für '%s' (Reason: %s)",
+                            target_module,
+                            complexity.get("reasoning", "unknown"),
+                        )
+                        await status_bus.emit(
+                            session_id,
+                            _t(
+                                de=f"Analysiere komplexe Daten in {target_module}…",
+                                en=f"Analyzing complex data in {target_module}…",
+                            ),
+                        )
+
+                        subagent = _get_or_create_subagent(
+                            session_id=session_id,
+                            module=target_module,
+                            tools=readonly_tools,
+                        )
+                        try:
+                            response, did_compact = await subagent.invoke(
+                                task=message,
+                                chat_history=chat_history,
+                                sub_tasks=complexity.get("sub_tasks"),
+                            )
+                        finally:
+                            _cleanup_subagent(session_id, target_module)
+                        return response, target_module, did_compact
+
                 manifests = {m.name: m for m in self.registry.list_modules()}
                 display = manifests.get(
                     target_module, type("", (), {"display_name": target_module})()
@@ -1795,7 +1924,6 @@ JSON-SCHEMA:
                     "Modul '%s' hat keinen registrierten Agent — Fallback auf ReAct-Loop.",
                     target_module,
                 )
-
         # ── Tier 1: Orchestrator-ReAct-Loop ─────────────────────────────
         # LLM entscheidet: call_module_agent, run_pipeline, create_custom_agent oder direkte Antwort.
         logger.info("Tier 1: Orchestrator-ReAct-Loop für: %s…", message[:80])

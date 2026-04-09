@@ -5186,6 +5186,88 @@ a:hover {
     font-size: 0.95rem;
 }
 
+.subagent-steps {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    margin: 8px 0;
+    font-size: 0.875rem;
+}
+
+.step-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.step-item:last-child {
+    border-bottom: none;
+}
+
+.step-icon {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+}
+
+.step-status-running .step-icon {
+    color: var(--accent-blue);
+    animation: pulse-dots 1.2s infinite;
+}
+
+.step-status-done .step-icon {
+    color: var(--success-green);
+}
+
+.step-status-error .step-icon {
+    color: var(--error-red);
+}
+
+.step-title {
+    flex: 1;
+    color: var(--text-primary);
+}
+
+.step-details {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-family: monospace;
+}
+
+@keyframes pulse-dots {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+}
+
+.typing-error-icon {
+    color: var(--error-red);
+    font-size: 12px;
+    width: 20px;
+    text-align: center;
+}
+
+.btn-step-retry {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.75rem;
+    padding: 1px 5px;
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.btn-step-retry:hover {
+    background-color: var(--surface-hover);
+    color: var(--text-primary);
+}
+
 /* ─── Accessibility: Reduced Motion ─── */
 @media (prefers-reduced-motion: reduce) {
     /* Globale Transitions und Animationen deaktivieren */
@@ -5210,7 +5292,8 @@ a:hover {
     .wf-connecting-pulse,
     .wf-run-node-pulse,
     .wf-run-pip-blink,
-    .sf-loading::before {
+    .sf-loading::before,
+    .step-status-running .step-icon {
         animation: none !important;
         opacity: 1 !important;
     }

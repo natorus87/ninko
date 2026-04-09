@@ -46,6 +46,17 @@ async def emit(session_id: str, text: str) -> None:
         pass
 
 
+async def emit_event(session_id: str, event: dict) -> None:
+    """Sendet ein strukturiertes Event an die Queue der Session (beliebiger type)."""
+    if not session_id:
+        return
+    q = get_queue(session_id)
+    try:
+        q.put_nowait(event)
+    except asyncio.QueueFull:
+        pass
+
+
 async def done(session_id: str) -> None:
     """Signalisiert dem SSE-Consumer, dass die Verarbeitung abgeschlossen ist."""
     if not session_id:

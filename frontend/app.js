@@ -881,6 +881,8 @@ const Ninko = {
                     const data = JSON.parse(e.data);
                     if (data.type === 'status') {
                         this.updateTypingStatus(data.text);
+                    } else if (data.type === 'subagent_step') {
+                        this._handleSubagentStepSSE(data);
                     } else if (data.type === 'done') {
                         evtSource.close();
                         evtSource = null;
@@ -7743,19 +7745,75 @@ const Ninko = {
     },
 
     _handleWsAlert(data) {
-        // WebSocket Alert-Handler - fügt neue Alerts zum Cache hinzu
         if (!data.alert_id) return;
-        
+
         const exists = this._alertsCache.some(a => a.alert_id === data.alert_id);
         if (!exists) {
             this._alertsCache.push(data);
             this._renderAlertsTable();
             this._updateAlertsBadge();
-            
+
             const panel = document.getElementById('settings-panel-alerts');
             if (panel && panel.classList.contains('active')) {
                 this._renderAlertsTable();
             }
+        }
+    },
+
+    // Subagent-Step-Handling über SSE (während aktivem Chat-Request)
+    _handleSubagentStepSSE(data) {
+        const stepType = data.step_type || '';
+        const title = data.title || '';
+        const stepId = data.step_id || '';
+        const module = data.module || '';
+        const stepsEl = document.getElementById('typing-steps');
+        if (!stepsEl) return;
+
+        if (stepType === 'step_start') {
+            // Neuen aktiven Step einfügen (nutzt vorhandene Mechanik)
+            this.updateTypingStatus(title);
+
+        } else if (stepType === 'step_done') {
+            // Bereits durch den nächsten step_start erledigt — kein Zusatz nötig
+
+        } else if (stepType === 'step_error') {
+            // Aktiven Step als Fehler markieren + Retry-Button hinzufügen
+            const activeStep = stepsEl.querySelector('.typing-step-active');
+            if (activeStep) {
+                activeStep.classList.remove('typing-step-active');
+                activeStep.classList.add('typing-step-error');
+                const spinner = activeStep.querySelector('.typing-spinner');
+                if (spinner) spinner.outerHTML = '<span class="typing-error-icon">✗</span>';
+
+                if (data.suggested_retry) {
+                    const retryBtn = document.createElement('button');
+                    retryBtn.className = 'btn-step-retry';
+                    retryBtn.title = 'Schritt wiederholen';
+                    retryBtn.textContent = '↺';
+                    retryBtn.onclick = () => this._retrySubagentStep(stepId, module);
+                    activeStep.appendChild(retryBtn);
+                }
+            }
+        }
+    },
+
+    async _retrySubagentStep(stepId, module) {
+        try {
+            const res = await fetch('/api/subagent/retry-step', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: this.sessionId,
+                    module,
+                    step_id: stepId,
+                }),
+            });
+            const data = await res.json();
+            if (data.status !== 'success') {
+                showNotification(`Retry fehlgeschlagen: ${data.error || 'Unbekannter Fehler'}`, 'error');
+            }
+        } catch (e) {
+            showNotification('Retry-Anfrage fehlgeschlagen', 'error');
         }
     },
 };
