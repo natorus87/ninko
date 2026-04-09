@@ -1,612 +1,665 @@
-# Plan: Intelligente Task-Decomposition mit Read-Only Subagents
+# Ninko Improvement Backlog — inspiriert durch crewAI
 
-## Core-Idee
-
-Das 4-Tier-Routing bekommt einen neuen Schritt: **LLM-basierte Komplexitätsbewertung**. Erkennt das LLM eine datenintensive Aufgabe, delegiert der Orchestrator an einen **generischen Read-Only Subagent**. Dieser arbeitet in einem **isolierten Context**, sammelt und aggregiert Daten iterativ und gibt nur eine kompakte Zusammenfassung an den Orchestrator zurück.
-
-**Warum?** Module wie Redmine, Jira, GLPI liefern bei `list_issues()` oft 50-200 KB JSON. Das füllt das Context-Window nach 2-3 Zyklen. Der User bekommt dann abgeschnittene oder generalisierte Antworten.
-
-**Lösung:** Der Subagent absorbiert die großen Datenmengen in seinem eigenen Context. Der Orchestrator erhält nur ~300 Tokens statt ~15.000.
+Analyse von [crewAI](https://github.com/crewAIInc/crewAI) auf übertragbare Konzepte.
+Fokus: konkrete, implementierbare Verbesserungen für Ninko's bestehende Architektur.
 
 ---
 
-## Architektur
+## Übersicht
 
-### Erweitertes Tier-Routing
+| # | Thema | Aufwand | Wert | Phase |
+|---|-------|---------|------|-------|
+| 1 | Memory: Composite Scoring | Klein | Hoch | Quick Win |
+| 2 | Skills: `allowed_tools` Whitelist | Klein | Hoch | Quick Win |
+| 3 | Tool-Usage Events & Audit Trail | Mittel | Hoch | Quick Win |
+| 4 | Knowledge Base vs. Memory Trennung | Mittel | Hoch | Mittelfristig |
+| 5 | `@router`/`@listen` Workflow-DSL | Groß | Mittel | Mittelfristig |
+| 6 | A2A Delegation mit AgentCard | Mittel | Mittel | Mittelfristig |
+| 7 | Async-Safe Context Management | Mittel | Mittel | Mittelfristig |
+| 8 | Skills: Progressive Disclosure | Klein | Mittel | Quick Win |
+| 9 | LLM Cost Tracking | Mittel | Mittel | Mittelfristig |
+| 10 | OpenTelemetry Tracing | Groß | Niedrig | Strategisch |
+
+---
+
+## 1. Memory: Composite Scoring
+
+### Problem heute
+
+`SemanticMemory` in `core/memory.py` macht nur Top-K nach cosine distance. Ältere aber wichtige Memories konkurrieren gleichwertig mit aktuellen. Unwichtiges Rauschen verdrängt relevante Fakten.
+
+### crewAI-Ansatz
+
+Composite Score beim Recall:
 
 ```
-Tier 1: Simple Questions (< 120 chars, keine Action-Verbs)
-        → Direct LLM answer
-
-Tier 2: Module erkannt (Keyword-Match)
-        ↓
-        LLM Complexity-Check: "Ist das datenintensiv?"
-        ├─ NEIN → Tier 2: Direct Module Agent (wie bisher)
-        └─ JA   → Tier 2.5: DataAnalysisSubagent (NEU)
-                   → isolierter Context
-                   → nur read-only Tools
-                   → gibt Summary zurück
-
-Tier 3: Dynamic Agent (kein Modul match)
-Tier 4: Multi-Step Workflow Pipeline
+score = α · semantic_similarity + β · recency_decay + γ · importance_weight
 ```
 
-### Complexity-Check (LLM-basiert)
+- **Semantic Similarity**: cosine distance (wie heute)
+- **Recency Decay**: `exp(-λ · age_in_days)` — Memories älter als 30 Tage werden automatisch weniger relevant
+- **Importance Weight**: beim Speichern wird ein `importance` Score (0.0–1.0) gesetzt (LLM-basiert oder manuell per Kategorie)
 
-**Wo:** Nach `_detect_module()`, vor Agent-Invocation
+### Umsetzung für Ninko
 
-**Prompt:**
-```markdown
-Analysiere diese Aufgabe für Modul "{module}":
-
-User-Query: {user_message}
-
-Wird diese Aufgabe wahrscheinlich viele Datensätze zurückliefern
-(> 20 Ergebnisse, komplexe Filterung, Aggregation)?
-
-Indikatoren für JA:
-- "alle/list all/show all" → viele Ergebnisse erwartet
-- "gruppiert nach/group by" → Aggregation über große Menge
-- "vergleiche/compare" → muss viele Daten durchgehen
-- Keine explizite Limitierung ("die letzten 5")
-
-Indikatoren für NEIN:
-- "Ticket #123" → einzelne Ressource
-- "erstelle/create" → Schreiboperation, keine Datenabfrage
-- Explizites Limit ("zeige 3")
-
-Antworte NUR mit JSON:
-{
-  "is_complex": true/false,
-  "sub_tasks": ["task1", "task2"],
-  "suggested_subagent_count": 1-2,
-  "reasoning": "..."
-}
-```
-
-**Timeout:** 2 Sekunden. Bei Timeout → `is_complex = false` (Fallback zu normalem Agent).
-
-### Orchestrator-Integration
+**`core/memory.py` — `SemanticMemory.query()`:**
 
 ```python
-# orchestrator.py — in route()
+def _composite_score(
+    self,
+    distance: float,        # ChromaDB gibt 0=gleich, 2=maximal verschieden
+    stored_at: datetime,
+    importance: float = 0.5,
+    alpha: float = 0.5,
+    beta: float = 0.3,
+    gamma: float = 0.2,
+    decay_lambda: float = 0.05,  # Halbwertszeit ~14 Tage
+) -> float:
+    semantic = 1.0 - (distance / 2.0)           # normiert auf [0, 1]
+    age_days = (datetime.utcnow() - stored_at).days
+    recency = math.exp(-decay_lambda * age_days)
+    return alpha * semantic + beta * recency + gamma * importance
+```
 
-TIER_SUBAGENT = "2.5"  # String, nicht int
+**Beim Speichern (`store()`):**
+```python
+# Metadaten mit Timestamp und Importance
+collection.add(
+    documents=[text],
+    metadatas=[{"stored_at": datetime.utcnow().isoformat(), "importance": importance}],
+    ids=[uid],
+)
+```
 
-async def route(self, message, session_id="", ...):
-    tier = await self._classify_tier(message)
-    
-    if tier == 1:
-        # Direct LLM
-        ...
-    
-    elif tier == 2:
-        module, _ = await self._detect_module(message)
-        
-        # NEU: Complexity-Check
-        complexity = await self._check_task_complexity(message, module)
-        
-        if complexity and complexity.get("is_complex"):
-            # Tier 2.5: Subagent
-            subagent = self._get_or_create_subagent(session_id, module)
-            summary, did_compact = await subagent.invoke(
-                task=message,
-                module=module,
-                sub_tasks=complexity.get("sub_tasks", []),
-            )
-            return summary, module, did_compact
-        else:
-            # Tier 2: Normal
-            agent = self.registry.get_agent(module)
-            response, did_compact = await agent.invoke(message)
-            return response, module, did_compact
-    ...
+**Beim Abrufen (`query()`):**
+```python
+results = collection.query(query_texts=[query], n_results=n_results * 3, include=["distances", "metadatas"])
+# Composite Score berechnen, re-ranken, Top-K zurückgeben
+```
+
+### Zusatz: Auto-Importance beim Speichern
+
+Bei `_auto_memorize()` in `base_agent.py` gibt der LLM-Call bereits eine Einschätzung zurück. Dort könnte direkt ein `importance`-Score mitextrahiert werden:
+
+```
+Antworte mit JSON: {"fact": "...", "importance": 0.8}
 ```
 
 ---
 
-## DataAnalysisSubagent
+## 2. Skills: `allowed_tools` Whitelist
 
-### Konzept
+### Problem heute
+
+Skills werden injiziert ohne zu deklarieren welche Tools sie benötigen oder erlauben. Der SafeGuard prüft nur global via `_TOOL_READONLY`. Es gibt keine skill-level Permission-Granularität.
+
+### crewAI-Ansatz
+
+Skills deklarieren explizit welche Tools sie verwenden dürfen:
+
+```yaml
+---
+name: kubernetes-diagnostics
+allowed_tools: [list_pods, get_pod_logs, describe_pod, get_events]
+modules: [kubernetes]
+---
+```
+
+### Umsetzung für Ninko
+
+**SKILL.md Frontmatter erweitern:**
+
+```yaml
+---
+name: kubernetes-incident-response
+description: Kubernetes Incident Response Playbook
+modules: [kubernetes]
+allowed_tools: [list_pods, get_pod_logs, describe_deployment, get_events]
+---
+```
+
+**`core/skills_manager.py` — `SkillInfo` Dataclass:**
 
 ```python
-class DataAnalysisSubagent(BaseAgent):
-    """
-    Generischer Subagent für datenintensive Aufgaben.
-    
-    - Eigener isolierter Context (belastet Orchestrator nicht)
-    - Nur read-only Tools (list_*, search_*, get_*, check_*)
-    - Gibt kompakte Summary zurück, keine Rohdaten
-    """
+@dataclass
+class SkillInfo:
+    name: str
+    description: str
+    modules: list[str]
+    body: str
+    allowed_tools: list[str] = field(default_factory=list)  # NEU
 ```
 
-### Tool-Zugriff: Nur Read-Only vom erkannten Modul
+**`core/safeguard.py` — Tool-Check mit Skill-Kontext:**
 
-**Problem:** Module-Tools sind pro Agent registriert, nicht zentral verfügbar.
+Wenn ein Skill injiziert ist und ein Tool-Call kommt, prüfen ob das Tool in `allowed_tools` des aktiven Skills liegt — zusätzlich zur globalen `_TOOL_READONLY` Prüfung.
 
-**Lösung:** `ModuleRegistry` hat `get_agent(module_name)` → der Agent hat `.tools`. Filtern nach `_TOOL_READONLY` aus `safeguard.py`:
-
-```python
-def _get_readonly_tools_for_module(self, module: str) -> list:
-    """Hole read-only Tools vom erkannten Modul."""
-    module_agent = self.registry.get_agent(module)
-    if not module_agent:
-        return []
-    
-    from core.safeguard import _TOOL_READONLY
-    return [t for t in module_agent.tools if t.name in _TOOL_READONLY]
-```
-
-Der Subagent bekommt **nur** die Tools des erkannten Moduls, nicht aller Module. Das verhindert Verwirrung und hält den Tool-Namespace klein.
-
-### System-Prompt
-
-```markdown
-# Data Analysis Subagent
-
-Du analysierst große Datenmengen für das Modul "{module}".
-
-## Strategie
-
-1. **Verstehe die Anfrage:** Welche Filter, Gruppierung, Sortierung?
-2. **Iterativ abfragen:** Nutze limit-Parameter, nicht alles auf einmal
-3. **Lokal aggregieren:** Zähle, gruppiere, sortiere in deinem Context
-4. **Kompakt zusammenfassen:**
-   - Statistiken (total, Verteilung)
-   - Top-N Items (nach Relevanz/Alter/Priorität)
-   - Insights (Auffälligkeiten, Trends)
-   - NIEMALS vollständige Listen (max 10-20 Items)
-
-## Wichtig
-- Gib NUR die Zusammenfassung zurück, keine Rohdaten
-- Max 500 Tokens Output
-- Wenn > 100 Ergebnisse: aggregiere statt aufzulisten
-```
-
-### Subagent-Skalierung (Lokales LLM)
-
-⚠️ **Constraint:** Bei einem lokalen LLM (LM Studio, Ollama) können LLM-Requests nicht parallel laufen (GPU ist Bottleneck). Mehrere Subagents parallel = Queue-Effekt = nur Overhead.
-
-**Strategie: Sequenzielles Batching**
-
-| Aufgabe | Subagents | Strategie |
-|---------|-----------|-----------|
-| 1-3 Queries | 1 | Ein Subagent, iterativ |
-| 4-5 Queries | 1 | Ein Subagent, batcht alle Sub-Tasks |
-| 6+ Queries (stark unterschiedlich) | 2 | Sequenziell, jeder batcht 2-3 |
-
-Bei Cloud-APIs (OpenAI, OpenRouter): Parallelisierung möglich, aber nicht als Basis-Annahme.
+**Sicherheitsvorteil:** Ein Skill der nur lesen soll, kann nicht plötzlich `delete_pod` aufrufen — auch wenn der SafeGuard das global erlauben würde.
 
 ---
 
-## Step-Visualization im Dashboard
+## 3. Tool-Usage Events & Audit Trail
 
-### Problemstellung
+### Problem heute
 
-Aktuell sieht der User nur einen Spinner. Was macht der Subagent? Funktioniert es? Wo hängt es?
+Ninko loggt Tool-Calls nur implizit über `RedisLogHandler`. Es gibt keinen strukturierten Audit-Trail: welcher Agent hat wann welches Tool mit welchen Parametern aufgerufen, wie lange hat es gedauert, was war das Ergebnis (Größe, Fehler)?
 
-### Lösung: WebSocket Step-Streaming
+### crewAI-Ansatz
 
-**Backend sendet 4 Event-Typen über den bestehenden WebSocket-Kanal:**
-
-```python
-# Event-Typen
-"step_start"   # Neuer Schritt beginnt
-"step_update"  # Text-Update während Schritt läuft (optional)
-"step_done"    # Schritt erfolgreich abgeschlossen
-"step_error"   # Schritt fehlgeschlagen + Error-Details + Retry-Flag
-```
-
-**Wichtig:** Der Subagent ist ein ReAct-Agent — die Steps kommen **dynamisch** aus den Tool-Calls, nicht vordefiniert. Integration in `base_agent.py`:
+Typed Events über einen Event-Bus:
 
 ```python
-# In BaseAgent._run_agent() oder dem Tool-Execution-Hook:
-
-# Vor Tool-Call:
-await self._emit_step({
-    "type": "step_start",
-    "step_id": tool_call.id,
-    "title": tool_call.name,  # z.B. "list_issues"
-    "description": str(tool_call.args)[:200],  # Argumente gekürzt
-    "status": "running"
-})
-
-# Nach Tool-Call:
-await self._emit_step({
-    "type": "step_done",
-    "step_id": tool_call.id,
-    "title": tool_call.name,
-    "details": {
-        "result_size": len(result),
-        "duration_ms": elapsed_ms,
-    },
-    "status": "done"
-})
+class ToolUsageEvent(BaseModel):
+    agent_name: str
+    tool_name: str
+    args: dict
+    result_size: int
+    duration_ms: float
+    error: str | None
+    timestamp: datetime
+    session_id: str
 ```
 
-So erscheint jeder Tool-Call als expandierbarer Schritt — egal welches Tool der Agent wählt.
+### Umsetzung für Ninko
 
-### Frontend: Step-Tree (Claude Code Stil)
-
-**Während Execution:**
-```
-●●● list_issues...                    (animated dots)
-●●● Filtering results...              (animated dots)
-●●● Aggregating by assignee...        (animated dots)
-```
-
-**Nach Completion:**
-```
-▶ ✓ list_issues                        500ms
-    API: list_issues(status="Open", type="Bug")
-    Results: 347 issues
-
-▶ ✓ Filter by age                       50ms
-    Input → Output: 347 → 67
-
-▶ ✓ Group by assignee                   30ms
-    Alice: 23, Bob: 18, Unassigned: 26
-
-▶ ✓ Summary generated                  200ms
-    12,500 → 125 tokens (1:100)
-```
-
-Klick auf `▶` expandiert die Details.
-
-### Animated Step-Text
-
-Der Schritt-Text animiert sich während er läuft:
-
-**CSS Animated Dots:**
-```css
-.step-title.running::after {
-  content: "";
-  animation: dots 1.5s infinite;
-}
-
-@keyframes dots {
-  0%, 20% { content: ""; }
-  40% { content: "."; }
-  60% { content: ".."; }
-  80%, 100% { content: "..."; }
-}
-```
-
-**Optionale Progress-Updates via WebSocket:**
-```python
-# Backend sendet step_update mit neuem Text
-await self._emit_step({
-    "type": "step_update",
-    "step_id": tool_call.id,
-    "title": f"list_issues ({len(partial_results)} received)"
-})
-```
-
-Frontend aktualisiert den Text, die Dots-Animation läuft weiter.
-
-### CSS-Regeln
-
-```css
-.steps-tree {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px;
-  font-size: 0.875rem;
-}
-
-.step {
-  border-left: 2px solid var(--border);
-  padding-left: 12px;
-  margin-bottom: 4px;
-}
-
-.step-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  padding: 6px 0;
-  user-select: none;
-}
-
-.step-status.running {
-  color: var(--accent-blue);
-  animation: pulse-dots 1.2s infinite;
-}
-
-.step-status.done { color: var(--success-green); }
-.step-status.error { color: var(--error-red); }
-
-@keyframes pulse-dots {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 1; }
-}
-
-.step-details {
-  display: none;
-  padding: 8px 0 8px 12px;
-  border-left: 2px solid var(--accent-blue);
-  color: var(--text-muted);
-}
-
-.step-details.open { display: block; }
-
-/* Error State */
-.step.error { border-left-color: var(--error-red); }
-
-.error-container {
-  background: rgba(239, 68, 68, 0.05);
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  border-radius: 6px;
-  padding: 12px;
-}
-
-.error-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.btn-retry {
-  background: var(--accent-blue);
-  color: white;
-  border: none;
-  padding: 6px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.85rem;
-  transition: background-color 0.15s, opacity 0.15s;
-}
-
-.btn-retry:disabled { opacity: 0.5; cursor: not-allowed; }
-```
-
----
-
-## Error Recovery & Retry
-
-### Error-Klassifizierung
+**`core/events.py` — neues Modul:**
 
 ```python
-class ErrorType(str, Enum):
-    RETRYABLE = "retryable"   # Timeout, Connection, Rate-Limit
-    PERMANENT = "permanent"    # Auth, Invalid Parameter, 404
-    PARTIAL   = "partial"      # Teilresultate ok, weitermachen
-```
+import asyncio
+from dataclasses import dataclass, field
+from datetime import datetime
 
-Bei `step_error` sendet das Backend:
-```python
-await self._emit_step({
-    "type": "step_error",
-    "step_id": tool_call.id,
-    "error": str(e),
-    "error_type": "retryable",       # oder "permanent"
-    "suggested_retry": True,          # Frontend zeigt Retry-Button
-    "status": "error"
-})
-```
+@dataclass
+class ToolEvent:
+    agent_name: str
+    tool_name: str
+    args: dict
+    session_id: str
+    timestamp: datetime = field(default_factory=datetime.utcnow)
+    duration_ms: float = 0.0
+    result_size: int = 0
+    error: str | None = None
 
-### Retry-Mechanismus
+# Module-level Event-Queue
+_event_queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
+_listeners: list[callable] = []
 
-**Frontend:**
-- `RETRYABLE` → Zeige Retry-Button + Skip-Button + Abort-Button
-- `PERMANENT` → Zeige nur Error + Abort-Button (kein Retry)
-- Exponential Backoff: 1s, 2s, 4s (max 3 Versuche)
-
-**Backend braucht in-memory State** für den pausierten Subagent — ähnliches Pattern wie `_paused_sg_agents` in `base_agent.py` für Safeguard-Tool-Pending:
-
-```python
-# Module-level dict in data_analysis_subagent.py
-_active_subagents: dict[str, DataAnalysisSubagent] = {}
-
-def _get_or_create_subagent(session_id: str, module: str) -> DataAnalysisSubagent:
-    if session_id not in _active_subagents:
-        _active_subagents[session_id] = DataAnalysisSubagent(module)
-    return _active_subagents[session_id]
-
-def _cleanup_subagent(session_id: str):
-    _active_subagents.pop(session_id, None)
-```
-
-**Retry-Endpoint:**
-
-```python
-@app.post("/api/subagent/retry-step")
-async def retry_step(body: RetryStepRequest):
-    subagent = _active_subagents.get(body.session_id)
-    if not subagent:
-        return {"status": "error", "error": "No active subagent"}
-    
-    result = await subagent.retry_step(body.step_id)
-    return result
-```
-
-**Subagent muss fehlgeschlagene Steps tracken:**
-
-```python
-class DataAnalysisSubagent(BaseAgent):
-    def __init__(self, module: str):
-        super().__init__(name="data_analysis_subagent")
-        self.module = module
-        self.tools = self._get_readonly_tools_for_module(module)
-        self._failed_steps: dict[str, dict] = {}  # step_id → {executor, args, ...}
-    
-    async def retry_step(self, step_id: str) -> dict:
-        if step_id not in self._failed_steps:
-            return {"status": "error", "error": "Step not found or already completed"}
-        
-        step = self._failed_steps[step_id]
+async def emit(event: ToolEvent) -> None:
+    for listener in _listeners:
         try:
-            result = await step["tool"].ainvoke(step["args"])
-            del self._failed_steps[step_id]
-            # emit step_done
-            return {"status": "success"}
-        except Exception as e:
-            is_retryable = isinstance(e, (TimeoutError, ConnectionError))
-            # emit step_error
-            return {"status": "error", "suggested_retry": is_retryable}
+            await listener(event)
+        except Exception:
+            pass
+
+def register_listener(fn: callable) -> None:
+    _listeners.append(fn)
 ```
 
----
+**`agents/base_agent.py` — Hook bei Tool-Execution:**
 
-## Chat-History Verhalten
+LangGraph `create_react_agent` unterstützt Callbacks. Dort einen `ToolEventHandler` registrieren der `events.emit()` aufruft — analog zum `StepTrackingHandler` im `DataAnalysisSubagent`.
 
-Wenn der Orchestrator an einen Subagent delegiert:
+**Nutzen:**
 
-1. **Chat-History bekommt nur die Summary** (nicht die internen Steps)
-2. **Steps sind transient** — sichtbar im Dashboard während der Execution, aber nicht in der gespeicherten History
-3. **Grund:** Die Steps sind Debugging-Info, nicht Konversations-Kontext. Sie in die History zu packen würde das Context-Problem nur verschieben.
+- Dashboard: "Letzte Tool-Calls" Tabelle in Settings → Logs
+- Cost Tracking (Punkt 9) baut darauf auf
+- Compliance: vollständiger Audit-Trail aller Aktionen
+
+**Redis-Persistenz:**
 
 ```python
-# In orchestrator.route():
-summary, did_compact = await subagent.invoke(task=message, module=module)
-
-# Summary geht in die Chat-History (wie jede andere Agent-Antwort)
-# Steps waren live via WebSocket sichtbar, werden nicht gespeichert
-return summary, module, did_compact
+key = "ninko:audit:tool_events"
+await redis.lpush(key, event.model_dump_json())
+await redis.ltrim(key, 0, 9999)  # Letzte 10.000 Events
 ```
 
 ---
 
-## Fallback: Was wenn Complexity-Check falsch liegt?
+## 4. Knowledge Base vs. Memory Trennung
 
-**False Positive** (LLM sagt "komplex", aber es sind nur 5 Tickets):
-- Subagent funktioniert trotzdem, nur minimaler Overhead (~1-2s extra LLM-Call)
-- Akzeptabler Trade-off
+### Problem heute
 
-**False Negative** (LLM sagt "nicht komplex", aber Module-Agent liefert 50 KB):
-- `_truncate_output()` in `core_tools.py` greift bereits (200 Zeilen / 4000 Chars)
-- Kein katastrophaler Fehler, nur suboptimale Antwort
-- Langfristig: Feedback-Loop (wenn `_truncate_output()` triggert → nächstes Mal Subagent nutzen)
+Ninko speichert alles in ChromaDB in einer `agent_memory` Collection: User-Fakten, Erfahrungen, episodische Erinnerungen — aber auch Wissen das statisch sein sollte (Runbooks, Modul-Dokumentation, API-Referenzen). Alles veraltet gleich schnell, alles hat dasselbe Recall-Verhalten.
+
+### crewAI-Ansatz
+
+Explizite Trennung:
+
+| Typ | Inhalt | Lebensdauer | Beispiel |
+|-----|--------|-------------|---------|
+| `Memory` | Episodisch, per-Session-Fakten | Session/Tage | "User bevorzugt kurze Antworten" |
+| `Knowledge` | Strukturiert, langlebig, multi-source | Permanent | Kubernetes-Runbook, API-Docs |
+
+`Knowledge` hat pluggable `Sources`:
+- `PDFKnowledgeSource` — lädt PDFs ein
+- `URLKnowledgeSource` — crawlt URLs
+- `StringKnowledgeSource` — statische Texte
+- Beliebige Custom Sources
+
+### Umsetzung für Ninko
+
+**Zwei ChromaDB Collections statt einer:**
+
+```python
+# Bestehend (bleibt)
+agent_memory_collection = chroma.get_or_create_collection("agent_memory")
+
+# Neu: statisches Wissen
+knowledge_collection = chroma.get_or_create_collection("ninko_knowledge")
+```
+
+**`core/knowledge.py` — neues Modul:**
+
+```python
+class KnowledgeSource(ABC):
+    @abstractmethod
+    async def load(self) -> list[str]:
+        """Liefert Texte die in die Knowledge Collection kommen."""
+        ...
+
+class URLKnowledgeSource(KnowledgeSource):
+    def __init__(self, url: str, selector: str | None = None): ...
+
+class FileKnowledgeSource(KnowledgeSource):
+    def __init__(self, path: str): ...
+
+class KnowledgeBase:
+    async def add_source(self, source: KnowledgeSource, tags: list[str] = []) -> None: ...
+    async def query(self, text: str, tags: list[str] | None = None, top_k: int = 5) -> list[str]: ...
+```
+
+**Integration in `base_agent.py`:**
+
+Im `invoke()` zuerst Knowledge-Query, dann Memory-Query. Knowledge-Results haben höhere Prio (sie sind verifiziertes Wissen).
+
+**Initialisierung beim Startup:**
+
+```python
+# main.py lifespan
+kb = KnowledgeBase()
+await kb.add_source(URLKnowledgeSource("https://kubernetes.io/docs/..."), tags=["kubernetes"])
+await kb.add_source(FileKnowledgeSource("docs/runbooks/proxmox.md"), tags=["proxmox"])
+```
+
+**Vorteil für Ninko:** Module-Dokumentation, Troubleshooting-Guides und API-Referenzen können einmalig geladen werden und sind für alle Agenten verfügbar — ohne dass sie durch User-Interaktion "vergessen" werden.
 
 ---
 
-## Workflow-Beispiele
+## 5. `@router` / `@listen` Workflow-DSL
 
-### Jira — "Alle kritischen Bugs älter als 2 Wochen"
+### Problem heute
 
+Ninko's Workflow-Engine ist graph-basiert (JSON-Nodes, Canvas-UI). Das ist gut für einfache lineare Flows, aber für komplexe Bedingungslogik muss der User den visuellen Editor bedienen. Es gibt keine programmatische, lesbare Definition von Workflows.
+
+### crewAI-Ansatz
+
+```python
+class IncidentFlow(Flow):
+    severity: int = 0
+    
+    @start()
+    async def detect(self):
+        self.severity = await check_severity()
+    
+    @router(detect)
+    def route(self) -> str:
+        return "critical" if self.severity > 8 else "standard"
+    
+    @listen("critical")
+    async def page_oncall(self): ...
+    
+    @listen("standard")
+    async def create_ticket(self): ...
+    
+    @listen(page_oncall, create_ticket)
+    async def notify_summary(self): ...
 ```
-User: "Zeige mir alle kritischen Bugs in Jira älter als 2 Wochen, gruppiert nach Assignee"
 
-1. _detect_module() → "jira"
-2. _check_task_complexity() → {is_complex: true, reasoning: "alle + älter als + gruppiert"}
-3. DataAnalysisSubagent startet:
-   - Tool: list_issues(type="Bug", priority="Critical", limit=100)
-     ●●● list_issues...
-     ✓ 67 Bugs (500ms)
-   - Lokal: filter age > 14 days → 67 bleiben
-   - Lokal: group by assignee → Alice: 23, Bob: 18, Unassigned: 26
-   - Summary generieren
-     ✓ Summary (200ms)
-4. Orchestrator erhält: "67 kritische alte Bugs. Alice: 23, Bob: 18, Unassigned: 26."
-   (~300 Tokens statt ~15.000)
+### Umsetzung für Ninko
+
+**Option A — Neuer Flow-Typ im Workflow-Editor:**
+
+Neben dem visuellen Graph-Editor eine "Code"-Ansicht anbieten, die Python-Klassen mit Decorators definiert. Separate Engine in `core/flow_engine.py`.
+
+**Option B — Skills als Flows:**
+
+`SKILL.md` um einen optionalen `flow:` Block erweitern der einen Python-ähnlichen Pseudo-Code für bedingte Logik enthält. Der Agent interpretiert ihn.
+
+**Decorator-System:**
+
+```python
+# core/flow_engine.py
+def start():
+    def decorator(fn): fn._is_start = True; return fn
+    return decorator
+
+def router(listen_to):
+    def decorator(fn): fn._is_router = True; fn._listens_to = listen_to; return fn
+    return decorator
+
+def listen(*sources):
+    def decorator(fn): fn._listens_to = sources; return fn
+    return decorator
+
+class Flow:
+    async def run(self) -> dict:
+        """Führt den Flow aus — traversiert den Dependency-Graph der Methoden."""
+        ...
 ```
 
-### Redmine — "Wie viele offene Tickets für Projekt XYZ?"
-
-```
-User: "Wie viele offene Tickets haben wir für Projekt XYZ?"
-
-1. _detect_module() → "redmine"
-2. _check_task_complexity() → {is_complex: false, reasoning: "Einfache Zählung"}
-3. Tier 2: Direct Redmine Agent (wie bisher)
-```
-
-### GLPI — "Überblick: Status-Verteilung + Überfällige + Assignees"
-
-```
-User: "Gib mir einen Überblick über alle Tickets: Status, Überfällige, Top Assignees"
-
-1. _detect_module() → "glpi"
-2. _check_task_complexity() → {
-     is_complex: true,
-     sub_tasks: ["Status-Verteilung", "Überfällige", "Assignee-Ranking"],
-     suggested_subagent_count: 1
-   }
-3. DataAnalysisSubagent startet (1 Subagent, batcht alle 3 Sub-Tasks):
-   - Tool: get_tickets(status="all", limit=100)
-   - Lokal: group by status → Open: 47, In Progress: 23, Review: 8
-   - Tool: get_tickets(filter="overdue")
-   - Lokal: count → 5 überfällige
-   - Lokal: group by assignee (aus erstem Abruf) → Alice: 28, Bob: 19
-   - Summary
-4. Orchestrator erhält kompakte Zusammenfassung
-```
+**Aufwand:** Groß — eigene Flow-Execution-Engine. Mittelfristig als Alternative zur JSON-basierten Workflow-Engine sinnvoll.
 
 ---
 
-## Implementierungs-Phasen
+## 6. A2A Delegation mit AgentCard
 
-### Phase 1: Core (2-3 Tage)
+### Problem heute
 
-- [ ] `DataAnalysisSubagent` Klasse (`backend/agents/data_analysis_subagent.py`)
-- [ ] `_check_task_complexity()` in Orchestrator
-- [ ] `_get_readonly_tools_for_module()` — Tool-Filterung
-- [ ] System-Prompt für Aggregation/Summarization
-- [ ] Integration in `route()` (Tier 2.5)
+`call_module_agent(module_name, task)` in `core_tools.py` ist ein reiner String-Dispatch. Der Orchestrator weiß nicht was der Ziel-Agent kann — er ruft ihn blind auf. Routing passiert nur über Keyword-Matching oder LLM-Klassifizierung.
 
-### Phase 2: Step-Visualization (2-3 Tage)
+### crewAI-Ansatz
 
-- [ ] `_emit_step()` in BaseAgent (Hook bei Tool-Execution)
-- [ ] WebSocket Event-Handling im Frontend (`subagent_step`)
-- [ ] Step-Tree HTML + CSS (expandierbar, animated dots)
-- [ ] `step_update` für Progress-Text während Execution
+`AgentCard` als strukturiertes Manifest:
 
-### Phase 3: Error Recovery (1-2 Tage)
-
-- [ ] Error-Klassifizierung (`retryable` / `permanent` / `partial`)
-- [ ] `_active_subagents` dict + `retry_step()` Methode
-- [ ] `/api/subagent/retry-step` Endpoint
-- [ ] Frontend: Retry/Skip/Abort Buttons + Exponential Backoff
-
-### Phase 4: Testing & Tuning (1-2 Tage)
-
-- [ ] Complexity-Check Prompt testen (10+ Queries, >80% Accuracy)
-- [ ] Token-Zählung: messen ob Context tatsächlich gespart wird
-- [ ] Integration Tests: Jira, Redmine, GLPI (je 3-5 Queries)
-- [ ] Performance: Subagent-Overhead messen
-
----
-
-## Entscheidungen (Finalisiert)
-
-| # | Entscheidung | Begründung |
-|---|-------------|-----------|
-| 1 | **LLM-basierte Komplexitätsbewertung** (kein Keyword-Fallback) | LLM versteht Kontext, Keywords sind fragile. Timeout 2s → Fallback zu normalem Agent. |
-| 2 | **Read-Only Tools** vom erkannten Modul | Subagent braucht nur Lesezugriff. Kein Safeguard nötig. |
-| 3 | **Kein Safeguard-Check** für Subagent | Read-Only = sicher. Keine Bestätigung nötig. |
-| 4 | **Sequenzielles Batching** (1-2 Subagents) | Lokales LLM = GPU Bottleneck. Parallelisierung nur mit Cloud-API. |
-| 5 | **Steps = dynamisch aus Tool-Calls** | ReAct-Agent entscheidet selbst. Steps sind nicht vordefiniert. |
-| 6 | **Summary in Chat-History**, Steps transient | Steps sind Debugging-Info, nicht Konversations-Kontext. |
-
----
-
-## Datei-Struktur
-
-```
-backend/
-├─ agents/
-│  ├─ data_analysis_subagent.py  ← NEU
-│  ├─ orchestrator.py            ← Modified (_check_task_complexity, Tier 2.5)
-│  └─ base_agent.py              ← Modified (_emit_step Hook)
-│
-├─ api/
-│  └─ routes_subagent.py         ← NEU (retry-step, abort Endpoints)
-│
-frontend/
-├─ app.js                        ← Modified (Step-Tree Rendering, WebSocket Handler)
-├─ style.css                     ← Modified (Steps CSS)
-└─ i18n/*.json                   ← Modified (Step-Labels)
+```json
+{
+  "name": "kubernetes-agent",
+  "capabilities": ["pod management", "log analysis", "scaling"],
+  "tools": ["list_pods", "get_pod_logs", "scale_deployment"],
+  "response_schema": {"type": "object", "properties": {...}},
+  "max_concurrency": 3
+}
 ```
 
+### Umsetzung für Ninko
+
+**`ModuleManifest` erweitern:**
+
+```python
+@dataclass
+class ModuleManifest:
+    # bestehende Felder...
+    agent_capabilities: list[str] = field(default_factory=list)  # NEU
+    # z.B. ["pod management", "log streaming", "scaling", "namespace monitoring"]
+```
+
+**`core/module_registry.py` — `get_agent_card(module_name) -> dict`:**
+
+```python
+def get_agent_card(self, module_name: str) -> dict:
+    manifest = self._manifests[module_name]
+    agent = self._agents[module_name]
+    return {
+        "name": module_name,
+        "display_name": manifest.display_name,
+        "capabilities": manifest.agent_capabilities,
+        "tools": [t.name for t in agent.tools],
+        "routing_keywords": manifest.routing_keywords[:10],
+    }
+```
+
+**Orchestrator-Verbesserung:**
+
+`_build_module_descriptions()` nutzt heute `manifest.description` + 5 Keywords. Mit AgentCard könnte der LLM-Classifier präzisere Beschreibungen bekommen:
+
+```
+kubernetes: pod management, log analysis, scaling, namespace monitoring
+           Tools: list_pods, get_pod_logs, scale_deployment, ...
+```
+
+**API-Endpoint:**
+
+`GET /api/agents/cards` — gibt alle AgentCards zurück. Nützlich für externe Integrationen und das Dashboard.
+
 ---
 
-## Success-Kriterien
+## 7. Async-Safe Context Management
 
-- [ ] Complexity-Check >80% Accuracy (10+ Test-Queries)
-- [ ] Context-Ersparnis: Subagent-Summary <5% der Original-Datenmenge
-- [ ] Performance: Subagent-Overhead <2s bei einfachen Queries
-- [ ] Steps sichtbar, expandierbar, animiert im Dashboard
-- [ ] Retry funktioniert für transiente Fehler (Timeout, Connection)
-- [ ] Keine Regression: einfache Queries funktionieren wie bisher (Tier 2 unverändert)
+### Problem heute
+
+Ninko propagiert Session-IDs, User-Kontext und Spracheinstellungen über explizite Parameter (`session_id: str`, `confirmed: bool`). Bei komplexen Aufrufketten (Orchestrator → Module Agent → Tool → Sub-Tool) müssen alle Parameter durchgereicht werden.
+
+`status_bus` nutzt bereits `contextvars.ContextVar` für `session_id`. Aber andere Kontexte (Language, Auth-Role, Trace-ID) sind noch als Parameter.
+
+### crewAI-Ansatz
+
+Zentrale `ExecutionContext` Klasse mit `ContextVar`-Backend:
+
+```python
+_ctx_session: ContextVar[str] = ContextVar("session_id", default="")
+_ctx_language: ContextVar[str] = ContextVar("language", default="de")
+_ctx_trace_id: ContextVar[str] = ContextVar("trace_id", default="")
+_ctx_user_role: ContextVar[str] = ContextVar("user_role", default="")
+
+def capture() -> dict:
+    return {
+        "session_id": _ctx_session.get(),
+        "language": _ctx_language.get(),
+        "trace_id": _ctx_trace_id.get(),
+        "user_role": _ctx_user_role.get(),
+    }
+
+def apply(ctx: dict) -> list[Token]:
+    tokens = [
+        _ctx_session.set(ctx.get("session_id", "")),
+        _ctx_language.set(ctx.get("language", "de")),
+        _ctx_trace_id.set(ctx.get("trace_id", "")),
+        _ctx_user_role.set(ctx.get("user_role", "")),
+    ]
+    return tokens
+```
+
+### Umsetzung für Ninko
+
+**`core/context.py` — neues Modul:**
+
+Context wird in `routes_chat.py` am Request-Eingang gesetzt. Alle nachgelagerten Calls (Agent, Tool, Status-Bus) lesen aus dem Context statt Parameter.
+
+**Schrittweise Migration:**
+
+1. Zuerst `trace_id` hinzufügen (für Audit Trail aus Punkt 3)
+2. Dann `language` aus Parameter-Passing herausnehmen
+3. Langfristig `session_id` aus `_t()` und Status-Bus-Calls herausnehmen
+
+**Vorteil:** Wenn ein Tool einen Sub-Call macht (z.B. `DataAnalysisSubagent` ruft Module-Tools auf), muss `session_id` nicht mehr explizit weitergegeben werden.
+
+---
+
+## 8. Skills: Progressive Disclosure (Lazy Loading)
+
+### Problem heute
+
+Alle Skills werden beim Startup vollständig geladen (`SkillsManager.load()`). Bei jedem Request werden bis zu 2 Skills als `SystemMessage` injiziert — der vollständige Markdown-Body. Bei langen Skills (300+ Zeilen) ist das unnötiger Token-Verbrauch wenn der Skill nur zu 20% relevant ist.
+
+### crewAI-Ansatz
+
+3-stufiges Disclosure-Modell:
+
+| Stufe | Inhalt | Wann geladen |
+|-------|--------|--------------|
+| METADATA | Name, Description, Tags | Immer (Startup) |
+| INSTRUCTIONS | Skill-Body (Markdown) | Bei Match |
+| RESOURCES | Scripts, Templates, externe Refs | Bei explizitem Request |
+
+### Umsetzung für Ninko
+
+**SKILL.md Struktur erweitern:**
+
+```markdown
+---
+name: kubernetes-incident-response
+description: Kubernetes Incident Response Playbook
+modules: [kubernetes]
+allowed_tools: [list_pods, get_pod_logs]
+---
+
+## Kurzübersicht
+<!-- METADATA-Level: immer verfügbar, max 2 Sätze -->
+Best-Practice-Patterns für Kubernetes Incident Response.
+
+## Vorgehen
+<!-- INSTRUCTIONS-Level: nur bei Match injiziert -->
+1. Pod-Status prüfen
+...
+
+## Ressourcen
+<!-- RESOURCES-Level: nur bei explizitem "zeige details" -->
+- Runbook: https://...
+- Script: ./scripts/k8s-recover.sh
+```
+
+**`core/skills_manager.py` — `SkillInfo` mit Level:**
+
+```python
+@dataclass
+class SkillInfo:
+    name: str
+    description: str  # METADATA
+    modules: list[str]
+    allowed_tools: list[str]
+    body_short: str   # INSTRUCTIONS (bis ## Ressourcen)
+    body_full: str    # RESOURCES (kompletter Body)
+```
+
+**Match-Logik bleibt gleich** — nur was injiziert wird ändert sich: standardmäßig `body_short`, bei explizitem "erkläre mir genauer" → `body_full`.
+
+---
+
+## 9. LLM Cost Tracking
+
+### Problem heute
+
+Ninko hat keine Übersicht über Token-Verbrauch pro Agent, pro Modul oder pro Session. Bei OpenRouter/Groq kostet jeder Call Geld — aber niemand sieht wie viel.
+
+### crewAI-Ansatz
+
+Token-Counting pro LLM-Call:
+
+```python
+class UsageMetrics(BaseModel):
+    total_tokens: int
+    prompt_tokens: int
+    completion_tokens: int
+    successful_requests: int
+    estimated_cost_usd: float  # basierend auf Provider-Preisliste
+```
+
+### Umsetzung für Ninko
+
+**`core/llm_factory.py` — Token-Counting Wrapper:**
+
+OpenAI-compatible APIs geben `usage.prompt_tokens` und `usage.completion_tokens` zurück. Diese aus der LLM-Response extrahieren und akkumulieren:
+
+```python
+class TokenTracker:
+    _totals: dict[str, UsageMetrics] = {}  # per agent_name
+
+    def record(self, agent_name: str, response) -> None:
+        usage = getattr(response, "usage_metadata", None)
+        if usage:
+            self._totals.setdefault(agent_name, UsageMetrics()).add(usage)
+
+    def get_summary(self) -> dict:
+        return {k: v.model_dump() for k, v in self._totals.items()}
+```
+
+**Redis-Persistenz:** `ninko:metrics:tokens:{date}` — tagesweise akkumuliert.
+
+**Dashboard:** Neues Panel in Settings → "Token-Verbrauch" mit Tabelle pro Agent und Gesamtkosten-Schätzung.
+
+**API:** `GET /api/metrics/tokens` — gibt aktuelle Auswertung zurück.
+
+**Preisliste:** Konfigurierbar per Provider in `llm_providers` Settings (`cost_per_1k_input`, `cost_per_1k_output`).
+
+---
+
+## 10. OpenTelemetry Tracing
+
+### Problem heute
+
+Bei Fehlern in Ninko (z.B. Tier-4 Pipeline schlägt fehl) muss man Logs manuell durchsuchen um zu verstehen: welcher Agent hat was aufgerufen, wo hat es gehängt, wie lange hat jeder Schritt gedauert?
+
+### crewAI-Ansatz
+
+OpenTelemetry als First-Class-Citizen:
+
+- Jeder Agent-Aufruf ist ein `Span`
+- Tool-Calls sind Child-Spans
+- Trace-ID wird über Async-Boundaries propagiert
+- Export zu Jaeger, Tempo, Datadog, etc.
+
+### Umsetzung für Ninko
+
+**`core/telemetry.py`:**
+
+```python
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+
+tracer = trace.get_tracer("ninko")
+
+@contextmanager
+def agent_span(agent_name: str, session_id: str):
+    with tracer.start_as_current_span(f"agent.{agent_name}") as span:
+        span.set_attribute("session_id", session_id)
+        yield span
+
+@contextmanager
+def tool_span(tool_name: str, agent_name: str):
+    with tracer.start_as_current_span(f"tool.{tool_name}") as span:
+        span.set_attribute("agent", agent_name)
+        yield span
+```
+
+**Integration in `base_agent.py`:**
+
+```python
+async def invoke(self, message: str, ...) -> tuple[str, bool]:
+    with agent_span(self.name, session_id):
+        # bestehende Logik
+        ...
+```
+
+**Aufwand:** Groß — erfordert OTEL Collector Deployment. Sinnvoll erst ab stabiler Produktion und wenn mehrere Tenants/Clusters.
+
+---
+
+## Priorisierte Roadmap
+
+### Phase 1 — Quick Wins (je 1–3 Tage)
+
+1. **Skills `allowed_tools`** — SKILL.md Frontmatter + SafeGuard-Integration
+2. **Skills Lazy Loading** — `body_short` vs. `body_full` Trennung im Parser
+3. **Memory Composite Scoring** — `_composite_score()` in `SemanticMemory.query()`
+
+### Phase 2 — Mittelfristig (je 1–2 Wochen)
+
+4. **Tool-Usage Events** — `core/events.py` + Callback in `base_agent.py` + Dashboard-Panel
+5. **AgentCard / ModuleManifest Erweiterung** — `agent_capabilities` + `/api/agents/cards`
+6. **LLM Cost Tracking** — Token-Wrapper + Redis-Persistenz + Dashboard
+7. **Knowledge Base** — `core/knowledge.py` + zweite ChromaDB Collection
+
+### Phase 3 — Strategisch (je 2–4 Wochen)
+
+8. **Async Context Management** — `core/context.py` + schrittweise Migration
+9. **Flow DSL** — `core/flow_engine.py` + Decorator-System
+10. **OpenTelemetry** — erst wenn Produktionslast skaliert
+
+---
+
+## Entscheidungs-Notizen
+
+**Was crewAI besser macht als Ninko:**
+- Formale Metadaten-Strukturen (alles deklariert, nichts implizit)
+- Fine-grained Observability (Events, Telemetry)
+- Saubere Trennung von Memory/Knowledge
+
+**Was Ninko besser macht als crewAI:**
+- Konkrete IT-Ops-Domäne (Module für echte Infrastruktur)
+- SafeGuard-System (crewAI hat kein Äquivalent)
+- Hot-Loading von Modulen/Skills ohne Restart
+- Produktionsreifes Multi-Tenant-Design (Redis, Vault, ChromaDB)
+
+**Nicht übernehmen:**
+- crewAI's Crew-Konzept (N Agents arbeiten gleichzeitig an einer Aufgabe) — Ninko hat klare Hierarchie (Orchestrator → Modul), parallele Crews würden das durcheinanderbringen
+- crewAI's Task-Objekte — Ninko's implizite Task-Delegation über LLM-Reasoning ist flexibler
