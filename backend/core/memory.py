@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import uuid
 from datetime import datetime, timezone
 
@@ -48,15 +49,25 @@ class SemanticMemory:
         content: str,
         metadata: dict | None = None,
         category: str = "general",
+        importance: float = 0.5,
     ) -> str:
         """
         Speichert einen Eintrag im Semantic Memory.
         Gibt die generierte ID zurück.
+
+        Args:
+            content: Der zu speichernde Text
+            metadata: Zusätzliche Metadaten
+            category: Kategorie für Filterung
+            importance: Wichtigkeit 0.0-1.0 (1.0 = kritisch)
         """
         doc_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc)
         meta = {
             "category": category,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": now.isoformat(),
+            "stored_at": now.isoformat(),  # Für Composite Scoring
+            "importance": max(0.0, min(1.0, importance)),  # Clamp 0-1
             **(metadata or {}),
         }
 
@@ -74,7 +85,12 @@ class SemanticMemory:
             ),
         )
 
-        logger.debug("Memory gespeichert: id=%s, category=%s", doc_id, category)
+        logger.debug(
+            "Memory gespeichert: id=%s, category=%s, importance=%.2f",
+            doc_id,
+            category,
+            meta["importance"],
+        )
         return doc_id
 
     async def search(
@@ -113,8 +129,12 @@ class SemanticMemory:
                     {
                         "id": results["ids"][0][i],
                         "content": doc,
-                        "metadata": results["metadatas"][0][i] if results["metadatas"] else {},
-                        "distance": results["distances"][0][i] if results["distances"] else None,
+                        "metadata": results["metadatas"][0][i]
+                        if results["metadatas"]
+                        else {},
+                        "distance": results["distances"][0][i]
+                        if results["distances"]
+                        else None,
                     }
                 )
 
@@ -167,13 +187,98 @@ class SemanticMemory:
             if dist is not None and dist <= threshold:
                 await self.delete(hit["id"])
                 deleted.append(hit["id"])
-                logger.info("Memory per Content gelöscht: id=%s, dist=%.3f", hit["id"], dist)
+                logger.info(
+                    "Memory per Content gelöscht: id=%s, dist=%.3f", hit["id"], dist
+                )
         return deleted
 
     def get_stats(self) -> dict:
         """Statistiken der Collection."""
         count = self._collection.count()
         return {"collection": self.COLLECTION_NAME, "document_count": count}
+
+    @staticmethod
+    def _composite_score(
+        distance: float,
+        stored_at_iso: str,
+        importance: float = 0.5,
+        alpha: float = 0.5,
+        beta: float = 0.3,
+        gamma: float = 0.2,
+        decay_lambda: float = 0.05,
+    ) -> float:
+        """
+        Berechnet einen gewichteten Composite Score für Memory-Re-Ranking.
+
+        Args:
+            distance: ChromaDB Cosine-Distanz (0.0 = identisch, 2.0 = maximal verschieden)
+            stored_at_iso: ISO-8601 Timestamp wann der Eintrag gespeichert wurde
+            importance: Wichtigkeit 0.0-1.0 (1.0 = kritisch, 0.5 = normal, 0.2 = trivial)
+            alpha: Gewicht für Semantic Similarity (default: 0.5)
+            beta: Gewicht für Recency (default: 0.3)
+            gamma: Gewicht für Importance (default: 0.2)
+            decay_lambda: Zerfallsrate für Recency (Halbwertszeit ~14 Tage bei 0.05)
+
+        Returns:
+            Gewichteter Score (höher = besser)
+        """
+        # Semantic: 0 = identisch, 2 = verschieden → normalisiere zu 0-1
+        semantic = 1.0 - (distance / 2.0)
+
+        # Recency: Exponentieller Zerfall mit Alter
+        try:
+            stored = datetime.fromisoformat(stored_at_iso.replace("Z", "+00:00"))
+            age_days = (datetime.now(timezone.utc) - stored).days
+        except (ValueError, TypeError):
+            age_days = 0
+        recency = math.exp(-decay_lambda * max(age_days, 0))
+
+        # Gewichtete Summe
+        return alpha * semantic + beta * recency + gamma * importance
+
+    async def query(
+        self,
+        text: str,
+        top_k: int = 5,
+        category: str | None = None,
+    ) -> list[str]:
+        """
+        Semantische Suche mit Composite Scoring (Semantic + Recency + Importance).
+
+        Args:
+            text: Suchquery
+            top_k: Anzahl der gewünschten Top-Ergebnisse
+            category: Optionale Kategorie-Filterung
+
+        Returns:
+            Liste der Top-K Dokument-Inhalte (beste Kombination aus Ähnlichkeit, Aktualität, Wichtigkeit)
+        """
+        # Schritt 1: Mehr Ergebnisse von ChromaDB holen für Re-Ranking
+        raw_results = await self.search(
+            query=text,
+            top_k=min(top_k * 4, 20),  # Max 20 für Re-Ranking
+            category=category,
+        )
+
+        # Schritt 2: Composite Score für jedes Ergebnis berechnen
+        scored: list[tuple[float, str]] = []
+        for hit in raw_results:
+            dist = hit.get("distance")
+            if dist is None:
+                continue
+            meta = hit.get("metadata", {})
+            score = self._composite_score(
+                distance=dist,
+                stored_at_iso=meta.get(
+                    "stored_at", datetime.now(timezone.utc).isoformat()
+                ),
+                importance=float(meta.get("importance", 0.5)),
+            )
+            scored.append((score, hit.get("content", "")))
+
+        # Schritt 3: Nach Score sortieren und Top-K zurückgeben
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [content for _, content in scored[:top_k]]
 
 
 # Singleton

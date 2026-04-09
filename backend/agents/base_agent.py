@@ -9,6 +9,7 @@ import asyncio
 import json as _json
 import logging
 import re
+import time
 from typing import Any, Sequence, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -29,6 +30,7 @@ from core.llm_factory import get_llm, get_model_context_window, get_llm_generati
 from core.memory import get_memory
 from core.context_manager import get_context_manager
 from core import status_bus
+from core.events import ToolEvent, emit_tool_event
 
 logger = logging.getLogger("ninko.agents.base")
 
@@ -492,17 +494,85 @@ _TOOL_LABELS: dict[str, str] = {
 
 
 class _StatusEmitter(AsyncCallbackHandler):
-    """Emittiert Tool-Start-Events als Status-Updates an den Status-Bus."""
+    """Emittiert Tool-Start-Events als Status-Updates und Audit-Events."""
 
-    def __init__(self, session_id: str) -> None:
+    def __init__(self, session_id: str, agent_name: str) -> None:
         self.session_id = session_id
+        self.agent_name = agent_name
+        self._tool_start_times: dict[str, float] = {}
+        self._tool_args: dict[str, dict] = {}  # run_id → args, für on_tool_end
 
     async def on_tool_start(self, serialized: dict, input_str: str, **kwargs) -> None:  # type: ignore[override]
         tool_name = serialized.get("name", "")
+        run_id = str(kwargs.get("run_id", ""))
+
+        # Status-Update
         label = _TOOL_LABELS.get(tool_name)
         if not label:
             label = tool_name.replace("_", " ").title()
         await status_bus.emit(self.session_id, f"{label}…")
+
+        # Zeitmessung starten + Args für Audit merken
+        self._tool_start_times[run_id] = time.monotonic()
+        try:
+            self._tool_args[run_id] = _json.loads(input_str) if input_str else {}
+        except (_json.JSONDecodeError, TypeError):
+            self._tool_args[run_id] = {"_raw": str(input_str)[:200]} if input_str else {}
+
+    async def on_tool_end(self, output: Any, **kwargs) -> None:  # type: ignore[override]
+        tool_name = kwargs.get("name", "")
+        run_id = str(kwargs.get("run_id", ""))
+
+        # Dauer berechnen
+        start_time = self._tool_start_times.pop(run_id, None)
+        duration_ms = 0.0
+        if start_time:
+            duration_ms = (time.monotonic() - start_time) * 1000
+
+        # Output analysieren
+        result_str = ""
+        error_str = None
+        if hasattr(output, "content"):
+            result_str = str(output.content) if output.content else ""
+            if hasattr(output, "status") and output.status == "error":
+                error_str = result_str
+        else:
+            result_str = str(output) if output else ""
+
+        result_size = len(result_str)
+
+        # Args aus on_tool_start holen
+        args = self._tool_args.pop(run_id, {})
+
+        # is_readonly heuristik
+        readonly_tools = {
+            "get_",
+            "list_",
+            "search_",
+            "fetch_",
+            "check_",
+            "load_",
+            "perform_web_search",
+            "recall_memory",
+            "get_available_languages",
+        }
+        is_readonly = any(tool_name.startswith(prefix) for prefix in readonly_tools)
+
+        # Event emittieren (non-blocking)
+        try:
+            event = ToolEvent(
+                agent_name=self.agent_name,
+                tool_name=tool_name,
+                args=args,
+                session_id=self.session_id,
+                duration_ms=round(duration_ms, 2),
+                result_size=result_size,
+                error=error_str,
+                is_readonly=is_readonly,
+            )
+            asyncio.create_task(emit_tool_event(event))
+        except Exception:
+            pass  # Audit-Tracking darf nie blockieren
 
     async def on_llm_start(self, serialized: dict, messages: list, **kwargs) -> None:  # type: ignore[override]
         await status_bus.emit(
@@ -520,6 +590,31 @@ class _StatusEmitter(AsyncCallbackHandler):
                 zh="思考中…",
             ),
         )
+
+    async def on_llm_end(self, response: Any, **kwargs) -> None:  # type: ignore[override]
+        """Token-Usage aus LLM-Response extrahieren und tracken."""
+        try:
+            usage = getattr(response, "usage_metadata", None)
+            if usage and isinstance(usage, dict):
+                prompt_tokens = usage.get("input_tokens", 0) or usage.get(
+                    "prompt_tokens", 0
+                )
+                completion_tokens = usage.get("output_tokens", 0) or usage.get(
+                    "completion_tokens", 0
+                )
+
+                if prompt_tokens > 0 or completion_tokens > 0:
+                    from core.metrics import record_llm_tokens
+
+                    asyncio.create_task(
+                        record_llm_tokens(
+                            agent_name=self.agent_name,
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                        )
+                    )
+        except Exception:
+            pass  # Token-Tracking darf nie blockieren
 
 
 _DEFAULT_AGENT_TIMEOUT_SECONDS = 1800
@@ -1022,7 +1117,7 @@ class BaseAgent:
         AGENT_TIMEOUT = _get_agent_timeout_seconds()
         run_config: dict = {"recursion_limit": 10000}
         if session_id:
-            run_config["callbacks"] = [_StatusEmitter(session_id)]
+            run_config["callbacks"] = [_StatusEmitter(session_id, self.name)]
         try:
             # Safeguard-Pfad: interrupt_before=["tools"] + MemorySaver wenn aktiv
             # .enabled wird durch das aktive Profil gesteuert (disabled-Profil → False)
@@ -1384,35 +1479,62 @@ class BaseAgent:
         """
         Extrahiert und speichert dauerhaft relevante Fakten aus dem Gespräch.
         Läuft als Hintergrund-Task, blockiert nie die Antwortzeit.
+        Nutzt Auto-Importance für besseres Memory-Ranking.
         """
         try:
             prompt = _t(
                 "Extrahiere aus diesem Gespräch NUR dauerhaft relevante Fakten "
                 "(z.B. Namen des Users, IPs, Präferenzen, Entscheidungen, gelöste Probleme, gelernte Konfigurationen). "
-                "Schreibe NUR 1-2 prägnante Sätze – in der Sprache des Users. "
-                "Wenn NICHTS dauerhaft Merkenswertes vorhanden ist, schreibe exakt (ohne Sonderzeichen): NICHTS\n\n"
+                'Antworte NUR mit JSON: {"fact": "...", "importance": 0.5}\n'
+                "importance: 1.0 = kritisch (Systemausfall, Kernkonfiguration), "
+                "0.5 = normal (Präferenzen, gelernte Patterns), "
+                "0.2 = trivial (temporäre Info). "
+                'Wenn NICHTS dauerhaft Merkenswertes vorhanden ist: {"fact": "NICHTS", "importance": 0.0}\n\n'
                 f"User: {user_msg}\nAssistent: {ai_response[:800]}",
                 "Extract ONLY permanently relevant facts from this conversation "
                 "(e.g. user names, IPs, preferences, decisions, solved problems, learned configurations). "
-                "Write ONLY 1-2 concise sentences — in the user's language. "
-                "If NOTHING permanently noteworthy is present, write exactly (no special characters) "
-                "one of: NOTHING / NICHTS / RIEN / NADA / NULLA / NIETS / NIC\n\n"
+                'Respond ONLY with JSON: {"fact": "...", "importance": 0.5}\n'
+                "importance: 1.0 = critical (system outage, core config), "
+                "0.5 = normal (preferences, learned patterns), "
+                "0.2 = trivial (temporary info). "
+                'If NOTHING permanently noteworthy: {"fact": "NOTHING", "importance": 0.0}\n\n'
                 f"User: {user_msg}\nAssistant: {ai_response[:800]}",
             )
             result = await self._llm.ainvoke([HumanMessage(content=prompt)])
-            fact = (
+            content = (
                 result.content.strip()
                 if hasattr(result, "content")
                 else str(result).strip()
             )
-            if fact and fact.strip("*_ \n").upper() not in _MEMORIZE_STOP_WORDS:
+
+            # JSON-Parsing mit Fallback
+            fact_text = ""
+            importance = 0.5  # Default
+            try:
+                parsed = _json.loads(content)
+                if isinstance(parsed, dict):
+                    fact_text = parsed.get("fact", "").strip()
+                    importance = float(parsed.get("importance", 0.5))
+            except _json.JSONDecodeError:
+                # Fallback: Altes Format (nur Text)
+                fact_text = content
+
+            # Validierung und Speicherung
+            if (
+                fact_text
+                and fact_text.strip("*_ \n\"'").upper() not in _MEMORIZE_STOP_WORDS
+            ):
                 await self._memory.store(
-                    content=fact,
+                    content=fact_text,
                     category="agent_memory",
                     metadata={"agent": self.name, "source": "auto"},
+                    importance=importance,
                 )
                 logger.debug(
-                    "Auto-Memory gespeichert für Agent '%s': %s…", self.name, fact[:80]
+                    "Auto-Memory gespeichert für Agent '%s' (importance=%.2f): %s…",
+                    self.name,
+                    importance,
+                    fact_text[:80],
                 )
         except _BASE_AGENT_RECOVERABLE_EXCEPTIONS as exc:
             logger.debug("Auto-Memorize fehlgeschlagen (ignoriert): %s", exc)

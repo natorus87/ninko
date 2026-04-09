@@ -25,6 +25,7 @@ class AgentGenerateRequest(BaseModel):
     use_case: str
     allowed_modules: list[str] = []
 
+
 REDIS_KEY = "ninko:agents"
 
 
@@ -85,15 +86,26 @@ async def get_agent(agent_id: str, request: Request) -> dict:
     agents = await _load_agents(redis, tenant_id)
     agent = next((a for a in agents if a["id"] == agent_id), None)
     if not agent:
-        raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' nicht gefunden")
+        raise HTTPException(
+            status_code=404, detail=f"Agent '{agent_id}' nicht gefunden"
+        )
 
     # Soul MD anhängen (wenn vorhanden)
     try:
         from core.soul_manager import get_soul_manager
+
         soul = get_soul_manager().get_soul(agent.get("name", ""))
         if soul:
             agent["soul_md"] = soul
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError):
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        json.JSONDecodeError,
+    ):
         pass
 
     return _public_agent(agent)
@@ -108,7 +120,9 @@ async def update_agent(agent_id: str, body: AgentCreate, request: Request) -> di
 
     idx = next((i for i, a in enumerate(agents) if a["id"] == agent_id), None)
     if idx is None:
-        raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' nicht gefunden")
+        raise HTTPException(
+            status_code=404, detail=f"Agent '{agent_id}' nicht gefunden"
+        )
 
     now = datetime.now(timezone.utc).isoformat()
     updated = {
@@ -132,7 +146,9 @@ async def delete_agent(agent_id: str, request: Request) -> dict:
     agents = await _load_agents(redis, tenant_id)
     deleted_agent = next((a for a in agents if a["id"] == agent_id), None)
     if not deleted_agent:
-        raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' nicht gefunden")
+        raise HTTPException(
+            status_code=404, detail=f"Agent '{agent_id}' nicht gefunden"
+        )
 
     agents = [a for a in agents if a["id"] != agent_id]
     await _save_agents(redis, tenant_id, agents)
@@ -140,10 +156,19 @@ async def delete_agent(agent_id: str, request: Request) -> dict:
     # Soul MD des gelöschten Agenten aufräumen
     try:
         from core.soul_manager import get_soul_manager
+
         agent_name = deleted_agent.get("name", "")
         if agent_name:
             await get_soul_manager().delete_soul(agent_name)
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as exc:
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        json.JSONDecodeError,
+    ) as exc:
         logger.warning("Soul-Cleanup für Agent '%s' fehlgeschlagen: %s", agent_id, exc)
 
     logger.info("Agent gelöscht: %s", agent_id)
@@ -154,6 +179,7 @@ async def delete_agent(agent_id: str, request: Request) -> dict:
 async def get_agent_templates() -> dict:
     """Built-in Agent-Vorlagen für den Agent Builder zurückgeben."""
     from core.agent_templates import AGENT_TEMPLATES
+
     return {"templates": AGENT_TEMPLATES}
 
 
@@ -180,8 +206,20 @@ async def generate_agent_spec(body: AgentGenerateRequest) -> dict:
                 for m in registry.list_manifests()
                 if m.enabled_by_default
             ]
-            module_context = ", ".join(all_modules[:12]) if all_modules else "kubernetes, linux_server, docker, pihole, homeassistant"
-        except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError):
+            module_context = (
+                ", ".join(all_modules[:12])
+                if all_modules
+                else "kubernetes, linux_server, docker, pihole, homeassistant"
+            )
+        except (
+            RuntimeError,
+            ValueError,
+            TypeError,
+            KeyError,
+            OSError,
+            ImportError,
+            json.JSONDecodeError,
+        ):
             module_context = "kubernetes, linux_server, docker, pihole, homeassistant, opnsense, glpi, telegram"
 
         allowed_hint = ""
@@ -218,6 +256,7 @@ Antworte AUSSCHLIESSLICH mit einem JSON-Objekt ohne Markdown-Umrahmung:
 
         # <think>-Blöcke entfernen (Thinking-Modelle)
         import re
+
         raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
 
         # Erstes JSON-Objekt extrahieren
@@ -226,6 +265,7 @@ Antworte AUSSCHLIESSLICH mit einem JSON-Objekt ohne Markdown-Umrahmung:
             raise ValueError("Kein JSON in LLM-Antwort gefunden")
 
         import json
+
         spec = json.loads(m.group())
 
         return {
@@ -235,9 +275,19 @@ Antworte AUSSCHLIESSLICH mit einem JSON-Objekt ohne Markdown-Umrahmung:
             "suggested_modules": spec.get("suggested_modules", []),
         }
 
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as exc:
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        json.JSONDecodeError,
+    ) as exc:
         logger.warning("Agent-Generierung fehlgeschlagen: %s", exc)
-        raise HTTPException(status_code=500, detail=f"Generierung fehlgeschlagen: {exc}")
+        raise HTTPException(
+            status_code=500, detail=f"Generierung fehlgeschlagen: {exc}"
+        )
 
 
 @router.post("/{agent_id}/duplicate", status_code=201)
@@ -248,7 +298,9 @@ async def duplicate_agent(agent_id: str, request: Request) -> dict:
     agents = await _load_agents(redis, tenant_id)
     original = next((a for a in agents if a["id"] == agent_id), None)
     if not original:
-        raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' nicht gefunden")
+        raise HTTPException(
+            status_code=404, detail=f"Agent '{agent_id}' nicht gefunden"
+        )
 
     now = datetime.now(timezone.utc).isoformat()
     duplicate = {
@@ -263,3 +315,60 @@ async def duplicate_agent(agent_id: str, request: Request) -> dict:
     await _save_agents(redis, tenant_id, agents)
     logger.info("Agent dupliziert: %s → %s", agent_id, duplicate["id"])
     return {"id": duplicate["id"], "status": "created"}
+
+
+# ── AgentCards Endpoint ───────────────────────────────────────
+
+from core.module_registry import get_registry
+from pydantic import Field
+
+
+class AgentCard(BaseModel):
+    """AgentCard – strukturierte Modul-Information für externe Integrationen."""
+
+    name: str
+    display_name: str
+    description: str = ""
+    version: str = ""
+    capabilities: list[str] = Field(default_factory=list)
+    keywords: list[str] = Field(default_factory=list)
+    api_prefix: str = ""
+    has_dashboard_tab: bool = False
+
+
+class AgentCardsResponse(BaseModel):
+    """Response für AgentCards."""
+
+    cards: list[AgentCard]
+    total: int
+
+
+@router.get("/cards", response_model=AgentCardsResponse)
+async def get_agent_cards(request: Request) -> AgentCardsResponse:
+    """
+    Gibt alle Module als strukturierte AgentCards zurück.
+
+    Nützlich für externe Integrationen und das Routing-Debugging.
+    """
+    _ = auth_tenant_id(resolve_request_auth(request))
+
+    registry = get_registry()
+    if not registry:
+        return AgentCardsResponse(cards=[], total=0)
+
+    cards: list[AgentCard] = []
+    for manifest in registry.list_modules():
+        cards.append(
+            AgentCard(
+                name=manifest.name,
+                display_name=manifest.display_name,
+                description=manifest.description,
+                version=manifest.version,
+                capabilities=manifest.agent_capabilities,
+                keywords=manifest.routing_keywords,
+                api_prefix=manifest.api_prefix,
+                has_dashboard_tab=bool(manifest.dashboard_tab),
+            )
+        )
+
+    return AgentCardsResponse(cards=cards, total=len(cards))

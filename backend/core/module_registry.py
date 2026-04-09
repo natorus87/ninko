@@ -51,6 +51,7 @@ class ModuleManifest:
     api_prefix: str = ""
     dashboard_tab: dict[str, str] = field(default_factory=dict)
     health_check: Callable[..., Awaitable[dict]] | None = None
+    agent_capabilities: list[str] = field(default_factory=list)
 
 
 # ── Registrierter Modul-Container ───────────────────────────

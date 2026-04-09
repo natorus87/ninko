@@ -18,6 +18,7 @@ async def check_glpi_health() -> dict:
         import httpx
         from core.connections import ConnectionManager
         from core.vault import get_vault
+        from core.tls import get_connection_verify_arg
 
         vault = get_vault()
 
@@ -25,7 +26,6 @@ async def check_glpi_health() -> dict:
         conn = await ConnectionManager.get_default_connection("glpi")
         if conn:
             base_url = conn.config.get("base_url", "").rstrip("/")
-            verify_ssl = conn.config.get("verify_ssl", True)
             app_token_path = conn.vault_keys.get("app_token", "")
             user_token_path = conn.vault_keys.get("user_token", "")
             app_token = (
@@ -37,7 +37,6 @@ async def check_glpi_health() -> dict:
         else:
             # Fallback to env vars
             base_url = os.environ.get("GLPI_BASE_URL", "").rstrip("/")
-            verify_ssl = os.environ.get("GLPI_VERIFY_SSL", "true").lower() == "true"
             app_token = await vault.get_secret("GLPI_APP_TOKEN")
             user_token = await vault.get_secret("GLPI_USER_TOKEN")
 
@@ -50,23 +49,8 @@ async def check_glpi_health() -> dict:
         if not app_token or not user_token:
             return {"status": "error", "detail": "GLPI tokens not in vault"}
 
-        # Handle SSL verification and CA cert
-        import os as _os
-
-        verify_arg: bool | str = verify_ssl
-        ca_path = ""
-        if conn:
-            ca_path = conn.config.get("ca_cert_pem", "")
-        if not ca_path:
-            ca_path = _os.environ.get("GLPI_CA_CERT_PATH", "").strip()
-
-        # Nur verwenden wenn Datei existiert, sonst bool verwenden
-        if verify_ssl and ca_path:
-            if _os.path.isfile(ca_path):
-                verify_arg = ca_path
-            else:
-                logger.warning("GLPI CA-Zertifikat nicht gefunden: %s", ca_path)
-                verify_arg = True  # Fallback zu Standard-SSL-Verify
+        # SSL-Verify über tls.py (gleiche Logik wie tools.py, verhindert str/bool-Bug)
+        verify_arg = await get_connection_verify_arg(conn, "glpi", default_verify=True)
 
         async with httpx.AsyncClient(verify=verify_arg, timeout=10.0) as client:
             resp = await client.get(
@@ -101,7 +85,7 @@ module_manifest = ModuleManifest(
     name="glpi",
     display_name="GLPI Helpdesk",
     description="GLPI Helpdesk Integration – Tickets, Incidents, SLA-Tracking",
-    version="1.1.4",
+    version="1.1.5",
     author="Ninko Team",
     enabled_by_default=True,
     env_prefix="GLPI_",

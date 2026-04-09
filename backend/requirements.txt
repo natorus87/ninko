@@ -63,3 +63,7 @@ faster-whisper>=1.1.0
 # ── OCR (Python) ────────────────────────────────────
 Pillow>=10.4.0
 pytesseract>=0.3.10
+
+# ── PDF Generation ───────────────────────────────────
+weasyprint>=62.0
+markdown>=3.5

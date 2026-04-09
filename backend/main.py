@@ -50,6 +50,8 @@ from api.routes_operations import router as operations_router
 from api.routes_knowledge_graph import router as knowledge_graph_router
 from api.routes_alerts import router as alerts_router
 from api.routes_subagent import router as subagent_router
+from api.routes_audit import router as audit_router
+from api.routes_metrics import router as metrics_router
 
 # Logging konfigurieren
 settings = get_settings()
@@ -783,6 +785,8 @@ app.include_router(auth_router)
 app.include_router(themes_router)
 app.include_router(modules_router)
 app.include_router(memory_router)
+app.include_router(audit_router)
+app.include_router(metrics_router)
 app.include_router(secrets_router)
 app.include_router(settings_router)
 app.include_router(ws_router)

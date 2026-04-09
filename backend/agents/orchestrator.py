@@ -1441,8 +1441,17 @@ JSON-SCHEMA:
             ):
                 utility_explicitly_mentioned.add(mod)
 
-        # Module-Beschreibungen dynamisch aus Registry (keine hardcodierten Namen)
-        module_lines = [f'- "{m.name}": {m.description}' for m in modules]
+        # Module-Beschreibungen dynamisch aus Registry (mit Capabilities)
+        module_lines = []
+        for m in modules:
+            line = f'- "{m.name}": {m.description}'
+            if m.agent_capabilities:
+                caps = ", ".join(m.agent_capabilities[:6])
+                line += f"\n    Fähigkeiten: {caps}"
+            if m.routing_keywords:
+                kws = ", ".join(m.routing_keywords[:5])
+                line += f"\n    Keywords: {kws}"
+            module_lines.append(line)
         module_descriptions = "\n".join(module_lines)
 
         planner_prompt = (
@@ -1836,7 +1845,9 @@ JSON-SCHEMA:
             if agent is not None:
                 readonly_tools = self._get_readonly_tools_for_module(target_module)
                 if readonly_tools:
-                    complexity = await self._check_task_complexity(message, target_module)
+                    complexity = await self._check_task_complexity(
+                        message, target_module
+                    )
                     if complexity and complexity.get("is_complex"):
                         logger.info(
                             "Tier 2.5: DataAnalysisSubagent für '%s' (Reason: %s)",

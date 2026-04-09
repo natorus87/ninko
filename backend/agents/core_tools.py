@@ -41,6 +41,7 @@ __all__ = [
     "configure_routing",
     "get_routing_info",
     "wait",
+    "generate_pdf_report",
 ]
 
 _CORE_TOOL_EXCEPTIONS = (
@@ -1095,9 +1096,7 @@ async def run_pipeline(steps: list[dict]) -> str:
                 message=full_task, chat_history=None, session_id=session_id
             )
         except _CORE_TOOL_EXCEPTIONS as exc:
-            logger.error(
-                "Pipeline Schritt %d ('%s') Fehler: %s", i + 1, module, exc
-            )
+            logger.error("Pipeline Schritt %d ('%s') Fehler: %s", i + 1, module, exc)
             result = _t(
                 f"Fehler in Modul '{module}': {exc}",
                 f"Error in module '{module}': {exc}",
@@ -1129,7 +1128,7 @@ async def run_pipeline(steps: list[dict]) -> str:
                 )
             )
             if any(result.startswith(p) for p in _err_prefixes):
-                remaining = sum(len(g) for g in groups[groups.index(group) + 1:])
+                remaining = sum(len(g) for g in groups[groups.index(group) + 1 :])
                 if remaining > 0:
                     results_ordered.append(
                         _t(
@@ -1142,9 +1141,7 @@ async def run_pipeline(steps: list[dict]) -> str:
                 aborted = True
         else:
             # Parallele Ausführung via asyncio.gather
-            parallel_label = ", ".join(
-                steps[i].get("module", "?") for i in group
-            )
+            parallel_label = ", ".join(steps[i].get("module", "?") for i in group)
             await status_bus.emit(
                 session_id,
                 _t(
@@ -1173,7 +1170,7 @@ async def run_pipeline(steps: list[dict]) -> str:
                     aborted = True
 
             if aborted:
-                remaining = sum(len(g) for g in groups[groups.index(group) + 1:])
+                remaining = sum(len(g) for g in groups[groups.index(group) + 1 :])
                 if remaining > 0:
                     results_ordered.append(
                         _t(
@@ -1210,7 +1207,11 @@ async def run_parallel_pipeline(groups: list[list[dict]]) -> str:
     flat_steps: list[dict] = []
     group_start = 0
     for gi, group in enumerate(groups):
-        prev_indices = list(range(group_start - len(groups[gi - 1]) if gi > 0 else 0, group_start)) if gi > 0 else []
+        prev_indices = (
+            list(range(group_start - len(groups[gi - 1]) if gi > 0 else 0, group_start))
+            if gi > 0
+            else []
+        )
         for step in group:
             new_step = {"module": step.get("module", ""), "task": step.get("task", "")}
             if gi == 0:
@@ -1322,8 +1323,9 @@ async def recall_memory(query: str) -> str:
         from core.memory import get_memory
 
         memory = get_memory()
-        hits = await memory.search(query=query, top_k=5, category="agent_memory")
-        if not hits:
+        # query() nutzt Composite Scoring (Semantic + Recency + Importance)
+        docs = await memory.query(text=query, top_k=5, category="agent_memory")
+        if not docs:
             return _t(
                 "Keine relevanten Erinnerungen zu dieser Anfrage gefunden.",
                 "No relevant memories found for this query.",
@@ -1336,7 +1338,7 @@ async def recall_memory(query: str) -> str:
                 "このクエリに関連するメモリが見つかりません。",
                 "未找到与此查询相关的记忆。",
             )
-        lines = [f"- {h['content']}" for h in hits]
+        lines = [f"- {doc}" for doc in docs]
         return _t("Gefundene Erinnerungen:\n", "Found memories:\n") + "\n".join(lines)
     except _CORE_TOOL_EXCEPTIONS as exc:
         logger.error("Fehler beim Abrufen aus Memory: %s", exc)
@@ -1930,4 +1932,175 @@ async def kg_record_incident(
         return _t(
             f"Fehler beim Speichern des Incidents: {exc}",
             f"Error recording incident: {exc}",
+        )
+
+
+# ── PDF Report Generation ───────────────────────────
+
+
+@tool
+async def generate_pdf_report(
+    title: str,
+    content_markdown: str,
+    output_path: str = "/tmp/ninko-reports/report.pdf",
+) -> str:
+    """
+    Erstellt ein PDF aus Markdown-Inhalt.
+
+    Nutzt weasyprint (Markdown → HTML → PDF). Das Output-Verzeichnis wird
+    automatisch erstellt falls nicht vorhanden.
+
+    Args:
+        title: Titel des Reports (wird im PDF Header verwendet)
+        content_markdown: Der Inhalt als Markdown-Text
+        output_path: Zielpfad für die PDF-Datei (default: /tmp/ninko-reports/report.pdf)
+
+    Returns:
+        Absoluter Pfad zur erstellten PDF-Datei
+    """
+    import os
+    from pathlib import Path
+
+    try:
+        import markdown
+        from weasyprint import HTML, CSS
+    except ImportError as exc:
+        logger.error("PDF-Generierung nicht verfügbar: %s", exc)
+        return _t(
+            "Fehler: PDF-Generierung nicht verfügbar (weasyprint nicht installiert)",
+            "Error: PDF generation not available (weasyprint not installed)",
+        )
+
+    try:
+        # Verzeichnis erstellen falls nicht vorhanden
+        output_dir = Path(output_path).parent
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Markdown zu HTML konvertieren
+        html_content = markdown.markdown(
+            content_markdown,
+            extensions=["tables", "fenced_code", "toc"],
+        )
+
+        # HTML mit Styling umgeben
+        full_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>{title}</title>
+            <style>
+                @page {{
+                    size: A4;
+                    margin: 2cm;
+                    @top-center {{
+                        content: "{title}";
+                        font-size: 9pt;
+                        color: #666;
+                    }}
+                    @bottom-center {{
+                        content: "Seite " counter(page) " von " counter(pages);
+                        font-size: 9pt;
+                        color: #666;
+                    }}
+                }}
+                body {{
+                    font-family: 'DejaVu Sans', Arial, sans-serif;
+                    font-size: 11pt;
+                    line-height: 1.6;
+                    color: #333;
+                }}
+                h1 {{
+                    color: #2c3e50;
+                    border-bottom: 2px solid #3498db;
+                    padding-bottom: 0.3em;
+                    font-size: 18pt;
+                }}
+                h2 {{
+                    color: #34495e;
+                    border-bottom: 1px solid #bdc3c7;
+                    padding-bottom: 0.2em;
+                    font-size: 14pt;
+                    margin-top: 1.5em;
+                }}
+                h3 {{
+                    color: #7f8c8d;
+                    font-size: 12pt;
+                }}
+                table {{
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin: 1em 0;
+                }}
+                th, td {{
+                    border: 1px solid #ddd;
+                    padding: 8px;
+                    text-align: left;
+                }}
+                th {{
+                    background-color: #f5f5f5;
+                    font-weight: bold;
+                }}
+                tr:nth-child(even) {{
+                    background-color: #fafafa;
+                }}
+                code {{
+                    background-color: #f4f4f4;
+                    padding: 2px 6px;
+                    border-radius: 3px;
+                    font-family: 'DejaVu Sans Mono', monospace;
+                    font-size: 10pt;
+                }}
+                pre {{
+                    background-color: #f4f4f4;
+                    padding: 12px;
+                    border-radius: 4px;
+                    overflow-x: auto;
+                    border-left: 4px solid #3498db;
+                }}
+                blockquote {{
+                    border-left: 4px solid #95a5a6;
+                    margin: 1em 0;
+                    padding-left: 1em;
+                    color: #555;
+                    font-style: italic;
+                }}
+                ul, ol {{
+                    margin: 1em 0;
+                    padding-left: 2em;
+                }}
+                li {{
+                    margin: 0.3em 0;
+                }}
+            </style>
+        </head>
+        <body>
+            <h1>{title}</h1>
+            {html_content}
+        </body>
+        </html>
+        """
+
+        # PDF generieren
+        HTML(string=full_html).write_pdf(output_path)
+
+        # Absoluten Pfad zurückgeben
+        abs_path = str(Path(output_path).resolve())
+
+        logger.info(
+            "PDF-Report erstellt: %s (%d bytes)",
+            abs_path,
+            Path(output_path).stat().st_size,
+        )
+
+        return _t(
+            f"✅ PDF-Report erstellt: {abs_path}",
+            f"✅ PDF report created: {abs_path}",
+        )
+
+    except _CORE_TOOL_EXCEPTIONS as exc:
+        logger.error("PDF-Generierungsfehler: %s", exc)
+        return _t(
+            f"Fehler bei der PDF-Generierung: {exc}",
+            f"Error generating PDF: {exc}",
         )

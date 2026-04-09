@@ -151,7 +151,14 @@ async def list_openproject_projects(connection_id: str = "") -> str:
         lines.append(f"\n✓ {total} Projekte")
 
         return "\n".join(lines)
-    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        aiohttp.ClientError,
+        OSError,
+    ) as e:
         logger.error("list_openproject_projects failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -226,7 +233,14 @@ async def get_openproject_project(project_name: str, connection_id: str = "") ->
             lines.append(f"  Erstellt: {details.get('createdAt', '')[:10]}")
 
         return "\n".join(lines)
-    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        aiohttp.ClientError,
+        OSError,
+    ) as e:
         logger.error("get_openproject_project failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -336,7 +350,14 @@ async def list_openproject_work_packages(
         lines.append(f"\n✓ {total} Work Packages")
 
         return "\n".join(lines)
-    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        aiohttp.ClientError,
+        OSError,
+    ) as e:
         logger.error("list_openproject_work_packages failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -397,7 +418,14 @@ async def get_openproject_work_package(
             lines.append(f"  📝 {desc}")
 
         return "\n".join(lines)
-    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        aiohttp.ClientError,
+        OSError,
+    ) as e:
         logger.error("get_openproject_work_package failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -464,7 +492,14 @@ async def list_openproject_users(connection_id: str = "") -> str:
         lines.append(f"\n✓ {total} Benutzer")
 
         return "\n".join(lines)
-    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        aiohttp.ClientError,
+        OSError,
+    ) as e:
         logger.error("list_openproject_users failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -561,7 +596,14 @@ async def list_openproject_time_entries(
             lines.append(f"  {date}: {hours}h ({activity})")
 
         return "\n".join(lines)
-    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        aiohttp.ClientError,
+        OSError,
+    ) as e:
         logger.error("list_openproject_time_entries failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -641,7 +683,14 @@ async def create_openproject_work_package(
             ja=f"✅ Work Packageを作成しました: #{result.get('id')} - {subject}",
             zh=f"✅ 已创建工作包: #{result.get('id')} - {subject}",
         )
-    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        aiohttp.ClientError,
+        OSError,
+    ) as e:
         logger.error("create_openproject_work_package failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -662,40 +711,107 @@ async def update_openproject_work_package(
     work_package_id: int,
     status: str = "",
     subject: str = "",
+    start_date: str = "",
+    due_date: str = "",
+    done_ratio: int = -1,
     connection_id: str = "",
 ) -> str:
     """
     Update a work package (task) in OpenProject.
-    Use this to change status or subject.
+    Use this to change status, subject, dates, or progress.
+
+    For Gantt chart updates, provide start_date and due_date in ISO format (YYYY-MM-DD).
+    The done_ratio (0-100) updates the progress percentage shown in Gantt.
     """
     try:
         client = await _get_api_client(connection_id)
-        update_data = {}
+
+        # First get current work package to obtain lockVersion (required for optimistic locking)
+        try:
+            current_wp = await _op_request(
+                "GET", f"/work_packages/{work_package_id}", client
+            )
+            lock_version = current_wp.get("lockVersion", 0)
+        except Exception:
+            lock_version = 0  # Fallback if we can't get current version
+
+        update_data = {
+            "lockVersion": lock_version,  # Required for optimistic locking
+        }
+
         if subject:
             update_data["subject"] = subject
         if status:
             status_data = {"name": status}
             update_data["status"] = status_data
 
-        await _op_request(
-            "PATCH",
-            f"/work_packages/{work_package_id}",
-            client,
-            json=update_data,
-        )
-        return _t(
-            de=f"✅ Work Package aktualisiert: #{work_package_id}",
-            en=f"✅ Work package updated: #{work_package_id}",
-            fr=f"✅ Package de travail mis à jour: #{work_package_id}",
-            es=f"✅ Paquete de trabajo actualizado: #{work_package_id}",
-            it=f"✅ Pacchetto di lavoro aggiornato: #{work_package_id}",
-            nl=f"✅ Work package bijgewerkt: #{work_package_id}",
-            pl=f"✅ Zaktualizowano pakiet pracy: #{work_package_id}",
-            pt=f"✅ Pacote de trabalho atualizado: #{work_package_id}",
-            ja=f"✅ Work Packageを更新しました: #{work_package_id}",
-            zh=f"✅ 已更新工作包: #{work_package_id}",
-        )
-    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
+        # Gantt-relevant fields
+        if start_date:
+            # ISO 8601 format expected: "2026-04-10"
+            update_data["startDate"] = start_date
+        if due_date:
+            update_data["dueDate"] = due_date
+        if done_ratio >= 0 and done_ratio <= 100:
+            update_data["percentageDone"] = done_ratio
+
+        # Only send update if we have data beyond lockVersion
+        if len(update_data) > 1:
+            await _op_request(
+                "PATCH",
+                f"/work_packages/{work_package_id}",
+                client,
+                json=update_data,
+            )
+
+            # Build success message with details
+            changes = []
+            if subject:
+                changes.append("subject")
+            if status:
+                changes.append("status")
+            if start_date:
+                changes.append("start_date")
+            if due_date:
+                changes.append("due_date")
+            if done_ratio >= 0:
+                changes.append(f"progress ({done_ratio}%)")
+
+            change_str = ", ".join(changes) if changes else "data"
+
+            return _t(
+                de=f"✅ Work Package #{work_package_id} aktualisiert ({change_str}). Gantt-Diagramm aktualisiert.",
+                en=f"✅ Work package #{work_package_id} updated ({change_str}). Gantt chart updated.",
+                fr=f"✅ Package de travail #{work_package_id} mis à jour ({change_str}). Diagramme de Gantt mis à jour.",
+                es=f"✅ Paquete de trabajo #{work_package_id} actualizado ({change_str}). Diagrama de Gantt actualizado.",
+                it=f"✅ Pacchetto di lavoro #{work_package_id} aggiornato ({change_str}). Diagramma di Gantt aggiornato.",
+                nl=f"✅ Work package #{work_package_id} bijgewerkt ({change_str}). Gantt-diagram bijgewerkt.",
+                pl=f"✅ Zaktualizowano pakiet pracy #{work_package_id} ({change_str}). Wykres Gantt zaktualizowany.",
+                pt=f"✅ Pacote de trabalho #{work_package_id} atualizado ({change_str}). Diagrama de Gantt atualizado.",
+                ja=f"✅ Work Package #{work_package_id}を更新しました ({change_str})。ガントチャートを更新しました。",
+                zh=f"✅ 已更新工作包 #{work_package_id} ({change_str})。甘特图已更新。",
+            )
+        else:
+            return _t(
+                de=f"⚠️ Keine Änderungen für Work Package #{work_package_id}",
+                en=f"⚠️ No changes for work package #{work_package_id}",
+                fr=f"⚠️ Aucune modification pour le package de travail #{work_package_id}",
+                es=f"⚠️ Sin cambios para el paquete de trabajo #{work_package_id}",
+                it=f"⚠️ Nessuna modifica per il pacchetto di lavoro #{work_package_id}",
+                nl=f"⚠️ Geen wijzigingen voor work package #{work_package_id}",
+                pl=f"⚠️ Brak zmian dla pakietu pracy #{work_package_id}",
+                pt=f"⚠️ Sem alterações para o pacote de trabalho #{work_package_id}",
+                ja=f"⚠️ Work Package #{work_package_id}に変更はありません",
+                zh=f"⚠️ 工作包 #{work_package_id} 无变更",
+            )
+
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        aiohttp.ClientError,
+        OSError,
+    ) as e:
         logger.error("update_openproject_work_package failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
@@ -779,7 +895,14 @@ async def log_openproject_time(
             ja=f"✅ {hours}hを{project_name}に記録しました",
             zh=f"✅ 已记录 {hours}h 用于 {project_name}",
         )
-    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        aiohttp.ClientError,
+        OSError,
+    ) as e:
         logger.error("log_openproject_time failed: %s", e)
         return _t(
             de=f"Fehler: {e}",
