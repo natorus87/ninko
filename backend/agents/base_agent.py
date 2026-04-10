@@ -31,6 +31,24 @@ from core.memory import get_memory
 from core.context_manager import get_context_manager
 from core import status_bus
 from core.events import ToolEvent, emit_tool_event
+from core.tool_error_handling import format_tool_error
+
+from agents.middleware import (
+    MiddlewareRegistry,
+    MiddlewareContext,
+    LLMProviderMiddleware,
+    SoulInjectionMiddleware,
+    LanguageMiddleware,
+    DatetimeMiddleware,
+    CompactionSummaryMiddleware,
+    RAGMiddleware,
+    KnowledgeGraphMiddleware,
+    SkillsMiddleware,
+    MessageBuilderMiddleware,
+    AgentExecutionMiddleware,
+    ResponseExtractionMiddleware,
+    MemoryStorageMiddleware,
+)
 
 logger = logging.getLogger("ninko.agents.base")
 
@@ -517,7 +535,9 @@ class _StatusEmitter(AsyncCallbackHandler):
         try:
             self._tool_args[run_id] = _json.loads(input_str) if input_str else {}
         except (_json.JSONDecodeError, TypeError):
-            self._tool_args[run_id] = {"_raw": str(input_str)[:200]} if input_str else {}
+            self._tool_args[run_id] = (
+                {"_raw": str(input_str)[:200]} if input_str else {}
+            )
 
     async def on_tool_end(self, output: Any, **kwargs) -> None:  # type: ignore[override]
         tool_name = kwargs.get("name", "")
@@ -643,6 +663,7 @@ def _log_bg_task_exception(task: asyncio.Task) -> None:
     except (asyncio.CancelledError, asyncio.InvalidStateError):
         pass
 
+
 # Auto-Memorize Cooldown: (agent_name, session_id) → letzter Zeitstempel (monotonic)
 _memorize_cooldowns: dict[tuple[str, str], float] = {}
 _DEFAULT_MEMORIZE_COOLDOWN_SECS = 60.0  # Max 1 Auto-Memorize pro Minute pro Agent
@@ -667,12 +688,18 @@ _TOOL_SAFEGUARD_SENTINEL = "__TOOL_SAFEGUARD__"
 # Paused safeguard agents: session_id → (sg_agent, thread_config)
 # Hält den unterbrochenen LangGraph-Agenten für den Resume-Aufruf am Leben.
 _paused_sg_agents: dict[str, tuple] = {}
-_paused_sg_agents_ts: dict[str, float] = {}  # session_id → Erstellungszeitpunkt (monotonic)
-_PAUSED_SG_AGENT_TTL_SECS: float = 300.0  # Gleicher TTL wie Redis-Key ninko:safeguard_tool_pending
+_paused_sg_agents_ts: dict[
+    str, float
+] = {}  # session_id → Erstellungszeitpunkt (monotonic)
+_PAUSED_SG_AGENT_TTL_SECS: float = (
+    300.0  # Gleicher TTL wie Redis-Key ninko:safeguard_tool_pending
+)
 
 # Session-spezifische Locks verhindern parallele Safeguard-Runs/Resumes
 _safeguard_session_locks: dict[str, asyncio.Lock] = {}
-_safeguard_session_locks_ts: dict[str, float] = {}  # session_id → Erstellungszeitpunkt (monotonic)
+_safeguard_session_locks_ts: dict[
+    str, float
+] = {}  # session_id → Erstellungszeitpunkt (monotonic)
 _SAFEGUARD_LOCK_TTL_SECS: float = 86400.0  # 24h
 
 _global_safeguard: "SafeguardMiddleware | None" = None
@@ -690,11 +717,13 @@ def _get_safeguard_session_lock(session_id: str) -> asyncio.Lock:
 
     Bereinigt abgelaufene Einträge bei jedem Aufruf, um unbegrenztes Wachstum
     des Dicts zu verhindern (Memory-Leak-Fix).
+
+    In K8s-Umgebungen wird RedisLock verwendet (distributed lock).
+    Im Alleingang (single-instance) fällt zurück auf asyncio.Lock.
     """
     import time
 
     now = time.monotonic()
-    # Abgelaufene Locks aufräumen (TTL 24h) — O(n) pro Aufruf, aber n ist klein
     expired = [
         sid
         for sid, ts in _safeguard_session_locks_ts.items()
@@ -707,6 +736,25 @@ def _get_safeguard_session_lock(session_id: str) -> asyncio.Lock:
         _safeguard_session_locks[session_id] = asyncio.Lock()
         _safeguard_session_locks_ts[session_id] = now
     return _safeguard_session_locks[session_id]
+
+
+async def _get_safeguard_session_lock_async(session_id: str) -> Any:
+    """Async distributed lock for K8s multi-instance deployments.
+
+    Returns a RedisLock when Redis is available, otherwise falls back
+    to the local asyncio.Lock for single-instance deployments.
+    """
+    try:
+        from core.distributed_lock import RedisLock
+
+        lock = RedisLock(
+            f"safeguard:session:{session_id}",
+            ttl_ms=int(_SAFEGUARD_LOCK_TTL_SECS * 1000),
+            max_wait_ms=5000,
+        )
+        return lock
+    except Exception:
+        return _get_safeguard_session_lock(session_id)
 
 
 def _get_agent_timeout_seconds() -> int:
@@ -833,6 +881,71 @@ class BaseAgent:
             len(self.tools),
         )
 
+        # Middleware-Registry für strukturierte Invoke-Pipeline
+        self._middleware = self._build_middleware_registry()
+
+    def _build_middleware_registry(self) -> MiddlewareRegistry:
+        registry = MiddlewareRegistry()
+
+        def _get_lang():
+            return _get_language()
+
+        def _get_tz():
+            try:
+                from core.config import get_settings as _gs
+
+                return _gs().TIMEZONE
+            except (ImportError, AttributeError):
+                return "Europe/Berlin"
+
+        def _get_soul_manager():
+            from core.soul_manager import get_soul_manager
+
+            return get_soul_manager()
+
+        def _get_skills_manager():
+            from core.skills_manager import get_skills_manager
+
+            return get_skills_manager()
+
+        registry.add(
+            LLMProviderMiddleware(get_llm, get_llm_generation, create_react_agent)
+        )
+        registry.add(SoulInjectionMiddleware(_get_soul_manager))
+        registry.add(LanguageMiddleware(_get_lang))
+        registry.add(DatetimeMiddleware(_get_tz))
+        registry.add(CompactionSummaryMiddleware())
+        registry.add(RAGMiddleware(self._memory))
+        registry.add(KnowledgeGraphMiddleware())
+        registry.add(SkillsMiddleware(_get_skills_manager))
+        registry.add(MessageBuilderMiddleware())
+        registry.add(
+            AgentExecutionMiddleware(
+                safeguard=_global_safeguard,
+                get_safeguard_session_lock=_get_safeguard_session_lock
+                if _global_safeguard
+                else None,
+                run_with_safeguard=self._run_with_safeguard
+                if _global_safeguard
+                else None,
+                paused_agents=_paused_sg_agents,
+                paused_agents_ts=_paused_sg_agents_ts,
+                paused_ttl_secs=_PAUSED_SG_AGENT_TTL_SECS,
+                callbacks_factory=lambda sid, name: _StatusEmitter(sid, name),
+            )
+        )
+        registry.add(ResponseExtractionMiddleware())
+        registry.add(
+            MemoryStorageMiddleware(
+                auto_memorize_fn=self._auto_memorize,
+                excluded_agents=_MEMORIZE_EXCLUDED_AGENTS,
+                cooldowns=_memorize_cooldowns,
+                background_tasks=_background_tasks,
+            )
+        )
+
+        return registry
+
     def _select_tools_for_request(self, message: str) -> list[BaseTool]:
         """
         JIT Tool Injection (OpenClaw-Prinzip):
@@ -915,44 +1028,12 @@ class BaseAgent:
         session_id: str = "",
         confirmed: bool = False,
     ) -> tuple[str, bool]:
-        """
-        Führt den Agenten mit einer Nachricht aus.
-
-        Gibt (antwort, wurde_komprimiert) zurück.
-        `wurde_komprimiert` ist True wenn der Kontext in diesem Aufruf
-        per LLM-Summary komprimiert wurde — der Aufrufer kann dann eine
-        System-Nachricht in die sichtbare Chat-History einfügen.
-
-        1. Context-Window kalibrieren (einmalig, gecacht)
-        2. Chat-History auf Token-Budget trimmen / komprimieren
-        3. System-Prompt + History + aktuelle Nachricht zusammenbauen
-        4. LangGraph Agent ausführen
-        5. Antwort + Compaction-Flag zurückgeben
-        """
-        # Chat-History aufbereiten
         history = chat_history or []
 
-        # LLM neu initialisieren wenn Provider gewechselt wurde
-        current_gen = get_llm_generation()
-        if current_gen != self._llm_generation:
-            # Alten Agent aufräumen (HTTP-Connections / Streams schließen)
-            if hasattr(self._agent, "aclose"):
-                try:
-                    await self._agent.aclose()
-                except Exception as _cleanup_exc:
-                    logger.debug("LLM-Agent cleanup fehlgeschlagen (ignoriert): %s", _cleanup_exc)
-            self._llm = get_llm()
-            self._agent = create_react_agent(model=self._llm, tools=self.tools)
-            self._llm_generation = current_gen
-            logger.info(
-                "Agent '%s': LLM nach Provider-Wechsel neu initialisiert.", self.name
-            )
-
-        # Context-Window einmalig kalibrieren (gecacht nach erstem Aufruf)
+        # Context-Window kalibrieren + Komprimierung/Trimming
         model_window = await get_model_context_window()
         self._context_mgr.update_from_model_window(model_window)
 
-        # Context-Budget prüfen: Komprimierung oder Trimming
         did_compact = False
         if self._context_mgr.should_reset(history):
             await status_bus.emit(
@@ -963,360 +1044,56 @@ class BaseAgent:
                 did_compact,
             ) = await self._context_mgr.compact_messages_async(history, self._llm)
         else:
-            # Einzelne sehr lange Nachrichten vorher stutzen (opencode Pruning)
             history = self._context_mgr.trim_large_messages(history)
             trimmed_history = self._context_mgr.trim_messages(
                 messages=history,
                 system_prompt=self.system_prompt,
             )
 
-        # Dynamischen Zusatz für den System Prompt holen
+        # Dynamischen Zusatz für den System Prompt
         appendix = await self._dynamic_prompt_appendix()
         final_system_prompt = self.system_prompt
         if appendix:
             final_system_prompt += f"\n\n{appendix}"
 
-        # Soul-Injection: Identität an den Anfang des System-Prompts setzen
-        try:
-            from core.soul_manager import get_soul_manager
-
-            soul = get_soul_manager().get_soul(self.name)
-            if soul:
-                final_system_prompt = soul + "\n\n---\n\n" + final_system_prompt
-                logger.debug("Soul MD für Agent '%s' injiziert.", self.name)
-        except _BASE_AGENT_RECOVERABLE_EXCEPTIONS as exc:
-            logger.debug("Soul-Injection fehlgeschlagen (ignoriert): %s", exc)
-
-        # Sprachanweisung injizieren
-        try:
-            from core.config import get_settings as _gs
-
-            lang = _gs().LANGUAGE
-            lang_instruction = _LANG_INSTRUCTIONS.get(lang)
-            if lang_instruction:
-                final_system_prompt += f"\n\n{lang_instruction}"
-        except (ImportError, AttributeError, TypeError, ValueError):
-            pass  # Fallback: keine Sprachanweisung
-
-        # Aktuelles Datum + Uhrzeit injizieren (Timezone aus Config)
-        try:
-            from datetime import datetime
-            import zoneinfo
-            from core.config import get_settings as _gs2
-
-            tz_name = _gs2().TIMEZONE
-            tz = zoneinfo.ZoneInfo(tz_name)
-            now = datetime.now(tz)
-            weekdays_de = [
-                "Montag",
-                "Dienstag",
-                "Mittwoch",
-                "Donnerstag",
-                "Freitag",
-                "Samstag",
-                "Sonntag",
-            ]
-            weekdays_en = [
-                "Monday",
-                "Tuesday",
-                "Wednesday",
-                "Thursday",
-                "Friday",
-                "Saturday",
-                "Sunday",
-            ]
-            lang = _gs2().LANGUAGE
-            if lang == "de":
-                dt_str = (
-                    f"Aktuelles Datum: {weekdays_de[now.weekday()]}, "
-                    f"{now.day:02d}.{now.month:02d}.{now.year} | "
-                    f"Uhrzeit: {now.strftime('%H:%M')} ({tz_name})"
-                )
-            else:
-                dt_str = (
-                    f"Current date: {weekdays_en[now.weekday()]}, "
-                    f"{now.strftime('%B %d, %Y')} | "
-                    f"Time: {now.strftime('%H:%M')} ({tz_name})"
-                )
-            final_system_prompt += f"\n\n{dt_str}"
-        except (ImportError, AttributeError, ValueError, RuntimeError) as exc:
-            logger.debug("Datetime-Injection fehlgeschlagen (ignoriert): %s", exc)
-
-        # Komprimierungs-Zusammenfassungen aus der History einsammeln (role="system")
-        # und in den System-Prompt integrieren (nicht als separate SystemMessage —
-        # Thinking-Modelle wie Qwen3.5 akzeptieren nur EINEN System-Block am Anfang)
-        # Guard gegen Duplikate bei mehrfachen Compaction-Zyklen
-        _seen_system_contents: set[str] = set()
-        for msg in trimmed_history:
-            if msg.get("role") == "system":
-                content = msg.get("content", "")
-                if content and content not in _seen_system_contents:
-                    final_system_prompt += "\n\n" + content
-                    _seen_system_contents.add(content)
-
-        # RAG-Kontext in den System-Prompt integrieren
-        try:
-            memory_hits = await self._memory.search(query=message, top_k=3)
-            relevant_hits = [
-                hit
-                for hit in memory_hits
-                if hit.get("distance") is None or hit["distance"] < 0.5
-            ]
-            if relevant_hits:
-                rag_context = "\n\n".join(
-                    f"[Memory] {hit['content']}" for hit in relevant_hits
-                )
-                final_system_prompt += (
-                    "\n\n"
-                    + _t(
-                        "Relevanter Kontext aus dem Memory:\n",
-                        "Relevant context from memory:\n",
-                    )
-                    + rag_context
-                )
-        except _BASE_AGENT_RECOVERABLE_EXCEPTIONS as exc:
-            logger.debug("Memory-Suche fehlgeschlagen: %s", exc)
-
-        # Knowledge Graph RAG-Erweiterung
-        try:
-            from core.knowledge_graph import get_knowledge_graph
-
-            kg = await get_knowledge_graph()
-
-            # Suche nach Entitäten, die zum Modul/Agent passen könnten
-            module_entity_id = f"module:{self.name}"
-            if module_entity_id in kg._graph:
-                # Verwandte Entitäten vorschlagen
-                related = await kg.suggest_related(module_entity_id)
-                if related:
-                    kg_context = _t(
-                        "Verwandte Systeme aus dem Knowledge Graph:\n",
-                        "Related systems from Knowledge Graph:\n",
-                    )
-                    for item in related[:5]:
-                        ent = item.get("entity", {})
-                        reason = item.get("reason", "")
-                        kg_context += f"- {ent.get('name', ent.get('id'))} ({reason})\n"
-                    final_system_prompt += "\n\n" + kg_context
-
-            # Falls es Incidents gibt, die zu diesem Modul gehören
-            incidents = await kg.find_by_type("incident")
-            module_incidents = [
-                i
-                for i in incidents
-                if i.get("properties", {}).get("module") == self.name
-            ]
-            if module_incidents:
-                incident_context = _t(
-                    "Relevante vergangene Incidents:\n",
-                    "Relevant past incidents:\n",
-                )
-                for inc in module_incidents[:3]:
-                    props = inc.get("properties", {})
-                    incident_context += f"- {props.get('summary', inc.get('name'))}\n"
-                final_system_prompt += "\n\n" + incident_context
-
-        except _BASE_AGENT_RECOVERABLE_EXCEPTIONS as exc:
-            logger.debug("Knowledge Graph RAG fehlgeschlagen: %s", exc)
-
-        # Skills-Injection in den System-Prompt integrieren
-        try:
-            from core.skills_manager import get_skills_manager
-
-            sm = get_skills_manager()
-            matching_skills = sm.find_matching_skills(message, self.name)
-            if matching_skills:
-                skill_text = sm.build_injection(matching_skills)
-                final_system_prompt += f"\n\n{skill_text}"
-                logger.debug(
-                    "Agent '%s': %d Skill(s) injiziert: %s",
-                    self.name,
-                    len(matching_skills),
-                    [s.name for s in matching_skills],
-                )
-        except _BASE_AGENT_RECOVERABLE_EXCEPTIONS as exc:
-            logger.debug("Skills-Injection fehlgeschlagen (ignoriert): %s", exc)
-
-        # Nachrichten aufbauen — genau EIN SystemMessage-Block am Anfang
-        # (Thinking-Modelle wie Qwen3.5 erlauben nur einen System-Block)
-        messages: list[BaseMessage] = [
-            SystemMessage(content=final_system_prompt),
-        ]
-
-        for msg in trimmed_history:
-            role = msg.get("role", "user")
-            content = msg.get("content", "")
-            if role == "user":
-                messages.append(HumanMessage(content=content))
-            elif role == "assistant":
-                messages.append(AIMessage(content=content))
-            # role="system" → bereits in final_system_prompt integriert
-            # role="system_compaction" → UI-Notification, nicht für LLM bestimmt
-            elif role not in ("system", "system_compaction", "tool"):
-                logger.warning(
-                    "Unbekannte Message-Rolle '%s' nach Compaction — übersprungen.", role
-                )
-
-        messages.append(HumanMessage(content=message))
-
-        # JIT Tool Injection: nur relevante Tools für diese Anfrage laden
+        # JIT Tool Injection
         active_tools = self._select_tools_for_request(message)
-        if len(active_tools) != len(self.tools):
-            # Temporären Agent mit gefiltertem Tool-Set erstellen
-            jit_agent = create_react_agent(model=self._llm, tools=active_tools)
-        else:
-            jit_agent = self._agent
+        jit_agent = (
+            create_react_agent(model=self._llm, tools=active_tools)
+            if len(active_tools) != len(self.tools)
+            else self._agent
+        )
 
-        # Agent ausführen – kein Schrittzähler (wie Roo Code), stattdessen Timeout
-        AGENT_TIMEOUT = _get_agent_timeout_seconds()
-        run_config: dict = {"recursion_limit": 10000}
-        if session_id:
-            run_config["callbacks"] = [_StatusEmitter(session_id, self.name)]
-        try:
-            # Safeguard-Pfad: interrupt_before=["tools"] + MemorySaver wenn aktiv
-            # .enabled wird durch das aktive Profil gesteuert (disabled-Profil → False)
-            use_safeguard = (
-                _global_safeguard is not None
-                and _global_safeguard.enabled
-                and not confirmed
-                and bool(session_id)
-                and bool(active_tools)
-            )
+        # Middleware-Kontext aufbauen
+        ctx = MiddlewareContext(
+            message=message,
+            chat_history=history,
+            session_id=session_id,
+            confirmed=confirmed,
+            agent_name=self.name,
+            system_prompt=self.system_prompt,
+            final_system_prompt=final_system_prompt,
+            trimmed_history=trimmed_history,
+            active_tools=active_tools,
+            llm=self._llm,
+            agent=self._agent,
+            jit_agent=jit_agent,
+            extra={"language": _get_language()},
+        )
 
-            if use_safeguard:
-                # Abgelaufene pausierte Agenten aufräumen (TTL = Redis-Key-TTL = 300s)
-                import time as _time_mod
+        # Pre-Processing Pipeline
+        pre_result = await self._middleware.run_pre(ctx)
+        if pre_result and pre_result.short_circuit:
+            return ctx.early_return_response, did_compact
 
-                _now_mono = _time_mod.monotonic()
-                _expired_paused = [
-                    sid
-                    for sid, ts in _paused_sg_agents_ts.items()
-                    if _now_mono - ts > _PAUSED_SG_AGENT_TTL_SECS
-                ]
-                for sid in _expired_paused:
-                    _paused_sg_agents.pop(sid, None)
-                    _paused_sg_agents_ts.pop(sid, None)
+        # LLM Call
+        await self._middleware.run_post(ctx)
 
-                # Wenn bereits ein pausierter Tool-Call in dieser Session wartet, nicht überschreiben.
-                if session_id in _paused_sg_agents:
-                    return _t(
-                        "Für diese Session gibt es bereits eine ausstehende Tool-Bestätigung. "
-                        "Bestätige zuerst den offenen Schritt (confirmed=true).",
-                        "There is already a pending tool confirmation for this session. "
-                        "Confirm the open step first (confirmed=true).",
-                    ), did_compact
+        # Response oder Early Return
+        if ctx.early_return:
+            return ctx.response, did_compact
 
-                async with _get_safeguard_session_lock(session_id):
-                    raw_result = await self._run_with_safeguard(
-                        messages, active_tools, run_config, session_id
-                    )
-                # Sentinel-String → Tool-Call braucht Bestätigung
-                if isinstance(raw_result, str):
-                    return raw_result, did_compact
-                result = raw_result
-            else:
-                result = await asyncio.wait_for(
-                    jit_agent.ainvoke(
-                        {"messages": messages},
-                        config=run_config,
-                    ),
-                    timeout=AGENT_TIMEOUT,
-                )
-
-            # Letzte AI-Nachricht extrahieren
-            all_messages = result.get("messages", [])
-            ai_messages = [
-                m for m in all_messages if isinstance(m, AIMessage) and m.content
-            ]
-
-            if ai_messages:
-                raw = _extract_text(ai_messages[-1].content)
-                response = _strip_thinking(raw)
-                # Thinking-Only-Antwort: Modell hat nur <think>-Blöcke generiert, kein Text
-                if not response:
-                    logger.debug(
-                        "Agent '%s': AI-Antwort enthielt nur <think>-Blöcke, suche Tool-Ergebnis.",
-                        self.name,
-                    )
-                    ai_messages = []  # Fallback auf Tool-Messages auslösen
-            if not ai_messages:
-                # Fallback: letztes Tool-Ergebnis verwenden wenn kein AI-Text vorhanden
-                # (passiert wenn LLM nach Tool-Aufruf keinen Text generiert oder nur <think>)
-                tool_messages = [
-                    m for m in all_messages if isinstance(m, ToolMessage) and m.content
-                ]
-                if tool_messages:
-                    response = _extract_text(tool_messages[-1].content)
-                    logger.debug(
-                        "Agent '%s': kein AI-Text, nutze letztes Tool-Ergebnis als Antwort.",
-                        self.name,
-                    )
-                else:
-                    response = _t("Keine Antwort generiert.", "No response generated.")
-
-            logger.debug(
-                "Agent '%s' Antwort: %s…",
-                self.name,
-                response[:100],
-            )
-
-            # Langzeitgedächtnis: relevante Fakten im Hintergrund speichern
-            # Triviale Antworten (< 80 Zeichen) überspringen – kein Mehrwert
-            # Background-Agenten (monitor, scheduler) ausschließen + Cooldown pro Agent
-            _now = asyncio.get_running_loop().time()
-            _cooldown_key = (self.name, session_id or "__no_session__")
-            _last = _memorize_cooldowns.get(_cooldown_key, 0.0)
-            if (
-                len(response) >= 80
-                and self.name not in _MEMORIZE_EXCLUDED_AGENTS
-                and (_now - _last) >= _get_memorize_cooldown_secs()
-            ):
-                # LRU-Schutz: Dict auf max 5000 Einträge begrenzen
-                if len(_memorize_cooldowns) > 5000:
-                    # Älteste Einträge entfernen (nach Timestamp sortiert)
-                    _oldest = sorted(_memorize_cooldowns, key=lambda k: _memorize_cooldowns[k])
-                    for _k in _oldest[:500]:
-                        _memorize_cooldowns.pop(_k, None)
-                _memorize_cooldowns[_cooldown_key] = _now
-                _task = asyncio.create_task(self._auto_memorize(message, response))
-                _background_tasks.add(_task)
-                _task.add_done_callback(_background_tasks.discard)
-                _task.add_done_callback(_log_bg_task_exception)
-
-            return response, did_compact
-
-        except asyncio.TimeoutError:
-            logger.warning("Agent '%s' Timeout nach %ds.", self.name, AGENT_TIMEOUT)
-            return _t(
-                "Die Anfrage hat zu lange gedauert und wurde abgebrochen. "
-                "Bitte versuche es mit einer spezifischeren Frage erneut.",
-                "The request took too long and was aborted. "
-                "Please try again with a more specific question.",
-            ), False
-        except _BASE_AGENT_RECOVERABLE_EXCEPTIONS as exc:
-            exc_str = str(exc)
-            # Spezifische LM Studio / LLM Fehler benutzerfreundlich machen
-            if "Model unloaded" in exc_str:
-                user_msg = _t(
-                    "Fehler: Das KI-Modell ist gerade nicht verfügbar (nicht geladen). "
-                    "Bitte prüfe LM Studio und lade das Modell neu.",
-                    "Error: The AI model is currently unavailable (not loaded). "
-                    "Please check LM Studio and reload the model.",
-                )
-            else:
-                logger.warning(
-                    "Agent '%s' Fehler wird gegenüber User sanitisiert. raw_error=%s",
-                    self.name,
-                    exc_str[:300],
-                )
-                user_msg = _t(
-                    "Fehler: Bei der Verarbeitung ist ein interner Fehler aufgetreten. "
-                    "Bitte versuche es erneut oder präzisiere die Anfrage.",
-                    "Error: An internal processing error occurred. "
-                    "Please retry or make the request more specific.",
-                )
-            logger.error("Agent '%s' Fehler: %s", self.name, exc, exc_info=True)
-            return user_msg, False
+        return ctx.response, did_compact
 
     def _extract_result_response(self, result: dict) -> str:
         """Extrahiert den Antwort-Text aus einem LangGraph-Ergebnis-Dict."""
