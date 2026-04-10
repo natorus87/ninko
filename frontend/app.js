@@ -4086,6 +4086,11 @@ const Ninko = {
             { key: 'REDMINE_API_KEY', label: 'API-Key', placeholder: '••••••••••••••••', type: 'password', isSecret: true },
             { key: 'verify_ssl', label: 'SSL verifizieren (Nein bei selbst-signierten Zertifikaten)', type: 'checkbox' },
         ],
+        openproject: [
+            { key: 'url', label: 'OpenProject URL', placeholder: 'https://openproject.example.com' },
+            { key: 'OPENPROJECT_API_KEY', label: 'API-Key', placeholder: '••••••••••••••••', type: 'password', isSecret: true },
+            { key: 'verify_ssl', label: 'SSL verifizieren (Nein bei selbst-signierten Zertifikaten)', type: 'checkbox' },
+        ],
         teams: [
             { key: 'MICROSOFT_APP_ID', label: 'Microsoft App ID', placeholder: 'e.g. 1234abcd-1234-abcd-1234-abcd1234abcd' },
             { key: 'MICROSOFT_APP_PASSWORD', label: 'Microsoft App Password / Client Secret', placeholder: '••••••', type: 'password', isSecret: true },
