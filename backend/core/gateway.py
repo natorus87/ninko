@@ -53,6 +53,9 @@ class Run:
     _queue: asyncio.Queue = field(default_factory=lambda: asyncio.Queue())
 
 
+_MAX_RUNS = 500  # Maximale Anzahl gleichzeitig gespeicherter Runs (DoS-Schutz)
+
+
 class RunManager:
     """Manages embedded LangGraph runs."""
 
@@ -60,10 +63,19 @@ class RunManager:
         self._runs: dict[str, Run] = {}
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._cleanup_task: asyncio.Task | None = None
+        self._bg_tasks: set[asyncio.Task] = set()
 
     async def start(self) -> None:
         if self._cleanup_task is None:
             self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+
+    def _log_task_exc(self, task: asyncio.Task) -> None:
+        try:
+            exc = task.exception()
+            if exc is not None:
+                logger.error("RunManager background task failed: %s: %s", type(exc).__name__, exc)
+        except (asyncio.CancelledError, asyncio.InvalidStateError):
+            pass
 
     async def stop(self) -> None:
         if self._cleanup_task:
@@ -73,6 +85,9 @@ class RunManager:
             except asyncio.CancelledError:
                 pass
             self._cleanup_task = None
+
+        for task in list(self._bg_tasks):
+            task.cancel()
 
         for run in list(self._runs.values()):
             run._cancel_event.set()
@@ -98,8 +113,28 @@ class RunManager:
             created_at=_time.monotonic(),
         )
 
+        # DoS-Schutz: Runs-Dict auf _MAX_RUNS begrenzen
+        if len(self._runs) >= _MAX_RUNS:
+            # Ältesten abgeschlossenen Run entfernen
+            finished = [
+                (rid, r)
+                for rid, r in self._runs.items()
+                if r.status in (RunStatus.COMPLETED, RunStatus.FAILED, RunStatus.CANCELLED)
+            ]
+            if finished:
+                oldest_rid = min(finished, key=lambda x: x[1].completed_at)[0]
+                del self._runs[oldest_rid]
+            else:
+                raise RuntimeError(
+                    f"RunManager: Maximale Run-Anzahl ({_MAX_RUNS}) erreicht — "
+                    "alle aktiv, kein Eviction möglich."
+                )
+
         self._runs[run_id] = run
-        asyncio.create_task(self._execute_run(run))
+        _task = asyncio.create_task(self._execute_run(run))
+        self._bg_tasks.add(_task)
+        _task.add_done_callback(self._bg_tasks.discard)
+        _task.add_done_callback(self._log_task_exc)
         return run
 
     async def get_run(self, run_id: str) -> Run | None:
