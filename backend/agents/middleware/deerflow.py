@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import time
 from collections import deque
 from typing import Any
 
@@ -25,10 +26,15 @@ class LoopDetectionMiddleware(BaseMiddleware):
     name = "loop_detection"
     priority = 420
 
+    _SESSION_TTL_SECS: float = 3600.0  # Sessions ohne Aktivität nach 1h aufräumen
+    _CLEANUP_INTERVAL: int = 500  # Cleanup alle N post_process-Aufrufe
+
     def __init__(self, max_history: int = 5, similarity_threshold: float = 0.8):
         self._max_history = max_history
         self._threshold = similarity_threshold
         self._response_hashes: dict[str, deque[str]] = {}
+        self._session_last_active: dict[str, float] = {}  # session_id → monotonic ts
+        self._call_count: int = 0
 
     def _hash_content(self, content: str) -> str:
         normalized = " ".join(content.lower().split())
@@ -41,12 +47,29 @@ class LoopDetectionMiddleware(BaseMiddleware):
         if not ctx.response or not ctx.session_id:
             return
 
+        now = time.monotonic()
+
+        # Periodischer TTL-Cleanup abgelaufener Sessions (kein unbegrenztes Wachstum)
+        self._call_count += 1
+        if self._call_count % self._CLEANUP_INTERVAL == 0:
+            expired = [
+                sid
+                for sid, ts in self._session_last_active.items()
+                if now - ts > self._SESSION_TTL_SECS
+            ]
+            for sid in expired:
+                self._response_hashes.pop(sid, None)
+                self._session_last_active.pop(sid, None)
+            if expired:
+                logger.debug("LoopDetection: %d abgelaufene Sessions bereinigt.", len(expired))
+
         content_hash = self._hash_content(ctx.response)
 
         if ctx.session_id not in self._response_hashes:
             self._response_hashes[ctx.session_id] = deque(maxlen=self._max_history)
 
         history = self._response_hashes[ctx.session_id]
+        self._session_last_active[ctx.session_id] = now
 
         if content_hash in history:
             logger.warning(
