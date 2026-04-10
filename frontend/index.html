@@ -5,6 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Ninko – IT-Operations-AI-Agent Dashboard">
+    <meta http-equiv="Content-Security-Policy"
+          content="script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' ws: wss:;">
     <title>Ninko</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -17,6 +19,15 @@
 <body>
     <a href="#main-content" class="skip-link">Zum Hauptinhalt springen</a>
     <div id="app">
+        <!-- Mobile Hamburger Button (visible only on screens <= 480px) -->
+        <button class="hamburger-btn" id="hamburger-btn"
+                aria-label="Menü öffnen/schließen"
+                type="button"
+                style="display:none;">☰</button>
+
+        <!-- Mobile Sidebar Overlay (visible when sidebar is open on mobile) -->
+        <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
         <!-- Sidebar -->
         <nav id="sidebar" class="sidebar">
             <div class="sidebar-panels" id="sidebar-panels">
