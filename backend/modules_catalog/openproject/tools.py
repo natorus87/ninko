@@ -10,7 +10,7 @@ import os
 from datetime import datetime
 from typing import Optional
 
-import aiohttp
+import httpx
 from langchain_core.tools import tool
 
 from agents.base_agent import _t
@@ -85,16 +85,14 @@ async def _op_request(
     url = f"{base_url}/api/v3{path}"
     headers = {"Authorization": f"Bearer {client['api_key']}"}
 
-    async with aiohttp.ClientSession(
-        headers=headers, timeout=aiohttp.ClientTimeout(total=30)
-    ) as session:
-        async with session.request(method, url, json=json) as resp:
-            if resp.status == 204:
-                return {"status": "OK"}
-            if resp.status == 201:
-                return await resp.json()
-            resp.raise_for_status()
-            return await resp.json()
+    async with httpx.AsyncClient(headers=headers, timeout=30.0) as session:
+        resp = await session.request(method, url, json=json)
+        if resp.status_code == 204:
+            return {"status": "OK"}
+        if resp.status_code == 201:
+            return resp.json()
+        resp.raise_for_status()
+        return resp.json()
 
 
 # ═══════════════════════════════════════════════════════
@@ -156,7 +154,7 @@ async def list_openproject_projects(connection_id: str = "") -> str:
         ValueError,
         TypeError,
         KeyError,
-        aiohttp.ClientError,
+        httpx.RequestError,
         OSError,
     ) as e:
         logger.error("list_openproject_projects failed: %s", e)
@@ -238,7 +236,7 @@ async def get_openproject_project(project_name: str, connection_id: str = "") ->
         ValueError,
         TypeError,
         KeyError,
-        aiohttp.ClientError,
+        httpx.RequestError,
         OSError,
     ) as e:
         logger.error("get_openproject_project failed: %s", e)
@@ -355,7 +353,7 @@ async def list_openproject_work_packages(
         ValueError,
         TypeError,
         KeyError,
-        aiohttp.ClientError,
+        httpx.RequestError,
         OSError,
     ) as e:
         logger.error("list_openproject_work_packages failed: %s", e)
@@ -423,7 +421,7 @@ async def get_openproject_work_package(
         ValueError,
         TypeError,
         KeyError,
-        aiohttp.ClientError,
+        httpx.RequestError,
         OSError,
     ) as e:
         logger.error("get_openproject_work_package failed: %s", e)
@@ -497,7 +495,7 @@ async def list_openproject_users(connection_id: str = "") -> str:
         ValueError,
         TypeError,
         KeyError,
-        aiohttp.ClientError,
+        httpx.RequestError,
         OSError,
     ) as e:
         logger.error("list_openproject_users failed: %s", e)
@@ -601,7 +599,7 @@ async def list_openproject_time_entries(
         ValueError,
         TypeError,
         KeyError,
-        aiohttp.ClientError,
+        httpx.RequestError,
         OSError,
     ) as e:
         logger.error("list_openproject_time_entries failed: %s", e)
@@ -688,7 +686,7 @@ async def create_openproject_work_package(
         ValueError,
         TypeError,
         KeyError,
-        aiohttp.ClientError,
+        httpx.RequestError,
         OSError,
     ) as e:
         logger.error("create_openproject_work_package failed: %s", e)
@@ -809,7 +807,7 @@ async def update_openproject_work_package(
         ValueError,
         TypeError,
         KeyError,
-        aiohttp.ClientError,
+        httpx.RequestError,
         OSError,
     ) as e:
         logger.error("update_openproject_work_package failed: %s", e)
@@ -900,7 +898,7 @@ async def log_openproject_time(
         ValueError,
         TypeError,
         KeyError,
-        aiohttp.ClientError,
+        httpx.RequestError,
         OSError,
     ) as e:
         logger.error("log_openproject_time failed: %s", e)
