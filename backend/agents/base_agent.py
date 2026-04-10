@@ -570,7 +570,8 @@ class _StatusEmitter(AsyncCallbackHandler):
                 error=error_str,
                 is_readonly=is_readonly,
             )
-            asyncio.create_task(emit_tool_event(event))
+            _evt_task = asyncio.create_task(emit_tool_event(event))
+            _evt_task.add_done_callback(_log_bg_task_exception)
         except Exception:
             pass  # Audit-Tracking darf nie blockieren
 
@@ -606,13 +607,14 @@ class _StatusEmitter(AsyncCallbackHandler):
                 if prompt_tokens > 0 or completion_tokens > 0:
                     from core.metrics import record_llm_tokens
 
-                    asyncio.create_task(
+                    _tok_task = asyncio.create_task(
                         record_llm_tokens(
                             agent_name=self.agent_name,
                             prompt_tokens=prompt_tokens,
                             completion_tokens=completion_tokens,
                         )
                     )
+                    _tok_task.add_done_callback(_log_bg_task_exception)
         except Exception:
             pass  # Token-Tracking darf nie blockieren
 
@@ -625,6 +627,21 @@ _DEFAULT_JIT_MAX_TOOLS = 8
 
 # Strong references to background tasks to prevent premature GC
 _background_tasks: set[asyncio.Task] = set()
+
+
+def _log_bg_task_exception(task: asyncio.Task) -> None:
+    """Done-Callback: loggt Exceptions aus Fire-and-Forget Background-Tasks."""
+    try:
+        exc = task.exception()
+        if exc is not None:
+            logger.warning(
+                "Background-Task '%s' fehlgeschlagen: %s: %s",
+                task.get_name(),
+                type(exc).__name__,
+                exc,
+            )
+    except (asyncio.CancelledError, asyncio.InvalidStateError):
+        pass
 
 # Auto-Memorize Cooldown: (agent_name, session_id) → letzter Zeitstempel (monotonic)
 _memorize_cooldowns: dict[tuple[str, str], float] = {}
@@ -650,8 +667,13 @@ _TOOL_SAFEGUARD_SENTINEL = "__TOOL_SAFEGUARD__"
 # Paused safeguard agents: session_id → (sg_agent, thread_config)
 # Hält den unterbrochenen LangGraph-Agenten für den Resume-Aufruf am Leben.
 _paused_sg_agents: dict[str, tuple] = {}
+_paused_sg_agents_ts: dict[str, float] = {}  # session_id → Erstellungszeitpunkt (monotonic)
+_PAUSED_SG_AGENT_TTL_SECS: float = 300.0  # Gleicher TTL wie Redis-Key ninko:safeguard_tool_pending
+
 # Session-spezifische Locks verhindern parallele Safeguard-Runs/Resumes
 _safeguard_session_locks: dict[str, asyncio.Lock] = {}
+_safeguard_session_locks_ts: dict[str, float] = {}  # session_id → Erstellungszeitpunkt (monotonic)
+_SAFEGUARD_LOCK_TTL_SECS: float = 86400.0  # 24h
 
 _global_safeguard: "SafeguardMiddleware | None" = None
 
@@ -664,9 +686,26 @@ def set_global_safeguard(sg: "SafeguardMiddleware") -> None:
 
 
 def _get_safeguard_session_lock(session_id: str) -> asyncio.Lock:
-    """Gibt den Lock für eine Session zurück (lazy init)."""
+    """Gibt den Lock für eine Session zurück (lazy init, TTL 24h).
+
+    Bereinigt abgelaufene Einträge bei jedem Aufruf, um unbegrenztes Wachstum
+    des Dicts zu verhindern (Memory-Leak-Fix).
+    """
+    import time
+
+    now = time.monotonic()
+    # Abgelaufene Locks aufräumen (TTL 24h) — O(n) pro Aufruf, aber n ist klein
+    expired = [
+        sid
+        for sid, ts in _safeguard_session_locks_ts.items()
+        if now - ts > _SAFEGUARD_LOCK_TTL_SECS
+    ]
+    for sid in expired:
+        _safeguard_session_locks.pop(sid, None)
+        _safeguard_session_locks_ts.pop(sid, None)
     if session_id not in _safeguard_session_locks:
         _safeguard_session_locks[session_id] = asyncio.Lock()
+        _safeguard_session_locks_ts[session_id] = now
     return _safeguard_session_locks[session_id]
 
 
@@ -1000,9 +1039,14 @@ class BaseAgent:
         # Komprimierungs-Zusammenfassungen aus der History einsammeln (role="system")
         # und in den System-Prompt integrieren (nicht als separate SystemMessage —
         # Thinking-Modelle wie Qwen3.5 akzeptieren nur EINEN System-Block am Anfang)
+        # Guard gegen Duplikate bei mehrfachen Compaction-Zyklen
+        _seen_system_contents: set[str] = set()
         for msg in trimmed_history:
             if msg.get("role") == "system":
-                final_system_prompt += "\n\n" + msg.get("content", "")
+                content = msg.get("content", "")
+                if content and content not in _seen_system_contents:
+                    final_system_prompt += "\n\n" + content
+                    _seen_system_contents.add(content)
 
         # RAG-Kontext in den System-Prompt integrieren
         try:
@@ -1130,6 +1174,19 @@ class BaseAgent:
             )
 
             if use_safeguard:
+                # Abgelaufene pausierte Agenten aufräumen (TTL = Redis-Key-TTL = 300s)
+                import time as _time_mod
+
+                _now_mono = _time_mod.monotonic()
+                _expired_paused = [
+                    sid
+                    for sid, ts in _paused_sg_agents_ts.items()
+                    if _now_mono - ts > _PAUSED_SG_AGENT_TTL_SECS
+                ]
+                for sid in _expired_paused:
+                    _paused_sg_agents.pop(sid, None)
+                    _paused_sg_agents_ts.pop(sid, None)
+
                 # Wenn bereits ein pausierter Tool-Call in dieser Session wartet, nicht überschreiben.
                 if session_id in _paused_sg_agents:
                     return _t(
@@ -1208,6 +1265,7 @@ class BaseAgent:
                 _task = asyncio.create_task(self._auto_memorize(message, response))
                 _background_tasks.add(_task)
                 _task.add_done_callback(_background_tasks.discard)
+                _task.add_done_callback(_log_bg_task_exception)
 
             return response, did_compact
 
@@ -1338,7 +1396,10 @@ class BaseAgent:
             tool_name, tool_args, sg_result = dangerous_call
 
             # Pausiert: Zustand im Modul-Dict speichern + in Redis vermerken
+            import time as _time_mod
+
             _paused_sg_agents[session_id] = (sg_agent, thread_config)
+            _paused_sg_agents_ts[session_id] = _time_mod.monotonic()
             from core.redis_client import get_redis
 
             redis = get_redis()
@@ -1446,6 +1507,7 @@ class BaseAgent:
 
             # Erfolg: pausierten Zustand + Pending-Key aufräumen
             _paused_sg_agents.pop(session_id, None)
+            _paused_sg_agents_ts.pop(session_id, None)
             try:
                 from core.redis_client import get_redis
 
