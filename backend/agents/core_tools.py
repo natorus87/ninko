@@ -1092,8 +1092,17 @@ async def run_pipeline(steps: list[dict]) -> str:
             task[:80],
         )
         try:
+            # Pipeline sub-steps: auto-confirm only if safeguard is disabled or profile is in auto mode.
+            # Strict profiles still require per-tool confirmation for destructive operations.
+            from agents.base_agent import _global_safeguard
+            pipeline_confirmed = (
+                _global_safeguard is None
+                or not _global_safeguard.enabled
+                or getattr(await _global_safeguard.resolve_profile(session_id=session_id), "auto_mode", False)
+            )
             result, _ = await agent.invoke(
-                message=full_task, chat_history=None, session_id=session_id
+                message=full_task, chat_history=None, session_id=session_id,
+                confirmed=pipeline_confirmed,
             )
         except _CORE_TOOL_EXCEPTIONS as exc:
             logger.error("Pipeline Schritt %d ('%s') Fehler: %s", i + 1, module, exc)
