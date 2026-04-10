@@ -64,7 +64,8 @@ async def check_openproject_health() -> dict:
             return {"status": "error", "detail": f"HTTP {resp.status_code}"}
 
     except httpx.HTTPStatusError as e:
-        return {"status": "error", "detail": f"HTTP {e.response.status_code}: {e.response.text[:100]}"}
+        logger.debug("OpenProject API full response: %s", e.response.text)
+        return {"status": "error", "detail": f"OpenProject API returned HTTP {e.response.status_code}. Check logs."}
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": str(exc)}
 
