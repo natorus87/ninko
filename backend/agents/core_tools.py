@@ -15,6 +15,7 @@ from core.tool_permissions import (
 
 # Strong references to background tasks to prevent premature GC
 _background_tasks: set[asyncio.Task] = set()
+_BG_TASKS_MAX = 1000  # Obergrenze für gleichzeitige Workflow-Tasks
 
 # Exportliste für externe Importe
 __all__ = [
@@ -120,19 +121,21 @@ _ALLOWED_COMMANDS = {
 
 logger = logging.getLogger("ninko.agents.core_tools")
 
-# opencode-Prinzip: Tool-Outputs auf sinnvolle Größe begrenzen
-_MAX_OUTPUT_CHARS = 4000
-_MAX_OUTPUT_LINES = 200
 
-
-def _truncate_output(
-    text: str, max_chars: int = _MAX_OUTPUT_CHARS, max_lines: int = _MAX_OUTPUT_LINES
-) -> str:
+def _truncate_output(text: str, max_chars: int = 0, max_lines: int = 0) -> str:
     """
     Kürzt Tool-Output auf max_lines Zeilen ODER max_chars Zeichen (was zuerst greift).
     Fügt am Ende einen Hinweis ein dass mehr Daten vorhanden sind.
     Analog zu opencode's Truncate.output() Prinzip.
     """
+    from core.config import get_settings
+
+    settings = get_settings()
+    if max_chars <= 0:
+        max_chars = settings.TOOL_MAX_OUTPUT_CHARS
+    if max_lines <= 0:
+        max_lines = settings.TOOL_MAX_OUTPUT_LINES
+
     lines = text.splitlines()
     total_lines = len(lines)
     total_chars = len(text)
@@ -703,6 +706,14 @@ async def execute_workflow(workflow_name_or_id: str) -> str:
                 "错误: 编排器尚未初始化。",
             )
         engine = WorkflowEngine(redis, orchestrator)
+        # Bounds-Check: ältesten Task canceln wenn Limit überschritten
+        if len(_background_tasks) >= _BG_TASKS_MAX:
+            _oldest = next(iter(_background_tasks), None)
+            if _oldest is not None:
+                logger.warning(
+                    "Workflow-Task-Limit (%d) erreicht — ältesten Task gecancelt.", _BG_TASKS_MAX
+                )
+                _oldest.cancel()
         _task = asyncio.create_task(engine.execute(wf, run_id))
         _background_tasks.add(_task)
         _task.add_done_callback(_background_tasks.discard)
@@ -1095,13 +1106,20 @@ async def run_pipeline(steps: list[dict]) -> str:
             # Pipeline sub-steps: auto-confirm only if safeguard is disabled or profile is in auto mode.
             # Strict profiles still require per-tool confirmation for destructive operations.
             from agents.base_agent import _global_safeguard
+
             pipeline_confirmed = (
                 _global_safeguard is None
                 or not _global_safeguard.enabled
-                or getattr(await _global_safeguard.resolve_profile(session_id=session_id), "auto_mode", False)
+                or getattr(
+                    await _global_safeguard.resolve_profile(session_id=session_id),
+                    "auto_mode",
+                    False,
+                )
             )
             result, _ = await agent.invoke(
-                message=full_task, chat_history=None, session_id=session_id,
+                message=full_task,
+                chat_history=None,
+                session_id=session_id,
                 confirmed=pipeline_confirmed,
             )
         except _CORE_TOOL_EXCEPTIONS as exc:
