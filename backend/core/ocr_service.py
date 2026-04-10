@@ -69,8 +69,8 @@ async def _ocr_python(image_bytes: bytes, language: str) -> str:
         ) from exc
 
     try:
-        img = Image.open(io.BytesIO(image_bytes))
-        text = pytesseract.image_to_string(img, lang=language or "deu+eng")
+        with Image.open(io.BytesIO(image_bytes)) as img:
+            text = pytesseract.image_to_string(img, lang=language or "deu+eng")
         return (text or "").strip()
     except (UnidentifiedImageError, OSError, RuntimeError, ValueError, TypeError) as exc:
         raise RuntimeError(f"Python OCR fehlgeschlagen: {exc}") from exc
