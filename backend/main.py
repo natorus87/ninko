@@ -673,7 +673,8 @@ async def _is_active_user_api_token(username: str, raw_token: str) -> bool:
                 return False
             return True
         return False
-    except Exception:
+    except Exception as exc:
+        logger.warning("API token check failed: %s", exc)
         return False
 
 
