@@ -64,6 +64,25 @@ def _parse_github_url(url: str) -> tuple[str, str] | None:
     return (m.group(1), m.group(2)) if m else None
 
 
+_SAFE_BRANCH_RE = re.compile(r"^[a-zA-Z0-9_./ -]{1,128}$")
+
+
+def _validate_branch(branch: str) -> str:
+    """Validiert und gibt den Branch-Namen zurück (CWE-20).
+
+    GitHub-Branch-Namen erlauben nur alphanumerische Zeichen, Punkte,
+    Bindestriche, Schrägstriche und Leerzeichen. Sonderzeichen wie
+    `..`, `?`, `#`, `@` sind in Git-Refs unzulässig.
+
+    Raises:
+        ValueError: wenn der Branch-Name ungültig ist.
+    """
+    branch = branch.strip()
+    if not branch or not _SAFE_BRANCH_RE.match(branch) or ".." in branch:
+        raise ValueError(f"Ungültiger Branch-Name: {branch!r}")
+    return branch
+
+
 def _version_tuple(v: str) -> tuple[int, ...]:
     """Convert version string to tuple for comparison. Returns (0,) for empty/invalid versions."""
     if not v or not isinstance(v, str):
@@ -474,10 +493,12 @@ async def install_requirements_if_exist(plugin_dir: Path) -> bool:
     if not req_file.is_file():
         return True
 
-    # Validate requirements.txt for dangerous patterns
+    # Validate requirements.txt for dangerous patterns (CWE-20).
+    # Normalisiere Whitespace vor dem Check um Bypass via Tabs/Spaces zu verhindern.
     req_content = req_file.read_text(encoding="utf-8", errors="replace")
+    req_content_normalized = " ".join(req_content.lower().split())
     for pattern in _DANGEROUS_REQ_PATTERNS:
-        if pattern in req_content:
+        if pattern.lower() in req_content_normalized:
             logger.error("requirements.txt enthält unerlaubtes Muster: %s", pattern)
             return False
 
@@ -771,7 +792,10 @@ async def list_repo_modules(request: Request, repo_id: str) -> JSONResponse:
         )
 
     owner, repo_name = parsed
-    branch = repo_cfg.get("branch", "main")
+    try:
+        branch = _validate_branch(repo_cfg.get("branch", "main"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     modules_path = repo_cfg.get("modules_path", "backend/modules_catalog")
     headers = _github_headers(repo_cfg.get("github_token", ""))
 
@@ -943,7 +967,10 @@ async def install_from_repo(
         )
 
     owner, repo_name = parsed
-    branch = repo_cfg.get("branch", "main")
+    try:
+        branch = _validate_branch(repo_cfg.get("branch", "main"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     modules_path = repo_cfg.get("modules_path", "backend/modules_catalog")
     headers = _github_headers(repo_cfg.get("github_token", ""))
 
@@ -1186,7 +1213,10 @@ async def reinstall_plugin(request: Request, plugin_name: str) -> JSONResponse:
         raise HTTPException(status_code=400, detail="Ungültige Repo-URL.")
 
     owner, repo_name = parsed
-    branch = repo_cfg.get("branch", "main")
+    try:
+        branch = _validate_branch(repo_cfg.get("branch", "main"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     modules_path = repo_cfg.get("modules_path", "backend/modules_catalog")
 
     plugins_dir = Path(__file__).resolve().parent.parent / "plugins"
