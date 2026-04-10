@@ -212,6 +212,7 @@ const Ninko = {
         this.initSafeguard();
         this._initCtxIndicator();
         this.initSidebarAccountMenu();
+        this.initMobileMenu();
         document.documentElement.classList.remove('light-mode-pre');
         document.body.style.opacity = '1';
     },
@@ -311,6 +312,60 @@ const Ninko = {
         const menu = document.getElementById('sidebar-account-menu');
         if (wrap) wrap.classList.remove('menu-open');
         if (menu) menu.style.display = 'none';
+    },
+
+    /**
+     * Initialize mobile hamburger menu and sidebar toggle.
+     * Handles sidebar open/close on screens <= 480px.
+     */
+    initMobileMenu() {
+        const hamburgerBtn = document.getElementById('hamburger-btn');
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('sidebar-overlay');
+
+        if (!hamburgerBtn || !sidebar || !overlay) return;
+
+        // Toggle sidebar on hamburger button click
+        hamburgerBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            sidebar.classList.toggle('mobile-open');
+            overlay.classList.toggle('mobile-open');
+        });
+
+        // Close sidebar when clicking on overlay
+        overlay.addEventListener('click', () => {
+            sidebar.classList.remove('mobile-open');
+            overlay.classList.remove('mobile-open');
+        });
+
+        // Close sidebar when clicking on any sidebar navigation item
+        const navTabs = sidebar.querySelectorAll('.nav-tab');
+        navTabs.forEach((tab) => {
+            tab.addEventListener('click', () => {
+                if (window.innerWidth <= 480) {
+                    sidebar.classList.remove('mobile-open');
+                    overlay.classList.remove('mobile-open');
+                }
+            });
+        });
+
+        // Close sidebar when clicking outside of it on mobile
+        document.addEventListener('click', (e) => {
+            if (window.innerWidth <= 480 &&
+                !sidebar.contains(e.target) &&
+                !hamburgerBtn.contains(e.target)) {
+                sidebar.classList.remove('mobile-open');
+                overlay.classList.remove('mobile-open');
+            }
+        });
+
+        // Close sidebar on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                sidebar.classList.remove('mobile-open');
+                overlay.classList.remove('mobile-open');
+            }
+        });
     },
 
     openSettingsFromMenu() {
