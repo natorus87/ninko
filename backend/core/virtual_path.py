@@ -42,15 +42,19 @@ class VirtualPathSystem:
         for prefix, real in sorted(self._mounts.items(), key=lambda x: -len(x[0])):
             if virtual_path.startswith(prefix):
                 relative = virtual_path[len(prefix) :].lstrip("/")
-                resolved = (real / relative).resolve()
+                candidate = real / relative
+                # os.path.realpath folgt Symlinks bevor wir den Whitelist-Check machen
+                # — verhindert Symlink-Breakout (z.B. /sandbox/link → /etc/passwd)
+                resolved = Path(os.path.realpath(candidate))
 
-                if not str(resolved).startswith(str(real)):
+                if not str(resolved).startswith(str(real) + os.sep) and resolved != real:
                     raise VirtualPathError(f"Path traversal detected: {virtual_path}")
                 return resolved
 
-        resolved = (self._base / virtual_path.lstrip("/")).resolve()
+        candidate = self._base / virtual_path.lstrip("/")
+        resolved = Path(os.path.realpath(candidate))
 
-        if not str(resolved).startswith(str(self._base)):
+        if not str(resolved).startswith(str(self._base) + os.sep) and resolved != self._base:
             raise VirtualPathError(f"Path traversal detected: {virtual_path}")
         return resolved
 
