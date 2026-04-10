@@ -615,8 +615,8 @@ class _StatusEmitter(AsyncCallbackHandler):
                         )
                     )
                     _tok_task.add_done_callback(_log_bg_task_exception)
-        except Exception:
-            pass  # Token-Tracking darf nie blockieren
+        except Exception as _tok_exc:
+            logger.warning("Token-Tracking fehlgeschlagen (ignoriert): %s", _tok_exc)
 
 
 _DEFAULT_AGENT_TIMEOUT_SECONDS = 1800
@@ -935,6 +935,12 @@ class BaseAgent:
         # LLM neu initialisieren wenn Provider gewechselt wurde
         current_gen = get_llm_generation()
         if current_gen != self._llm_generation:
+            # Alten Agent aufräumen (HTTP-Connections / Streams schließen)
+            if hasattr(self._agent, "aclose"):
+                try:
+                    await self._agent.aclose()
+                except Exception as _cleanup_exc:
+                    logger.debug("LLM-Agent cleanup fehlgeschlagen (ignoriert): %s", _cleanup_exc)
             self._llm = get_llm()
             self._agent = create_react_agent(model=self._llm, tools=self.tools)
             self._llm_generation = current_gen
@@ -1146,6 +1152,10 @@ class BaseAgent:
                 messages.append(AIMessage(content=content))
             # role="system" → bereits in final_system_prompt integriert
             # role="system_compaction" → UI-Notification, nicht für LLM bestimmt
+            elif role not in ("system", "system_compaction", "tool"):
+                logger.warning(
+                    "Unbekannte Message-Rolle '%s' nach Compaction — übersprungen.", role
+                )
 
         messages.append(HumanMessage(content=message))
 
@@ -1261,6 +1271,12 @@ class BaseAgent:
                 and self.name not in _MEMORIZE_EXCLUDED_AGENTS
                 and (_now - _last) >= _get_memorize_cooldown_secs()
             ):
+                # LRU-Schutz: Dict auf max 5000 Einträge begrenzen
+                if len(_memorize_cooldowns) > 5000:
+                    # Älteste Einträge entfernen (nach Timestamp sortiert)
+                    _oldest = sorted(_memorize_cooldowns, key=lambda k: _memorize_cooldowns[k])
+                    for _k in _oldest[:500]:
+                        _memorize_cooldowns.pop(_k, None)
                 _memorize_cooldowns[_cooldown_key] = _now
                 _task = asyncio.create_task(self._auto_memorize(message, response))
                 _background_tasks.add(_task)
