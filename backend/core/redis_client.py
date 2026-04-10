@@ -38,21 +38,60 @@ class RedisClient:
         """Gibt die Redis-Connection zurück."""
         return self._redis
 
+    async def hgetall_paginated(self, key: str, page_size: int = 100) -> dict:
+        """Holt alle Einträge aus einem Redis Hash mit HSCAN-Pagination.
+
+        HSCAN iteriert über große Hashes ohne sie komplett in den RAM zu laden.
+        Bessere Performance als hgetall() bei 1000+ Einträgen.
+
+        Args:
+            key: Redis Hash-Key
+            page_size: Anzahl der Einträge pro Scan-Iteration (default: 100)
+
+        Returns:
+            Vollständiger dict mit allen Hash-Einträgen
+        """
+        result = {}
+        cursor = 0
+
+        while True:
+            cursor, partial = await self._redis.hscan(key, cursor, count=page_size)
+            result.update(partial)
+            if cursor == 0:
+                break
+
+        return result
+
     # ── Chat-History (Working Memory) ──────────────────
     async def store_chat_message(
-        self, session_id: str, role: str, content: str, max_messages: int = 50
+        self, session_id: str, role: str, content: str, max_messages: int = 100
     ) -> None:
-        """Speichert eine Chat-Nachricht in der Working Memory."""
+        """Speichert eine Chat-Nachricht in der Working Memory.
+
+        Args:
+            session_id: Session-Identifikator
+            role: Nachrichtenrolle (user, assistant, system_compaction, etc.)
+            content: Nachrichteninhalt
+            max_messages: Maximum Anzahl der gespeicherten Nachrichten (default=100, alte werden gelöscht)
+        """
         key = f"{self.CHAT_HISTORY_PREFIX}{session_id}"
         message = json.dumps({"role": role, "content": content})
         await self._redis.rpush(key, message)
         await self._redis.ltrim(key, -max_messages, -1)
         await self._redis.expire(key, 86400)  # 24h TTL
 
-    async def get_chat_history(self, session_id: str) -> list[dict]:
-        """Gibt die Chat-History einer Session zurück."""
+    async def get_chat_history(self, session_id: str, limit: int = 100) -> list[dict]:
+        """Gibt die Chat-History einer Session zurück (maximal die neuesten `limit` Nachrichten).
+
+        Args:
+            session_id: Session-Identifikator
+            limit: Maximum Anzahl der zurückzugebenden Nachrichten (neueste zuerst), default=100
+
+        Returns:
+            Liste der Chat-Nachrichten, begrenzt auf die letzten `limit` Einträge
+        """
         key = f"{self.CHAT_HISTORY_PREFIX}{session_id}"
-        raw = await self._redis.lrange(key, 0, -1)
+        raw = await self._redis.lrange(key, -limit, -1)
         return [json.loads(msg) for msg in raw]
 
     async def clear_chat_history(self, session_id: str) -> None:
@@ -88,9 +127,20 @@ class RedisClient:
         await self._redis.hset(self._ui_history_key(tenant_id), conv_id, json.dumps(conversation))
 
     async def ui_history_get_all(self, *, tenant_id: str = "default") -> list[dict]:
-        """Gibt alle gespeicherten Konversationen zurück (sortiert nach updatedAt desc)."""
-        raw = await self._redis.hgetall(self._ui_history_key(tenant_id))
-        entries = [json.loads(v) for v in raw.values()]
+        """Gibt alle gespeicherten Konversationen zurück (sortiert nach updatedAt desc).
+
+        Nutzt hgetall_paginated() für effiziente Pagination bei vielen Einträgen.
+        """
+        raw = await self.hgetall_paginated(self._ui_history_key(tenant_id))
+        entries = []
+
+        for value in raw.values():
+            try:
+                entries.append(json.loads(value))
+            except (json.JSONDecodeError, ValueError):
+                # Malformed entry — skip silently
+                continue
+
         entries.sort(key=lambda e: e.get("updatedAt", 0), reverse=True)
         return entries
 
