@@ -44,8 +44,15 @@ _DEFAULT_REPOS: list[dict[str, str]] = [
     }
 ]
 _marketplace_cache: dict[str, Any] = {}
-_CACHE_TTL = 300  # 5 Minuten
+_CACHE_TTL = 0  # Will be loaded from settings dynamically
 _REDIS_PLUGIN_META_KEY = "ninko:plugins:metadata"
+
+
+def _get_cache_ttl() -> int:
+    """Get cache TTL from settings (lazy load)."""
+    from core.config import get_settings
+
+    return get_settings().PLUGIN_CACHE_TTL_SECONDS
 
 
 # ─── Hilfsfunktionen ──────────────────────────────────────────────────────────
@@ -116,20 +123,79 @@ def _is_repo_allowed(repo_url: str) -> bool:
     )
 
 
+# ─── Token-Verschlüsselung (CWE-256 Fix) ────────────────────────────────────
+# GitHub-Tokens werden verschlüsselt in Redis gespeichert (Fernet AES-128-CBC).
+# Schlüssel wird aus SESSION_SECRET abgeleitet — wenn kein Secret gesetzt ist,
+# wird der Token zwar gespeichert, aber eine Warnung geloggt.
+_TOKEN_PREFIX = "fernet:"
+
+
+def _get_fernet() -> "Fernet | None":
+    """Gibt eine Fernet-Instanz zurück, Schlüssel aus SESSION_SECRET abgeleitet."""
+    import hashlib
+
+    from cryptography.fernet import Fernet
+
+    secret = os.getenv("SESSION_SECRET", "").strip()
+    if not secret:
+        logger.warning(
+            "SESSION_SECRET nicht gesetzt — GitHub-Token kann nicht verschlüsselt werden."
+        )
+        return None
+    key = base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest())
+    return Fernet(key)
+
+
+def _encrypt_token(token: str) -> str:
+    """Verschlüsselt einen Token mit Fernet. Gibt Plaintext zurück wenn kein Secret."""
+    if not token:
+        return token
+    fernet = _get_fernet()
+    if fernet is None:
+        return token
+    return _TOKEN_PREFIX + fernet.encrypt(token.encode()).decode()
+
+
+def _decrypt_token(stored: str) -> str:
+    """Entschlüsselt einen Fernet-Token. Gibt Plaintext zurück bei Legacy-Einträgen."""
+    if not stored or not stored.startswith(_TOKEN_PREFIX):
+        return stored  # Backwards-compatible: Legacy-Plaintext-Token
+    from cryptography.fernet import InvalidToken
+
+    fernet = _get_fernet()
+    if fernet is None:
+        return ""
+    try:
+        return fernet.decrypt(stored[len(_TOKEN_PREFIX):].encode()).decode()
+    except InvalidToken:
+        logger.warning("GitHub-Token konnte nicht entschlüsselt werden — Token gelöscht.")
+        return ""
+
+
 async def _load_repos() -> list[dict[str, Any]]:
-    """Lädt die Repo-Liste aus Redis. Gibt Default zurück wenn leer."""
+    """Lädt die Repo-Liste aus Redis. Tokens werden on-the-fly entschlüsselt."""
     redis = get_redis()
     raw = await redis.connection.get(_REDIS_REPOS_KEY)
     if raw:
         repos = json.loads(raw)
         if repos:
+            for repo in repos:
+                if repo.get("github_token"):
+                    repo["github_token"] = _decrypt_token(repo["github_token"])
             return repos
     return list(_DEFAULT_REPOS)
 
 
 async def _save_repos(repos: list[dict[str, Any]]) -> None:
+    """Speichert die Repo-Liste in Redis. Tokens werden vor dem Speichern verschlüsselt."""
+    encrypted_repos = []
+    for repo in repos:
+        repo_copy = dict(repo)
+        if repo_copy.get("github_token"):
+            repo_copy["github_token"] = _encrypt_token(repo_copy["github_token"])
+        encrypted_repos.append(repo_copy)
     redis = get_redis()
-    await redis.connection.set(_REDIS_REPOS_KEY, json.dumps(repos))
+    await redis.connection.set(_REDIS_REPOS_KEY, json.dumps(encrypted_repos))
     _marketplace_cache.clear()
 
 
@@ -697,7 +763,7 @@ async def list_repo_modules(request: Request, repo_id: str) -> JSONResponse:
         f"{repo_cfg['repo_url']}:{repo_cfg['branch']}:{repo_cfg['modules_path']}"
     )
     cached = _marketplace_cache.get(cache_key)
-    if cached and time.time() - cached["ts"] < _CACHE_TTL:
+    if cached and time.time() - cached["ts"] < _get_cache_ttl():
         return JSONResponse(
             content=_build_module_list(
                 cached["modules"], registry, plugins_dir, plugin_meta
