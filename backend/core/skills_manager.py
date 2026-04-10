@@ -20,6 +20,15 @@ Format einer SKILL.md:
 
 `modules` kann eine Liste von Modul-Namen sein (nur für diese Agenten injizieren)
 oder weggelassen werden / `*` für alle Agenten.
+
+ABGRENZUNG zu den anderen Kontextsystemen:
+  Skills   = WIE löst der Agent eine bestimmte Klasse von Aufgaben?
+             Prozedurales Domänenwissen (Checklisten, Runbooks, Schritt-für-Schritt).
+             Wird per Keyword-Match lazy pro Request injiziert (max 2 Skills).
+
+  Soul     = WER ist der Agent? Charakter, dauerhafter Stil (soul_manager.py).
+
+  Memory   = WAS wurde erlebt? Semantische Fakten aus Interaktionen (memory.py).
 """
 
 from __future__ import annotations

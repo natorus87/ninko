@@ -1,6 +1,16 @@
 """
 Ninko Semantic Memory – ChromaDB-basiert.
 Speichert Incidents, Runbooks und Chat-Kontext als Embeddings.
+
+ABGRENZUNG zu den anderen Kontextsystemen:
+  Memory   = WAS wurde in der Vergangenheit erlebt/gelernt?
+             Semantische Fakten aus Chat-Interaktionen werden als Vektor-Embeddings
+             in ChromaDB gespeichert und per RAG-Suche (top-k) pro Request abgerufen.
+             Enthält Fakten über Systeme, Vorfälle, Konfigurationen.
+
+  Soul     = WER ist der Agent? Charakter, dauerhafter Stil (soul_manager.py).
+
+  Skills   = WIE löst der Agent Aufgaben? Prozedurales Wissen (skills_manager.py).
 """
 
 from __future__ import annotations

@@ -5,6 +5,19 @@ Verwaltet Soul MDs: die persistente Identität jedes Agenten.
 - Ninkos eigene Soul MD wird aus backend/souls/ninko.md geladen (built-in, im Image).
 - Agent-Souls werden in Redis gespeichert (ninko:souls) und beim Start geladen.
 - Dynamisch erstellte Agenten erhalten beim Register automatisch eine generierte Soul MD.
+
+ABGRENZUNG zu den anderen Kontextsystemen:
+  Soul     = WER ist der Agent? Charakter, Persönlichkeit, dauerhafter Stil.
+             Wird einmal beim Agenten-Start in den System-Prompt injiziert.
+             Ändert sich nur bei expliziter Neukonfiguration.
+
+  Skills   = WIE löst der Agent eine bestimmte Klasse von Aufgaben?
+             Prozedurales Domänenwissen (z.B. K8s-Debugging-Checkliste).
+             Wird per Keyword-Match lazy pro Request injiziert (max 2 Skills).
+
+  Memory   = WAS wurde in der Vergangenheit erlebt/gelernt?
+             Semantische Fakten aus Chat-Interaktionen (ChromaDB-Embeddings).
+             Wird per RAG-Suche pro Request abgerufen (top-k relevante Chunks).
 """
 
 from __future__ import annotations
