@@ -34,6 +34,18 @@ from agents.base_agent import _t
 logger = logging.getLogger("ninko.api.settings")
 router = APIRouter(prefix="/api/settings", tags=["Settings"])
 
+# Gemeinsame Exception-Typen für Settings-Operationen (Redis-Lese/Schreib-Fehler,
+# Deserialisierung, Import-Fehler bei optionalen Modulen)
+_SETTINGS_RECOVERABLE_EXCEPTIONS = (
+    RuntimeError,
+    ValueError,
+    TypeError,
+    KeyError,
+    OSError,
+    ImportError,
+    json.JSONDecodeError,
+)
+
 REDIS_KEY_LLM = "ninko:settings:llm"
 REDIS_KEY_MODULES = "ninko:settings:modules"
 REDIS_KEY_K8S_CLUSTERS = "ninko:settings:k8s_clusters"
@@ -136,16 +148,8 @@ async def update_llm_settings(body: LlmSettings) -> LlmSettingsResponse:
                 existing = json.loads(existing_raw)
                 if existing.get("api_key"):
                     payload["api_key"] = existing["api_key"]
-            except (
-                RuntimeError,
-                ValueError,
-                TypeError,
-                KeyError,
-                OSError,
-                ImportError,
-                json.JSONDecodeError,
-            ):
-                pass
+            except _SETTINGS_RECOVERABLE_EXCEPTIONS as exc:
+                logger.warning("API-Key aus bestehenden LLM-Settings konnte nicht gelesen werden: %s", exc)
 
     await redis.connection.set(REDIS_KEY_LLM, json.dumps(payload))
     logger.info(
@@ -261,16 +265,8 @@ async def get_branding_settings() -> BrandingSettingsResponse:
             data = json.loads(raw)
             merged = {**defaults, **(data or {})}
             return BrandingSettingsResponse(**merged, source="redis")
-        except (
-            RuntimeError,
-            ValueError,
-            TypeError,
-            KeyError,
-            OSError,
-            ImportError,
-            json.JSONDecodeError,
-        ):
-            pass
+        except _SETTINGS_RECOVERABLE_EXCEPTIONS as exc:
+            logger.warning("Branding-Settings aus Redis konnten nicht geladen werden, Defaults verwendet: %s", exc)
     return BrandingSettingsResponse(**defaults, source="default")
 
 
@@ -507,16 +503,8 @@ async def delete_branding_asset(filename: str) -> dict:
                 changed = True
             if changed:
                 await redis.connection.set(REDIS_KEY_BRANDING, json.dumps(data))
-        except (
-            RuntimeError,
-            ValueError,
-            TypeError,
-            KeyError,
-            OSError,
-            ImportError,
-            json.JSONDecodeError,
-        ):
-            pass
+        except _SETTINGS_RECOVERABLE_EXCEPTIONS as exc:
+            logger.warning("Branding-Settings nach Asset-Löschung konnten nicht aktualisiert werden: %s", exc)
 
     return {"deleted": True, "filename": filename}
 
@@ -1108,16 +1096,8 @@ async def list_k8s_clusters() -> K8sClusterListResponse:
                     has_kubeconfig=True,
                 )
             ]
-        except (
-            RuntimeError,
-            ValueError,
-            TypeError,
-            KeyError,
-            OSError,
-            ImportError,
-            json.JSONDecodeError,
-        ):
-            pass
+        except _SETTINGS_RECOVERABLE_EXCEPTIONS as exc:
+            logger.warning("Kubeconfig aus Umgebungsvariablen konnte nicht geladen werden: %s", exc)
 
     return K8sClusterListResponse(clusters=clusters, total=len(clusters))
 
@@ -1305,16 +1285,8 @@ async def update_tts_settings(body: dict) -> dict:
         import core.tts as _tts_mod
 
         _tts_mod._service = None
-    except (
-        RuntimeError,
-        ValueError,
-        TypeError,
-        KeyError,
-        OSError,
-        ImportError,
-        json.JSONDecodeError,
-    ):
-        pass
+    except _SETTINGS_RECOVERABLE_EXCEPTIONS as exc:
+        logger.warning("TTS-Service-Singleton konnte nicht zurückgesetzt werden: %s", exc)
 
     logger.info("TTS-Settings aktualisiert: %s", data)
     return {"status": "saved", **data}
@@ -1408,16 +1380,8 @@ async def update_stt_settings(body: dict) -> dict:
             from api.routes_transcription import invalidate_whisper_cache
 
             invalidate_whisper_cache()
-        except (
-            RuntimeError,
-            ValueError,
-            TypeError,
-            KeyError,
-            OSError,
-            ImportError,
-            json.JSONDecodeError,
-        ):
-            pass
+        except _SETTINGS_RECOVERABLE_EXCEPTIONS as exc:
+            logger.warning("Whisper-Cache konnte nicht invalidiert werden: %s", exc)
 
     logger.info(
         "STT-Settings aktualisiert: %s",
