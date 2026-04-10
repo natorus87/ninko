@@ -1868,11 +1868,22 @@ JSON-SCHEMA:
                             tools=readonly_tools,
                         )
                         try:
-                            response, did_compact = await subagent.invoke(
+                            result = await subagent.invoke(
                                 task=message,
                                 chat_history=chat_history,
                                 sub_tasks=complexity.get("sub_tasks"),
                             )
+                            # invoke() muss (str, bool) zurückgeben — defensiver Unpack
+                            if isinstance(result, tuple) and len(result) == 2:
+                                response, did_compact = result
+                            else:
+                                logger.warning(
+                                    "DataAnalysisSubagent.invoke() hat kein (str, bool)-Tuple "
+                                    "zurückgegeben (type=%s) — did_compact=False angenommen.",
+                                    type(result).__name__,
+                                )
+                                response = result if isinstance(result, str) else str(result)
+                                did_compact = False
                         finally:
                             _cleanup_subagent(session_id, target_module)
                         return response, target_module, did_compact
