@@ -329,8 +329,9 @@ async def _check_module_update_from_repo(
                 "update_available": _version_tuple(repo_version)
                 > _version_tuple(installed_version),
             }
-    except Exception:
-        return {"update_available": False}
+    except Exception as exc:
+        logger.warning("Update check failed for %s: %s", mod_name, exc)
+        return {"update_available": False, "check_failed": True}
 
 
 @router.get("/check-updates")
@@ -476,16 +477,18 @@ async def upload_plugin(request: Request, file: UploadFile = File(...)) -> JSONR
                     status_code=400,
                     detail=f"ZIP-Archiv zu groß: {total_size // (1024 * 1024)} MB (max. 100 MB unkomprimiert).",
                 )
+            extract_dir_resolved = extract_dir.resolve()
             for member in members:
                 if hasattr(member, "is_symlink") and member.is_symlink():
                     raise HTTPException(
                         status_code=400,
                         detail="ZIP-Archiv enthält symbolische Links (nicht erlaubt).",
                     )
-                if ".." in member.filename or member.filename.startswith("/"):
+                dest_path = (extract_dir / member.filename).resolve()
+                if not str(dest_path).startswith(str(extract_dir_resolved)):
                     raise HTTPException(
                         status_code=400,
-                        detail=f"ZIP-Archiv enthält ungültigen Pfad: {member.filename}",
+                        detail="ZIP-Archiv enthält ungültigen Pfad (Path-Traversal verhindert).",
                     )
             zip_ref.extractall(extract_dir)
 
@@ -924,16 +927,18 @@ async def install_from_repo(
                 raise HTTPException(
                     status_code=400, detail="Modul zu groß (max. 100 MB)."
                 )
+            extract_dir_resolved = extract_dir.resolve()
             for member in members:
                 if hasattr(member, "is_symlink") and member.is_symlink():
                     raise HTTPException(
                         status_code=400,
                         detail="ZIP-Archiv enthält symbolische Links (nicht erlaubt).",
                     )
-                if ".." in member.filename or member.filename.startswith("/"):
+                dest_path = (extract_dir / member.filename).resolve()
+                if not str(dest_path).startswith(str(extract_dir_resolved)):
                     raise HTTPException(
                         status_code=400,
-                        detail=f"ZIP-Archiv enthält ungültigen Pfad: {member.filename}",
+                        detail="ZIP-Archiv enthält ungültigen Pfad (Path-Traversal verhindert).",
                     )
             zip_ref.extractall(extract_dir)
 
