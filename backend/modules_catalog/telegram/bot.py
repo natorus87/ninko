@@ -101,6 +101,8 @@ class TelegramBot:
         self.offset = 0
         # Tracks sessions that were cleared while a request was in flight
         self._cleared_sessions: set[str] = set()
+        # Track background tasks to prevent memory leaks
+        self._background_tasks: set[asyncio.Task] = set()
 
     async def get_token(self) -> str | None:
         """Load the current Telegram bot token from the ConnectionManager."""
@@ -117,6 +119,12 @@ class TelegramBot:
 
         return None
 
+    def _track_task(self, task: asyncio.Task) -> asyncio.Task:
+        """Track a background task to prevent memory leaks."""
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+        return task
+
     async def start(self) -> None:
         """Start the polling loop as a background task."""
         if self.running:
@@ -132,7 +140,7 @@ class TelegramBot:
         logger.info("Telegram bot polling started.")
 
     async def stop(self) -> None:
-        """Stop the polling loop."""
+        """Stop the polling loop and cancel all background tasks."""
         if not self.running:
             return
 
@@ -144,6 +152,14 @@ class TelegramBot:
             except asyncio.CancelledError:
                 pass
         self.task = None
+
+        # Cancel all tracked background tasks
+        if self._background_tasks:
+            for task in list(self._background_tasks):
+                task.cancel()
+            await asyncio.gather(*self._background_tasks, return_exceptions=True)
+            self._background_tasks.clear()
+
         logger.info("Telegram bot polling stopped.")
 
     async def _poll_loop(self) -> None:
@@ -173,8 +189,12 @@ class TelegramBot:
                             updates = data.get("result", [])
                             for update in updates:
                                 self.offset = update["update_id"] + 1
-                                # Process each update as an independent task
-                                asyncio.create_task(self.handle_update(update, token))
+                                # Process each update as an independent tracked task
+                                self._track_task(
+                                    asyncio.create_task(
+                                        self.handle_update(update, token)
+                                    )
+                                )
                         else:
                             logger.error(
                                 "Telegram API Error: %s", data.get("description")
@@ -615,7 +635,9 @@ class TelegramBot:
         # ── React to the message + silent typing indicator ────────────────────
         if message_id:
             await self._react(token, chat_id, message_id, "⚡")
-        typing_task = asyncio.create_task(self._keep_typing(token, chat_id))
+        typing_task = self._track_task(
+            asyncio.create_task(self._keep_typing(token, chat_id))
+        )
 
         try:
             from core.safeguard import is_bot_confirmation, SAFEGUARD_PENDING_KEY
@@ -643,8 +665,8 @@ class TelegramBot:
                             f"https://api.telegram.org/bot{token}/answerCallbackQuery",
                             json={"callback_query_id": callback_query.get("id")},
                         )
-                except Exception:
-                    pass
+                except Exception as _cb_exc:
+                    logger.debug("answerCallbackQuery fehlgeschlagen (best-effort): %s", _cb_exc)
 
                 # Handle button click
                 if callback_data == "confirm_yes" and pending_raw:
