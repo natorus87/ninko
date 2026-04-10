@@ -5,7 +5,7 @@
 
 > **Status Overview:**
 > - 🔴 0 CRITICAL open ✅
-> - 🟡 14 HIGH open (code quality, concurrency, NEW: resource leaks)
+> - 🟡 0 HIGH open ✅
 > - 🟠 20 MEDIUM open
 > - 🟢 12 LOW open
 
@@ -20,98 +20,7 @@
 
 ## 🟡 HIGH – Open Issues
 
-### Code Quality – Exception Handling
-
-- [ ] **Breite Exception-Handler ermöglichen Silent Failures**
-  - Files: `backend/api/routes_plugins.py:575-583`, `backend/main.py:66-74, 167-176`
-  - Problem: Multi-Exception-Tupel mit 7+ Typen → maskiert echte Bugs
-  - Action: `_COMMON_STARTUP_EXCEPTIONS` Konstante + spezifisches Logging
-
-- [ ] **Broad `try/except Exception` in routes_subagent.py (NEW)**
-  - File: `backend/api/routes_subagent.py:97-114`
-  - Problem: Outer try/except um subagent step loading – swallowed errors
-  - Action: Targeted exceptions + logging
-
-- [ ] **Broad catch in DataAnalysisSubagent (NEW)**
-  - File: `backend/agents/data_analysis_subagent.py:377-383`
-  - Problem: Broad catch um StepTrackingHandler – masks root causes
-  - Action: Replace with specific exceptions
-
-- [ ] **Broad `except Exception` in on_llm_end (NEW)**
-  - File: `backend/agents/base_agent.py:596-618`
-  - Problem: Token-tracking errors swallowed silently
-  - Action: Log errors instead of silent pass
-
-- [ ] **Silent Exception-Handling ohne Logging (6 Stellen)**
-  - Files: `base_agent.py`, `data_analysis_subagent.py`, `metrics.py`, `routes_subagent.py`, `openproject/tools.py`, `telegram/bot.py`
-  - Problem: `except Exception: pass` → Datenverlust unmerklich
-  - Action: `logger.warning()` für jeden silent `pass`
-
-- [ ] **79 Zeilen duplizierten Exception-Code**
-  - Files: `routes_plugins.py:575-583`, `core_tools.py:247-258, 294-296, 304-312`
-  - Problem: Identische Exception-Handler mehrfach wiederholt
-  - Action: Refactor zu `core/exceptions.py` mit zentralen Exception-Sets
-
-- [ ] **Bare `except Exception:` in Auth Path**
-  - File: `backend/main.py:666`
-  - Problem: `_is_active_user_api_token` gibt False bei Exception zurück, ohne Logging
-  - Action: Spezifische Exceptions catchen + `logger.exception()` hinzufügen
-
-- [ ] **Silent Exception in Update Check**
-  - File: `backend/api/routes_plugins.py:332-333`
-  - Problem: `except Exception: return {"update_available": False}` ohne Logging
-  - Action: `logger.exception()` hinzufügen
-
-- [ ] **Silent `pass` in Exception Handlers (8 Stellen)**
-  - Files: `routes_settings.py:148,273,519,1118,1315,1418`, `telegram/bot.py:646-647`, `knowledge_graph/manifest.py:29-30`
-  - Problem: Fehler werden stillschweigend ignoriert
-  - Action: Mindestens `logger.warning()` hinzufügen
-
-### Agent Logic
-
-- [ ] **Alter LLM-Agent wird bei Provider-Wechsel nicht aufgeräumt**
-  - File: `backend/agents/base_agent.py:906-908`
-  - Problem: HTTP-Connection/Stream bleibt offen bei Provider-Wechsel
-  - Action: `if hasattr(self._agent, 'cleanup'): await self._agent.cleanup()`
-
-- [ ] **Keine Validation der Message-Rollen nach Compaction**
-  - File: `backend/agents/base_agent.py:1092-1106`
-  - Problem: Unbekannte `role`-Werte werden still ignoriert
-  - Action: `logger.warning("Unknown message role: %s — skipping", role)`
-
-### Concurrency
-
-- [ ] **Keine Bounds-Checking auf `_background_tasks`**
-  - File: `backend/agents/core_tools.py:708-710`
-  - Problem: Wächst unkontrolliert bei vielen `create_dag_workflow()`-Calls
-  - Action: Limit auf 1000 Tasks + Cancel des ältesten
-
-- [ ] **`_memorize_cooldowns` wächst unbegrenzt**
-  - File: `backend/agents/base_agent.py:1200-1210`
-  - Problem: `(agent_name, session_id)` Keys werden nie gelöscht
-  - Action: LRU-Dict mit max_size=5000
-
-- [ ] **`UnboundLocalError` möglich bei Subagent-Fehler**
-  - File: `backend/agents/orchestrator.py:1876-1877`
-  - Problem: `response` nicht definiert wenn `subagent.invoke()` wirft
-  - Action: Exception in `except` abfangen mit Fallback-Response
-
-### Resource Management
-
-- [ ] **Memory-Leak: `_safeguard_session_locks` wächst unbegrenzt (NEW)**
-  - File: `backend/core/safeguard.py:653-670`
-  - Problem: Globales Dict ohne TTL/Cleanup – wächst unbegrenzt
-  - Action: TTL-basiertes Cleanup implementieren (24h)
-
-- [ ] **Untracked `asyncio.create_task` (NEW)**
-  - File: `backend/agents/base_agent.py:~572-575`
-  - Problem: `emit_tool_event()` als Task gestartet ohne Tracking
-  - Action: Task in `_background_tasks` aufnehmen + add_done_callback
-
-- [ ] **Unclosed Resource: `Image.open()` (NEW)**
-  - File: `backend/core/ocr_service.py:72`
-  - Problem: `Image.open(io.BytesIO(...))` ohne Context Manager
-  - Action: `with Image.open(...) as img:` verwenden
+*Alle 14 HIGH Issues wurden am 2026-04-10 behoben. Siehe Completed-Tabelle.*
 
 
 ---
@@ -188,6 +97,14 @@
 
 | Date | Issue | Status |
 |------|-------|--------|
+| 2026-04-10 | on_llm_end `except Exception: pass` → logger.warning | ✅ FIXED |
+| 2026-04-10 | LLM-Agent Cleanup bei Provider-Wechsel (aclose() vor create_react_agent) | ✅ FIXED |
+| 2026-04-10 | Unbekannte Message-Rollen nach Compaction — logger.warning | ✅ FIXED |
+| 2026-04-10 | `_memorize_cooldowns` LRU-Schutz: max 5000 Einträge, 500 älteste entfernt | ✅ FIXED |
+| 2026-04-10 | routes_settings.py: `_SETTINGS_RECOVERABLE_EXCEPTIONS` Konstante + 6× logger.warning | ✅ FIXED |
+| 2026-04-10 | core_tools.py: `_background_tasks` Limit 1000, cancel oldest | ✅ FIXED |
+| 2026-04-10 | ocr_service.py: `Image.open()` → `with Image.open(...) as img:` | ✅ FIXED |
+| 2026-04-10 | telegram/bot.py: answerCallbackQuery silent pass → logger.debug | ✅ FIXED |
 | 2026-04-10 | GitHub-Token Verschlüsselung (CWE-256) via Fernet/SESSION_SECRET | ✅ FIXED |
 | 2026-04-10 | Skills/Soul/Memory Grenzen in Modul-Docstrings dokumentiert | ✅ FIXED |
 | 2026-04-10 | `_safeguard_session_locks` Memory-Leak — TTL 24h Cleanup | ✅ FIXED |
@@ -216,7 +133,7 @@
 | Priorität | Sicherheit | Backend | Performance | Frontend | Architektur | Total |
 |-----------|-----------|---------|------------|----------|------------|-------|
 | 🔴 CRITICAL | 0 | 0 | 0 | 0 | 0 | **0** |
-| 🟡 HIGH | 6 | 8 | 0 | 0 | 0 | **14** |
+| 🟡 HIGH | 0 | 0 | 0 | 0 | 0 | **0** |
 | 🟠 MEDIUM | 0 | 4 | 0 | 0 | 3 | **7** |
 | 🟢 LOW | 0 | 3 | 0 | 0 | 0 | **3** |
 
