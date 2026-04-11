@@ -135,6 +135,9 @@ class TelegramBot:
             logger.warning("Telegram bot token missing. Polling start aborted.")
             return
 
+        # Register native Telegram commands in menu
+        await self._register_commands(token)
+
         self.running = True
         self.task = asyncio.create_task(self._poll_loop())
         logger.info("Telegram bot polling started.")
@@ -161,6 +164,32 @@ class TelegramBot:
             self._background_tasks.clear()
 
         logger.info("Telegram bot polling stopped.")
+
+    async def _register_commands(self, token: str) -> None:
+        """
+        Register native Telegram bot commands in the menu (OpenClaw-style).
+        Commands appear in the Telegram command menu for easy access.
+        """
+        commands = [
+            {"command": "start", "description": "Start the bot / clear chat history"},
+            {"command": "clear", "description": "Clear chat history and reset"},
+            {"command": "reset", "description": "Reset conversation memory"},
+            {"command": "chatid", "description": "Show your Telegram Chat ID"},
+        ]
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                url = f"https://api.telegram.org/bot{token}/setMyCommands"
+                resp = await client.post(url, json={"commands": commands})
+                if resp.status_code == 200 and resp.json().get("ok"):
+                    logger.info(
+                        "Telegram commands registered: %s",
+                        [c["command"] for c in commands],
+                    )
+                else:
+                    logger.warning("Failed to register commands: %s", resp.text)
+        except Exception as exc:
+            logger.warning("Could not register Telegram commands: %s", exc)
 
     async def _poll_loop(self) -> None:
         """Main long-polling loop."""
@@ -229,14 +258,18 @@ class TelegramBot:
         chat_id: int,
         text: str,
         parse_mode: str = "",
+        reply_to_message_id: int | None = None,
     ) -> bool:
         """
         Send a message. Tries parse_mode first, falls back to plain text on error.
+        Supports reply threading via reply_to_message_id (OpenClaw-style).
         Returns True on success.
         """
         payload: dict[str, Any] = {"chat_id": chat_id, "text": text}
         if parse_mode:
             payload["parse_mode"] = parse_mode
+        if reply_to_message_id:
+            payload["reply_to_message_id"] = reply_to_message_id
 
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -251,6 +284,8 @@ class TelegramBot:
                 if parse_mode and resp.status_code == 400:
                     logger.debug("Markdown parsing failed, sending plain text.")
                     plain_payload = {"chat_id": chat_id, "text": text}
+                    if reply_to_message_id:
+                        plain_payload["reply_to_message_id"] = reply_to_message_id
                     resp2 = await client.post(
                         f"https://api.telegram.org/bot{token}/sendMessage",
                         json=plain_payload,
@@ -845,6 +880,7 @@ class TelegramBot:
                     chat_id,
                     "🗜️ <i>Conversation history has been compressed — older details have been summarized.</i>",
                     parse_mode="HTML",
+                    reply_to_message_id=message_id,
                 )
 
             # ── Voice-Reply: always voice for voice inputs, no text ────────────
@@ -942,18 +978,31 @@ class TelegramBot:
                         "Image send failed, falling back to text: %s", img_err
                     )
                     fallback = format_for_telegram(final_text)
-                    await self._send(token, chat_id, fallback, parse_mode="HTML")
+                    await self._send(
+                        token,
+                        chat_id,
+                        fallback,
+                        parse_mode="HTML",
+                        reply_to_message_id=message_id,
+                    )
                 return
 
             final_text = format_for_telegram(final_text)
 
             # Send response in chunks (Telegram limit: 4096 characters)
+            # Reply threading: first chunk replies to original message, rest are follow-ups
             chunks = [
                 final_text[i : i + _MAX_MSG_LEN]
                 for i in range(0, len(final_text), _MAX_MSG_LEN)
             ]
-            for chunk in chunks:
-                await self._send(token, chat_id, chunk, parse_mode="HTML")
+            for idx, chunk in enumerate(chunks):
+                await self._send(
+                    token,
+                    chat_id,
+                    chunk,
+                    parse_mode="HTML",
+                    reply_to_message_id=message_id if idx == 0 else None,
+                )
 
         except (
             RuntimeError,
@@ -973,6 +1022,7 @@ class TelegramBot:
                     f"❌ Fehler bei der Verarbeitung ({err_type}):\n{str(exc)[:300]}\n\nBitte versuche es erneut.",
                     f"❌ Error during processing ({err_type}):\n{str(exc)[:300]}\n\nPlease try again.",
                 ),
+                reply_to_message_id=message_id,
             )
         finally:
             typing_task.cancel()
