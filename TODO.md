@@ -108,7 +108,10 @@
 | 2026-04-11 | CWE-78: `mcp_registry.py` – Command + Argument Whitelist-Regex | ✅ FIXED |
 | 2026-04-11 | CWE-613: `auth.py`/`routes_auth.py` – Token-Blacklist bei Logout | ✅ FIXED |
 | 2026-04-11 | XSS: `app.js` + `index.html` – DOMPurify + `_escapeAttr()` URL-Escaping | ✅ FIXED |
-| 2026-04-11 | CWE-326: `vault.py` – PBKDF2 (210k Iterationen) statt SHA256 | ✅ FIXED |
+| 2026-04-11 | CWE-326: `vault.py` – PBKDF2 (210k Iterationen) mit transparentem Migration-Layer | ✅ FIXED |
+| | - Dual-Key Support: Neu (210k) + Legacy (100k) | |
+| | - Automatische Re-Verschlüsselung beim Lesen | |
+| | - Kein Breaking Change mehr – abwärtskompatibel | |
 | 2026-04-11 | CWE-379: `tls.py` – `/app/data/certs` mit mode=0o700/0o600 | ✅ FIXED |
 | 2026-04-11 | CWE-918: `routes_auth.py` – IP-Whitelist für `x-forwarded-proto` | ✅ FIXED |
 | 2026-04-07 | Synology Agent duplicate class definition | ✅ FIXED |

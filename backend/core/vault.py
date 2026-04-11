@@ -74,9 +74,13 @@ class VaultClient:
             )
             if self._hvac_client.is_authenticated():
                 self._backend = "vault"
-                logger.info("Vault-Backend initialisiert: %s", self._settings.VAULT_ADDR)
+                logger.info(
+                    "Vault-Backend initialisiert: %s", self._settings.VAULT_ADDR
+                )
             else:
-                logger.warning("Vault-Authentifizierung fehlgeschlagen – Fallback auf SQLite.")
+                logger.warning(
+                    "Vault-Authentifizierung fehlgeschlagen – Fallback auf SQLite."
+                )
                 self._init_sqlite()
         except _VAULT_EXCEPTIONS as exc:
             logger.warning("Vault nicht erreichbar (%s) – Fallback auf SQLite.", exc)
@@ -91,6 +95,8 @@ class VaultClient:
                 "SQLITE_SECRETS_KEY ist nicht gesetzt. "
                 "Bitte die Umgebungsvariable konfigurieren, um Secrets zu verschlüsseln."
             )
+
+        # NEU: PBKDF2 mit 210k Iterationen (CWE-326 compliant)
         key_bytes = hashlib.pbkdf2_hmac(
             "sha256",
             key_str.encode(),
@@ -99,11 +105,29 @@ class VaultClient:
         )
         self._fernet = Fernet(base64.urlsafe_b64encode(key_bytes))
 
+        # LEGACY: Alter Key mit weniger Iterationen (für Migration)
+        # Hinweis: 100k Iterationen waren der vorherige Standard
+        legacy_key_bytes = hashlib.pbkdf2_hmac(
+            "sha256",
+            key_str.encode(),
+            b"ninko_sqlite_secrets_v1",
+            100_000,  # Alter Standard
+        )
+        self._legacy_fernet = Fernet(base64.urlsafe_b64encode(legacy_key_bytes))
+
+        # Migration-Tracking
+        self._migration_count = 0
+
         # Sicherstellen, dass das Verzeichnis existiert
         db_dir = Path(self.SQLITE_DB_PATH).parent
         db_dir.mkdir(parents=True, exist_ok=True)
 
         logger.info("SQLite Secrets-Backend initialisiert: %s", self.SQLITE_DB_PATH)
+        if self._migration_count > 0:
+            logger.info(
+                "SQLite Migration: %d Secrets wurden automatisch migriert.",
+                self._migration_count,
+            )
 
     async def _ensure_sqlite_table(self, db: aiosqlite.Connection) -> None:
         """Erstellt die Secrets-Tabelle falls nötig."""
@@ -126,16 +150,40 @@ class VaultClient:
         return self._fernet.encrypt(data.encode()).decode()
 
     def _decrypt(self, data: str) -> str:
-        """Fernet-Entschlüsselung."""
+        """
+        Fernet-Entschlüsselung mit Dual-Key Support für Migration.
+
+        Versucht zuerst mit dem neuen PBKDF2-210k Key (CWE-326 compliant),
+        dann mit dem Legacy-Key (100k Iterationen) für alte Secrets.
+        """
         if not self._fernet:
             raise RuntimeError("Kein Verschlüsselungs-Backend initialisiert.")
+
+        # Versuche neuen Key (PBKDF2-210k)
         try:
             return self._fernet.decrypt(data.encode()).decode()
         except InvalidToken:
-            logger.error(
-                "Entschlüsselung fehlgeschlagen – Token ungültig oder mit altem Schlüssel verschlüsselt."
-            )
-            raise
+            pass  # Versuche Legacy-Key
+
+        # Versuche Legacy-Key (PBKDF2-100k)
+        if hasattr(self, "_legacy_fernet") and self._legacy_fernet:
+            try:
+                decrypted = self._legacy_fernet.decrypt(data.encode()).decode()
+                logger.info(
+                    "Legacy-Secret erfolgreich entschlüsselt – "
+                    "wird bei nächster Gelegenheit migriert."
+                )
+                return decrypted
+            except InvalidToken:
+                pass
+
+        logger.error(
+            "Entschlüsselung fehlgeschlagen – "
+            "Token ungültig oder mit unbekanntem Schlüssel verschlüsselt."
+        )
+        raise InvalidToken(
+            "Secret kann nicht entschlüsselt werden – möglicherweise mit altem/anderem Schlüssel verschlüsselt."
+        )
 
     # ── Read ───────────────────────────────────────────
     async def get_secret(self, key: str) -> str | None:
@@ -158,16 +206,71 @@ class VaultClient:
             return None
 
     async def _get_sqlite_secret(self, key: str) -> str | None:
-        """Liest ein Secret aus SQLite."""
+        """
+        Liest ein Secret aus SQLite.
+
+        Unterstützt automatische Migration von Legacy-Verschlüsselung:
+        - Versucht zuerst mit neuem PBKDF2-210k Key
+        - Falls das fehlschlägt, versucht Legacy PBKDF2-100k Key
+        - Bei erfolgreicher Legacy-Entschlüsselung: automatische Re-Verschlüsselung
+        """
         async with aiosqlite.connect(self.SQLITE_DB_PATH) as db:
             await self._ensure_sqlite_table(db)
             async with db.execute(
                 "SELECT value FROM secrets WHERE key = ?", (key,)
             ) as cursor:
                 row = await cursor.fetchone()
-                if row:
-                    return self._decrypt(row[0])
-        return None
+                if not row:
+                    return None
+
+                encrypted_value = row[0]
+
+                # Versuche mit neuem Key (PBKDF2-210k)
+                try:
+                    return self._fernet.decrypt(encrypted_value.encode()).decode()
+                except InvalidToken:
+                    pass
+
+                # Versuche mit Legacy-Key (PBKDF2-100k) und migriere
+                if hasattr(self, "_legacy_fernet") and self._legacy_fernet:
+                    try:
+                        decrypted = self._legacy_fernet.decrypt(
+                            encrypted_value.encode()
+                        ).decode()
+
+                        # Automatische Re-Verschlüsselung mit neuem Key
+                        logger.info(
+                            "Migriere Secret '%s' von Legacy-Verschlüsselung "
+                            "zu PBKDF2-210k",
+                            key,
+                        )
+                        await self._migrate_secret(db, key, decrypted)
+                        return decrypted
+                    except InvalidToken:
+                        pass
+
+                logger.error(
+                    "Secret '%s' kann nicht entschlüsselt werden – "
+                    "möglicherweise mit anderem Schlüssel verschlüsselt.",
+                    key,
+                )
+                raise InvalidToken(f"Secret '{key}' kann nicht entschlüsselt werden.")
+
+    async def _migrate_secret(
+        self, db: aiosqlite.Connection, key: str, value: str
+    ) -> None:
+        """Migriert ein Secret zur neuen Verschlüsselung (PBKDF2-210k)."""
+        encrypted = self._encrypt(value)
+        await db.execute(
+            """
+            UPDATE secrets 
+            SET value = ?, updated_at = CURRENT_TIMESTAMP 
+            WHERE key = ?
+            """,
+            (encrypted, key),
+        )
+        await db.commit()
+        self._migration_count += 1
 
     # ── Write ──────────────────────────────────────────
     async def set_secret(self, key: str, value: str) -> None:
@@ -221,7 +324,9 @@ class VaultClient:
             logger.info("Vault-Secret gelöscht: %s", key)
             return True
         except _VAULT_EXCEPTIONS as exc:
-            logger.warning("Vault-Secret '%s' konnte nicht gelöscht werden: %s", key, exc)
+            logger.warning(
+                "Vault-Secret '%s' konnte nicht gelöscht werden: %s", key, exc
+            )
             return False
 
     async def _delete_sqlite_secret(self, key: str) -> bool:
@@ -267,7 +372,11 @@ class VaultClient:
             try:
                 if self._hvac_client and self._hvac_client.is_authenticated():
                     return {"status": "ok", "backend": "vault"}
-                return {"status": "error", "backend": "vault", "detail": "Nicht authentifiziert"}
+                return {
+                    "status": "error",
+                    "backend": "vault",
+                    "detail": "Nicht authentifiziert",
+                }
             except _VAULT_EXCEPTIONS as exc:
                 return {"status": "error", "backend": "vault", "detail": str(exc)}
         else:
