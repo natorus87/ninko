@@ -481,13 +481,11 @@ const Ninko = {
 
                 // Load JS
                 try {
-                    const jsRes = await fetch(`/api/modules/${mod.name}/frontend/tab.js?v=${Date.now()}`);
-                    if (jsRes.ok) {
-                        const jsCode = await jsRes.text();
-                        const script = document.createElement('script');
-                        script.textContent = jsCode;
-                        document.body.appendChild(script);
-                    }
+                    const script = document.createElement('script');
+                    script.src = `/api/modules/${mod.name}/frontend/tab.js?v=${Date.now()}`;
+                    script.type = 'module';
+                    script.async = true;
+                    document.body.appendChild(script);
                 } catch {
                     // JS optional
                 }
@@ -2064,22 +2062,29 @@ const Ninko = {
     formatText(text) {
         // [NINKO_IMAGE:url] → inline <img> Tag (beliebige URL — lokal /api/images/ oder extern https://)
         // Backward-compat: akzeptiert auch alte [KUMIO_IMAGE:url]-Marker.
-        text = text.replace(/\[(?:NINKO_IMAGE|KUMIO_IMAGE):([^\]]+)\]/g,
-            '<img src="$1" alt="Generiertes Bild" style="max-width:100%;border-radius:8px;margin:0.5rem 0;box-shadow:0 2px 8px rgba(0,0,0,0.15);">');
+        text = text.replace(/\[(?:NINKO_IMAGE|KUMIO_IMAGE):([^\]]+)\]/g, (_, url) =>
+            `<img src="${this._escapeAttr(url)}" alt="Generiertes Bild" style="max-width:100%;border-radius:8px;margin:0.5rem 0;box-shadow:0 2px 8px rgba(0,0,0,0.15);">`);
         // Fallback: /api/images/ URLs die der LLM als Link formatiert hat
-        text = text.replace(/<a[^>]*href="(\/api\/images\/[\w\-]+\.\w+)"[^>]*>[^<]*<\/a>/g,
-            '<img src="$1" alt="Generiertes Bild" style="max-width:100%;border-radius:8px;margin:0.5rem 0;box-shadow:0 2px 8px rgba(0,0,0,0.15);">');
+        text = text.replace(/<a[^>]*href="(\/api\/images\/[\w\-]+\.\w+)"[^>]*>[^<]*<\/a>/g, (_, url) =>
+            `<img src="${this._escapeAttr(url)}" alt="Generiertes Bild" style="max-width:100%;border-radius:8px;margin:0.5rem 0;box-shadow:0 2px 8px rgba(0,0,0,0.15);">`);
         // Fallback: nackte /api/images/ URLs im Text
-        text = text.replace(/(?<![="])(\/api\/images\/[\w\-]+\.\w+)/g,
-            '<img src="$1" alt="Generiertes Bild" style="max-width:100%;border-radius:8px;margin:0.5rem 0;box-shadow:0 2px 8px rgba(0,0,0,0.15);">');
+        text = text.replace(/(?<![="])(\/api\/images\/[\w\-]+\.\w+)/g, (_, url) =>
+            `<img src="${this._escapeAttr(url)}" alt="Generiertes Bild" style="max-width:100%;border-radius:8px;margin:0.5rem 0;box-shadow:0 2px 8px rgba(0,0,0,0.15);">`);
         if (typeof marked !== 'undefined') {
             // marked.js verfügbar: vollständiges Markdown-Rendering (Tabellen, Listen, etc.)
             const html = marked.parse(text, {
                 breaks: true,
                 gfm: true,
             });
+            // HTML sanitisieren mit DOMPurify (graceful fallback wenn nicht verfügbar)
+            const sanitized = (typeof DOMPurify !== 'undefined')
+                ? DOMPurify.sanitize(html, {
+                    ADD_ATTR: ['target', 'rel'],
+                    FORBID_TAGS: ['script', 'style', 'iframe', 'form', 'input'],
+                })
+                : html;
             // Links immer in neuem Tab öffnen
-            return html.replace(/<a /g, '<a target="_blank" rel="noopener noreferrer" ');
+            return sanitized.replace(/<a /g, '<a target="_blank" rel="noopener noreferrer" ');
         }
         // Fallback: einfaches Inline-Rendering
         const escaped = this._escapeHtml(text);
@@ -7496,6 +7501,10 @@ const Ninko = {
 
     _escapeHtml(str) {
         return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    },
+
+    _escapeAttr(str) {
+        return String(str || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     },
 
     _esc(str) {
