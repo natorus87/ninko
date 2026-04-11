@@ -222,6 +222,20 @@ def _api_key_context(key: str) -> dict[str, Any] | None:
     return None
 
 
+async def _is_token_blacklisted(token: str) -> bool:
+    """
+    Check if a session token is on the Redis blacklist.
+    Prevents CWE-613: Lack of Logout (invalidate tokens after logout).
+    """
+    try:
+        from core.redis_client import get_redis
+        redis = get_redis()
+        result = await redis.connection.get(f"ninko:session_blacklist:{token[:64]}")
+        return result is not None
+    except Exception:
+        return False
+
+
 def _session_context(session_token: str) -> dict[str, Any] | None:
     payload = _parse_session_token(session_token)
     if not payload:
@@ -259,6 +273,35 @@ def resolve_request_auth(request: Request) -> dict[str, Any] | None:
 
     session_token = _extract_session_from_request(request)
     if session_token:
+        return _session_context(session_token)
+    return None
+
+
+async def resolve_request_auth_async(request: Request) -> dict[str, Any] | None:
+    """
+    Async version of resolve_request_auth that checks session blacklist.
+    Use this in async endpoints to validate session tokens against blacklist.
+    """
+    cfg = get_settings()
+    if not cfg.API_AUTH_ENABLED:
+        return {
+            "username": cfg.ADMIN_USERNAME or "admin",
+            "role": ROLE_ADMIN,
+            "module_permissions": {"*": {"read": True, "write": True}},
+            "tenant_id": "default",
+            "auth_source": "disabled",
+        }
+
+    key = _extract_key_from_request(request)
+    if key:
+        ctx = _api_key_context(key)
+        if ctx:
+            return ctx
+
+    session_token = _extract_session_from_request(request)
+    if session_token:
+        if await _is_token_blacklisted(session_token):
+            return None
         return _session_context(session_token)
     return None
 

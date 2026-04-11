@@ -141,7 +141,11 @@ async def update_llm_settings(body: LlmSettings) -> LlmSettingsResponse:
     """LLM-Konfiguration aktualisieren und LLM-Factory neu initialisieren."""
     redis = get_redis()
     payload = body.model_dump()
-    if not payload.get("api_key"):
+    api_key_value = payload.get("api_key")
+    # Expliziter Check für None oder leeren/whitespace String (nicht nur falsy)
+    if api_key_value is None or (
+        isinstance(api_key_value, str) and api_key_value.strip() == ""
+    ):
         existing_raw = await redis.connection.get(REDIS_KEY_LLM)
         if existing_raw:
             try:
@@ -149,7 +153,10 @@ async def update_llm_settings(body: LlmSettings) -> LlmSettingsResponse:
                 if existing.get("api_key"):
                     payload["api_key"] = existing["api_key"]
             except _SETTINGS_RECOVERABLE_EXCEPTIONS as exc:
-                logger.warning("API-Key aus bestehenden LLM-Settings konnte nicht gelesen werden: %s", exc)
+                logger.warning(
+                    "API-Key aus bestehenden LLM-Settings konnte nicht gelesen werden: %s",
+                    exc,
+                )
 
     await redis.connection.set(REDIS_KEY_LLM, json.dumps(payload))
     logger.info(
@@ -266,7 +273,10 @@ async def get_branding_settings() -> BrandingSettingsResponse:
             merged = {**defaults, **(data or {})}
             return BrandingSettingsResponse(**merged, source="redis")
         except _SETTINGS_RECOVERABLE_EXCEPTIONS as exc:
-            logger.warning("Branding-Settings aus Redis konnten nicht geladen werden, Defaults verwendet: %s", exc)
+            logger.warning(
+                "Branding-Settings aus Redis konnten nicht geladen werden, Defaults verwendet: %s",
+                exc,
+            )
     return BrandingSettingsResponse(**defaults, source="default")
 
 
@@ -297,7 +307,33 @@ async def reset_branding_settings() -> BrandingSettingsResponse:
 async def upload_branding_asset(file: UploadFile = File(...)) -> dict:
     """Branding-Bild hochladen und persistieren."""
     cfg = get_settings()
-    raw = await file.read()
+    max_bytes = int(cfg.BRANDING_MAX_UPLOAD_BYTES)
+
+    # Chunked reading für DoS-Schutz (nicht alles auf einmal in Memory)
+    chunk_size = 1024 * 1024  # 1MB chunks
+    raw = b""
+    while True:
+        chunk = await file.read(chunk_size)
+        if not chunk:
+            break
+        raw += chunk
+        if len(raw) > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=_t(
+                    de="Datei zu groß.",
+                    en="File too large.",
+                    fr="Fichier trop volumineux.",
+                    es="Archivo demasiado grande.",
+                    it="File troppo grande.",
+                    nl="Bestand te groot.",
+                    pl="Plik zbyt duży.",
+                    pt="Arquivo muito grande.",
+                    ja="ファイルが大きすぎます。",
+                    zh="文件太大。",
+                ),
+            )
+
     if not raw:
         raise HTTPException(
             status_code=400,
@@ -312,22 +348,6 @@ async def upload_branding_asset(file: UploadFile = File(...)) -> dict:
                 pt="Arquivo vazio.",
                 ja="空のファイル。",
                 zh="空文件。",
-            ),
-        )
-    if len(raw) > int(cfg.BRANDING_MAX_UPLOAD_BYTES):
-        raise HTTPException(
-            status_code=413,
-            detail=_t(
-                de="Datei zu groß.",
-                en="File too large.",
-                fr="Fichier trop volumineux.",
-                es="Archivo demasiado grande.",
-                it="File troppo grande.",
-                nl="Bestand te groot.",
-                pl="Plik zbyt duży.",
-                pt="Arquivo muito grande.",
-                ja="ファイルが大きすぎます。",
-                zh="文件太大。",
             ),
         )
 
@@ -504,7 +524,10 @@ async def delete_branding_asset(filename: str) -> dict:
             if changed:
                 await redis.connection.set(REDIS_KEY_BRANDING, json.dumps(data))
         except _SETTINGS_RECOVERABLE_EXCEPTIONS as exc:
-            logger.warning("Branding-Settings nach Asset-Löschung konnten nicht aktualisiert werden: %s", exc)
+            logger.warning(
+                "Branding-Settings nach Asset-Löschung konnten nicht aktualisiert werden: %s",
+                exc,
+            )
 
     return {"deleted": True, "filename": filename}
 
@@ -1097,7 +1120,9 @@ async def list_k8s_clusters() -> K8sClusterListResponse:
                 )
             ]
         except _SETTINGS_RECOVERABLE_EXCEPTIONS as exc:
-            logger.warning("Kubeconfig aus Umgebungsvariablen konnte nicht geladen werden: %s", exc)
+            logger.warning(
+                "Kubeconfig aus Umgebungsvariablen konnte nicht geladen werden: %s", exc
+            )
 
     return K8sClusterListResponse(clusters=clusters, total=len(clusters))
 
@@ -1286,7 +1311,9 @@ async def update_tts_settings(body: dict) -> dict:
 
         _tts_mod._service = None
     except _SETTINGS_RECOVERABLE_EXCEPTIONS as exc:
-        logger.warning("TTS-Service-Singleton konnte nicht zurückgesetzt werden: %s", exc)
+        logger.warning(
+            "TTS-Service-Singleton konnte nicht zurückgesetzt werden: %s", exc
+        )
 
     logger.info("TTS-Settings aktualisiert: %s", data)
     return {"status": "saved", **data}

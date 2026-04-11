@@ -114,8 +114,8 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
                         outcome="confirmed",
                         rationale=_pending_info.get("rationale", ""),
                     )
-            except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError):
-                pass
+            except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as exc:
+                logger.warning("Audit-Log für Tool-Confirmation fehlgeschlagen: %s", exc)
             # Redis-Key nicht löschen — resume_tool_execution() macht das selbst
             response_text, did_compact = await orchestrator.resume_tool_execution(scoped_session_id)
             await status_bus.done(scoped_session_id)

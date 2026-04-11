@@ -19,6 +19,7 @@ OpenAI-kompatibler Provider:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import tempfile
@@ -36,6 +37,9 @@ from core.config import get_settings
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/transcription", tags=["transcription"])
+
+# Rate Limiting: Max 3 parallele Transkriptionen (CPU/GPU-intensiv)
+_TRANSCRIPTION_SEMAPHORE = asyncio.Semaphore(3)
 
 # ── Whisper-Modell-Cache (lazy, thread-safe) ──────────────────────────────────
 _whisper_model: Any = None
@@ -62,9 +66,13 @@ def _load_whisper_model() -> Any:
 
         logger.info(
             "Lade Whisper-Modell '%s' auf %s (compute_type=%s) …",
-            model_size, device, compute_type,
+            model_size,
+            device,
+            compute_type,
         )
-        _whisper_model = WhisperModel(model_size, device=device, compute_type=compute_type)
+        _whisper_model = WhisperModel(
+            model_size, device=device, compute_type=compute_type
+        )
         logger.info("Whisper-Modell '%s' bereit.", model_size)
         return _whisper_model
 
@@ -78,6 +86,7 @@ def invalidate_whisper_cache() -> None:
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
+
 
 class TranscriptionResponse(BaseModel):
     text: str
@@ -115,8 +124,7 @@ def _validate_upload_meta(
         raise HTTPException(
             status_code=413,
             detail=(
-                f"Audio-Datei zu groß ({byte_len} Bytes). "
-                f"Maximum: {max_bytes} Bytes."
+                f"Audio-Datei zu groß ({byte_len} Bytes). Maximum: {max_bytes} Bytes."
             ),
         )
 
@@ -139,6 +147,7 @@ def _validate_upload_meta(
 
 # ── Provider-Implementierungen ────────────────────────────────────────────────
 
+
 async def _transcribe_whisper(tmp_path: str) -> tuple[str, float, str]:
     """Transkribiert mit lokalem faster-whisper. Gibt (text, avg_conf, lang) zurück."""
     import asyncio
@@ -152,8 +161,7 @@ async def _transcribe_whisper(tmp_path: str) -> tuple[str, float, str]:
         segments = list(segments_gen)
         text = " ".join(s.text.strip() for s in segments).strip()
         avg_conf = (
-            sum(s.avg_logprob for s in segments) / len(segments)
-            if segments else -2.0
+            sum(s.avg_logprob for s in segments) / len(segments) if segments else -2.0
         )
         return text, avg_conf, info.language
 
@@ -161,7 +169,9 @@ async def _transcribe_whisper(tmp_path: str) -> tuple[str, float, str]:
     return await loop.run_in_executor(None, do_transcribe)
 
 
-async def _transcribe_whisper_with_model(tmp_path: str, model_size: str) -> tuple[str, float, str]:
+async def _transcribe_whisper_with_model(
+    tmp_path: str, model_size: str
+) -> tuple[str, float, str]:
     """Transkribiert mit explizitem Whisper-Modell (ohne globalen Cache)."""
     import asyncio
     from faster_whisper import WhisperModel  # type: ignore
@@ -177,8 +187,7 @@ async def _transcribe_whisper_with_model(tmp_path: str, model_size: str) -> tupl
         segments = list(segments_gen)
         text = " ".join(s.text.strip() for s in segments).strip()
         avg_conf = (
-            sum(s.avg_logprob for s in segments) / len(segments)
-            if segments else -2.0
+            sum(s.avg_logprob for s in segments) / len(segments) if segments else -2.0
         )
         return text, avg_conf, info.language
 
@@ -186,7 +195,9 @@ async def _transcribe_whisper_with_model(tmp_path: str, model_size: str) -> tupl
     return await loop.run_in_executor(None, do_transcribe)
 
 
-async def _transcribe_openai_compatible(tmp_path: str, filename: str) -> tuple[str, float, str]:
+async def _transcribe_openai_compatible(
+    tmp_path: str, filename: str
+) -> tuple[str, float, str]:
     """Transkribiert über externe OpenAI-kompatible API."""
     import httpx
 
@@ -204,7 +215,13 @@ async def _transcribe_openai_compatible(tmp_path: str, filename: str) -> tuple[s
         headers["Authorization"] = f"Bearer {api_key}"
 
     ext = Path(filename).suffix.lower() or ".webm"
-    mime = "audio/webm" if ext == ".webm" else "audio/ogg" if ext == ".ogg" else "audio/mpeg"
+    mime = (
+        "audio/webm"
+        if ext == ".webm"
+        else "audio/ogg"
+        if ext == ".ogg"
+        else "audio/mpeg"
+    )
 
     with open(tmp_path, "rb") as f:
         audio_data = f.read()
@@ -217,9 +234,7 @@ async def _transcribe_openai_compatible(tmp_path: str, filename: str) -> tuple[s
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(endpoint, headers=headers, files=files, data=data)
         if resp.status_code != 200:
-            raise RuntimeError(
-                f"STT-API Fehler {resp.status_code}: {resp.text[:200]}"
-            )
+            raise RuntimeError(f"STT-API Fehler {resp.status_code}: {resp.text[:200]}")
         result = resp.json()
 
     text = result.get("text", "").strip()
@@ -228,6 +243,7 @@ async def _transcribe_openai_compatible(tmp_path: str, filename: str) -> tuple[s
 
 
 # ── Endpunkt ──────────────────────────────────────────────────────────────────
+
 
 @router.post("/", response_model=TranscriptionResponse)
 async def transcribe_audio(file: UploadFile = File(...)) -> TranscriptionResponse:
@@ -252,10 +268,14 @@ async def transcribe_audio(file: UploadFile = File(...)) -> TranscriptionRespons
 
         provider = os.getenv("STT_PROVIDER", "whisper")
 
-        if provider == "openai_compatible":
-            text, _, detected_lang = await _transcribe_openai_compatible(tmp_path, filename)
-        else:
-            text, _, detected_lang = await _transcribe_whisper(tmp_path)
+        # Rate Limiting: Semaphore für CPU/GPU-intensive Transkription
+        async with _TRANSCRIPTION_SEMAPHORE:
+            if provider == "openai_compatible":
+                text, _, detected_lang = await _transcribe_openai_compatible(
+                    tmp_path, filename
+                )
+            else:
+                text, _, detected_lang = await _transcribe_whisper(tmp_path)
 
         if not text:
             raise HTTPException(
@@ -272,7 +292,9 @@ async def transcribe_audio(file: UploadFile = File(...)) -> TranscriptionRespons
         raise HTTPException(status_code=503, detail=str(exc))
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         logger.error("Transkriptionsfehler: %s", exc)
-        raise HTTPException(status_code=500, detail=f"Transkription fehlgeschlagen: {exc}")
+        raise HTTPException(
+            status_code=500, detail=f"Transkription fehlgeschlagen: {exc}"
+        )
     finally:
         if tmp_path:
             try:
@@ -342,8 +364,12 @@ async def benchmark_whisper_models(
             )
 
         # Höhere avg_logprob ist besser (weniger negativ), bei Gleichstand schnelleres Modell.
-        best = sorted(results, key=lambda r: (r.avg_confidence, -r.duration_ms), reverse=True)[0]
-        return WhisperBenchmarkResponse(results=results, recommended_model=best.model_size)
+        best = sorted(
+            results, key=lambda r: (r.avg_confidence, -r.duration_ms), reverse=True
+        )[0]
+        return WhisperBenchmarkResponse(
+            results=results, recommended_model=best.model_size
+        )
 
     except HTTPException:
         raise
@@ -361,6 +387,7 @@ async def benchmark_whisper_models(
 
 
 # ── Hilfsfunktionen für Bot-Module ────────────────────────────────────────────
+
 
 async def transcribe_bytes(audio_bytes: bytes, filename: str = "audio.ogg") -> str:
     """
@@ -396,7 +423,9 @@ async def transcribe_bytes_extended(
         provider = os.getenv("STT_PROVIDER", "whisper")
 
         if provider == "openai_compatible":
-            text, avg_conf, detected_lang = await _transcribe_openai_compatible(tmp_path, filename)
+            text, avg_conf, detected_lang = await _transcribe_openai_compatible(
+                tmp_path, filename
+            )
         else:
             text, avg_conf, detected_lang = await _transcribe_whisper(tmp_path)
 
@@ -429,7 +458,11 @@ async def _llm_spellcheck(text: str) -> str:
             f"ohne Erklärungen:\n\n{text}"
         )
         result = await llm.ainvoke([HumanMessage(content=prompt)])
-        corrected = result.content.strip() if hasattr(result, "content") else str(result).strip()
+        corrected = (
+            result.content.strip()
+            if hasattr(result, "content")
+            else str(result).strip()
+        )
         if corrected:
             logger.debug("STT Spellcheck: '%s' → '%s'", text[:60], corrected[:60])
             return corrected

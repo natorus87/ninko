@@ -31,6 +31,8 @@ _AGENT_POOL_EXCEPTIONS = (
 REDIS_KEY = "ninko:agents"
 # Minimale Keyword-Übereinstimmung (0–1) damit ein Agent als passend gilt
 _MATCH_THRESHOLD = 0.18
+# Maximale Anzahl live-instanziierter Agenten im Pool vor LRU-Eviction
+_AGENT_POOL_MAX = 200
 
 
 class DynamicAgentPool:
@@ -121,6 +123,7 @@ class DynamicAgentPool:
         """
         Erstellt eine BaseAgent-Instanz aus einem Agent-Definition-Dict
         und speichert sie im internen Pool.
+        Implementiert LRU-Eviction wenn der Pool die Größe _AGENT_POOL_MAX überschreitet.
         """
         from agents.base_agent import BaseAgent
 
@@ -128,6 +131,21 @@ class DynamicAgentPool:
         agent_id = agent_def["id"]
         scoped_id = _scoped_id(tenant_id, agent_id)
         normalized_def = {**agent_def, "tenant_id": tenant_id}
+
+        # LRU-Eviction: Wenn Pool-Größe >= Limit, ältesten Eintrag entfernen
+        if (
+            scoped_id not in self._live_agents
+            and len(self._live_agents) >= _AGENT_POOL_MAX
+        ):
+            evicted_id = next(iter(self._live_agents))
+            evicted_agent = self._live_agents.pop(evicted_id)
+            self._meta.pop(evicted_id, None)
+            logger.info(
+                "DynamicAgentPool: LRU-Eviction: Agent '%s' entfernt (Pool-Limit %d)",
+                evicted_id,
+                _AGENT_POOL_MAX,
+            )
+
         agent = BaseAgent(
             name=normalized_def["name"],
             system_prompt=normalized_def["system_prompt"],
@@ -376,6 +394,12 @@ class DynamicAgentPool:
             # Live-Instanz neu erstellen damit der neue Prompt sofort wirkt
             self._meta[scoped_id] = agents[idx]
             if scoped_id in self._live_agents:
+                old_agent = self._live_agents[scoped_id]
+                try:
+                    if hasattr(old_agent, "aclose"):
+                        await old_agent.aclose()
+                except Exception:
+                    pass
                 self._instantiate(agents[idx])
 
         # Soul MD neu generieren wenn name oder description geändert wurde

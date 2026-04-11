@@ -13,6 +13,7 @@ import binascii
 import logging
 from pathlib import Path
 
+from core.config import get_settings
 from core.vault import get_vault
 
 logger = logging.getLogger("ninko.core.tls")
@@ -56,15 +57,21 @@ async def get_connection_verify_arg(
     if conn is None:
         return default_verify
 
-    verify_ssl = str(conn.config.get("verify_ssl", str(default_verify))).lower() == "true"
+    verify_ssl = (
+        str(conn.config.get("verify_ssl", str(default_verify))).lower() == "true"
+    )
     if not verify_ssl:
+        # CWE-295: Warnung bei deaktiviertem SSL-Verify
+        logger.warning(
+            "SSL verification disabled for module '%s' connection '%s' (verify_ssl=false). "
+            "This is insecure and should only be used in development environments.",
+            module_id,
+            getattr(conn, "id", "unknown"),
+        )
         return False
 
     vault = get_vault()
-    cert_vk = (
-        conn.vault_keys.get("ca_cert_pem")
-        or conn.vault_keys.get("CA_CERT_PEM")
-    )
+    cert_vk = conn.vault_keys.get("ca_cert_pem") or conn.vault_keys.get("CA_CERT_PEM")
     if not cert_vk:
         return True
 
@@ -73,9 +80,10 @@ async def get_connection_verify_arg(
     if not cert_pem:
         return True
 
-    cert_dir = Path("/tmp/ninko-certs")
-    cert_dir.mkdir(parents=True, exist_ok=True)
+    cert_dir = Path(get_settings().DATA_DIR) / "certs"
+    cert_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     cert_path = cert_dir / f"{module_id}_{conn.id}_ca.pem"
     cert_path.write_text(cert_pem, encoding="utf-8")
+    cert_path.chmod(0o600)
     logger.info("TLS CA-Zertifikat für Modul '%s' geladen: %s", module_id, cert_path)
     return str(cert_path)

@@ -86,7 +86,7 @@ async def _op_request(
     headers = {"Authorization": f"Bearer {client['api_key']}"}
 
     logger.debug("OpenProject API request: %s %s", method, url)
-    async with httpx.AsyncClient(headers=headers, timeout=30.0) as session:
+    async with httpx.AsyncClient(headers=headers, timeout=30.0, verify=True) as session:
         try:
             resp = await session.request(method, url, json=json)
             if resp.status_code == 204:
@@ -96,9 +96,13 @@ async def _op_request(
             resp.raise_for_status()
             return resp.json()
         except httpx.HTTPStatusError as e:
-            logger.error("OpenProject API error: HTTP %s for %s %s", e.response.status_code, method, url)
-            logger.debug("OpenProject API full response: %s", e.response.text)
-            raise ValueError(f"OpenProject API returned HTTP {e.response.status_code}") from e
+            logger.error(
+                "OpenProject API error: HTTP %s for %s", e.response.status_code, url
+            )
+            # Response text nicht loggen - könnte sensitive Daten enthalten
+            raise ValueError(
+                f"OpenProject API returned HTTP {e.response.status_code}"
+            ) from e
 
 
 # ═══════════════════════════════════════════════════════

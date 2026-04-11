@@ -11,19 +11,31 @@ import shutil
 import signal
 import tempfile
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from langchain_core.tools import tool
 
 logger = logging.getLogger("ninko.modules.codelab")
 
-_MAX_CODE_CHARS = 100_000
-_MAX_STDOUT_CHARS = 20_000
-_MAX_STDERR_CHARS = 5_000
-_MAX_MEMORY_BYTES = 256 * 1024 * 1024
-_MAX_FILESIZE_BYTES = 5 * 1024 * 1024
-_MAX_NOFILE = 64
-_MAX_NPROC = 16
+# Resource limits loaded from core config
+
+
+def _get_resource_limits() -> dict[str, int]:
+    """Get resource limits from core settings."""
+    from core.config import get_settings
+
+    settings = get_settings()
+    return {
+        "max_code_chars": settings.CODELAB_MAX_CODE_CHARS,
+        "max_stdout_chars": settings.CODELAB_MAX_STDOUT_CHARS,
+        "max_stderr_chars": settings.CODELAB_MAX_STDERR_CHARS,
+        "max_memory_bytes": settings.CODELAB_MAX_MEMORY_BYTES,
+        "max_filesize_bytes": settings.CODELAB_MAX_FILESIZE_BYTES,
+        "max_nofile": settings.CODELAB_MAX_NOFILE,
+        "max_nproc": settings.CODELAB_MAX_NPROC,
+    }
+
 
 # Unterstützte Sprachen mit Ausführungs-Kommandos
 _LANGUAGES: dict[str, dict] = {
@@ -74,21 +86,28 @@ def _build_sandbox_env(tmp_dir: str) -> dict[str, str]:
     }
 
 
-def _make_preexec(timeout: int) -> object:
+def _make_preexec(
+    timeout: int,
+    memory_bytes: int,
+    filesize_bytes: int,
+    nofile: int,
+    nproc: int,
+) -> Callable[[], None]:
     """
     Setzt harte Ressourcenlimits pro Ausführung.
     Hinweis: gilt nur auf POSIX-Systemen.
     """
+
     def _preexec() -> None:
         import resource
 
         os.setsid()
         cpu = max(1, min(timeout + 1, 60))
         resource.setrlimit(resource.RLIMIT_CPU, (cpu, cpu))
-        resource.setrlimit(resource.RLIMIT_AS, (_MAX_MEMORY_BYTES, _MAX_MEMORY_BYTES))
-        resource.setrlimit(resource.RLIMIT_FSIZE, (_MAX_FILESIZE_BYTES, _MAX_FILESIZE_BYTES))
-        resource.setrlimit(resource.RLIMIT_NOFILE, (_MAX_NOFILE, _MAX_NOFILE))
-        resource.setrlimit(resource.RLIMIT_NPROC, (_MAX_NPROC, _MAX_NPROC))
+        resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
+        resource.setrlimit(resource.RLIMIT_FSIZE, (filesize_bytes, filesize_bytes))
+        resource.setrlimit(resource.RLIMIT_NOFILE, (nofile, nofile))
+        resource.setrlimit(resource.RLIMIT_NPROC, (nproc, nproc))
         resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
 
     return _preexec
@@ -112,10 +131,12 @@ async def execute_code(code: str, language: str = "python", timeout: int = 15) -
     timeout = max(1, min(timeout, 60))
     code = code or ""
 
-    if len(code) > _MAX_CODE_CHARS:
+    limits = _get_resource_limits()
+
+    if len(code) > limits["max_code_chars"]:
         return {
             "stdout": "",
-            "stderr": f"Code ist zu groß ({len(code)} Zeichen, max {_MAX_CODE_CHARS}).",
+            "stderr": f"Code ist zu groß ({len(code)} Zeichen, max {limits['max_code_chars']}).",
             "exit_code": 1,
             "duration_ms": 0.0,
             "language": language,
@@ -151,7 +172,17 @@ async def execute_code(code: str, language: str = "python", timeout: int = 15) -
         cmd = cfg["cmd"](tmp_path)
         t_start = time.perf_counter()
         sandbox_env = _build_sandbox_env(tmp_dir)
-        preexec = _make_preexec(timeout) if os.name == "posix" else None
+        preexec = (
+            _make_preexec(
+                timeout,
+                limits["max_memory_bytes"],
+                limits["max_filesize_bytes"],
+                limits["max_nofile"],
+                limits["max_nproc"],
+            )
+            if os.name == "posix"
+            else None
+        )
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -190,14 +221,18 @@ async def execute_code(code: str, language: str = "python", timeout: int = 15) -
         stdout = stdout_bytes.decode("utf-8", errors="replace")
         stderr = stderr_bytes.decode("utf-8", errors="replace")
 
-        if len(stdout) > _MAX_STDOUT_CHARS:
-            stdout = stdout[:_MAX_STDOUT_CHARS] + "\n… (Ausgabe gekürzt)"
-        if len(stderr) > _MAX_STDERR_CHARS:
-            stderr = stderr[:_MAX_STDERR_CHARS] + "\n… (Fehlerausgabe gekürzt)"
+        if len(stdout) > limits["max_stdout_chars"]:
+            stdout = stdout[: limits["max_stdout_chars"]] + "\n… (Ausgabe gekürzt)"
+        if len(stderr) > limits["max_stderr_chars"]:
+            stderr = (
+                stderr[: limits["max_stderr_chars"]] + "\n… (Fehlerausgabe gekürzt)"
+            )
 
         logger.info(
             "CodeLab: %s ausgeführt, exit=%d, %.0fms",
-            language, proc.returncode, duration_ms,
+            language,
+            proc.returncode,
+            duration_ms,
         )
 
         return {

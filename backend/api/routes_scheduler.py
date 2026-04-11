@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 
+from croniter import croniter
 from fastapi import APIRouter, HTTPException, Request
 
 from schemas.scheduler import (
@@ -33,6 +34,7 @@ def _get_scheduler(request: Request) -> object:
 
 # ── Tasks CRUD ─────────────────────────────────────
 
+
 @router.get("/tasks", response_model=ScheduledTaskListResponse)
 async def list_tasks(request: Request) -> ScheduledTaskListResponse:
     """Alle geplanten Aufgaben auflisten."""
@@ -44,11 +46,21 @@ async def list_tasks(request: Request) -> ScheduledTaskListResponse:
     )
 
 
+def _validate_cron(cron_expr: str | None) -> None:
+    """Validiert einen Cron-Ausdruck. Raises HTTPException bei ungültigem Format."""
+    if cron_expr is None:
+        return
+    if not croniter.is_valid(cron_expr):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ungültiger Cron-Ausdruck: '{cron_expr}'. Beispiel: '*/5 * * * *'",
+        )
+
+
 @router.post("/tasks", status_code=201, response_model=ScheduledTaskInfo)
-async def create_task(
-    request: Request, body: ScheduledTaskCreate
-) -> ScheduledTaskInfo:
+async def create_task(request: Request, body: ScheduledTaskCreate) -> ScheduledTaskInfo:
     """Neue geplante Aufgabe erstellen."""
+    _validate_cron(body.cron)
     scheduler = _get_scheduler(request)
 
     try:
@@ -63,12 +75,11 @@ async def update_task(
     request: Request, task_id: str, body: ScheduledTaskUpdate
 ) -> ScheduledTaskInfo:
     """Geplante Aufgabe aktualisieren."""
+    _validate_cron(body.cron)
     scheduler = _get_scheduler(request)
 
     try:
-        task = await scheduler.update_task(
-            task_id, body.model_dump(exclude_unset=True)
-        )
+        task = await scheduler.update_task(task_id, body.model_dump(exclude_unset=True))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 

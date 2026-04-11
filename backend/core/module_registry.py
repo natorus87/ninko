@@ -333,9 +333,30 @@ class ModuleRegistry:
     def get_routing_map(self) -> dict[str, str]:
         """Aggregiert alle routing_keywords → {keyword: module_name}."""
         routing: dict[str, str] = {}
+        duplicates: dict[str, list[str]] = {}
+
         for name, mod in self._modules.items():
             for kw in mod.manifest.routing_keywords:
-                routing[kw.lower()] = name
+                key = kw.lower()
+                if key in routing:
+                    # Duplikat gefunden
+                    if key not in duplicates:
+                        duplicates[key] = [routing[key]]
+                    duplicates[key].append(name)
+                else:
+                    routing[key] = name
+
+        # Bei Duplikaten: Warning loggen (Orchestrator-Ambiguität)
+        if duplicates:
+            for keyword, modules in duplicates.items():
+                logger.warning(
+                    "Duplicate routing_keyword '%s' found in modules: %s. "
+                    "Orchestrator will use '%s'.",
+                    keyword,
+                    modules,
+                    routing[keyword],
+                )
+
         return routing
 
     def get_routing_keywords(self) -> dict[str, str]:

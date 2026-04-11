@@ -13,6 +13,7 @@ Konfiguration in Redis: ninko:settings:image_provider
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
@@ -29,6 +30,9 @@ logger = logging.getLogger("ninko.core.image_provider")
 
 REDIS_KEY = "ninko:settings:image_provider"
 IMAGES_DIR = Path("/app/data/images")
+
+# Rate Limiting: Max 2 parallele Image-Generierungen (GPU/CPU-intensiv)
+_IMAGE_GEN_SEMAPHORE = asyncio.Semaphore(2)
 
 # ── Default Config ───────────────────────────────────────────────────────────
 
@@ -63,14 +67,18 @@ def _ensure_images_dir() -> Path:
         except (OSError, PermissionError):
             continue
 
-    raise PermissionError("Kein beschreibbares Verzeichnis für Bildspeicherung gefunden.")
+    raise PermissionError(
+        "Kein beschreibbares Verzeichnis für Bildspeicherung gefunden."
+    )
 
 
 # ── Provider Config laden/speichern ──────────────────────────────────────────
 
+
 async def get_image_provider_config() -> dict[str, Any]:
     """Lädt die Image-Provider-Konfiguration aus Redis."""
     from core.redis_client import get_redis
+
     redis = get_redis()
     raw = await redis.connection.get(REDIS_KEY)
     if raw:
@@ -90,6 +98,7 @@ async def save_image_provider_config(config: dict[str, Any]) -> None:
     """Speichert die Image-Provider-Konfiguration in Redis."""
     import json
     from core.redis_client import get_redis
+
     redis = get_redis()
     await redis.connection.set(REDIS_KEY, json.dumps(config))
     # Env-Vars setzen für Kompatibilität
@@ -101,7 +110,10 @@ async def save_image_provider_config(config: dict[str, Any]) -> None:
 
 # ── Provider-Implementierungen ───────────────────────────────────────────────
 
-async def _generate_together(prompt: str, api_key: str, model: str, size: str) -> tuple[bytes, str]:
+
+async def _generate_together(
+    prompt: str, api_key: str, model: str, size: str
+) -> tuple[bytes, str]:
     """Together AI – OpenAI-kompatibel."""
     model = model or "black-forest-labs/FLUX.1-schnell-Free"
     # Together AI nutzt die OpenAI-kompatible /v1/images/generations API
@@ -123,13 +135,17 @@ async def _generate_together(prompt: str, api_key: str, model: str, size: str) -
             },
         )
         if resp.status_code != 200:
-            raise RuntimeError(f"Together AI Error {resp.status_code}: {resp.text[:300]}")
+            raise RuntimeError(
+                f"Together AI Error {resp.status_code}: {resp.text[:300]}"
+            )
         data = resp.json()
         b64 = data["data"][0]["b64_json"]
         return base64.b64decode(b64), "png"
 
 
-async def _generate_openai(prompt: str, api_key: str, model: str, size: str) -> tuple[bytes, str]:
+async def _generate_openai(
+    prompt: str, api_key: str, model: str, size: str
+) -> tuple[bytes, str]:
     """OpenAI DALL-E 2/3."""
     model = model or "dall-e-3"
     size = size or "1024x1024"
@@ -155,7 +171,9 @@ async def _generate_openai(prompt: str, api_key: str, model: str, size: str) -> 
         return base64.b64decode(b64), "png"
 
 
-async def _generate_google(prompt: str, api_key: str, model: str, size: str) -> tuple[bytes, str]:
+async def _generate_google(
+    prompt: str, api_key: str, model: str, size: str
+) -> tuple[bytes, str]:
     """Google Imagen 3/4 via Gemini API."""
     model = model or "imagen-3.0-generate-002"
     async with httpx.AsyncClient(timeout=120) as client:
@@ -175,7 +193,9 @@ async def _generate_google(prompt: str, api_key: str, model: str, size: str) -> 
             },
         )
         if resp.status_code != 200:
-            raise RuntimeError(f"Google Imagen Error {resp.status_code}: {resp.text[:300]}")
+            raise RuntimeError(
+                f"Google Imagen Error {resp.status_code}: {resp.text[:300]}"
+            )
         data = resp.json()
         b64 = data["predictions"][0]["bytesBase64Encoded"]
         return base64.b64decode(b64), "png"
@@ -190,7 +210,9 @@ def _parse_size(size: str) -> tuple[int, int]:
     return w, h
 
 
-async def _generate_stability(prompt: str, api_key: str, model: str, size: str) -> tuple[bytes, str]:
+async def _generate_stability(
+    prompt: str, api_key: str, model: str, size: str
+) -> tuple[bytes, str]:
     """Stability AI – Stable Image Core."""
     _ = model or "stable-image-core"
     w, h = _parse_size(size)
@@ -210,11 +232,15 @@ async def _generate_stability(prompt: str, api_key: str, model: str, size: str) 
             },
         )
         if resp.status_code != 200:
-            raise RuntimeError(f"Stability AI Error {resp.status_code}: {resp.text[:300]}")
+            raise RuntimeError(
+                f"Stability AI Error {resp.status_code}: {resp.text[:300]}"
+            )
         return resp.content, "png"
 
 
-async def _generate_huggingface(prompt: str, api_key: str, model: str, size: str) -> tuple[bytes, str]:
+async def _generate_huggingface(
+    prompt: str, api_key: str, model: str, size: str
+) -> tuple[bytes, str]:
     """Hugging Face Inference API."""
     model = model or "black-forest-labs/FLUX.1-schnell"
     w, h = _parse_size(size)
@@ -232,9 +258,13 @@ async def _generate_huggingface(prompt: str, api_key: str, model: str, size: str
         )
         content_type = (resp.headers.get("content-type") or "").lower()
         if resp.status_code != 200:
-            raise RuntimeError(f"HuggingFace Error {resp.status_code}: {resp.text[:300]}")
+            raise RuntimeError(
+                f"HuggingFace Error {resp.status_code}: {resp.text[:300]}"
+            )
         if "image/" not in content_type:
-            raise RuntimeError(f"HuggingFace returned non-image response: {resp.text[:300]}")
+            raise RuntimeError(
+                f"HuggingFace returned non-image response: {resp.text[:300]}"
+            )
         if "jpeg" in content_type or "jpg" in content_type:
             return resp.content, "jpg"
         if "webp" in content_type:
@@ -243,6 +273,7 @@ async def _generate_huggingface(prompt: str, api_key: str, model: str, size: str
 
 
 # ── Hauptfunktion ────────────────────────────────────────────────────────────
+
 
 async def generate_image(
     prompt: str,
@@ -277,22 +308,23 @@ async def generate_image(
             "Bitte in den Einstellungen den API-Key eingeben."
         )
 
-    # Provider aufrufen
-    if backend == "together_ai":
-        image_bytes, ext = await _generate_together(prompt, api_key, model, size)
-    elif backend == "openai":
-        image_bytes, ext = await _generate_openai(prompt, api_key, model, size)
-    elif backend == "google":
-        image_bytes, ext = await _generate_google(prompt, api_key, model, size)
-    elif backend == "stability_ai":
-        image_bytes, ext = await _generate_stability(prompt, api_key, model, size)
-    elif backend == "huggingface":
-        image_bytes, ext = await _generate_huggingface(prompt, api_key, model, size)
-    else:
-        raise ValueError(
-            f"Unbekannter Image-Provider: '{backend}'. "
-            "Unterstützt: together_ai, openai, google, stability_ai, huggingface."
-        )
+    # Provider aufrufen (mit Rate Limiting)
+    async with _IMAGE_GEN_SEMAPHORE:
+        if backend == "together_ai":
+            image_bytes, ext = await _generate_together(prompt, api_key, model, size)
+        elif backend == "openai":
+            image_bytes, ext = await _generate_openai(prompt, api_key, model, size)
+        elif backend == "google":
+            image_bytes, ext = await _generate_google(prompt, api_key, model, size)
+        elif backend == "stability_ai":
+            image_bytes, ext = await _generate_stability(prompt, api_key, model, size)
+        elif backend == "huggingface":
+            image_bytes, ext = await _generate_huggingface(prompt, api_key, model, size)
+        else:
+            raise ValueError(
+                f"Unbekannter Image-Provider: '{backend}'. "
+                "Unterstützt: together_ai, openai, google, stability_ai, huggingface."
+            )
 
     # Bild speichern
     img_dir = _ensure_images_dir()
@@ -301,7 +333,13 @@ async def generate_image(
     filepath = img_dir / filename
     filepath.write_bytes(image_bytes)
 
-    logger.info("Bild generiert: %s (%d KB, Provider: %s, Modell: %s)", filename, len(image_bytes) // 1024, backend, model)
+    logger.info(
+        "Bild generiert: %s (%d KB, Provider: %s, Modell: %s)",
+        filename,
+        len(image_bytes) // 1024,
+        backend,
+        model,
+    )
 
     return {
         "image_id": image_id,

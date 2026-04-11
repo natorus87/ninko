@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 import pickle
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -62,6 +63,7 @@ class KnowledgeGraph:
     """
 
     _instance: KnowledgeGraph | None = None
+    _init_lock: threading.Lock = threading.Lock()
 
     def __init__(self) -> None:
         self._graph = nx.DiGraph()
@@ -80,9 +82,12 @@ class KnowledgeGraph:
 
     @classmethod
     def get_instance(cls) -> KnowledgeGraph:
-        """Singleton-Accessor."""
+        """Singleton-Accessor mit thread-safe Initialisierung."""
         if cls._instance is None:
-            cls._instance = KnowledgeGraph()
+            with cls._init_lock:
+                # Double-check pattern
+                if cls._instance is None:
+                    cls._instance = KnowledgeGraph()
         return cls._instance
 
     def _load(self) -> None:

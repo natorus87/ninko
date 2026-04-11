@@ -418,13 +418,14 @@ const Ninko = {
         return 'sess-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9);
     },
 
+    // SECURITY: Session ID wird in Memory gehalten, NICHT in sessionStorage (XSS-Protection)
+    _sessionId: null,
+
     getSessionId() {
-        let id = sessionStorage.getItem('ninko_session');
-        if (!id) {
-            id = this.generateUUID();
-            sessionStorage.setItem('ninko_session', id);
+        if (!this._sessionId) {
+            this._sessionId = this.generateUUID();
         }
-        return id;
+        return this._sessionId;
     },
 
     // ─── Modules ───
@@ -1078,24 +1079,19 @@ const Ninko = {
 
     // ─── Chat History ───
     async loadHistory() {
+        // SECURITY: Chat history wird NICHT in localStorage gespeichert (XSS/CWE-200)
+        // da sie potenziell sensitive Daten enthalten kann.
+        // Nur Server-Side History wird verwendet.
         try {
             const res = await fetch('/api/chat/ui-history');
             if (res.ok) {
                 const data = await res.json();
                 this.chatHistory = data.conversations || [];
-                // Lokalen Cache aktualisieren
-                try { localStorage.setItem('ninko_chat_history', JSON.stringify(this.chatHistory)); } catch { /**/ }
             } else {
                 throw new Error('API nicht erreichbar');
             }
         } catch {
-            // Fallback auf localStorage wenn Server nicht erreichbar
-            try {
-                const raw = localStorage.getItem('ninko_chat_history');
-                this.chatHistory = raw ? JSON.parse(raw) : [];
-            } catch {
-                this.chatHistory = [];
-            }
+            this.chatHistory = [];
         }
         this.renderHistory();
     },

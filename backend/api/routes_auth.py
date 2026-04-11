@@ -22,15 +22,65 @@ from core.auth import (
     create_api_access_token,
     create_session_token,
     resolve_request_auth,
+    resolve_request_auth_async,
     resolve_request_role,
 )
 from core.config import get_settings
 from core.rbac import RbacStore, hash_password
+from core.redis_client import get_redis
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 rbac_store = RbacStore()
 
 _ID_RE = re.compile(r"^[a-zA-Z0-9_\-]{2,64}$")
+
+# Brute-Force Protection Settings (CWE-307)
+_MAX_LOGIN_ATTEMPTS = 5
+_LOGIN_WINDOW_SECONDS = 900  # 15 minutes
+_LOGIN_LOCKOUT_SECONDS = 1800  # 30 minutes
+
+
+async def _check_login_rate_limit(username: str) -> tuple[bool, int]:
+    """
+    Per-username brute-force protection.
+    Returns (allowed: bool, retry_after: int).
+    """
+    redis = get_redis()
+    key = f"ninko:login_attempts:{username.lower()}"
+
+    # Check if currently locked out
+    lockout_key = f"{key}:locked"
+    is_locked = await redis.connection.get(lockout_key)
+    if is_locked:
+        ttl = await redis.connection.ttl(lockout_key)
+        return False, max(1, ttl)
+
+    # Get current attempt count
+    attempts = await redis.connection.get(key)
+    if attempts and int(attempts) >= _MAX_LOGIN_ATTEMPTS:
+        # Lock out the user
+        await redis.connection.setex(lockout_key, _LOGIN_LOCKOUT_SECONDS, "1")
+        await redis.connection.delete(key)
+        return False, _LOGIN_LOCKOUT_SECONDS
+
+    return True, 0
+
+
+async def _record_login_attempt(username: str, success: bool) -> None:
+    """Record a login attempt (success resets counter)."""
+    redis = get_redis()
+    key = f"ninko:login_attempts:{username.lower()}"
+
+    if success:
+        # Clear attempts on successful login
+        await redis.connection.delete(key)
+        await redis.connection.delete(f"{key}:locked")
+    else:
+        # Increment attempt counter with TTL
+        pipe = redis.connection.pipeline()
+        pipe.incr(key)
+        pipe.expire(key, _LOGIN_WINDOW_SECONDS)
+        await pipe.execute()
 
 
 def _assert_admin(request: Request) -> None:
@@ -57,7 +107,9 @@ def _sanitize_user(user: dict[str, Any]) -> dict[str, Any]:
         "must_change_password": bool(user.get("must_change_password", False)),
         "roles": list(user.get("roles") or []),
         "groups": list(user.get("groups") or []),
-        "custom_settings": user.get("custom_settings", {}) if isinstance(user.get("custom_settings"), dict) else {},
+        "custom_settings": user.get("custom_settings", {})
+        if isinstance(user.get("custom_settings"), dict)
+        else {},
         "created_at": user.get("created_at", ""),
         "updated_at": user.get("updated_at", ""),
     }
@@ -149,15 +201,39 @@ class UserCustomSettingsRequest(BaseModel):
     settings: dict[str, Any] = Field(default_factory=dict)
 
 
+def _is_trusted_proxy(host: str | None) -> bool:
+    """
+    Verify if request comes from a trusted proxy (loopback or RFC-1918 private IP).
+    Prevents CWE-918: Untrusted Proxy with X-Forwarded-Proto spoofing.
+    """
+    if not host:
+        return False
+    try:
+        import ipaddress
+
+        addr = ipaddress.ip_address(host)
+        return addr.is_loopback or addr.is_private
+    except ValueError:
+        return False
+
+
 def _should_set_secure_cookie(request: Request, cfg_secure: bool) -> bool:
     """
     Enable Secure cookies only when requested by config and request is HTTPS.
-    Accept X-Forwarded-Proto for reverse proxy termination (Traefik/nginx).
+    Accept X-Forwarded-Proto ONLY from trusted proxies (loopback/RFC-1918).
+    Prevents CWE-918: Untrusted Proxy with X-Forwarded-Proto spoofing.
     """
     if not cfg_secure:
         return False
-    proto_hdr = (request.headers.get("x-forwarded-proto") or "").split(",", 1)[0].strip().lower()
-    is_https = request.url.scheme == "https" or proto_hdr == "https"
+    is_https = request.url.scheme == "https"
+    if not is_https and request.client and _is_trusted_proxy(request.client.host):
+        proto_hdr = (
+            (request.headers.get("x-forwarded-proto") or "")
+            .split(",", 1)[0]
+            .strip()
+            .lower()
+        )
+        is_https = proto_hdr == "https"
     return is_https
 
 
@@ -170,14 +246,30 @@ async def login(body: LoginRequest, response: Response, request: Request) -> dic
     username = body.username.strip()
     password = body.password
     if not username or not password:
-        raise HTTPException(status_code=400, detail="Username and password are required.")
+        raise HTTPException(
+            status_code=400, detail="Username and password are required."
+        )
+
+    # CWE-307: Check per-username rate limit
+    allowed, retry_after = await _check_login_rate_limit(username)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many failed login attempts. Please try again in {retry_after} seconds.",
+            headers={"Retry-After": str(retry_after)},
+        )
 
     # 1) Try RBAC users first
     user = await rbac_store.authenticate_user(username, password)
     if user is not None:
+        # Record successful login
+        await _record_login_attempt(username, success=True)
+
         effective = await rbac_store.build_effective_permissions(username)
         if not effective:
-            raise HTTPException(status_code=403, detail="No effective permissions for this user.")
+            raise HTTPException(
+                status_code=403, detail="No effective permissions for this user."
+            )
 
         token = create_session_token(
             username,
@@ -186,12 +278,13 @@ async def login(body: LoginRequest, response: Response, request: Request) -> dic
             module_permissions=effective["module_permissions"],
             password_change_required=bool(user.get("must_change_password", False)),
         )
+        # CWE-614: SameSite=Strict für Session-Cookie
         response.set_cookie(
             key=cfg.SESSION_COOKIE_NAME,
             value=token,
             httponly=True,
             secure=_should_set_secure_cookie(request, cfg.SESSION_COOKIE_SECURE),
-            samesite="lax",
+            samesite="strict",
             max_age=max(1, int(cfg.SESSION_TTL_HOURS)) * 3600,
             path="/",
         )
@@ -205,12 +298,39 @@ async def login(body: LoginRequest, response: Response, request: Request) -> dic
             "password_change_required": bool(user.get("must_change_password", False)),
         }
 
+    # Record failed login attempt
+    await _record_login_attempt(username, success=False)
+
     raise HTTPException(status_code=401, detail="Invalid credentials.")
 
 
 @router.post("/logout")
-async def logout(response: Response) -> dict:
+async def logout(response: Response, request: Request) -> dict:
+    """
+    Logout: Delete session cookie and blacklist the token.
+    Prevents CWE-613: Lack of Logout in Session Tokens.
+    """
+    from core.redis_client import get_redis
+    import time as _time
+
     cfg = get_settings()
+    token = request.cookies.get(cfg.SESSION_COOKIE_NAME, "").strip()
+    if token:
+        try:
+            from core.auth import _parse_session_token
+
+            payload = _parse_session_token(token)
+            if payload:
+                ttl = max(0, int(payload.get("exp", 0) - _time.time()))
+                if ttl > 0:
+                    redis = get_redis()
+                    await redis.connection.setex(
+                        f"ninko:session_blacklist:{token[:64]}",
+                        ttl,
+                        "1",
+                    )
+        except Exception:
+            pass
     response.delete_cookie(
         key=cfg.SESSION_COOKIE_NAME,
         path="/",
@@ -235,7 +355,7 @@ async def me(request: Request) -> dict:
             "password_change_required": False,
         }
 
-    auth_ctx = resolve_request_auth(request)
+    auth_ctx = await resolve_request_auth_async(request)
     if not auth_ctx:
         return {"authenticated": False, "auth_enabled": True}
 
@@ -251,7 +371,9 @@ async def me(request: Request) -> dict:
             "groups": effective["group_ids"],
             "module_permissions": effective["module_permissions"],
             "tenant_id": effective.get("tenant_id", "default"),
-            "password_change_required": bool(effective.get("password_change_required", False)),
+            "password_change_required": bool(
+                effective.get("password_change_required", False)
+            ),
         }
 
     return {
@@ -263,21 +385,27 @@ async def me(request: Request) -> dict:
         "groups": [],
         "module_permissions": auth_ctx.get("module_permissions", {}),
         "tenant_id": auth_ctx.get("tenant_id", "default"),
-        "password_change_required": bool(auth_ctx.get("password_change_required", False)),
+        "password_change_required": bool(
+            auth_ctx.get("password_change_required", False)
+        ),
     }
 
 
 @router.post("/change-password")
-async def change_own_password(body: ChangeOwnPasswordRequest, request: Request, response: Response) -> dict:
+async def change_own_password(
+    body: ChangeOwnPasswordRequest, request: Request, response: Response
+) -> dict:
     cfg = get_settings()
     if not cfg.API_AUTH_ENABLED:
         raise HTTPException(status_code=400, detail="Auth is disabled.")
 
-    auth_ctx = resolve_request_auth(request)
+    auth_ctx = await resolve_request_auth_async(request)
     if not auth_ctx:
         raise HTTPException(status_code=401, detail="Not authenticated.")
     if str(auth_ctx.get("auth_source", "")) != "session":
-        raise HTTPException(status_code=403, detail="Password change requires session authentication.")
+        raise HTTPException(
+            status_code=403, detail="Password change requires session authentication."
+        )
 
     username = str(auth_ctx.get("username", "")).strip()
     if not username:
@@ -339,7 +467,9 @@ async def bootstrap_admin(body: LoginRequest, request: Request) -> dict:
 
     username = _validate_id(body.username, "username")
     if len(body.password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 chars.")
+        raise HTTPException(
+            status_code=400, detail="Password must be at least 8 chars."
+        )
 
     await rbac_store.bootstrap_admin_if_needed(username, body.password)
     return {"status": "ok", "username": username}
@@ -359,7 +489,9 @@ async def create_user(body: UserCreateRequest, request: Request) -> dict:
     _assert_admin(request)
     username = _validate_id(body.username, "username")
     if len(body.password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 chars.")
+        raise HTTPException(
+            status_code=400, detail="Password must be at least 8 chars."
+        )
 
     state = await rbac_store.load()
     users: dict[str, dict[str, Any]] = state["users"]
@@ -456,11 +588,15 @@ async def update_user(username: str, body: UserUpdateRequest, request: Request) 
 
 
 @router.put("/users/{username}/password")
-async def set_user_password(username: str, body: UserPasswordRequest, request: Request) -> dict:
+async def set_user_password(
+    username: str, body: UserPasswordRequest, request: Request
+) -> dict:
     _assert_admin(request)
     username = _validate_id(username, "username")
     if len(body.password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 chars.")
+        raise HTTPException(
+            status_code=400, detail="Password must be at least 8 chars."
+        )
 
     state = await rbac_store.load()
     users: dict[str, dict[str, Any]] = state["users"]
@@ -513,7 +649,9 @@ async def get_user_custom_settings(username: str, request: Request) -> dict:
 
 
 @router.put("/users/{username}/settings")
-async def update_user_custom_settings(username: str, body: UserCustomSettingsRequest, request: Request) -> dict:
+async def update_user_custom_settings(
+    username: str, body: UserCustomSettingsRequest, request: Request
+) -> dict:
     _assert_admin(request)
     username = _validate_id(username, "username")
     state = await rbac_store.load()
@@ -524,7 +662,11 @@ async def update_user_custom_settings(username: str, body: UserCustomSettingsReq
     user["custom_settings"] = body.settings if isinstance(body.settings, dict) else {}
     user["updated_at"] = state["updated_at"]
     await rbac_store.save(state)
-    return {"status": "updated", "username": username, "settings": user["custom_settings"]}
+    return {
+        "status": "updated",
+        "username": username,
+        "settings": user["custom_settings"],
+    }
 
 
 @router.get("/users/{username}/api-tokens")
@@ -544,7 +686,9 @@ async def list_user_api_tokens(username: str, request: Request) -> dict:
 
 
 @router.post("/users/{username}/api-tokens")
-async def create_user_api_token(username: str, body: ApiTokenCreateRequest, request: Request) -> dict:
+async def create_user_api_token(
+    username: str, body: ApiTokenCreateRequest, request: Request
+) -> dict:
     _assert_admin(request)
     username = _validate_id(username, "username")
     state = await rbac_store.load()
@@ -553,11 +697,15 @@ async def create_user_api_token(username: str, body: ApiTokenCreateRequest, requ
     if not isinstance(user, dict):
         raise HTTPException(status_code=404, detail="User not found.")
     if not bool(user.get("active", True)):
-        raise HTTPException(status_code=400, detail="Cannot create API token for inactive user.")
+        raise HTTPException(
+            status_code=400, detail="Cannot create API token for inactive user."
+        )
 
     effective = await rbac_store.build_effective_permissions(username)
     if not effective:
-        raise HTTPException(status_code=400, detail="No effective permissions for this user.")
+        raise HTTPException(
+            status_code=400, detail="No effective permissions for this user."
+        )
 
     raw_token = create_api_access_token(
         username,
@@ -651,7 +799,10 @@ async def create_role(body: RoleCreateRequest, request: Request) -> dict:
         raise HTTPException(status_code=409, detail="Role already exists.")
 
     module_permissions = {
-        k.strip().lower().replace("-", "_"): {"read": bool(v.read), "write": bool(v.write)}
+        k.strip().lower().replace("-", "_"): {
+            "read": bool(v.read),
+            "write": bool(v.write),
+        }
         for k, v in body.module_permissions.items()
         if k.strip()
     }
@@ -660,7 +811,8 @@ async def create_role(body: RoleCreateRequest, request: Request) -> dict:
         "name": body.name.strip(),
         "description": body.description.strip(),
         "base_role": body.base_role,
-        "module_permissions": module_permissions or {"*": {"read": True, "write": body.base_role != "read"}},
+        "module_permissions": module_permissions
+        or {"*": {"read": True, "write": body.base_role != "read"}},
     }
     await rbac_store.save(state)
     return {"status": "created", "role": roles[role_id]}
@@ -684,7 +836,10 @@ async def update_role(role_id: str, body: RoleUpdateRequest, request: Request) -
         role["base_role"] = body.base_role
     if body.module_permissions is not None:
         role["module_permissions"] = {
-            k.strip().lower().replace("-", "_"): {"read": bool(v.read), "write": bool(v.write)}
+            k.strip().lower().replace("-", "_"): {
+                "read": bool(v.read),
+                "write": bool(v.write),
+            }
             for k, v in body.module_permissions.items()
             if k.strip()
         }
@@ -698,7 +853,9 @@ async def delete_role(role_id: str, request: Request) -> dict:
     _assert_admin(request)
     role_id = _validate_id(role_id, "role_id")
     if role_id == "role_admin":
-        raise HTTPException(status_code=400, detail="Built-in role_admin cannot be deleted.")
+        raise HTTPException(
+            status_code=400, detail="Built-in role_admin cannot be deleted."
+        )
 
     state = await rbac_store.load()
     roles: dict[str, dict[str, Any]] = state["roles"]
@@ -774,7 +931,9 @@ async def create_group(body: GroupCreateRequest, request: Request) -> dict:
 
 
 @router.put("/groups/{group_id}")
-async def update_group(group_id: str, body: GroupUpdateRequest, request: Request) -> dict:
+async def update_group(
+    group_id: str, body: GroupUpdateRequest, request: Request
+) -> dict:
     _assert_admin(request)
     group_id = _validate_id(group_id, "group_id")
     state = await rbac_store.load()
@@ -825,7 +984,9 @@ async def delete_group(group_id: str, request: Request) -> dict:
     _assert_admin(request)
     group_id = _validate_id(group_id, "group_id")
     if group_id == "group_admins":
-        raise HTTPException(status_code=400, detail="Built-in group_admins cannot be deleted.")
+        raise HTTPException(
+            status_code=400, detail="Built-in group_admins cannot be deleted."
+        )
 
     state = await rbac_store.load()
     groups: dict[str, dict[str, Any]] = state["groups"]

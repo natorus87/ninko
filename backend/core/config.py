@@ -5,8 +5,10 @@ Nur Core-Konfiguration, keine Modul-spezifischen Einstellungen.
 
 from __future__ import annotations
 
+import logging
 from typing import Literal
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -69,7 +71,7 @@ class CoreSettings(BaseSettings):
     LLM_VERIFY_SSL: bool = True  # False = self-signed Zertifikate erlauben
 
     # ── API Security ───────────────────────────────────
-    API_AUTH_ENABLED: bool = False
+    API_AUTH_ENABLED: bool = True
     API_KEY_ADMIN: str = ""
     API_KEY_WRITE: str = ""
     API_KEY_READ: str = ""
@@ -111,6 +113,22 @@ class CoreSettings(BaseSettings):
     AGENT_JIT_MAX_TOOLS: int = 8
     AGENT_MEMORIZE_COOLDOWN_SECS: float = 60.0
 
+    # ── Tool Output Limits ─────────────────────────────
+    TOOL_MAX_OUTPUT_CHARS: int = 4000
+    TOOL_MAX_OUTPUT_LINES: int = 200
+
+    # ── Plugin Cache ───────────────────────────────────
+    PLUGIN_CACHE_TTL_SECONDS: int = 300  # 5 minutes
+
+    # ── CodeLab Resource Limits ───────────────────────
+    CODELAB_MAX_CODE_CHARS: int = 100_000
+    CODELAB_MAX_STDOUT_CHARS: int = 20_000
+    CODELAB_MAX_STDERR_CHARS: int = 5_000
+    CODELAB_MAX_MEMORY_BYTES: int = 256 * 1024 * 1024  # 256 MB
+    CODELAB_MAX_FILESIZE_BYTES: int = 5 * 1024 * 1024  # 5 MB
+    CODELAB_MAX_NOFILE: int = 64
+    CODELAB_MAX_NPROC: int = 16
+
     # ── TTS (Piper) ────────────────────────────────────
     TTS_ENABLED: bool = False
     PIPER_BINARY: str = "piper"
@@ -145,6 +163,25 @@ class CoreSettings(BaseSettings):
         "Extract all readable text from this image. "
         "Return plain text only, preserving line breaks where possible."
     )
+
+    @model_validator(mode="after")
+    def _validate_secrets(self) -> "CoreSettings":
+        """Validiert Security-kritische Defaults und loggt Warnungen."""
+        logger = logging.getLogger("ninko.core.config")
+
+        if self.SESSION_SECRET == "change-me-in-production":
+            logger.warning(
+                "SECURITY: SESSION_SECRET ist auf den Default-Wert gesetzt! "
+                "Bitte SESSION_SECRET in der .env-Datei oder als Umgebungsvariable setzen."
+            )
+
+        if self.BOOTSTRAP_ADMIN_PASSWORD == "admin":
+            logger.warning(
+                "SECURITY: BOOTSTRAP_ADMIN_PASSWORD ist 'admin'! "
+                "Bitte BOOTSTRAP_ADMIN_PASSWORD in der .env-Datei setzen."
+            )
+
+        return self
 
 
 # Singleton-Instanz

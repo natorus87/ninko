@@ -13,9 +13,12 @@ Optional auth headers:
 """
 
 import json
+import logging
 import os
 import urllib.error
 import urllib.request
+
+logger = logging.getLogger(__name__)
 
 
 BASE_URL = os.getenv("NINKO_BASE_URL", "http://localhost:8000").rstrip("/")
@@ -48,7 +51,10 @@ def _request(
 def _print_result(name: str, ok: bool, detail: str = "") -> None:
     state = "OK" if ok else "FAIL"
     suffix = f" — {detail}" if detail else ""
-    print(f"[{state}] {name}{suffix}")
+    if ok:
+        logger.info("[%s] %s%s", state, name, suffix)
+    else:
+        logger.warning("[%s] %s%s", state, name, suffix)
 
 
 def main() -> int:
@@ -89,10 +95,14 @@ def main() -> int:
     boundary = "----ninko-e2e-boundary"
     bogus_audio = b"not-audio"
     multipart = (
-        f"--{boundary}\r\n"
-        f'Content-Disposition: form-data; name="file"; filename="test.txt"\r\n'
-        f"Content-Type: text/plain\r\n\r\n"
-    ).encode("utf-8") + bogus_audio + f"\r\n--{boundary}--\r\n".encode("utf-8")
+        (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="file"; filename="test.txt"\r\n'
+            f"Content-Type: text/plain\r\n\r\n"
+        ).encode("utf-8")
+        + bogus_audio
+        + f"\r\n--{boundary}--\r\n".encode("utf-8")
+    )
 
     status, body = _request(
         "POST",
@@ -107,9 +117,11 @@ def main() -> int:
     _print_result("transcription_rejects_invalid_upload", ok, f"status={status}")
     failures += 0 if ok else 1
 
+    # Output final JSON summary (stdout for CI parsing)
     print(json.dumps({"base_url": BASE_URL, "failures": failures}, ensure_ascii=False))
     return 1 if failures else 0
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(name)s: %(message)s")
     raise SystemExit(main())

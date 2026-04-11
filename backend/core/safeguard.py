@@ -37,6 +37,21 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("ninko.core.safeguard")
 
+_SAFEGUARD_EXCEPTIONS_GENERAL = (
+    AttributeError,
+    TypeError,
+    ValueError,
+    KeyError,
+    RuntimeError,
+    OSError,
+    json.JSONDecodeError,
+)
+
+_SAFEGUARD_EXCEPTIONS_TIMEOUT = (asyncio.TimeoutError,)
+
+_SAFEGUARD_EXCEPTIONS_IMPORT = (ImportError,)
+
+# Legacy tuple for backward compatibility - deprecated, use specific tuples above
 _SAFEGUARD_EXCEPTIONS = (
     ImportError,
     AttributeError,
@@ -1539,8 +1554,20 @@ class SafeguardMiddleware:
 
         # 1. Clearly safe question patterns (single-word checks)
         safe_keywords = (
-            "show ", "list", "get ", "what ", "how ", "which ", "why ",
-            "status", "help", "zeige ", "liste", "was ", "wie ", "mostra ",
+            "show ",
+            "list",
+            "get ",
+            "what ",
+            "how ",
+            "which ",
+            "why ",
+            "status",
+            "help",
+            "zeige ",
+            "liste",
+            "was ",
+            "wie ",
+            "mostra ",
         )
         if any(lower.startswith(kw) for kw in safe_keywords) or lower.endswith("?"):
             return {
@@ -1552,11 +1579,29 @@ class SafeguardMiddleware:
 
         # 2. Extremely destructive CLI patterns (high-confidence block)
         destructive_patterns = (
-            "rm -rf", "rm -r", "rm -", "drop table", "drop database",
-            "delete from", "truncate ", "format disk", "wipefs",
-            "mkfs", "kubectl delete", "terraform destroy",
-            "destroy", "wipe", "delete", "remove", "purge",
-            "lösch", "entfern", "vernicht", "supprim", "efface", "enlever",
+            "rm -rf",
+            "rm -r",
+            "rm -",
+            "drop table",
+            "drop database",
+            "delete from",
+            "truncate ",
+            "format disk",
+            "wipefs",
+            "mkfs",
+            "kubectl delete",
+            "terraform destroy",
+            "destroy",
+            "wipe",
+            "delete",
+            "remove",
+            "purge",
+            "lösch",
+            "entfern",
+            "vernicht",
+            "supprim",
+            "efface",
+            "enlever",
         )
         if any(pat in lower for pat in destructive_patterns):
             return {
@@ -1568,9 +1613,21 @@ class SafeguardMiddleware:
 
         # 3. Obvious state-changing patterns (high-confidence block)
         state_patterns = (
-            "create", "deploy", "install", "kubectl apply", "helm install",
-            "terraform apply", "update", "restart", "reboot", "apply",
-            "erstell", "deploye", "installier", "starte ", "aktualisier",
+            "create",
+            "deploy",
+            "install",
+            "kubectl apply",
+            "helm install",
+            "terraform apply",
+            "update",
+            "restart",
+            "reboot",
+            "apply",
+            "erstell",
+            "deploye",
+            "installier",
+            "starte ",
+            "aktualisier",
         )
         if any(pat in lower for pat in state_patterns):
             return {

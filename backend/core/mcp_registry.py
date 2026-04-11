@@ -13,6 +13,7 @@ import contextlib
 import json
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -21,6 +22,28 @@ import httpx
 logger = logging.getLogger("ninko.core.mcp_registry")
 
 DEFAULT_PROTOCOL_VERSION = "2025-03-26"
+
+# CWE-78 Mitigation: Whitelist for MCP command validation
+_MCP_ALLOWED_COMMAND_RE = re.compile(r"^/?[a-zA-Z0-9_][a-zA-Z0-9_./-]*$")
+_MCP_ALLOWED_ARG_RE = re.compile(r"^[a-zA-Z0-9_./:=@+\- ]*$")
+
+
+def _validate_mcp_command(command: str) -> str:
+  """Validates MCP executable against whitelist pattern (CWE-78)."""
+  cmd = command.strip()
+  if not cmd or not _MCP_ALLOWED_COMMAND_RE.match(cmd):
+    raise ValueError(
+        f"Invalid MCP command: '{cmd}'. "
+        "Only alphanumeric characters, '_', '.', '/', '-' allowed."
+    )
+  return cmd
+
+
+def _validate_mcp_args(args: list[str]) -> None:
+  """Validates MCP arguments against whitelist pattern (CWE-78)."""
+  for arg in args:
+    if not _MCP_ALLOWED_ARG_RE.match(str(arg)):
+      raise ValueError(f"Invalid MCP argument: '{arg}'")
 
 
 @dataclass(slots=True)
@@ -88,9 +111,13 @@ class McpRegistry:
     ) -> dict:
         if config.transport != "stdio":
             if config.transport == "http":
-                return await self._call_http(config, method, params or {}, initialize_only)
+                return await self._call_http(
+                    config, method, params or {}, initialize_only
+                )
             if config.transport == "sse":
-                return await self._call_sse(config, method, params or {}, initialize_only)
+                return await self._call_sse(
+                    config, method, params or {}, initialize_only
+                )
             raise McpClientError(f"Unsupported MCP transport '{config.transport}'.")
 
         return await self._call_stdio(config, method, params or {}, initialize_only)
@@ -119,7 +146,9 @@ class McpRegistry:
                 },
                 request_id=1,
             )
-            await self._post_notification(client, config.url, headers, "notifications/initialized", {})
+            await self._post_notification(
+                client, config.url, headers, "notifications/initialized", {}
+            )
             if initialize_only:
                 return initialize_result
             return await self._post_jsonrpc(
@@ -184,7 +213,10 @@ class McpRegistry:
                         request_id=1,
                     )
                     initialize_result = await self._await_queue_result(
-                        queue, request_id=1, timeout=config.timeout_seconds, method="initialize"
+                        queue,
+                        request_id=1,
+                        timeout=config.timeout_seconds,
+                        method="initialize",
                     )
                     await self._post_notification(
                         client,
@@ -223,14 +255,23 @@ class McpRegistry:
         initialize_only: bool,
     ) -> dict:
         if not config.command.strip():
-            raise McpClientError("No MCP server command configured for stdio transport.")
+            raise McpClientError(
+                "No MCP server command configured for stdio transport."
+            )
+
+        # CWE-78: Validate command and arguments against whitelist
+        try:
+            validated_command = _validate_mcp_command(config.command)
+            _validate_mcp_args(config.args)
+        except ValueError as exc:
+            raise McpClientError(str(exc)) from exc
 
         env = {**os.environ, **config.env}
         if config.auth_token:
             env.setdefault("MCP_AUTH_TOKEN", config.auth_token)
 
         process = await asyncio.create_subprocess_exec(
-            config.command,
+            validated_command,
             *config.args,
             cwd=config.cwd or None,
             env=env or None,
@@ -256,19 +297,32 @@ class McpRegistry:
                 f"MCP request '{method}' timed out after {config.timeout_seconds} seconds."
             ) from exc
         finally:
-            if process.stdin:
-                process.stdin.close()
-                with contextlib.suppress(Exception):
-                    await process.stdin.wait_closed()
-            if process.returncode is None:
-                process.terminate()
-                with contextlib.suppress(ProcessLookupError, asyncio.TimeoutError):
-                    await asyncio.wait_for(process.wait(), timeout=2)
-            if process.returncode is None:
-                process.kill()
-            stderr = await process.stderr.read() if process.stderr else b""
-            if stderr:
-                logger.debug("MCP stderr: %s", stderr.decode("utf-8", errors="replace"))
+            try:
+                # Gracefully terminate process and close all pipes
+                if process.returncode is None:
+                    process.terminate()
+                    try:
+                        await asyncio.wait_for(process.wait(), timeout=2)
+                    except asyncio.TimeoutError:
+                        process.kill()
+                        await process.wait()
+                # Ensure all pipes are properly closed using communicate()
+                # This prevents stdout/stderr pipe leaks (stdout/stderr are StreamReader)
+                try:
+                    stdout, stderr = await asyncio.wait_for(
+                        process.communicate(), timeout=1.0
+                    )
+                    if stderr:
+                        logger.debug(
+                            "MCP stderr: %s", stderr.decode("utf-8", errors="replace")
+                        )
+                except asyncio.TimeoutError:
+                    # communicate() timed out - stdin is the only pipe we can close
+                    if process.stdin:
+                        process.stdin.close()
+            except (ProcessLookupError, OSError):
+                # Process already gone, ignore
+                pass
 
     async def _initialize_stdio(
         self,
@@ -372,7 +426,9 @@ class McpRegistry:
         data_lines: list[str] = []
         async for line in response.aiter_lines():
             if line == "":
-                await self._flush_sse_event(event_name, data_lines, queue, endpoint_queue)
+                await self._flush_sse_event(
+                    event_name, data_lines, queue, endpoint_queue
+                )
                 event_name = "message"
                 data_lines = []
                 continue

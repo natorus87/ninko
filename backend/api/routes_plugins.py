@@ -13,6 +13,7 @@ import logging
 import os
 import re
 import shutil
+import sys
 import time
 import uuid
 import tarfile
@@ -59,8 +60,11 @@ def _get_cache_ttl() -> int:
 
 
 def _parse_github_url(url: str) -> tuple[str, str] | None:
-    """Extrahiert (owner, repo) aus einer GitHub-URL."""
-    m = re.search(r"github\.com[:/]([^/]+)/([^/.\s]+?)(?:\.git)?\s*$", url.strip())
+    """Extrahiert (owner, repo) aus einer GitHub-URL. Nur https://github.com/ URLs akzeptiert."""
+    m = re.match(
+        r"https://github\.com/([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+?)(?:\.git)?$",
+        url.strip(),
+    )
     return (m.group(1), m.group(2)) if m else None
 
 
@@ -185,9 +189,11 @@ def _decrypt_token(stored: str) -> str:
     if fernet is None:
         return ""
     try:
-        return fernet.decrypt(stored[len(_TOKEN_PREFIX):].encode()).decode()
+        return fernet.decrypt(stored[len(_TOKEN_PREFIX) :].encode()).decode()
     except InvalidToken:
-        logger.warning("GitHub-Token konnte nicht entschlüsselt werden — Token gelöscht.")
+        logger.warning(
+            "GitHub-Token konnte nicht entschlüsselt werden — Token gelöscht."
+        )
         return ""
 
 
@@ -475,6 +481,7 @@ async def check_plugin_updates(request: Request) -> JSONResponse:
 
 
 _MAX_UNCOMPRESSED_SIZE = 100 * 1024 * 1024  # 100 MB
+_MAX_PLUGIN_FILES = 500  # Max Anzahl Dateien im ZIP (CWE-400: ZIP-Bomb-Schutz)
 _DANGEROUS_REQ_PATTERNS = (
     "--index-url",
     "--extra-index-url",
@@ -503,10 +510,18 @@ async def install_requirements_if_exist(plugin_dir: Path) -> bool:
             return False
 
     logger.info("Installiere Abhängigkeiten für Plugin aus: %s", req_file)
+    logger.warning(
+        "pip install ohne venv-Isolation: Plugin-Abhängigkeiten werden in den System-Namespace installiert. "
+        "Sicherstellen, dass requirements.txt aus vertrauenswürdiger Quelle stammt."
+    )
     try:
         proc = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-m",
             "pip",
             "install",
+            "--isolated",
+            "--no-cache-dir",
             "-r",
             str(req_file),
             stdout=asyncio.subprocess.PIPE,
@@ -558,6 +573,12 @@ async def upload_plugin(request: Request, file: UploadFile = File(...)) -> JSONR
         extract_dir = temp_dir / "extracted"
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             members = zip_ref.infolist()
+            # CWE-400: Limit Dateianzahl für ZIP-Bomb-Schutz
+            if len(members) > _MAX_PLUGIN_FILES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"ZIP-Archiv enthält zu viele Dateien: {len(members)} (max. {_MAX_PLUGIN_FILES}).",
+                )
             total_size = sum(m.file_size for m in members)
             if total_size > _MAX_UNCOMPRESSED_SIZE:
                 raise HTTPException(

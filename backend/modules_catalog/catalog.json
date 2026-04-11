@@ -84,7 +84,7 @@
       "version": "1.0.0",
       "author": "Ninko Team"
     },
-{
+    {
       "name": "linux_server",
       "display_name": "Linux Server",
       "description": "Linux Server Management über SSH – Befehle, Services, Monitoring, Dateien",
@@ -168,7 +168,7 @@
       "version": "1.0.0",
       "author": "Ninko Team"
     },
-{
+    {
       "name": "tasmota",
       "display_name": "Tasmota",
       "description": "Steuerung und Monitoring von Tasmota-Geräten (ESP8266/ESP32) via HTTP REST API.",

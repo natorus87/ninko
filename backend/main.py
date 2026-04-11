@@ -370,12 +370,28 @@ async def lifespan(app: FastAPI) -> object:
     # ── Monitor Agent (Background) ────────────────────
     monitor = MonitorAgent(registry)
     monitor_task = asyncio.create_task(monitor.start_loop())
+    monitor_task.add_done_callback(
+        lambda t: (
+            logger.error("Monitor task ended with exception: %s", t.exception())
+            if not t.cancelled() and t.exception() is not None
+            else None
+        )
+    )
     app.state.monitor = monitor
+    app.state.monitor_task = monitor_task
 
     # ── Scheduler Agent (Background) ──────────────────
     scheduler = SchedulerAgent(registry, orchestrator)
     scheduler_task = asyncio.create_task(scheduler.start_loop())
+    scheduler_task.add_done_callback(
+        lambda t: (
+            logger.error("Scheduler task ended with exception: %s", t.exception())
+            if not t.cancelled() and t.exception() is not None
+            else None
+        )
+    )
     app.state.scheduler = scheduler
+    app.state.scheduler_task = scheduler_task
 
     # ── Safeguard paused-agent cleanup (Background) ───
     safeguard = app.state.safeguard
@@ -386,17 +402,18 @@ async def lifespan(app: FastAPI) -> object:
                 await asyncio.sleep(60)
                 try:
                     await safeguard.cleanup_paused_agents()
-                except (
-                    RuntimeError,
-                    ValueError,
-                    TypeError,
-                    KeyError,
-                    OSError,
-                    ImportError,
-                ):
-                    pass
+                except _MAIN_RECOVERABLE_EXCEPTIONS as exc:
+                    logger.warning("sg_cleanup_loop: Fehler beim Cleanup: %s", exc)
 
         sg_cleanup_task = asyncio.create_task(_sg_cleanup_loop())
+        sg_cleanup_task.add_done_callback(
+            lambda t: (
+                logger.error("sg_cleanup_loop unerwartet beendet: %s", t.exception())
+                if not t.cancelled() and t.exception() is not None
+                else None
+            )
+        )
+        app.state.sg_cleanup_task = sg_cleanup_task
         logger.info("Safeguard paused-agent cleanup task started.")
 
     # ── Telegram Polling Bot (optional – catalog module) ──
@@ -465,6 +482,12 @@ async def lifespan(app: FastAPI) -> object:
     # ── Shutdown ──────────────────────────────────────
     logger.info("Ninko wird heruntergefahren…")
 
+    # MemoryQueue stoppen (Flush verbleibender Messages)
+    from core.memory_queue import get_memory_queue
+
+    memory_queue = get_memory_queue()
+    await memory_queue.stop()
+
     # Telegram Bot stoppen (falls geladen)
     if telegram_bot is not None:
         await telegram_bot.stop()
@@ -473,7 +496,8 @@ async def lifespan(app: FastAPI) -> object:
     monitor_task.cancel()
     await scheduler.stop()
     scheduler_task.cancel()
-    if safeguard:
+    sg_cleanup_task = getattr(app.state, "sg_cleanup_task", None)
+    if sg_cleanup_task:
         sg_cleanup_task.cancel()
 
     from core.redis_client import get_redis

@@ -34,7 +34,9 @@ async def check_openproject_health() -> dict:
                 return {"status": "error", "detail": "Missing API key"}
 
             async with httpx.AsyncClient(
-                headers={"Authorization": f"Bearer {api_key}"}, timeout=10.0
+                headers={"Authorization": f"Bearer {api_key}"},
+                timeout=10.0,
+                verify=True,
             ) as client:
                 resp = await client.get(f"{host.rstrip('/')}/api/v3")
                 if resp.status_code == 200:
@@ -56,7 +58,9 @@ async def check_openproject_health() -> dict:
             return {"status": "error", "detail": "Missing config"}
 
         async with httpx.AsyncClient(
-            headers={"Authorization": f"Bearer {api_key}"}, timeout=10.0
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=10.0,
+            verify=True,
         ) as client:
             resp = await client.get(f"{base_url.rstrip('/')}/api/v3")
             if resp.status_code == 200:
@@ -64,8 +68,11 @@ async def check_openproject_health() -> dict:
             return {"status": "error", "detail": f"HTTP {resp.status_code}"}
 
     except httpx.HTTPStatusError as e:
-        logger.debug("OpenProject API full response: %s", e.response.text)
-        return {"status": "error", "detail": f"OpenProject API returned HTTP {e.response.status_code}. Check logs."}
+        logger.debug("OpenProject API HTTP error: status=%s", e.response.status_code)
+        return {
+            "status": "error",
+            "detail": f"OpenProject API returned HTTP {e.response.status_code}. Check API configuration.",
+        }
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": str(exc)}
 

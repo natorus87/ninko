@@ -29,6 +29,51 @@ from core.vault import get_vault
 logger = logging.getLogger("ninko.core.connections")
 
 
+# CWE-312 & CWE-200: Sensitive field patterns for detection and redaction
+_SENSITIVE_FIELD_PATTERNS = frozenset({
+    "api_key", "apikey", "api_token", "access_token", "secret",
+    "password", "passwd", "token", "auth_token", "bearer",
+    "private_key", "secret_key", "client_secret",
+})
+
+
+def _has_sensitive_config_fields(config: dict) -> list[str]:
+    """
+    Prüft ob ein config-Dict verdächtige Feldnamen enthält (case-insensitive).
+
+    Returns:
+        Liste verdächtiger Feldnamen, die wahrscheinlich Secrets enthalten.
+    """
+    if not config:
+        return []
+    found = []
+    for key in config:
+        key_lower = str(key).lower().replace("-", "_").replace(" ", "_")
+        if any(pat in key_lower for pat in _SENSITIVE_FIELD_PATTERNS):
+            found.append(key)
+    return found
+
+
+def _redact_connection_data(data: dict) -> dict:
+    """
+    Redaktiert sensitive Felder in Connection-Daten für sicheres Logging (CWE-200).
+    Vault-Keys sind nur Schlüssel-Namen, keine Secrets — diese werden nicht redaktiert.
+
+    Returns:
+        Kopie des Dict mit redaktierten sensitive Feldern (***REDACTED***).
+    """
+    result = dict(data)
+    config = result.get("config") or {}
+    if config:
+        suspicious = _has_sensitive_config_fields(config)
+        if suspicious:
+            redacted_config = dict(config)
+            for key in suspicious:
+                redacted_config[key] = "***REDACTED***"
+            result["config"] = redacted_config
+    return result
+
+
 class ConnectionManager:
     """Manager für Modul-Verbindungen."""
 
@@ -226,6 +271,23 @@ class ConnectionManager:
         redis = get_redis()
         key = ConnectionManager._get_redis_key(module_id, tenant_id)
         data = [json.loads(c.model_dump_json()) for c in connections]
+
+        # CWE-312: Warn if any connection's config contains sensitive field names.
+        # These should be stored in 'secrets' + Vault, not in plaintext 'config'.
+        for conn in connections:
+            if hasattr(conn, 'config') and conn.config:
+                suspicious = _has_sensitive_config_fields(conn.config)
+                if suspicious:
+                    logger.warning(
+                        "CWE-312: Verbindung '%s' (Modul '%s') enthält möglicherweise "
+                        "sensitive Felder in config (nicht in secrets): %s — "
+                        "Diese Werte werden im Klartext in Redis gespeichert. "
+                        "Bitte 'secrets' statt 'config' für Credentials verwenden.",
+                        conn.name,
+                        module_id,
+                        suspicious,
+                    )
+
         logger.info(
             "Speichere %d Verbindungen für %s in Redis Key %s",
             len(connections),

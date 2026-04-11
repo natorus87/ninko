@@ -592,12 +592,11 @@ class WorkflowEngine:
     ) -> None:
         """Schreibt den aktuellen Run-Status nach Redis (mit Lock gegen Race Conditions)."""
         lock_key = f"{tenant_id}:{workflow_id}"
-        if lock_key not in _run_update_locks:
-            _run_update_locks[lock_key] = asyncio.Lock()
+        lock = _run_update_locks.setdefault(lock_key, asyncio.Lock())
         key = f"{_tenant_key(REDIS_KEY_RUNS_PREFIX, tenant_id)}{workflow_id}"
         now = datetime.now(timezone.utc).isoformat()
 
-        async with _run_update_locks[lock_key]:
+        async with lock:
             runs_raw = await self.redis.connection.get(key)
             runs = json.loads(runs_raw) if runs_raw else []
 

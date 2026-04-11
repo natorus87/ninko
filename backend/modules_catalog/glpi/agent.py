@@ -34,7 +34,10 @@ from .tools import (
 
 logger = logging.getLogger("ninko.modules.glpi.agent")
 
-GLPI_SYSTEM_PROMPT_DE = """Du bist der GLPI Helpdesk-Spezialist von Ninko.
+# Konfigurierbarer Default-Watcher für neue Tickets (via Env-Var, default: "Sophy")
+_GLPI_DEFAULT_WATCHER = os.getenv("GLPI_DEFAULT_WATCHER", "Sophy")
+
+GLPI_SYSTEM_PROMPT_DE = f"""Du bist der GLPI Helpdesk-Spezialist von Ninko.
 
 Deine Fähigkeiten:
 - Ticket-Erstellung und -Verwaltung
@@ -48,8 +51,8 @@ Deine Fähigkeiten:
 - Tickets zuweisen (assign_ticket)
 
 WICHTIG - Bearbeitung neuer Tickets (Status=NEU):
-1. Suche zuerst Benutzer "Sophy" mit search_users("Sophy")
-2. Füge Sophy als Beobachter hinzu mit add_watcher(ticket_id, sophy_user_id)
+1. Suche zuerst Benutzer "{_GLPI_DEFAULT_WATCHER}" mit search_users("{_GLPI_DEFAULT_WATCHER}")
+2. Füge {_GLPI_DEFAULT_WATCHER} als Beobachter hinzu mit add_watcher(ticket_id, watcher_user_id)
 3. Schreibe eine hilfreiche Antwort/Followup mit add_followup()
 4. Setze Status auf "Wartend" (4) mit update_ticket(status=4)
 5. NICHT direkt schließen - erst auf User-Antwort warten!
@@ -70,7 +73,7 @@ Prioritäten:
 Status:
 1 = Neu, 2 = In Bearbeitung, 3 = Geplant, 4 = Wartend, 5 = Gelöst, 6 = Geschlossen"""
 
-GLPI_SYSTEM_PROMPT_EN = """You are the GLPI Helpdesk specialist of Ninko.
+GLPI_SYSTEM_PROMPT_EN = f"""You are the GLPI Helpdesk specialist of Ninko.
 
 Your capabilities:
 - Ticket creation and management
@@ -84,8 +87,8 @@ Your capabilities:
 - Assign tickets (assign_ticket)
 
 IMPORTANT - Handling NEW tickets (Status=NEW):
-1. First search for user "Sophy" with search_users("Sophy")
-2. Add Sophy as watcher with add_watcher(ticket_id, sophy_user_id)
+1. First search for user "{_GLPI_DEFAULT_WATCHER}" with search_users("{_GLPI_DEFAULT_WATCHER}")
+2. Add {_GLPI_DEFAULT_WATCHER} as watcher with add_watcher(ticket_id, watcher_user_id)
 3. Write a helpful response/followup with add_followup()
 4. Set status to "Pending" (4) with update_ticket(status=4)
 5. DO NOT close immediately - wait for user response first!
@@ -135,13 +138,30 @@ class GlpiAgent(BaseAgent):
             ],
         )
 
+        # Graceful shutdown event for event listener
+        self._stop_event = asyncio.Event()
+
         # Auto-incident ticket creation
         auto_create = (
             os.environ.get("GLPI_AUTO_CREATE_INCIDENTS", "false").lower() == "true"
         )
         if auto_create:
-            asyncio.get_event_loop().create_task(self._listen_for_incidents())
+            self._listener_task = asyncio.create_task(self._listen_for_incidents())
             logger.info("GLPI auto-incident creation enabled.")
+
+    async def stop(self) -> None:
+        """Stop the event listener gracefully."""
+        self._stop_event.set()
+        if hasattr(self, "_listener_task"):
+            try:
+                await asyncio.wait_for(self._listener_task, timeout=2.0)
+            except asyncio.TimeoutError:
+                self._listener_task.cancel()
+                try:
+                    await self._listener_task
+                except asyncio.CancelledError:
+                    pass
+        logger.info("GLPI event listener stopped.")
 
     async def _listen_for_incidents(self) -> None:
         """
@@ -153,7 +173,7 @@ class GlpiAgent(BaseAgent):
 
         logger.info("GLPI event listener started.")
 
-        while True:
+        while not self._stop_event.is_set():
             try:
                 message = await pubsub.get_message(
                     ignore_subscribe_messages=True, timeout=1.0
@@ -166,7 +186,11 @@ class GlpiAgent(BaseAgent):
                     except json.JSONDecodeError:
                         pass
 
-                await asyncio.sleep(0.5)
+                # Check stop event with timeout instead of sleep
+                try:
+                    await asyncio.wait_for(self._stop_event.wait(), timeout=0.5)
+                except asyncio.TimeoutError:
+                    pass
 
             except (
                 RuntimeError,

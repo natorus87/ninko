@@ -91,7 +91,12 @@ class VaultClient:
                 "SQLITE_SECRETS_KEY ist nicht gesetzt. "
                 "Bitte die Umgebungsvariable konfigurieren, um Secrets zu verschlüsseln."
             )
-        key_bytes = hashlib.sha256(key_str.encode()).digest()
+        key_bytes = hashlib.pbkdf2_hmac(
+            "sha256",
+            key_str.encode(),
+            b"ninko_sqlite_secrets_v1",
+            210_000,
+        )
         self._fernet = Fernet(base64.urlsafe_b64encode(key_bytes))
 
         # Sicherstellen, dass das Verzeichnis existiert
