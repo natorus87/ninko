@@ -632,9 +632,9 @@ class TelegramBot:
             )
             return
 
-        # ── React to the message + silent typing indicator ────────────────────
+        # ── Ack reaction: immediate "👀" feedback, then "⚡" while working ────
         if message_id:
-            await self._react(token, chat_id, message_id, "⚡")
+            await self._react(token, chat_id, message_id, "👀")  # Acknowledge
         typing_task = self._track_task(
             asyncio.create_task(self._keep_typing(token, chat_id))
         )
@@ -666,7 +666,9 @@ class TelegramBot:
                             json={"callback_query_id": callback_query.get("id")},
                         )
                 except Exception as _cb_exc:
-                    logger.debug("answerCallbackQuery fehlgeschlagen (best-effort): %s", _cb_exc)
+                    logger.debug(
+                        "answerCallbackQuery fehlgeschlagen (best-effort): %s", _cb_exc
+                    )
 
                 # Handle button click
                 if callback_data == "confirm_yes" and pending_raw:
