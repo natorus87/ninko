@@ -627,6 +627,67 @@ class TelegramBot:
             logger.error("_send_photo error: %s", exc)
             return False
 
+    async def _send_preview_message(
+        self, token: str, chat_id: int, reply_to_message_id: int | None = None
+    ) -> int | None:
+        """
+        Send a preview message for streaming (OpenClaw-style).
+        Returns the message_id for editing.
+        """
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                payload: dict[str, Any] = {
+                    "chat_id": chat_id,
+                    "text": "💭...",
+                }
+                if reply_to_message_id:
+                    payload["reply_to_message_id"] = reply_to_message_id
+
+                resp = await client.post(
+                    f"https://api.telegram.org/bot{token}/sendMessage",
+                    json=payload,
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data.get("ok"):
+                        return data["result"].get("message_id")
+        except Exception as exc:
+            logger.debug("Preview message failed: %s", exc)
+        return None
+
+    async def _edit_message(
+        self,
+        token: str,
+        chat_id: int,
+        message_id: int,
+        text: str,
+        parse_mode: str = "",
+    ) -> bool:
+        """Edit an existing message (for streaming updates)."""
+        try:
+            payload: dict[str, Any] = {
+                "chat_id": chat_id,
+                "message_id": message_id,
+                "text": text[:4096],  # Telegram limit
+            }
+            if parse_mode:
+                payload["parse_mode"] = parse_mode
+
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(
+                    f"https://api.telegram.org/bot{token}/editMessageText",
+                    json=payload,
+                )
+                if resp.status_code == 200 and resp.json().get("ok"):
+                    return True
+
+                # If edit fails (e.g., message too long), send as new message
+                if resp.status_code == 400:
+                    return await self._send(token, chat_id, text, parse_mode)
+        except Exception as exc:
+            logger.debug("Edit message failed: %s", exc)
+        return False
+
     async def handle_update(self, update: dict[str, Any], token: str) -> None:
         """Process a single Telegram update."""
         msg = update.get("message")
@@ -1142,20 +1203,43 @@ class TelegramBot:
 
             final_text = format_for_telegram(final_text)
 
-            # Send response in chunks (Telegram limit: 4096 characters)
-            # Reply threading: first chunk replies to original message, rest are follow-ups
-            chunks = [
-                final_text[i : i + _MAX_MSG_LEN]
-                for i in range(0, len(final_text), _MAX_MSG_LEN)
-            ]
-            for idx, chunk in enumerate(chunks):
-                await self._send(
-                    token,
-                    chat_id,
-                    chunk,
-                    parse_mode="HTML",
-                    reply_to_message_id=message_id if idx == 0 else None,
+            # Check if streaming is enabled (OpenClaw-style)
+            streaming_enabled = str(
+                conn.config.get("streaming", "false") if conn else "false"
+            ).lower() in ("true", "1", "yes")
+
+            if streaming_enabled and len(final_text) <= 4000:
+                # Send preview then edit with final response
+                preview_msg_id = await self._send_preview_message(
+                    token, chat_id, reply_to_message_id=message_id
                 )
+                if preview_msg_id:
+                    await self._edit_message(
+                        token, chat_id, preview_msg_id, final_text, parse_mode="HTML"
+                    )
+                else:
+                    # Fallback to normal send
+                    await self._send(
+                        token,
+                        chat_id,
+                        final_text,
+                        parse_mode="HTML",
+                        reply_to_message_id=message_id,
+                    )
+            else:
+                # Send response in chunks (Telegram limit: 4096 characters)
+                chunks = [
+                    final_text[i : i + _MAX_MSG_LEN]
+                    for i in range(0, len(final_text), _MAX_MSG_LEN)
+                ]
+                for idx, chunk in enumerate(chunks):
+                    await self._send(
+                        token,
+                        chat_id,
+                        chunk,
+                        parse_mode="HTML",
+                        reply_to_message_id=message_id if idx == 0 else None,
+                    )
 
         except (
             RuntimeError,
