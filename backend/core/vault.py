@@ -271,7 +271,15 @@ class VaultClient:
                     "möglicherweise mit anderem Schlüssel verschlüsselt.",
                     key,
                 )
-                raise InvalidToken(f"Secret '{key}' kann nicht entschlüsselt werden.")
+                # SECURITY: Bei nicht entschlüsselbaren Secrets nicht crashen,
+                # sondern None zurückgeben. Das erlaubt den App-Start und den
+                # Benutzer kann das Secret neu setzen.
+                logger.warning(
+                    "Secret '%s' wird als None zurückgegeben. "
+                    "Bitte das Secret neu setzen um es mit dem aktuellen Key zu verschlüsseln.",
+                    key,
+                )
+                return None
 
     async def _migrate_secret(
         self, db: aiosqlite.Connection, key: str, value: str
