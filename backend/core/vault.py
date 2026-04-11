@@ -105,15 +105,19 @@ class VaultClient:
         )
         self._fernet = Fernet(base64.urlsafe_b64encode(key_bytes))
 
-        # LEGACY: Alter Key mit weniger Iterationen (für Migration)
-        # Hinweis: 100k Iterationen waren der vorherige Standard
+        # LEGACY 1: PBKDF2 mit 100k Iterationen (zwischenzeitlicher Standard)
         legacy_key_bytes = hashlib.pbkdf2_hmac(
             "sha256",
             key_str.encode(),
             b"ninko_sqlite_secrets_v1",
-            100_000,  # Alter Standard
+            100_000,
         )
         self._legacy_fernet = Fernet(base64.urlsafe_b64encode(legacy_key_bytes))
+
+        # LEGACY 2: Direktes SHA256 (ursprüngliche v1.0.0 Implementierung)
+        # WICHTIG: Dies ist der älteste Standard vor Einführung von PBKDF2
+        v1_key_bytes = hashlib.sha256(key_str.encode()).digest()
+        self._v1_fernet = Fernet(base64.urlsafe_b64encode(v1_key_bytes))
 
         # Migration-Tracking
         self._migration_count = 0
@@ -170,7 +174,19 @@ class VaultClient:
             try:
                 decrypted = self._legacy_fernet.decrypt(data.encode()).decode()
                 logger.info(
-                    "Legacy-Secret erfolgreich entschlüsselt – "
+                    "Legacy-Secret (PBKDF2-100k) erfolgreich entschlüsselt – "
+                    "wird bei nächster Gelegenheit migriert."
+                )
+                return decrypted
+            except InvalidToken:
+                pass
+
+        # Versuche V1-Key (direktes SHA256 – ursprüngliche v1.0.0)
+        if hasattr(self, "_v1_fernet") and self._v1_fernet:
+            try:
+                decrypted = self._v1_fernet.decrypt(data.encode()).decode()
+                logger.info(
+                    "V1-Secret (SHA256) erfolgreich entschlüsselt – "
                     "wird bei nächster Gelegenheit migriert."
                 )
                 return decrypted
@@ -182,7 +198,8 @@ class VaultClient:
             "Token ungültig oder mit unbekanntem Schlüssel verschlüsselt."
         )
         raise InvalidToken(
-            "Secret kann nicht entschlüsselt werden – möglicherweise mit altem/anderem Schlüssel verschlüsselt."
+            "Secret kann nicht entschlüsselt werden – "
+            "möglicherweise mit altem/anderem Schlüssel verschlüsselt."
         )
 
     # ── Read ───────────────────────────────────────────
