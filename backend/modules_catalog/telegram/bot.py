@@ -103,6 +103,92 @@ class TelegramBot:
         self._cleared_sessions: set[str] = set()
         # Track background tasks to prevent memory leaks
         self._background_tasks: set[asyncio.Task] = set()
+        self._pairing_ttl = 3600  # 1 hour
+
+    async def _get_connection_config(self) -> dict[str, Any]:
+        """Get Telegram connection config with defaults."""
+        from core.connections import ConnectionManager
+
+        conn = await ConnectionManager.get_default_connection("telegram")
+        if conn:
+            return conn.config
+        return {}
+
+    async def _is_user_authorized(
+        self, user_id: int, chat_id: int, is_group: bool = False
+    ) -> tuple[bool, str]:
+        """
+        Check if user is authorized based on DM policy and allowlists.
+        Returns (authorized, reason).
+        """
+        config = await self._get_connection_config()
+
+        # DM Policy: pairing | allowlist | open | disabled
+        dm_policy = config.get("dm_policy", "pairing")
+
+        if dm_policy == "disabled":
+            return False, "DMs are disabled"
+
+        if dm_policy == "open":
+            return True, "open policy"
+
+        # Get allowlist (numeric user IDs)
+        allow_from = config.get("allow_from", [])
+        if isinstance(allow_from, str):
+            allow_from = [s.strip() for s in allow_from.split(",") if s.strip()]
+
+        # Check if user is in allowlist
+        if str(user_id) in allow_from:
+            return True, "allowlist"
+
+        # For pairing policy, check if user has a valid pairing
+        if dm_policy == "pairing":
+            redis = get_redis()
+            paired_key = f"ninko:telegram:paired_users:{user_id}"
+            is_paired = await redis.connection.get(paired_key)
+            if is_paired:
+                return True, "paired"
+            return False, "pairing required - use /pair"
+
+        return False, "not in allowlist"
+
+    async def _generate_pairing_code(self, user_id: int) -> str:
+        """Generate a pairing code for user authorization."""
+        import secrets
+        import string
+
+        # Generate 6-character code
+        code = "".join(
+            secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6)
+        )
+
+        redis = get_redis()
+        pairing_key = f"ninko:telegram:pairing:{code}"
+
+        # Store with TTL
+        await redis.connection.setex(pairing_key, self._pairing_ttl, str(user_id))
+
+        return code
+
+    async def _approve_pairing(
+        self, code: str, admin_user_id: int | None = None
+    ) -> bool:
+        """Approve a pairing request by code."""
+        redis = get_redis()
+        pairing_key = f"ninko:telegram:pairing:{code}"
+
+        user_id = await redis.connection.get(pairing_key)
+        if not user_id:
+            return False
+
+        # Mark user as paired (permanent)
+        paired_key = f"ninko:telegram:paired_users:{user_id}"
+        await redis.connection.set(paired_key, "1")
+
+        # Delete pairing code
+        await redis.connection.delete(pairing_key)
+
+        return True
 
     async def get_token(self) -> str | None:
         """Load the current Telegram bot token from the ConnectionManager."""
@@ -584,7 +670,74 @@ class TelegramBot:
         if not chat_id or not text:
             return
 
-        # Allowlist check: only permit allowed chat IDs
+        user = msg.get("from", {})
+        user_id = user.get("id")
+        username = user.get("username", "")
+        is_group = msg.get("chat", {}).get("type") in ["group", "supergroup"]
+
+        authorized, reason = await self._is_user_authorized(user_id, chat_id, is_group)
+
+        if cmd == "/pair":
+            if authorized:
+                await self._send(
+                    token,
+                    chat_id,
+                    _t(
+                        "✅ Du bist bereits autorisiert.",
+                        "✅ You are already authorized.",
+                    ),
+                )
+            else:
+                code = await self._generate_pairing_code(user_id)
+                await self._send(
+                    token,
+                    chat_id,
+                    _t(
+                        f"🔐 Pairing-Code: <code>{code}</code>\n\nGib diesen Code im Ninko Dashboard ein oder sende ihn einem Admin.",
+                        f"🔐 Pairing Code: <code>{code}</code>\n\nEnter this code in the Ninko Dashboard or send it to an admin.",
+                    ),
+                    parse_mode="HTML",
+                )
+            return
+
+        if cmd.startswith("/pair ") and user_id:
+            # Admin approval: /pair CODE
+            parts = text.strip().split()
+            if len(parts) == 2:
+                code = parts[1].upper()
+                success = await self._approve_pairing(code, user_id)
+                if success:
+                    await self._send(
+                        token,
+                        chat_id,
+                        _t(
+                            "✅ Pairing erfolgreich! Der Benutzer ist jetzt autorisiert.",
+                            "✅ Pairing successful! The user is now authorized.",
+                        ),
+                    )
+                else:
+                    await self._send(
+                        token,
+                        chat_id,
+                        _t(
+                            "❌ Ungültiger oder abgelaufener Pairing-Code.",
+                            "❌ Invalid or expired pairing code.",
+                        ),
+                    )
+            return
+
+        if not authorized and not is_group:
+            await self._send(
+                token,
+                chat_id,
+                _t(
+                    f"🔒 Zugriff verweigert: {reason}\n\nVerwende /pair um einen Pairing-Code zu generieren.",
+                    f"🔒 Access denied: {reason}\n\nUse /pair to generate a pairing code.",
+                ),
+            )
+            return
+
+        # Legacy allowlist check (chat-based, for backward compatibility)
         from core.connections import ConnectionManager
 
         conn = await ConnectionManager.get_default_connection("telegram")
