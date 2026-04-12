@@ -1,6 +1,42 @@
 # Ninko – Open Issues & Review Tracker
 
-**Last updated:** 2026-04-12 (A1 orchestrator refactor verified in container)
+**Last updated:** 2026-04-12 (K8s Debug Session – Secrets migrated, Chat empty responses, Login issues)
+
+## 🚨 K8s Deployment – Aktuelle Probleme (2026-04-12)
+
+### 🔴 CRITICAL – Chat gibt leere Antworten
+**Status:** ❌ Nicht behoben  
+**Problem:** `AgentExecutionMiddleware.post_process()` hängt bei `jit_agent.ainvoke()`  
+**Debug:** LLM direkt funktioniert, Middleware-Kette nicht  
+**TODO:** 
+- [ ] Middleware-Logging hinzufügen um exakte Blockade zu finden
+- [ ] Test ohne Safeguard (`ctx.use_safeguard = False`)
+- [ ] Test ohne ChromaDB (Memory deaktivieren)
+
+### 🔴 CRITICAL – Login funktioniert nicht  
+**Status:** ⚠️ Teilweise behoben (`force_password=True` gesetzt)  
+**Problem:** Passwort-Hash wird aktualisiert, aber `verify_password()` gibt `False`  
+**Debug:** Encoding-Problem mit Sonderzeichen im Passwort  
+**TODO:**
+- [ ] Passwort-Hash-Encoding debuggen (`$` Zeichen im Hash)
+- [ ] Test mit einfachem Passwort (nur alphanumerisch)
+
+### 🟡 HIGH – Datenbank-Persistenz fehlt
+**Status:** ❌ Kein PVC  
+**Problem:** SQLite-DBs (`users.db`, `ninko.db`) werden bei Pod-Restart gelöscht  
+**Lösung:** PVC für `/app/data` anlegen
+
+### ✅ BEHOBEN – Secrets-Migration
+**Status:** ✅ Alle 10 Secrets migriert (V1 → V3)  
+**Module:** IONOS, Pi-hole, Email, Home Assistant, Kubernetes, Linux Server, Proxmox, WordPress, OPNsense
+
+### ✅ BEHOBEN – LLM-Konfiguration
+**Status:** ✅ Env-Vars gepatched (Platzhalter → echte Werte)  
+**Patch:** `LMSTUDIO_BASE_URL`, `LMSTUDIO_MODEL`, `LMSTUDIO_EMBED_MODEL`
+
+---
+
+**Full Review Reports:**
 
 **Full Review Reports:**
 - [Full Review 2026-04-11 v2](./.claude/reports/full-review-2026-04-11-v2.md) ← **AKTUELL**
@@ -18,19 +54,27 @@
 
 ## 🔴 CRITICAL – Open Issues
 
+### K8s Deployment-Probleme
+| # | Issue | Status |
+|---|-------|--------|
+| K1 | Chat gibt leere Antworten – `AgentExecutionMiddleware.post_process()` hängt | ❌ OPEN |
+| K2 | Login funktioniert nicht – `verify_password()` gibt `False` trotz Hash-Update | ⚠️ PARTIAL |
+| K3 | Datenbank-Persistenz – Kein PVC für SQLite-DBs | ❌ OPEN |
+
 ### API-Auth-Lücken (vor Deployment beheben)
 | # | Issue | Status |
 |---|-------|--------|
-| - | Keine offenen Critical Issues mehr | ✅ CLEAN |
+| - | Keine weiteren Critical Issues | ✅ CLEAN |
 
 ---
 
 ## 🟡 HIGH – Open Issues
 
-### Security
+### K8s/Infrastructure
 | # | Issue | Status |
 |---|-------|--------|
-| - | Keine offenen High Issues mehr | ✅ CLEAN |
+| K4 | PVC für `/app/data` einrichten (10Gi) | ❌ OPEN |
+| K5 | Backup-Strategie für Redis/SQLite definieren | ❌ OPEN |
 
 ---
 
@@ -156,22 +200,29 @@
 | 2026-04-12 | A4: `agent_pool.py` – invertierter Token-Index ersetzt Full-Scan in `find_best_match()` | ✅ FIXED |
 | 2026-04-12 | A5: `tool_registry.py` – autodiscovery für `modules_catalog`/`modules`/`plugins`; neue Tools brauchen keinen manuellen Registry-Eintrag mehr | ✅ FIXED |
 | 2026-04-12 | F1: `app.js` – Chat-History escaped `h.id`/`title` konsistent vor `innerHTML` | ✅ FIXED |
+| 2026-04-12 | **K8s Debug Session** – Secrets-Migration (10/10 V1→V3), LLM-Config gepatched | ✅ DONE |
+| 2026-04-12 | `main.py` – `force_password=True` für Bootstrap-Admin (Passwort-Update) | ✅ FIXED |
 | 2026-04-07 | Synology Agent duplicate class definition | ✅ FIXED |
 | 2026-04-07 | image_gen __init__.py bereinigt | ✅ FIXED |
 | 2026-04-07 | slack tools.py – unused import entfernt | ✅ FIXED |
 
 ---
 
-## 📊 Priority Matrix (Post-Review 2026-04-11)
+## 📊 Priority Matrix (Post-Review 2026-04-11 + K8s Debug 2026-04-12)
 
-| Priorität | Sicherheit | Backend | Performance | Frontend | Architektur | Total |
-|-----------|-----------|---------|------------|----------|------------|-------|
-| 🔴 CRITICAL | 0 | 0 | 0 | 0 | 0 | **0** |
-| 🟡 HIGH | 0 | 0 | 0 | 0 | 0 | **0** |
-| 🟠 MEDIUM | 0 | 0 | 0 | 0 | 0 | **0** |
-| 🟢 LOW | 0 | 0 | 0 | 0 | 0 | **0** |
+| Priorität | Sicherheit | Backend | Performance | Frontend | Architektur | K8s/Infra | Total |
+|-----------|-----------|---------|------------|----------|------------|-----------|-------|
+| 🔴 CRITICAL | 0 | 1 | 0 | 0 | 0 | 2 | **3** |
+| 🟡 HIGH | 0 | 0 | 0 | 0 | 0 | 2 | **2** |
+| 🟠 MEDIUM | 0 | 0 | 0 | 0 | 0 | 0 | **0** |
+| 🟢 LOW | 0 | 0 | 0 | 0 | 0 | 0 | **0** |
 
-**Total Open: 0 Issues**
+**Total Open: 5 Issues**
+
+**Kritische K8s-Issues:**
+- K1: Chat empty responses (Middleware hangs)
+- K2: Login broken (verify_password fails)
+- K3: No PVC for SQLite DBs
 
 ---
 
