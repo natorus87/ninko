@@ -688,8 +688,138 @@ class TelegramBot:
             logger.debug("Edit message failed: %s", exc)
         return False
 
+    async def _handle_callback_query(
+        self, callback_query: dict[str, Any], token: str
+    ) -> None:
+        """Handle safeguard confirmation button clicks (confirm_yes / confirm_no)."""
+        from core.safeguard import SAFEGUARD_PENDING_KEY
+
+        callback_data = callback_query.get("data", "")
+        callback_msg = callback_query.get("message", {})
+        chat_id = callback_msg.get("chat", {}).get("id")
+
+        if not chat_id:
+            return
+
+        # Acknowledge immediately (removes spinner on the button)
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                await client.post(
+                    f"https://api.telegram.org/bot{token}/answerCallbackQuery",
+                    json={"callback_query_id": callback_query.get("id")},
+                )
+        except Exception as _cb_exc:
+            logger.debug("answerCallbackQuery fehlgeschlagen (best-effort): %s", _cb_exc)
+
+        redis = get_redis()
+        session_id = f"telegram_{chat_id}"
+        pending_key = SAFEGUARD_PENDING_KEY.format(session_id=session_id)
+        pending_raw = await redis.connection.get(pending_key)
+
+        if callback_data == "confirm_yes":
+            if not pending_raw:
+                await self._send(
+                    token,
+                    chat_id,
+                    _t(
+                        "Keine ausstehende Aktion.",
+                        "No pending action.",
+                        fr="Aucune action en attente.",
+                        es="No hay acción pendiente.",
+                        it="Nessuna azione in sospeso.",
+                        nl="Geen openstaande actie.",
+                        pl="Brak oczekującej akcji.",
+                        pt="Nenhuma ação pendente.",
+                        ja="保留中のアクションはありません。",
+                        zh="没有待处理的操作。",
+                    ),
+                )
+                return
+
+            original_text = (
+                pending_raw.decode() if isinstance(pending_raw, bytes) else pending_raw
+            )
+            await redis.connection.delete(pending_key)
+            logger.info(
+                "Safeguard: Telegram user confirmed via button for %s.", session_id
+            )
+
+            typing_task = self._track_task(
+                asyncio.create_task(self._keep_typing(token, chat_id))
+            )
+            try:
+                orchestrator = self.app.state.orchestrator
+                history = await redis.get_chat_history(session_id)
+                contextualized_text = f"[Telegram Chat-ID: {chat_id}]\n{original_text}"
+                response_text, _, did_compact = await orchestrator.route(
+                    message=contextualized_text,
+                    chat_history=history,
+                    session_id=session_id,
+                    confirmed=True,
+                )
+                await redis.store_chat_message(
+                    session_id=session_id, role="user", content=original_text
+                )
+                await redis.store_chat_message(
+                    session_id=session_id, role="assistant", content=response_text
+                )
+                if did_compact:
+                    await redis.store_chat_message(
+                        session_id=session_id,
+                        role="system_compaction",
+                        content="Conversation history has been compressed.",
+                    )
+                await self._send(token, chat_id, response_text, parse_mode="HTML")
+            except Exception as exc:
+                logger.error(
+                    "Callback confirm_yes error for %s: %s", session_id, exc, exc_info=True
+                )
+                await self._send(
+                    token,
+                    chat_id,
+                    _t(
+                        "❌ Fehler bei der Ausführung.",
+                        "❌ Error during execution.",
+                        fr="❌ Erreur lors de l'exécution.",
+                        es="❌ Error durante la ejecución.",
+                        it="❌ Errore durante l'esecuzione.",
+                        nl="❌ Fout bij uitvoering.",
+                        pl="❌ Błąd podczas wykonywania.",
+                        pt="❌ Erro durante a execução.",
+                        ja="❌ 実行中にエラーが発生しました。",
+                        zh="❌ 执行时出错。",
+                    ),
+                )
+            finally:
+                typing_task.cancel()
+
+        elif callback_data == "confirm_no":
+            await redis.connection.delete(pending_key)
+            await self._send(
+                token,
+                chat_id,
+                _t(
+                    "❌ Aktion abgebrochen.",
+                    "❌ Action cancelled.",
+                    fr="❌ Action annulée.",
+                    es="❌ Acción cancelada.",
+                    it="❌ Azione annullata.",
+                    nl="❌ Actie geannuleerd.",
+                    pl="❌ Działanie anulowane.",
+                    pt="❌ Ação cancelada.",
+                    ja="❌ アクションがキャンセルされました。",
+                    zh="❌ 操作已取消。",
+                ),
+            )
+        # Unknown callback_data: ignore silently
+
     async def handle_update(self, update: dict[str, Any], token: str) -> None:
         """Process a single Telegram update."""
+        # ── Callback query (inline button click) ──────────────────────────────
+        if update.get("callback_query"):
+            await self._handle_callback_query(update["callback_query"], token)
+            return
+
         msg = update.get("message")
         if not msg:
             return
@@ -730,6 +860,8 @@ class TelegramBot:
 
         if not chat_id or not text:
             return
+
+        cmd = text.strip().lower().split("@")[0]  # /clear@botname → /clear
 
         user = msg.get("from", {})
         user_id = user.get("id")
@@ -834,9 +966,6 @@ class TelegramBot:
 
         logger.info("Telegram message from chat %s: %s…", chat_id, text[:60])
 
-        # Intercept commands without orchestrator
-        cmd = text.strip().lower().split("@")[0]  # /clear@botname → /clear
-
         if cmd == "/chatid":
             await self._send(
                 token,
@@ -900,82 +1029,10 @@ class TelegramBot:
             pending_key = SAFEGUARD_PENDING_KEY.format(session_id=session_id)
             pending_raw = await redis.connection.get(pending_key)
 
-            # Check for callback_data (button clicks)
-            callback_query = update.get("callback_query")
-            if callback_query:
-                callback_data = callback_query.get("data", "")
-                callback_msg = callback_query.get("message", {})
-                callback_chat_id = callback_msg.get("chat", {}).get("id")
+            # Callback queries are handled in _handle_callback_query (dispatched from
+            # handle_update before this code path is reached).
 
-                # Answer the callback query (remove loading spinner)
-                try:
-                    async with httpx.AsyncClient(timeout=5.0) as client:
-                        await client.post(
-                            f"https://api.telegram.org/bot{token}/answerCallbackQuery",
-                            json={"callback_query_id": callback_query.get("id")},
-                        )
-                except Exception as _cb_exc:
-                    logger.debug(
-                        "answerCallbackQuery fehlgeschlagen (best-effort): %s", _cb_exc
-                    )
-
-                # Handle button click
-                if callback_data == "confirm_yes" and pending_raw:
-                    # User clicked "Ja" → execute pending action
-                    text = (
-                        pending_raw.decode()
-                        if isinstance(pending_raw, bytes)
-                        else pending_raw
-                    )
-                    await redis.connection.delete(pending_key)
-                    logger.info(
-                        "Safeguard: Telegram user confirmed via button for %s.",
-                        session_id,
-                    )
-                elif callback_data == "confirm_no":
-                    # User clicked "Nein" → cancel
-                    await redis.connection.delete(pending_key)
-                    await self._send(
-                        token,
-                        chat_id,
-                        _t(
-                            "❌ Aktion abgebrochen.",
-                            "❌ Action cancelled.",
-                            fr="❌ Action annulée.",
-                            es="❌ Acción cancelada.",
-                            it="❌ Azione annullata.",
-                            nl="❌ Actie geannuleerd.",
-                            pl="❌ Działanie anulowane.",
-                            pt="❌ Ação cancelada.",
-                            ja="❌ アクションがキャンセルされました。",
-                            zh="❌ 操作已取消。",
-                        ),
-                    )
-                    return
-                elif callback_data == "confirm_yes" and not pending_raw:
-                    # Button click but no pending action
-                    await self._send(
-                        token,
-                        chat_id,
-                        _t(
-                            "Keine ausstehende Aktion.",
-                            "No pending action.",
-                            fr="Aucune action en attente.",
-                            es="No hay acción pendiente.",
-                            it="Nessuna azione in sospeso.",
-                            nl="Geen openstaande actie.",
-                            pl="Brak oczekującej akcji.",
-                            pt="Nenhuma ação pendente.",
-                            ja="保留中のアクションはありません。",
-                            zh="没有待处理的操作。",
-                        ),
-                    )
-                    return
-                else:
-                    # Unknown callback, ignore
-                    return
-
-            elif pending_raw and is_bot_confirmation(text):
+            if pending_raw and is_bot_confirmation(text):
                 # User confirmed via text (legacy support)
                 text = (
                     pending_raw.decode()
