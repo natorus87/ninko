@@ -798,16 +798,58 @@
                                 </div>
                             </div>
 
-                            <!-- Globales Embedding-Modell -->
+                            <!-- Embedding-Provider -->
                             <div class="setting-group" style="margin-top:1.5rem;">
-                                <h4 style="margin-top:0;">Embedding-Modell</h4>
-                                <p class="text-muted" style="font-size:0.85rem;margin-bottom:1rem;">Einheitlich für ChromaDB. Wird verwendet, egal welcher LLM-Provider aktiv ist. Wechsel löscht nicht die bestehenden Vektoren – Re-Embedding nötig.</p>
-                                <div class="form-row" style="display:flex;gap:0.5rem;align-items:center;">
-                                    <input id="global-embed-model" type="text" class="form-input" style="flex:1;"
-                                        placeholder="nomic-ai/nomic-embed-text-v1.5-GGUF">
-                                    <button class="btn btn-sm btn-primary" onclick="Ninko.saveEmbedModel()">Speichern</button>
+                                <h4 style="margin-top:0;" data-i18n="settings.embedTitle">Embedding-Provider</h4>
+                                <p class="text-muted" style="font-size:0.85rem;margin-bottom:1rem;" data-i18n="settings.embedDesc">Einheitlich für ChromaDB. Wechsel löscht nicht die bestehenden Vektoren – Re-Embedding nötig.</p>
+
+                                <!-- Checkbox: eigenen Provider nutzen -->
+                                <div class="form-row">
+                                    <label class="form-label">
+                                        <input type="checkbox" id="embed-use-custom"
+                                            onchange="Ninko.toggleEmbedCustom()">
+                                        <span data-i18n="settings.embedUseCustom">Eigenen Embedding-Provider konfigurieren</span>
+                                    </label>
+                                    <span class="form-hint" data-i18n="settings.embedUseCustomHint">Deaktiviert = aktiver LLM-Provider wird auch für Embeddings genutzt</span>
                                 </div>
-                                <span id="embed-model-status" class="save-status" style="font-size:0.85rem;"></span>
+
+                                <!-- Felder: nur sichtbar wenn Checkbox aktiv -->
+                                <div id="embed-custom-fields" style="display:none;">
+                                    <div class="form-row">
+                                        <label class="form-label" for="embed-backend" data-i18n="settings.embedBackend">Backend</label>
+                                        <select id="embed-backend" class="form-select"
+                                            onchange="Ninko.toggleEmbedApiKey()">
+                                            <option value="lmstudio">LM Studio</option>
+                                            <option value="ollama">Ollama</option>
+                                            <option value="openai_compatible">OpenAI-kompatibel (API-Key)</option>
+                                            <option value="litellm">LiteLLM Proxy (API-Key)</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-row">
+                                        <label class="form-label" for="embed-base-url" data-i18n="settings.embedBaseUrl">Base URL</label>
+                                        <input id="embed-base-url" type="text" class="form-input"
+                                            placeholder="http://ollama:11434"
+                                            data-i18n-placeholder="settings.embedBaseUrlPlaceholder">
+                                    </div>
+                                    <div class="form-row" id="embed-api-key-row" style="display:none;">
+                                        <label class="form-label" for="embed-api-key" data-i18n="settings.embedApiKey">API Key</label>
+                                        <input id="embed-api-key" type="password" class="form-input"
+                                            placeholder="sk-...">
+                                    </div>
+                                </div>
+
+                                <!-- Modell (immer sichtbar) -->
+                                <div class="form-row">
+                                    <label class="form-label" for="embed-model" data-i18n="settings.embedModel">Embedding-Modell</label>
+                                    <input id="embed-model" type="text" class="form-input"
+                                        placeholder="nomic-ai/nomic-embed-text-v1.5-GGUF"
+                                        data-i18n-placeholder="settings.embedModelPlaceholder">
+                                </div>
+
+                                <div class="form-actions" style="margin-top:0.75rem;">
+                                    <span id="embed-provider-status" class="save-status" style="font-size:0.85rem;"></span>
+                                    <button class="btn btn-sm btn-primary" onclick="Ninko.saveEmbedProvider()" data-i18n="settings.save">💾 Speichern</button>
+                                </div>
                             </div>
 
                             <!-- Provider Editor (inline, hidden until opened) -->

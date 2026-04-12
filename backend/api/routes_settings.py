@@ -172,6 +172,7 @@ async def update_llm_settings(body: LlmSettings) -> LlmSettingsResponse:
 # ── Global Embedding Model (einheitlich für ChromaDB) ──
 
 REDIS_KEY_EMBED_MODEL = "ninko:settings:embed_model"
+REDIS_KEY_EMBED_PROVIDER = "ninko:settings:embed_provider"
 
 
 @router.get("/llm/embed-model")
@@ -219,6 +220,100 @@ async def set_embed_model(body: dict) -> dict:
 
     logger.info("Globales Embedding-Modell geändert zu: %s", model)
     return {"embed_model": model, "status": "saved"}
+
+
+@router.get("/llm/embed-provider")
+async def get_embed_provider() -> dict:
+    """Embedding-Provider-Konfiguration abrufen."""
+    import json as _json
+
+    redis = get_redis()
+    stored = await redis.connection.get(REDIS_KEY_EMBED_PROVIDER)
+    if stored:
+        raw = stored if isinstance(stored, str) else stored.decode()
+        try:
+            return _json.loads(raw)
+        except Exception:
+            pass
+    # Defaults: kein eigener Provider (Fallback auf LLM-Provider)
+    settings = get_settings()
+    return {
+        "use_custom": False,
+        "backend": "lmstudio",
+        "base_url": "",
+        "api_key": "",
+        "model": settings.EMBED_MODEL,
+    }
+
+
+@router.put("/llm/embed-provider")
+async def set_embed_provider(body: dict) -> dict:
+    """
+    Embedding-Provider-Konfiguration setzen.
+
+    Body:
+        use_custom (bool)  – True = eigenen Provider nutzen
+        backend    (str)   – ollama | lmstudio | openai_compatible | litellm
+        base_url   (str)   – Base URL des Embedding-Endpoints
+        api_key    (str)   – API-Key (leer wenn nicht benötigt)
+        model      (str)   – Embedding-Modell-Name
+    """
+    import json as _json
+
+    use_custom = bool(body.get("use_custom", False))
+    backend = body.get("backend", "lmstudio").strip()
+    base_url = body.get("base_url", "").strip()
+    api_key = body.get("api_key", "").strip()
+    model = body.get("model", "").strip()
+
+    if not model:
+        raise HTTPException(
+            status_code=400,
+            detail=_t(
+                de="Modellname darf nicht leer sein.",
+                en="Model name cannot be empty.",
+                fr="Le nom du modèle ne peut pas être vide.",
+                es="El nombre del modelo no puede estar vacío.",
+                it="Il nome del modello non può essere vuoto.",
+                nl="Modelnaam mag niet leeg zijn.",
+                pl="Nazwa modelu nie może być pusta.",
+                pt="O nome do modelo não pode estar vazio.",
+                ja="モデル名は空にできません。",
+                zh="模型名称不能为空。",
+            ),
+        )
+
+    payload = {
+        "use_custom": use_custom,
+        "backend": backend,
+        "base_url": base_url,
+        "api_key": api_key,
+        "model": model,
+    }
+
+    redis = get_redis()
+    await redis.connection.set(REDIS_KEY_EMBED_PROVIDER, _json.dumps(payload))
+
+    # Sofort in Env übernehmen
+    os.environ["EMBED_MODEL"] = model
+    if use_custom:
+        os.environ["EMBED_BACKEND"] = backend
+        os.environ["EMBED_BASE_URL"] = base_url
+        os.environ["EMBED_API_KEY"] = api_key
+    else:
+        # Fallback: eigene Provider-Einstellungen löschen
+        os.environ.pop("EMBED_BACKEND", None)
+        os.environ.pop("EMBED_BASE_URL", None)
+        os.environ.pop("EMBED_API_KEY", None)
+
+    import core.config
+    core.config._settings = None
+
+    logger.info(
+        "Embedding-Provider geändert: use_custom=%s backend=%s model=%s url=%s",
+        use_custom, backend, model, base_url,
+    )
+    return {**payload, "status": "saved"}
 
 
 def _reconfigure_llm(settings: LlmSettings) -> None:

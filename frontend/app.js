@@ -1127,16 +1127,21 @@ const Ninko = {
             return;
         }
 
-        list.innerHTML = this.chatHistory.map(h => `
+        list.innerHTML = this.chatHistory.map(h => {
+            const historyId = this._escapeHtml(h.id);
+            const historyTitle = this._escapeHtml(h.title);
+            const historyTitleAttr = this._escapeAttr(h.title);
+            return `
             <div class="history-item ${h.id === this.currentHistoryId ? 'active' : ''}"
-                onclick="Ninko.loadHistoryEntry('${h.id}')"
-                title="${h.title}">
-                <span class="history-item-text">${h.title}</span>
-                <button class="history-item-delete" onclick="event.stopPropagation(); Ninko.deleteHistoryEntry('${h.id}')" title="Chat löschen">
+                onclick="Ninko.loadHistoryEntry('${historyId}')"
+                title="${historyTitleAttr}">
+                <span class="history-item-text">${historyTitle}</span>
+                <button class="history-item-delete" onclick="event.stopPropagation(); Ninko.deleteHistoryEntry('${historyId}')" title="Chat löschen">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m5 0V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
                 </button>
             </div>
-        `).join('');
+        `;
+        }).join('');
     },
 
     loadHistoryEntry(id) {
@@ -7673,28 +7678,79 @@ const Ninko = {
     },
 
     async loadEmbedModel() {
+        // Legacy-Wrapper – lädt jetzt den vollen Provider
+        await this.loadEmbedProvider();
+    },
+
+    async loadEmbedProvider() {
         try {
-            const res = await fetch('/api/settings/llm/embed-model');
+            const res = await fetch('/api/settings/llm/embed-provider');
+            if (!res.ok) return;
             const data = await res.json();
-            document.getElementById('global-embed-model').value = data.embed_model || '';
+
+            const useCustom = !!data.use_custom;
+            const cbEl = document.getElementById('embed-use-custom');
+            if (cbEl) {
+                cbEl.checked = useCustom;
+                this.toggleEmbedCustom();
+            }
+            const backendEl = document.getElementById('embed-backend');
+            if (backendEl && data.backend) backendEl.value = data.backend;
+            const urlEl = document.getElementById('embed-base-url');
+            if (urlEl) urlEl.value = data.base_url || '';
+            // API-Key: nicht vorab befüllen (Sicherheit); Placeholder zeigen
+            const modelEl = document.getElementById('embed-model');
+            if (modelEl) modelEl.value = data.model || '';
+            this.toggleEmbedApiKey();
         } catch { }
     },
 
-    async saveEmbedModel() {
-        const statusEl = document.getElementById('embed-model-status');
-        const model = document.getElementById('global-embed-model').value.trim();
-        if (!model) { statusEl.textContent = 'Modellname darf nicht leer sein'; return; }
-        statusEl.textContent = 'Speichere…';
+    toggleEmbedCustom() {
+        const checked = document.getElementById('embed-use-custom')?.checked;
+        const fields = document.getElementById('embed-custom-fields');
+        if (fields) fields.style.display = checked ? '' : 'none';
+    },
+
+    toggleEmbedApiKey() {
+        const backend = document.getElementById('embed-backend')?.value;
+        const row = document.getElementById('embed-api-key-row');
+        if (row) row.style.display = (backend === 'openai_compatible' || backend === 'litellm') ? '' : 'none';
+    },
+
+    async saveEmbedProvider() {
+        const statusEl = document.getElementById('embed-provider-status');
+        const model = document.getElementById('embed-model')?.value.trim();
+        if (!model) {
+            if (statusEl) statusEl.textContent = t('settings.embedModelRequired') || 'Modellname darf nicht leer sein';
+            return;
+        }
+        if (statusEl) statusEl.textContent = t('settings.saving') || 'Speichere…';
+
+        const useCustom = !!document.getElementById('embed-use-custom')?.checked;
+        const backend = document.getElementById('embed-backend')?.value || 'lmstudio';
+        const baseUrl = document.getElementById('embed-base-url')?.value.trim() || '';
+        const apiKey = document.getElementById('embed-api-key')?.value.trim() || '';
+
         try {
-            const res = await fetch('/api/settings/llm/embed-model', {
+            const res = await fetch('/api/settings/llm/embed-provider', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ embed_model: model }),
+                body: JSON.stringify({ use_custom: useCustom, backend, base_url: baseUrl, api_key: apiKey, model }),
             });
-            if (res.ok) { statusEl.textContent = 'Gespeichert'; showNotification('Embedding-Modell gespeichert', 'success'); }
-            else { statusEl.textContent = 'Fehler'; }
-        } catch { statusEl.textContent = 'Verbindungsfehler'; }
+            if (res.ok) {
+                if (statusEl) statusEl.textContent = t('settings.saved') || 'Gespeichert';
+                showNotification(t('settings.embedSaved') || 'Embedding-Provider gespeichert', 'success');
+            } else {
+                const err = await res.json().catch(() => ({}));
+                if (statusEl) statusEl.textContent = err.detail || 'Fehler';
+            }
+        } catch {
+            if (statusEl) statusEl.textContent = t('settings.connectionError') || 'Verbindungsfehler';
+        }
     },
+
+    // Legacy – falls irgendwo noch direkt aufgerufen
+    async saveEmbedModel() { await this.saveEmbedProvider(); },
 
     // ─── Alert Management ───
     _alertsCache: [],

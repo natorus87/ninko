@@ -41,6 +41,10 @@ class CoreSettings(BaseSettings):
     LITELLM_API_KEY: str = ""
     # Globales Embedding-Modell (einheitlich für ChromaDB)
     EMBED_MODEL: str = "nomic-ai/nomic-embed-text-v1.5-GGUF"
+    # Eigener Embedding-Provider (leer = Fallback auf aktiven LLM-Provider)
+    EMBED_BACKEND: str = ""  # ollama | lmstudio | openai_compatible | litellm
+    EMBED_BASE_URL: str = ""
+    EMBED_API_KEY: str = ""
 
     # ── ChromaDB ───────────────────────────────────────
     CHROMA_HOST: str = "chromadb"

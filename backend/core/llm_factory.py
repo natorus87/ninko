@@ -362,20 +362,58 @@ def get_llm() -> BaseChatModel:
 def get_embeddings() -> Embeddings:
     """
     Gibt das Embedding-Modell zurück.
-    Nutzt das globale EMBED_MODEL und verbindet sich über den aktiven LLM-Provider
-    (gleiche Base-URL und API-Key), da nur eine ChromaDB existiert und das
-    Embedding-Modell einheitlich sein muss.
+
+    Priorität:
+    1. Eigener Embedding-Provider (EMBED_BACKEND gesetzt) → dessen URL + Key + Modell
+    2. Fallback auf aktiven LLM-Provider (gleiche Base-URL/API-Key)
+
+    Das Embedding-Modell muss einheitlich sein, da nur eine ChromaDB existiert.
     """
     settings = get_settings()
     embed_model = settings.EMBED_MODEL
 
+    # ── 1. Eigener Embedding-Provider ────────────────────────────────────────
+    embed_backend = settings.EMBED_BACKEND.strip()
+    if embed_backend:
+        embed_base_url = settings.EMBED_BASE_URL.strip()
+        embed_api_key = settings.EMBED_API_KEY.strip()
+
+        if embed_backend == "ollama":
+            try:
+                from langchain_ollama import OllamaEmbeddings
+            except ImportError:
+                raise ImportError("langchain-ollama ist nicht installiert.")
+            logger.info(
+                "Embedding-Backend: Ollama (eigener Provider) – Modell=%s, URL=%s",
+                embed_model, embed_base_url,
+            )
+            return OllamaEmbeddings(
+                model=embed_model,
+                base_url=embed_base_url or "http://ollama:11434",
+            )
+        else:
+            # lmstudio, openai_compatible, litellm → alle nutzen OpenAI-kompatiblen Endpoint
+            base_url = _get_lmstudio_base_url(embed_base_url) if embed_base_url else ""
+            api_key = embed_api_key or ("lm-studio" if embed_backend == "lmstudio" else "sk-placeholder")
+            logger.info(
+                "Embedding-Backend: %s (eigener Provider) – Modell=%s, URL=%s",
+                embed_backend, embed_model, base_url,
+            )
+            return OpenAIEmbeddings(
+                base_url=base_url,
+                api_key=api_key,
+                model=embed_model,
+                check_embedding_ctx_length=False,
+            )
+
+    # ── 2. Fallback: aktiver LLM-Provider ────────────────────────────────────
     if settings.LLM_BACKEND == "ollama":
         try:
             from langchain_ollama import OllamaEmbeddings
         except ImportError:
             raise ImportError("langchain-ollama ist nicht installiert. Nutze LM Studio als Backend.")
         logger.info(
-            "Embedding-Backend: Ollama – Modell=%s, URL=%s",
+            "Embedding-Backend: Ollama (LLM-Fallback) – Modell=%s, URL=%s",
             embed_model, settings.OLLAMA_BASE_URL,
         )
         return OllamaEmbeddings(
@@ -387,7 +425,7 @@ def get_embeddings() -> Embeddings:
         base_url = _get_lmstudio_base_url(settings.OPENAI_BASE_URL)
         api_key = settings.OPENAI_API_KEY or "sk-placeholder"
         logger.info(
-            "Embedding-Backend: OpenAI-kompatibel – Modell=%s, URL=%s",
+            "Embedding-Backend: OpenAI-kompatibel (LLM-Fallback) – Modell=%s, URL=%s",
             embed_model, base_url,
         )
         return OpenAIEmbeddings(
@@ -398,10 +436,10 @@ def get_embeddings() -> Embeddings:
         )
 
     else:
-        # LM Studio
+        # LM Studio (Standard-Fallback)
         base_url = _get_lmstudio_base_url(settings.LMSTUDIO_BASE_URL)
         logger.info(
-            "Embedding-Backend: LM Studio – Modell=%s, URL=%s",
+            "Embedding-Backend: LM Studio (LLM-Fallback) – Modell=%s, URL=%s",
             embed_model, base_url,
         )
         return OpenAIEmbeddings(
