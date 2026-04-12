@@ -64,6 +64,7 @@ backend:
     webSearch: true   # Requires searxng.enabled=true
     codelab: true
     imageGen: false
+    dataviz: true
 
   # ── Monitoring ──
   monitoring:

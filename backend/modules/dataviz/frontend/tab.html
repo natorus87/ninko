@@ -1,0 +1,118 @@
+<div class="dataviz-container">
+    <div class="dataviz-header">
+        <h2>📊 DataViz - Diagramme & Visualisierungen</h2>
+        <p>Erstelle Diagramme aus Daten oder mit Mermaid</p>
+    </div>
+    
+    <div class="dataviz-tabs">
+        <button class="dataviz-tab-btn active" data-tab="chart">Chart Generator</button>
+        <button class="dataviz-tab-btn" data-tab="mermaid">Mermaid</button>
+        <button class="dataviz-tab-btn" data-tab="history">Verlauf</button>
+    </div>
+    
+    <div class="dataviz-content">
+        <!-- Chart Generator Tab -->
+        <div id="chart-tab" class="dataviz-panel active">
+            <div class="dataviz-form">
+                <div class="form-row">
+                    <label>Chart-Typ:</label>
+                    <select id="chart-type">
+                        <option value="line">📈 Liniendiagramm</option>
+                        <option value="bar">📊 Balkendiagramm</option>
+                        <option value="pie">🥧 Kreisdiagramm</option>
+                        <option value="scatter">⚫ Streudiagramm</option>
+                        <option value="area">🗻 Flächendiagramm</option>
+                    </select>
+                </div>
+                
+                <div class="form-row">
+                    <label>Titel:</label>
+                    <input type="text" id="chart-title" placeholder="z.B. Ölpreisentwicklung 2025">
+                </div>
+                
+                <div class="form-row">
+                    <label>Daten (JSON):</label>
+                    <textarea id="chart-data" rows="8" placeholder='[
+  {"label": "Jan", "value": 60},
+  {"label": "Feb", "value": 64},
+  {"label": "März", "value": 91}
+]'></textarea>
+                </div>
+                
+                <div class="form-row">
+                    <label>X-Achse:</label>
+                    <input type="text" id="chart-xlabel" placeholder="Monat">
+                </div>
+                
+                <div class="form-row">
+                    <label>Y-Achse:</label>
+                    <input type="text" id="chart-ylabel" placeholder="Preis (USD)">
+                </div>
+                
+                <div class="form-row">
+                    <label>Format:</label>
+                    <select id="chart-format">
+                        <option value="png">PNG Bild</option>
+                        <option value="svg">SVG Vektor</option>
+                        <option value="html">Interaktiv (Plotly)</option>
+                    </select>
+                </div>
+                
+                <button id="generate-chart" class="btn-primary">Diagramm erstellen</button>
+            </div>
+            
+            <div class="dataviz-preview">
+                <h3>Vorschau</h3>
+                <div id="chart-output" class="chart-output">
+                    <p class="placeholder">Diagramm wird hier angezeigt...</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Mermaid Tab -->
+        <div id="mermaid-tab" class="dataviz-panel">
+            <div class="dataviz-form">
+                <div class="form-row">
+                    <label>Diagramm-Typ:</label>
+                    <select id="mermaid-type">
+                        <option value="flowchart">Flussdiagramm</option>
+                        <option value="sequence">Sequenzdiagramm</option>
+                        <option value="gantt">Gantt-Diagramm</option>
+                        <option value="pie">Kreisdiagramm</option>
+                        <option value="class">Klassendiagramm</option>
+                        <option value="state">Zustandsdiagramm</option>
+                    </select>
+                </div>
+                
+                <div class="form-row">
+                    <label>Titel:</label>
+                    <input type="text" id="mermaid-title" placeholder="Optionaler Titel">
+                </div>
+                
+                <div class="form-row">
+                    <label>Mermaid Code:</label>
+                    <textarea id="mermaid-code" rows="12" placeholder="graph TD\n    A[Start] --> B{Entscheidung}\n    B -->|Ja| C[Ende]\n    B -->|Nein| D[Wiederholen]"></textarea>
+                </div>
+                
+                <button id="render-mermaid" class="btn-primary">Diagramm rendern</button>
+            </div>
+            
+            <div class="dataviz-preview">
+                <h3>Vorschau</h3>
+                <div id="mermaid-output" class="mermaid-output">
+                    <p class="placeholder">Mermaid-Diagramm wird hier angezeigt...</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- History Tab -->
+        <div id="history-tab" class="dataviz-panel">
+            <div class="dataviz-history">
+                <h3>Letzte Diagramme</h3>
+                <div id="chart-history-list">
+                    <p class="placeholder">Noch keine Diagramme erstellt...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

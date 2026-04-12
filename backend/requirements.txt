@@ -67,3 +67,8 @@ pytesseract>=0.3.10
 # ── PDF Generation ───────────────────────────────────
 weasyprint>=62.0
 markdown>=3.5
+
+# ── Visualization ───────────────────────────────────
+matplotlib>=3.8.0
+plotly>=5.18.0
+kaleido>=0.2.0  # Für Plotly statische Exporte

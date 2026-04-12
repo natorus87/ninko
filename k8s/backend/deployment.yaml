@@ -79,6 +79,8 @@ spec:
               value: "true"
             - name: NINKO_MODULE_IMAGE_GEN
               value: "true"
+            - name: NINKO_MODULE_DATAVIZ
+              value: "true"
 
             # ─── Modul-Secrets (Fallback wenn kein UI-Connection konfiguriert) ───
             # - name: IONOS_API_KEY

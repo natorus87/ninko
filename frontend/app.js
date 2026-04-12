@@ -756,6 +756,7 @@ const Ninko = {
             'tasmota': typeof TasmotaTab !== 'undefined' ? TasmotaTab : null,
             'opnsense': typeof OPNsenseTab !== 'undefined' ? OPNsenseTab : null,
             'checkmk': typeof CheckmkTab !== 'undefined' ? CheckmkTab : null,
+            'dataviz': typeof DataVizTab !== 'undefined' ? DataVizTab : null,
         };
         // Fallback: dynamisch registrierte Plugin-Tabs (via Ninko._pluginTabs)
         return map[tabId] || this._pluginTabs[tabId] || null;

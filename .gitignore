@@ -98,3 +98,6 @@ DONE.md
 
 # Interne Migrations-Runbooks
 NAMESPACE_MIGRATION_RUNBOOK.md
+
+# Playwright MCP State
+.playwright-mcp/

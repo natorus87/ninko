@@ -113,6 +113,8 @@ spec:
               value: {{ .Values.backend.modules.codelab | toString | quote }}
             - name: NINKO_MODULE_IMAGE_GEN
               value: {{ .Values.backend.modules.imageGen | toString | quote }}
+            - name: NINKO_MODULE_DATAVIZ
+              value: {{ .Values.backend.modules.dataviz | toString | quote }}
 
             # ─── Monitoring ─────────────────────────────────
             - name: MONITOR_INTERVAL_SECONDS

@@ -453,6 +453,19 @@ _TOOL_STATUS_LABELS: dict[str, str] = {
     "get_github_repo_content": _t(de="Lade Inhalt", en="Loading content"),
     "search_github_code": _t(de="Suche Code", en="Searching code"),
     "search_github_issues": _t(de="Suche Issues", en="Searching issues"),
+    # ── DataViz ────────────────────────────────────────────────────────────
+    "create_line_chart": _t(de="Erstelle Liniendiagramm", en="Creating line chart"),
+    "create_bar_chart": _t(de="Erstelle Balkendiagramm", en="Creating bar chart"),
+    "create_pie_chart": _t(de="Erstelle Kreisdiagramm", en="Creating pie chart"),
+    "create_mermaid_diagram": _t(
+        de="Erstelle Mermaid-Diagramm", en="Creating mermaid diagram"
+    ),
+    "create_interactive_chart_plotly": _t(
+        de="Erstelle interaktives Diagramm", en="Creating interactive chart"
+    ),
+    "analyze_data_for_chart": _t(
+        de="Analysiere Daten für Diagramm", en="Analyzing data for chart"
+    ),
 }
 
 
@@ -590,18 +603,48 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
 
     # ── Kubernetes (requires kubectl) ──────────────────────────────────────
     kubernetes_tools = [
-        ToolMetadata("get_cluster_status", "kubernetes", readonly=True, required_bins=("kubectl",)),
-        ToolMetadata("get_all_pods", "kubernetes", readonly=True, required_bins=("kubectl",)),
-        ToolMetadata("get_failing_pods", "kubernetes", readonly=True, required_bins=("kubectl",)),
-        ToolMetadata("list_namespaces", "kubernetes", readonly=True, required_bins=("kubectl",)),
-        ToolMetadata("list_services", "kubernetes", readonly=True, required_bins=("kubectl",)),
-        ToolMetadata("get_recent_events", "kubernetes", readonly=True, required_bins=("kubectl",)),
-        ToolMetadata("get_resource_yaml", "kubernetes", readonly=True, required_bins=("kubectl",)),
-        ToolMetadata("get_pod_logs", "kubernetes", readonly=True, required_bins=("kubectl",)),
-        ToolMetadata("list_ingresses", "kubernetes", readonly=True, required_bins=("kubectl",)),
-        ToolMetadata("list_pvcs", "kubernetes", readonly=True, required_bins=("kubectl",)),
-        ToolMetadata("list_deployments", "kubernetes", readonly=True, required_bins=("kubectl",)),
-        ToolMetadata("get_deployment_status", "kubernetes", readonly=True, required_bins=("kubectl",)),
+        ToolMetadata(
+            "get_cluster_status",
+            "kubernetes",
+            readonly=True,
+            required_bins=("kubectl",),
+        ),
+        ToolMetadata(
+            "get_all_pods", "kubernetes", readonly=True, required_bins=("kubectl",)
+        ),
+        ToolMetadata(
+            "get_failing_pods", "kubernetes", readonly=True, required_bins=("kubectl",)
+        ),
+        ToolMetadata(
+            "list_namespaces", "kubernetes", readonly=True, required_bins=("kubectl",)
+        ),
+        ToolMetadata(
+            "list_services", "kubernetes", readonly=True, required_bins=("kubectl",)
+        ),
+        ToolMetadata(
+            "get_recent_events", "kubernetes", readonly=True, required_bins=("kubectl",)
+        ),
+        ToolMetadata(
+            "get_resource_yaml", "kubernetes", readonly=True, required_bins=("kubectl",)
+        ),
+        ToolMetadata(
+            "get_pod_logs", "kubernetes", readonly=True, required_bins=("kubectl",)
+        ),
+        ToolMetadata(
+            "list_ingresses", "kubernetes", readonly=True, required_bins=("kubectl",)
+        ),
+        ToolMetadata(
+            "list_pvcs", "kubernetes", readonly=True, required_bins=("kubectl",)
+        ),
+        ToolMetadata(
+            "list_deployments", "kubernetes", readonly=True, required_bins=("kubectl",)
+        ),
+        ToolMetadata(
+            "get_deployment_status",
+            "kubernetes",
+            readonly=True,
+            required_bins=("kubectl",),
+        ),
     ]
     registry.register_many(kubernetes_tools)
 
@@ -631,6 +674,17 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
         ToolMetadata("get_system_messages", "pihole", readonly=True),
     ]
     registry.register_many(pihole_tools)
+
+    # ── DataViz ────────────────────────────────────────────────────────────
+    dataviz_tools = [
+        ToolMetadata("create_line_chart", "dataviz", readonly=True),
+        ToolMetadata("create_bar_chart", "dataviz", readonly=True),
+        ToolMetadata("create_pie_chart", "dataviz", readonly=True),
+        ToolMetadata("create_mermaid_diagram", "dataviz", readonly=True),
+        ToolMetadata("create_interactive_chart_plotly", "dataviz", readonly=True),
+        ToolMetadata("analyze_data_for_chart", "dataviz", readonly=True),
+    ]
+    registry.register_many(dataviz_tools)
 
     # ── FritzBox ────────────────────────────────────────────────────────────
     fritzbox_tools = [
@@ -700,15 +754,31 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
 
     # ── Docker (requires docker) ────────────────────────────────────────────
     docker_tools = [
-        ToolMetadata("list_containers", "docker", readonly=True, required_bins=("docker",)),
-        ToolMetadata("inspect_container", "docker", readonly=True, required_bins=("docker",)),
-        ToolMetadata("get_container_logs", "docker", readonly=True, required_bins=("docker",)),
-        ToolMetadata("get_container_stats", "docker", readonly=True, required_bins=("docker",)),
+        ToolMetadata(
+            "list_containers", "docker", readonly=True, required_bins=("docker",)
+        ),
+        ToolMetadata(
+            "inspect_container", "docker", readonly=True, required_bins=("docker",)
+        ),
+        ToolMetadata(
+            "get_container_logs", "docker", readonly=True, required_bins=("docker",)
+        ),
+        ToolMetadata(
+            "get_container_stats", "docker", readonly=True, required_bins=("docker",)
+        ),
         ToolMetadata("list_images", "docker", readonly=True, required_bins=("docker",)),
-        ToolMetadata("list_volumes", "docker", readonly=True, required_bins=("docker",)),
-        ToolMetadata("get_docker_info", "docker", readonly=True, required_bins=("docker",)),
-        ToolMetadata("get_docker_version", "docker", readonly=True, required_bins=("docker",)),
-        ToolMetadata("get_docker_disk_usage", "docker", readonly=True, required_bins=("docker",)),
+        ToolMetadata(
+            "list_volumes", "docker", readonly=True, required_bins=("docker",)
+        ),
+        ToolMetadata(
+            "get_docker_info", "docker", readonly=True, required_bins=("docker",)
+        ),
+        ToolMetadata(
+            "get_docker_version", "docker", readonly=True, required_bins=("docker",)
+        ),
+        ToolMetadata(
+            "get_docker_disk_usage", "docker", readonly=True, required_bins=("docker",)
+        ),
     ]
     registry.register_many(docker_tools)
 
