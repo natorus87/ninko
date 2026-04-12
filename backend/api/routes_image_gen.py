@@ -8,10 +8,11 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from core.auth import ROLE_ADMIN, resolve_request_auth_async
 from core.image_provider import (
     generate_image,
     get_image_provider_config,
@@ -22,6 +23,18 @@ from core.image_provider import (
 logger = logging.getLogger("ninko.api.routes_image_gen")
 
 router = APIRouter(tags=["Image Generation"])
+
+
+async def _require_authenticated(request: Request) -> None:
+    auth_ctx = await resolve_request_auth_async(request)
+    if not auth_ctx:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+
+
+async def _assert_admin(request: Request) -> None:
+    auth_ctx = await resolve_request_auth_async(request)
+    if not auth_ctx or str(auth_ctx.get("role")) != ROLE_ADMIN:
+        raise HTTPException(status_code=403, detail="Admin role required.")
 
 
 # ── Image Serving ────────────────────────────────────────────────────────────
@@ -69,8 +82,9 @@ class ImageGenerateRequest(BaseModel):
 
 
 @router.get("/api/settings/image-provider")
-async def get_image_provider() -> dict:
+async def get_image_provider(request: Request) -> dict:
     """Holt die aktuelle Image-Provider-Konfiguration."""
+    await _assert_admin(request)
     config = await get_image_provider_config()
     # API-Key maskieren
     if config.get("api_key"):
@@ -81,8 +95,11 @@ async def get_image_provider() -> dict:
 
 
 @router.put("/api/settings/image-provider")
-async def update_image_provider(data: ImageProviderConfig) -> dict[str, str]:
+async def update_image_provider(
+    request: Request, data: ImageProviderConfig
+) -> dict[str, str]:
     """Aktualisiert die Image-Provider-Konfiguration."""
+    await _assert_admin(request)
     current = await get_image_provider_config()
 
     # Merge: leere Felder überschreiben nicht
@@ -98,10 +115,11 @@ async def update_image_provider(data: ImageProviderConfig) -> dict[str, str]:
 
 
 @router.post("/api/images/generate")
-async def generate_image_asset(body: ImageGenerateRequest) -> dict:
+async def generate_image_asset(request: Request, body: ImageGenerateRequest) -> dict:
     """
     Generiert ein Bild direkt über die konfigurierte Image-Provider-Pipeline.
     """
+    await _require_authenticated(request)
     prompt = (body.prompt or "").strip()
     if not prompt:
         raise HTTPException(status_code=400, detail="Prompt darf nicht leer sein.")

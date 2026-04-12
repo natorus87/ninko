@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import pickle
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -91,32 +90,40 @@ class KnowledgeGraph:
         return cls._instance
 
     def _load(self) -> None:
-        """Lädt den Graph aus Pickle (oder startet leer)."""
-        if self._pickle_path.exists():
+        """Lädt den Graph sicher aus JSON (oder startet leer)."""
+        if self._json_path.exists():
             try:
-                with open(self._pickle_path, "rb") as f:
-                    self._graph = pickle.load(f)
-                logger.info("Knowledge Graph geladen aus %s", self._pickle_path)
-            except (pickle.PickleError, OSError, EOFError) as e:
+                with open(self._json_path, encoding="utf-8") as f:
+                    data = json.load(f)
+                self._graph = nx.node_link_graph(data, directed=True)
+                logger.info("Knowledge Graph geladen aus %s", self._json_path)
+            except (
+                OSError,
+                ValueError,
+                TypeError,
+                KeyError,
+                json.JSONDecodeError,
+            ) as e:
                 logger.error("Fehler beim Laden: %s – starte leer", e)
                 self._graph = nx.DiGraph()
+        elif self._pickle_path.exists():
+            logger.warning(
+                "Ignoriere unsichere Legacy-Pickle-Datei %s; bitte per JSON neu exportieren/importieren.",
+                self._pickle_path,
+            )
+            self._graph = nx.DiGraph()
         else:
             self._graph = nx.DiGraph()
 
     async def _save(self) -> None:
-        """Persistiert den Graph (Pickle + JSON-Export)."""
+        """Persistiert den Graph sicher als JSON-Export."""
         async with self._lock:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, self._save_sync)
 
     def _save_sync(self) -> None:
-        """Synchrone Speicherung (für Executor)."""
+        """Synchrone JSON-Speicherung (für Executor)."""
         try:
-            # Pickle (schnell, vollständig)
-            with open(self._pickle_path, "wb") as f:
-                pickle.dump(self._graph, f, protocol=pickle.HIGHEST_PROTOCOL)
-
-            # JSON-Export (human-readable, für Analyse/Backup)
             data = nx.node_link_data(self._graph)
             with open(self._json_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False, default=str)

@@ -25,11 +25,20 @@ from typing import Any
 import httpx
 from fastapi import APIRouter, Request, UploadFile, File, HTTPException, Query
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
+from core.auth import ROLE_ADMIN, resolve_request_auth_async
 from core.redis_client import get_redis
 
 logger = logging.getLogger("ninko.api.plugins")
 router = APIRouter(prefix="/api/plugins", tags=["Plugins"])
+
+
+async def _assert_admin(request: Request) -> None:
+    """Erzwingt Admin-Authentifizierung für Plugin-Management-Endpunkte."""
+    auth_ctx = await resolve_request_auth_async(request)
+    if not auth_ctx or str(auth_ctx.get("role")) != ROLE_ADMIN:
+        raise HTTPException(status_code=403, detail="Admin role required.")
 
 # ─── Marketplace – Multi-Repo ─────────────────────────────────────────────────
 _REDIS_REPOS_KEY = "ninko:settings:marketplace_repos"
@@ -47,6 +56,23 @@ _DEFAULT_REPOS: list[dict[str, str]] = [
 _marketplace_cache: dict[str, Any] = {}
 _CACHE_TTL = 0  # Will be loaded from settings dynamically
 _REDIS_PLUGIN_META_KEY = "ninko:plugins:metadata"
+
+
+class MarketplaceRepoCreateRequest(BaseModel):
+    name: str = ""
+    repo_url: str = Field(min_length=1, max_length=512)
+    branch: str = "main"
+    modules_path: str = "backend/modules_catalog"
+    github_token: str = ""
+
+
+class MarketplaceRepoUpdateRequest(BaseModel):
+    name: str | None = None
+    repo_url: str | None = Field(default=None, min_length=1, max_length=512)
+    branch: str | None = None
+    modules_path: str | None = None
+    github_token: str | None = None
+    github_token_clear: bool = False
 
 
 def _get_cache_ttl() -> int:
@@ -553,6 +579,7 @@ async def upload_plugin(request: Request, file: UploadFile = File(...)) -> JSONR
     Nimmt ein ZIP-Archiv entgegen, entpackt es unter `backend/plugins/<name>`
     und lädt es per Hot-Load in den Speicher.
     """
+    await _assert_admin(request)
     if not file.filename or not file.filename.endswith(".zip"):
         raise HTTPException(
             status_code=400, detail="Es muss eine ZIP-Datei hochgeladen werden."
@@ -571,34 +598,40 @@ async def upload_plugin(request: Request, file: UploadFile = File(...)) -> JSONR
 
         # 2. ZIP-Sicherheitsprüfung und Entpacken
         extract_dir = temp_dir / "extracted"
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            members = zip_ref.infolist()
-            # CWE-400: Limit Dateianzahl für ZIP-Bomb-Schutz
-            if len(members) > _MAX_PLUGIN_FILES:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"ZIP-Archiv enthält zu viele Dateien: {len(members)} (max. {_MAX_PLUGIN_FILES}).",
-                )
-            total_size = sum(m.file_size for m in members)
-            if total_size > _MAX_UNCOMPRESSED_SIZE:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"ZIP-Archiv zu groß: {total_size // (1024 * 1024)} MB (max. 100 MB unkomprimiert).",
-                )
-            extract_dir_resolved = extract_dir.resolve()
-            for member in members:
-                if hasattr(member, "is_symlink") and member.is_symlink():
+        try:
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                members = zip_ref.infolist()
+                # CWE-400: Limit Dateianzahl für ZIP-Bomb-Schutz
+                if len(members) > _MAX_PLUGIN_FILES:
                     raise HTTPException(
                         status_code=400,
-                        detail="ZIP-Archiv enthält symbolische Links (nicht erlaubt).",
+                        detail=f"ZIP-Archiv enthält zu viele Dateien: {len(members)} (max. {_MAX_PLUGIN_FILES}).",
                     )
-                dest_path = (extract_dir / member.filename).resolve()
-                if not str(dest_path).startswith(str(extract_dir_resolved)):
+                total_size = sum(m.file_size for m in members)
+                if total_size > _MAX_UNCOMPRESSED_SIZE:
                     raise HTTPException(
                         status_code=400,
-                        detail="ZIP-Archiv enthält ungültigen Pfad (Path-Traversal verhindert).",
+                        detail=f"ZIP-Archiv zu groß: {total_size // (1024 * 1024)} MB (max. 100 MB unkomprimiert).",
                     )
-            zip_ref.extractall(extract_dir)
+                extract_dir_resolved = extract_dir.resolve()
+                for member in members:
+                    if hasattr(member, "is_symlink") and member.is_symlink():
+                        raise HTTPException(
+                            status_code=400,
+                            detail="ZIP-Archiv enthält symbolische Links (nicht erlaubt).",
+                        )
+                    dest_path = (extract_dir / member.filename).resolve()
+                    if not str(dest_path).startswith(str(extract_dir_resolved)):
+                        raise HTTPException(
+                            status_code=400,
+                            detail="ZIP-Archiv enthält ungültigen Pfad (Path-Traversal verhindert).",
+                        )
+                zip_ref.extractall(extract_dir)
+        except zipfile.BadZipFile as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="Ungültiges ZIP-Archiv.",
+            ) from exc
 
         # Wir erwarten, dass im ZIP genau EINER Ordner liegt (das Plugin-Package, z.B. 'mein_plugin')
         contents = list(extract_dir.iterdir())
@@ -683,7 +716,10 @@ async def upload_plugin(request: Request, file: UploadFile = File(...)) -> JSONR
         json.JSONDecodeError,
     ) as e:
         logger.error("Fehler beim Plugin Upload: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Unerwarteter Fehler: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Unerwarteter Fehler beim Plugin-Upload. Details im Server-Log.",
+        )
     finally:
         # Cleanup temp directory
         shutil.rmtree(temp_dir, ignore_errors=True)
@@ -700,10 +736,12 @@ async def list_repos() -> JSONResponse:
 
 
 @router.post("/marketplace/repos")
-async def add_repo(request: Request) -> JSONResponse:
+async def add_repo(
+    request: Request, body: MarketplaceRepoCreateRequest
+) -> JSONResponse:
     """Neues Repo zur Liste hinzufügen."""
-    body = await request.json()
-    repo_url = body.get("repo_url", "").strip()
+    await _assert_admin(request)
+    repo_url = body.repo_url.strip()
     if not repo_url or not _parse_github_url(repo_url):
         raise HTTPException(
             status_code=400, detail="Ungültige oder fehlende GitHub-URL."
@@ -716,11 +754,11 @@ async def add_repo(request: Request) -> JSONResponse:
     repos = await _load_repos()
     new_repo: dict[str, Any] = {
         "id": uuid.uuid4().hex[:10],
-        "name": body.get("name", "").strip() or repo_url,
+        "name": body.name.strip() or repo_url,
         "repo_url": repo_url,
-        "branch": (body.get("branch") or "main").strip(),
-        "modules_path": (body.get("modules_path") or "backend/modules_catalog").strip(),
-        "github_token": body.get("github_token", "").strip(),
+        "branch": (body.branch or "main").strip(),
+        "modules_path": (body.modules_path or "backend/modules_catalog").strip(),
+        "github_token": body.github_token.strip(),
     }
     repos.append(new_repo)
     await _save_repos(repos)
@@ -728,18 +766,20 @@ async def add_repo(request: Request) -> JSONResponse:
 
 
 @router.put("/marketplace/repos/{repo_id}")
-async def update_repo(request: Request, repo_id: str) -> JSONResponse:
+async def update_repo(
+    request: Request, repo_id: str, body: MarketplaceRepoUpdateRequest
+) -> JSONResponse:
     """Repo-Konfiguration aktualisieren."""
-    body = await request.json()
+    await _assert_admin(request)
     repos = await _load_repos()
     repo = next((r for r in repos if r["id"] == repo_id), None)
     if not repo:
         raise HTTPException(status_code=404, detail="Repo nicht gefunden.")
 
-    if "name" in body and body["name"].strip():
-        repo["name"] = body["name"].strip()
-    if "repo_url" in body:
-        url = body["repo_url"].strip()
+    if body.name and body.name.strip():
+        repo["name"] = body.name.strip()
+    if body.repo_url is not None:
+        url = body.repo_url.strip()
         if not _parse_github_url(url):
             raise HTTPException(status_code=400, detail="Ungültige GitHub-URL.")
         if not _is_repo_allowed(url):
@@ -748,16 +788,13 @@ async def update_repo(request: Request, repo_id: str) -> JSONResponse:
                 detail="Repository ist nicht in der erlaubten Allowlist.",
             )
         repo["repo_url"] = url
-    if "branch" in body:
-        repo["branch"] = (body["branch"] or "main").strip()
-    if "modules_path" in body:
-        repo["modules_path"] = (
-            body["modules_path"] or "backend/modules_catalog"
-        ).strip()
+    if body.branch is not None:
+        repo["branch"] = (body.branch or "main").strip()
+    if body.modules_path is not None:
+        repo["modules_path"] = (body.modules_path or "backend/modules_catalog").strip()
 
-    token_clear = bool(body.get("github_token_clear"))
-    token_value = body.get("github_token", "").strip()
-    if token_clear:
+    token_value = (body.github_token or "").strip() if body.github_token is not None else ""
+    if body.github_token_clear:
         repo["github_token"] = ""
     elif token_value:
         repo["github_token"] = token_value
@@ -767,8 +804,9 @@ async def update_repo(request: Request, repo_id: str) -> JSONResponse:
 
 
 @router.delete("/marketplace/repos/{repo_id}")
-async def delete_repo(repo_id: str) -> JSONResponse:
+async def delete_repo(repo_id: str, request: Request) -> JSONResponse:
     """Repo entfernen (Official-Repo kann nicht gelöscht werden)."""
+    await _assert_admin(request)
     if repo_id == _OFFICIAL_REPO_ID:
         raise HTTPException(
             status_code=403, detail="Das Official-Repo kann nicht gelöscht werden."
@@ -969,6 +1007,7 @@ async def install_from_repo(
     repo_id: str = Query(default=_OFFICIAL_REPO_ID),
 ) -> JSONResponse:
     """Lädt ein Modul aus dem angegebenen Repo herunter und installiert es als Plugin."""
+    await _assert_admin(request)
     if not re.fullmatch(r"[a-zA-Z0-9_]+", module_name):
         raise HTTPException(status_code=400, detail="Ungültiger Modulname.")
 
@@ -1167,6 +1206,7 @@ async def delete_plugin(request: Request, plugin_name: str) -> JSONResponse:
     Deinstalliert ein Plugin vom Dateisystem und entlädt es intern.
     Ein echter Memory-Cleanup erfordert jedoch einen Container-Neustart.
     """
+    await _assert_admin(request)
     import re
 
     if not re.fullmatch(r"[a-zA-Z0-9_\-]+", plugin_name):
@@ -1209,6 +1249,7 @@ async def reinstall_plugin(request: Request, plugin_name: str) -> JSONResponse:
     """
     Re-installiert ein Plugin aus dem ursprünglichen Repository (Update).
     """
+    await _assert_admin(request)
     import re
 
     if not re.fullmatch(r"[a-zA-Z0-9_\-]+", plugin_name):

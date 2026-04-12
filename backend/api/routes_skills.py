@@ -8,15 +8,23 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from core.auth import ROLE_ADMIN, resolve_request_auth_async
 from core.skills_manager import get_skills_manager
 from core.skill_marketplace import get_skill_marketplace
 
 logger = logging.getLogger("ninko.api.skills")
 
 router = APIRouter(prefix="/api/skills", tags=["skills"])
+
+
+async def _assert_admin(request: Request) -> None:
+    """Erzwingt Admin-Authentifizierung für state-changing Skill-Operationen."""
+    auth_ctx = await resolve_request_auth_async(request)
+    if not auth_ctx or str(auth_ctx.get("role")) != ROLE_ADMIN:
+        raise HTTPException(status_code=403, detail="Admin role required.")
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -74,8 +82,9 @@ async def get_marketplace() -> list[dict]:
 
 
 @router.post("/marketplace/install", status_code=201)
-async def install_from_marketplace(body: MarketplaceInstall) -> dict:
+async def install_from_marketplace(body: MarketplaceInstall, request: Request) -> dict:
     """Installiert einen Skill aus dem Marketplace."""
+    await _assert_admin(request)
     mp = get_skill_marketplace()
     try:
         path = await mp.install_from_remote(
@@ -99,8 +108,9 @@ async def list_repos() -> list[dict]:
 
 
 @router.post("/repos", status_code=201)
-async def add_repo(body: RepoCreate) -> dict:
+async def add_repo(body: RepoCreate, request: Request) -> dict:
     """Neues Skill-Repository hinzufügen."""
+    await _assert_admin(request)
     mp = get_skill_marketplace()
     try:
         await mp.add_repo(
@@ -117,8 +127,9 @@ async def add_repo(body: RepoCreate) -> dict:
 
 
 @router.delete("/repos/{repo_id}")
-async def remove_repo(repo_id: str) -> dict:
+async def remove_repo(repo_id: str, request: Request) -> dict:
     """Skill-Repository entfernen (builtin-Repos geschützt)."""
+    await _assert_admin(request)
     mp = get_skill_marketplace()
     try:
         await mp.remove_repo(repo_id)
@@ -144,8 +155,9 @@ async def get_skill(name: str) -> dict:
 
 
 @router.post("/", status_code=201)
-async def create_skill(body: SkillCreate) -> dict:
+async def create_skill(body: SkillCreate, request: Request) -> dict:
     """Erstellt einen neuen Skill und persistiert ihn in data/skills/."""
+    await _assert_admin(request)
     mgr = get_skills_manager()
     if mgr.get_skill(body.name):
         raise HTTPException(
@@ -163,8 +175,9 @@ async def create_skill(body: SkillCreate) -> dict:
 
 
 @router.put("/{name}")
-async def update_skill(name: str, body: SkillUpdate) -> dict:
+async def update_skill(name: str, body: SkillUpdate, request: Request) -> dict:
     """Aktualisiert einen bestehenden Skill (Runtime-Override für Built-ins möglich)."""
+    await _assert_admin(request)
     mgr = get_skills_manager()
     try:
         path = mgr.update_skill(name, body.description, body.content, body.modules)
@@ -175,8 +188,9 @@ async def update_skill(name: str, body: SkillUpdate) -> dict:
 
 
 @router.delete("/{name}", status_code=200)
-async def delete_skill(name: str) -> dict:
+async def delete_skill(name: str, request: Request) -> dict:
     """Löscht einen Runtime-Skill. Built-in Skills können nicht gelöscht werden."""
+    await _assert_admin(request)
     mgr = get_skills_manager()
     try:
         success = mgr.delete_skill(name)

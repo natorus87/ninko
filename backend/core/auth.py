@@ -26,6 +26,8 @@ from core.config import get_settings
 ROLE_ADMIN = "admin"
 ROLE_WRITE = "write"
 ROLE_READ = "read"
+_REQUEST_AUTH_CACHE_ATTR = "_ninko_auth_ctx"
+_REQUEST_AUTH_CACHE_FILLED_ATTR = "_ninko_auth_ctx_resolved"
 
 
 def _b64url_encode(data: bytes) -> str:
@@ -255,6 +257,9 @@ def _session_context(session_token: str) -> dict[str, Any] | None:
 
 def resolve_request_auth(request: Request) -> dict[str, Any] | None:
     """Resolve caller auth context from API key headers or session cookie."""
+    if hasattr(request.state, _REQUEST_AUTH_CACHE_FILLED_ATTR):
+        return getattr(request.state, _REQUEST_AUTH_CACHE_ATTR, None)
+
     cfg = get_settings()
     if not cfg.API_AUTH_ENABLED:
         return {
@@ -282,28 +287,35 @@ async def resolve_request_auth_async(request: Request) -> dict[str, Any] | None:
     Async version of resolve_request_auth that checks session blacklist.
     Use this in async endpoints to validate session tokens against blacklist.
     """
+    if hasattr(request.state, _REQUEST_AUTH_CACHE_FILLED_ATTR):
+        return getattr(request.state, _REQUEST_AUTH_CACHE_ATTR, None)
+
     cfg = get_settings()
     if not cfg.API_AUTH_ENABLED:
-        return {
+        auth_ctx = {
             "username": cfg.ADMIN_USERNAME or "admin",
             "role": ROLE_ADMIN,
             "module_permissions": {"*": {"read": True, "write": True}},
             "tenant_id": "default",
             "auth_source": "disabled",
         }
+    else:
+        auth_ctx = None
+        key = _extract_key_from_request(request)
+        if key:
+            auth_ctx = _api_key_context(key)
 
-    key = _extract_key_from_request(request)
-    if key:
-        ctx = _api_key_context(key)
-        if ctx:
-            return ctx
+        if auth_ctx is None:
+            session_token = _extract_session_from_request(request)
+            if session_token:
+                if await _is_token_blacklisted(session_token):
+                    auth_ctx = None
+                else:
+                    auth_ctx = _session_context(session_token)
 
-    session_token = _extract_session_from_request(request)
-    if session_token:
-        if await _is_token_blacklisted(session_token):
-            return None
-        return _session_context(session_token)
-    return None
+    setattr(request.state, _REQUEST_AUTH_CACHE_ATTR, auth_ctx)
+    setattr(request.state, _REQUEST_AUTH_CACHE_FILLED_ATTR, True)
+    return auth_ctx
 
 
 def resolve_request_role(request: Request) -> str | None:

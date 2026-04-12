@@ -28,10 +28,11 @@ import time
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 
+from core.auth import resolve_request_auth_async
 from core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,13 @@ _TRANSCRIPTION_SEMAPHORE = asyncio.Semaphore(3)
 # ── Whisper-Modell-Cache (lazy, thread-safe) ──────────────────────────────────
 _whisper_model: Any = None
 _whisper_lock = threading.Lock()
+
+
+async def _require_authenticated(request: Request) -> None:
+    """Blockiert CPU/GPU-intensive STT-Endpunkte für anonyme Requests."""
+    auth_ctx = await resolve_request_auth_async(request)
+    if not auth_ctx:
+        raise HTTPException(status_code=401, detail="Authentication required.")
 
 
 def _load_whisper_model() -> Any:
@@ -246,11 +254,14 @@ async def _transcribe_openai_compatible(
 
 
 @router.post("/", response_model=TranscriptionResponse)
-async def transcribe_audio(file: UploadFile = File(...)) -> TranscriptionResponse:
+async def transcribe_audio(
+    request: Request, file: UploadFile = File(...)
+) -> TranscriptionResponse:
     """
     Transkribiert eine hochgeladene Audio-Datei zu Text.
     Wird vom Chat-Dashboard (Mikrofon-Button) und den Bot-Modulen genutzt.
     """
+    await _require_authenticated(request)
     content = await file.read()
     filename = file.filename or "audio.webm"
     _validate_upload_meta(
@@ -305,6 +316,7 @@ async def transcribe_audio(file: UploadFile = File(...)) -> TranscriptionRespons
 
 @router.post("/whisper/benchmark", response_model=WhisperBenchmarkResponse)
 async def benchmark_whisper_models(
+    request: Request,
     file: UploadFile = File(...),
     models: str = "base,small",
 ) -> WhisperBenchmarkResponse:
@@ -312,6 +324,7 @@ async def benchmark_whisper_models(
     Vergleicht mehrere Whisper-Modelle auf derselben Audio-Datei.
     Standardmäßig: base vs small.
     """
+    await _require_authenticated(request)
     content = await file.read()
     filename = file.filename or "audio.webm"
     _validate_upload_meta(

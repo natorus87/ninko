@@ -268,7 +268,11 @@ class McpRegistry:
 
         env = {**os.environ, **config.env}
         if config.auth_token:
-            env.setdefault("MCP_AUTH_TOKEN", config.auth_token)
+            logger.warning(
+                "Ignoring stdio MCP auth_token for command '%s'; "
+                "do not pass secrets via subprocess environment.",
+                validated_command,
+            )
 
         process = await asyncio.create_subprocess_exec(
             validated_command,
