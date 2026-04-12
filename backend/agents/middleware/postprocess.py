@@ -24,8 +24,11 @@ class ResponseExtractionMiddleware(BaseMiddleware):
     priority = 500
 
     async def pre_process(self, ctx: MiddlewareContext) -> MiddlewareResult:
+        return MiddlewareResult()
+
+    async def post_process(self, ctx: MiddlewareContext) -> None:
         if not ctx.result:
-            return MiddlewareResult()
+            return
 
         all_msgs = ctx.result.get("messages", [])
         ai_msgs = [m for m in all_msgs if isinstance(m, AIMessage) and m.content]
@@ -36,7 +39,7 @@ class ResponseExtractionMiddleware(BaseMiddleware):
             if response:
                 ctx.response = response
                 logger.debug("Agent '%s' Antwort: %s…", ctx.agent_name, response[:100])
-                return MiddlewareResult()
+                return
 
         tool_msgs = [m for m in all_msgs if isinstance(m, ToolMessage) and m.content]
         if tool_msgs:
@@ -47,8 +50,6 @@ class ResponseExtractionMiddleware(BaseMiddleware):
             )
         else:
             ctx.response = "Keine Antwort generiert."
-
-        return MiddlewareResult()
 
 
 class MemoryStorageMiddleware(BaseMiddleware):
@@ -68,20 +69,23 @@ class MemoryStorageMiddleware(BaseMiddleware):
         self._bg_tasks = background_tasks or set()
 
     async def pre_process(self, ctx: MiddlewareContext) -> MiddlewareResult:
+        return MiddlewareResult()
+
+    async def post_process(self, ctx: MiddlewareContext) -> None:
         if (
             not ctx.response
             or len(ctx.response) < _MEMORIZE_MIN_LENGTH
             or ctx.agent_name in self._excluded
             or not self._auto_memorize
         ):
-            return MiddlewareResult()
+            return
 
         now = asyncio.get_running_loop().time()
         key = (ctx.agent_name, ctx.session_id or "__no_session__")
         last = self._cooldowns.get(key, 0.0)
 
         if (now - last) < _MEMORIZE_COOLDOWN_SECS:
-            return MiddlewareResult()
+            return
 
         if len(self._cooldowns) > 5000:
             oldest = sorted(self._cooldowns, key=lambda k: self._cooldowns[k])
@@ -92,8 +96,6 @@ class MemoryStorageMiddleware(BaseMiddleware):
         task = asyncio.create_task(self._auto_memorize(ctx.message, ctx.response))
         self._bg_tasks.add(task)
         task.add_done_callback(self._bg_tasks.discard)
-
-        return MiddlewareResult()
 
 
 def _extract_text(content: Any) -> str:

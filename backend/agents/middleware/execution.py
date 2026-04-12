@@ -90,19 +90,44 @@ class AgentExecutionMiddleware(BaseMiddleware):
 
         try:
             if ctx.use_safeguard and self._get_lock and self._run_sg:
+                logger.debug(
+                    "AgentExecutionMiddleware: safeguard run start agent=%s session=%s tools=%d",
+                    ctx.agent_name,
+                    ctx.session_id,
+                    len(ctx.active_tools),
+                )
                 async with self._get_lock(ctx.session_id):
                     raw_result = await self._run_sg(
                         ctx.messages, ctx.active_tools, run_config, ctx.session_id
                     )
+                logger.debug(
+                    "AgentExecutionMiddleware: safeguard run end agent=%s session=%s result_type=%s",
+                    ctx.agent_name,
+                    ctx.session_id,
+                    type(raw_result).__name__,
+                )
                 if isinstance(raw_result, str):
                     ctx.response = raw_result
                     ctx.early_return = True
                     return
                 ctx.result = raw_result
             else:
+                logger.debug(
+                    "AgentExecutionMiddleware: ainvoke start agent=%s session=%s tools=%d safeguard=%s",
+                    ctx.agent_name,
+                    ctx.session_id,
+                    len(ctx.active_tools),
+                    ctx.use_safeguard,
+                )
                 ctx.result = await asyncio.wait_for(
                     jit_agent.ainvoke({"messages": ctx.messages}, config=run_config),
                     timeout=timeout,
+                )
+                logger.debug(
+                    "AgentExecutionMiddleware: ainvoke end agent=%s session=%s result_type=%s",
+                    ctx.agent_name,
+                    ctx.session_id,
+                    type(ctx.result).__name__,
                 )
         except asyncio.TimeoutError:
             logger.warning("Agent '%s' Timeout nach %ds.", ctx.agent_name, timeout)
