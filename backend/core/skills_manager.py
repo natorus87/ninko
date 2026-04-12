@@ -38,6 +38,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from core.config import get_settings
+
 logger = logging.getLogger("ninko.core.skills_manager")
 
 _SKILLS_EXCEPTIONS = (
@@ -75,11 +77,17 @@ class SkillsManager:
         self._skills: list[Skill] = []
         self._loaded = False
 
+        settings = get_settings()
+        data_dir = Path(settings.DATA_DIR)
+        self._runtime_path = data_dir / "runtime_skills"
+        self._legacy_runtime_path = data_dir / "skills"
+
         # Suchpfade: Built-in zuerst, dann persistentes Data-Volume
         base = Path(__file__).resolve().parent.parent
         self._search_paths: list[Path] = [
             base / "skills",            # backend/skills/
-            Path("/app/data/skills"),   # Runtime (Docker-Volume)
+            self._runtime_path,         # Runtime (preferred, writable fallback)
+            self._legacy_runtime_path,  # Legacy runtime path
             base.parent / "data" / "skills",  # Local dev fallback
         ]
 
@@ -254,14 +262,7 @@ class SkillsManager:
 
         Gibt den Pfad zur erstellten SKILL.md zurück.
         """
-        # Persistentes Verzeichnis bevorzugen
-        target_base: Path | None = None
-        for p in self._search_paths:
-            if "data" in str(p):
-                target_base = p
-                break
-        if target_base is None:
-            target_base = self._search_paths[-1]
+        target_base = self._select_runtime_target()
 
         # Verzeichnis anlegen
         skill_dir = target_base / _slugify(name)
@@ -282,6 +283,29 @@ class SkillsManager:
         self.reload()
 
         return skill_file
+
+    def _select_runtime_target(self) -> Path:
+        """Wählt ein schreibbares Runtime-Verzeichnis für persistente Skills."""
+        candidates = [
+            self._runtime_path,
+            self._legacy_runtime_path,
+            self._search_paths[-1],
+        ]
+        for candidate in candidates:
+            try:
+                candidate.mkdir(parents=True, exist_ok=True)
+                probe = candidate / ".write_test"
+                probe.write_text("ok", encoding="utf-8")
+                probe.unlink()
+                return candidate
+            except _SKILLS_EXCEPTIONS as exc:
+                logger.warning(
+                    "Runtime-Skill-Pfad nicht beschreibbar (%s): %s",
+                    candidate,
+                    exc,
+                )
+
+        raise PermissionError("Kein beschreibbarer Runtime-Skill-Pfad verfügbar.")
 
     # ──────────────────────────────────────────────────────────────────────
     # Hilfsmethoden

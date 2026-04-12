@@ -148,11 +148,8 @@ ROUTING_PRESETS: dict[str, dict] = {
 }
 
 # ── Session-scoped Routing State ──────────────────────────────────────────────
-# Routing-Configs gelten nur für die aktuelle Session — nach Session-Ende zurück zu Defaults.
-# session_id → (RoutingConfig, last_updated_monotonic)
-_session_routing_configs: dict[str, tuple[RoutingConfig, float]] = {}
-# session_id → {"tiers": [2,2,1,2], "modules": ["k8s","k8s",None,"k8s"]}
-_session_stats: dict[str, dict] = {}
+# Routing-Configs und Heuristik-Stats werden in Redis gehalten, damit sie
+# multi-worker- und restart-stabil bleiben.
 _SESSION_ROUTING_TTL = 86400.0  # 24h, matching Redis chat-history TTL
 
 # Speed signals that trigger auto-fast preset for a session (DE + EN)
@@ -227,26 +224,98 @@ _WORKFLOW_HOWTO_PATTERNS: tuple[re.Pattern, ...] = (
 )
 
 
-def get_session_routing_config(session_id: str) -> RoutingConfig | None:
-    """Gibt die session-scoped Routing-Config zurück, falls vorhanden und nicht abgelaufen."""
-    if not session_id or session_id not in _session_routing_configs:
+def _routing_config_key(session_id: str) -> str:
+    return f"ninko:orchestrator:routing:{session_id}"
+
+
+def _routing_stats_key(session_id: str) -> str:
+    return f"ninko:orchestrator:routing_stats:{session_id}"
+
+
+async def get_session_routing_config(session_id: str) -> RoutingConfig | None:
+    """Gibt die session-scoped Routing-Config aus Redis zurück."""
+    if not session_id:
         return None
-    cfg, ts = _session_routing_configs[session_id]
-    if time.monotonic() - ts > _SESSION_ROUTING_TTL:
-        _session_routing_configs.pop(session_id, None)
+    try:
+        from core.redis_client import get_redis
+
+        raw = await get_redis().connection.get(_routing_config_key(session_id))
+        if not raw:
+            return None
+        payload = _json.loads(raw)
+        if not isinstance(payload, dict):
+            return None
+        return RoutingConfig.from_dict(payload)
+    except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
+        logger.warning(
+            "Konnte Routing-Config für Session '%s' nicht laden: %s",
+            session_id,
+            exc,
+        )
         return None
-    return cfg
 
 
-def set_session_routing_config(session_id: str, cfg: RoutingConfig) -> None:
-    """Setzt die session-scoped Routing-Config (überschreibt Defaults für diese Session)."""
-    if session_id:
-        _session_routing_configs[session_id] = (cfg, time.monotonic())
+async def set_session_routing_config(session_id: str, cfg: RoutingConfig) -> None:
+    """Persistiert die session-scoped Routing-Config in Redis."""
+    if not session_id:
+        return
+    from core.redis_client import get_redis
+
+    await get_redis().connection.set(
+        _routing_config_key(session_id),
+        _json.dumps(cfg.to_dict()),
+        ex=int(_SESSION_ROUTING_TTL),
+    )
 
 
-def clear_session_routing_config(session_id: str) -> None:
-    """Löscht die session-scoped Routing-Config → nächste Anfrage nutzt wieder Defaults."""
-    _session_routing_configs.pop(session_id, None)
+async def clear_session_routing_config(session_id: str) -> None:
+    """Löscht die session-scoped Routing-Config aus Redis."""
+    if not session_id:
+        return
+    from core.redis_client import get_redis
+
+    await get_redis().connection.delete(_routing_config_key(session_id))
+
+
+async def _get_session_routing_stats(session_id: str) -> dict[str, list]:
+    """Lädt Routing-Heuristik-Stats für eine Session aus Redis."""
+    if not session_id:
+        return {"tiers": [], "modules": []}
+    try:
+        from core.redis_client import get_redis
+
+        raw = await get_redis().connection.get(_routing_stats_key(session_id))
+        if not raw:
+            return {"tiers": [], "modules": []}
+        payload = _json.loads(raw)
+        if not isinstance(payload, dict):
+            return {"tiers": [], "modules": []}
+        tiers = payload.get("tiers")
+        modules = payload.get("modules")
+        return {
+            "tiers": list(tiers) if isinstance(tiers, list) else [],
+            "modules": list(modules) if isinstance(modules, list) else [],
+        }
+    except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
+        logger.warning(
+            "Konnte Routing-Stats für Session '%s' nicht laden: %s",
+            session_id,
+            exc,
+        )
+        return {"tiers": [], "modules": []}
+
+
+async def _set_session_routing_stats(session_id: str, stats: dict[str, list]) -> None:
+    """Persistiert Routing-Heuristik-Stats für eine Session in Redis."""
+    if not session_id:
+        return
+    from core.redis_client import get_redis
+
+    await get_redis().connection.set(
+        _routing_stats_key(session_id),
+        _json.dumps(stats),
+        ex=int(_SESSION_ROUTING_TTL),
+    )
 
 
 SYSTEM_PROMPT = """Du bist Ninko – ein intelligenter IT-Operations-Assistent.
@@ -407,7 +476,7 @@ class OrchestratorAgent(BaseAgent):
         Priorität: session-scoped config > RoutingConfig() Defaults.
         Session-Config wird durch configure_routing-Tool oder proaktive Heuristiken gesetzt.
         """
-        session_cfg = get_session_routing_config(session_id)
+        session_cfg = await get_session_routing_config(session_id)
         if session_cfg is not None:
             return session_cfg
         return RoutingConfig()
@@ -416,7 +485,7 @@ class OrchestratorAgent(BaseAgent):
         """Kein-Op – bleibt für Kompatibilität mit configure_routing-Tool."""
         pass
 
-    def _proactive_routing_adjust(
+    async def _proactive_routing_adjust(
         self,
         session_id: str,
         message: str,
@@ -428,7 +497,7 @@ class OrchestratorAgent(BaseAgent):
         Läuft synchron und ohne LLM-Call — nur Pattern-Matching und Session-Stats.
         """
         msg_lower = message.lower()
-        stats = _session_stats.get(session_id, {"tiers": [], "modules": []})
+        stats = await _get_session_routing_stats(session_id)
         words = set(re.sub(r"[^\w\s]", " ", msg_lower).split())
 
         # ── Heuristik 1: Speed-Signale → Fast-Preset für diese Session ──────
@@ -436,7 +505,7 @@ class OrchestratorAgent(BaseAgent):
             new_cfg = RoutingConfig.from_dict(
                 {**RoutingConfig().to_dict(), "preset": "fast"}
             )
-            set_session_routing_config(session_id, new_cfg)
+            await set_session_routing_config(session_id, new_cfg)
             logger.info(
                 "Proaktives Routing: Speed-Signal erkannt → Fast-Preset für Session '%s'",
                 session_id,
@@ -454,7 +523,7 @@ class OrchestratorAgent(BaseAgent):
             "wieder",
         }
         if words & _RESET_SIGNALS and cfg.preset != "default":
-            clear_session_routing_config(session_id)
+            await clear_session_routing_config(session_id)
             logger.info(
                 "Proaktives Routing: Reset-Signal erkannt → Defaults für Session '%s'",
                 session_id,
@@ -476,7 +545,7 @@ class OrchestratorAgent(BaseAgent):
             new_cfg = RoutingConfig.from_dict(
                 {**cfg.to_dict(), "preset": f"focus:{dominant}"}
             )
-            set_session_routing_config(session_id, new_cfg)
+            await set_session_routing_config(session_id, new_cfg)
             logger.info(
                 "Proaktives Routing: Modul-Fokus '%s' erkannt (Session '%s')",
                 dominant,
@@ -486,19 +555,20 @@ class OrchestratorAgent(BaseAgent):
 
         return cfg
 
-    def _update_session_stats(
+    async def _update_session_stats(
         self, session_id: str, tier: int, module: str | None
     ) -> None:
         """Trackt Tier-Nutzung und Modul-Verteilung pro Session für proaktive Heuristiken."""
         if not session_id:
             return
-        stats = _session_stats.setdefault(session_id, {"tiers": [], "modules": []})
+        stats = await _get_session_routing_stats(session_id)
         stats["tiers"].append(tier)
         stats["modules"].append(module)
         # Nur die letzten 20 Einträge behalten
         if len(stats["tiers"]) > 20:
             stats["tiers"] = stats["tiers"][-20:]
             stats["modules"] = stats["modules"][-20:]
+        await _set_session_routing_stats(session_id, stats)
 
     def _refresh_routing_map(self) -> None:
         """Routing-Map aus der Registry aktualisieren (nur wenn dirty)."""
@@ -1629,6 +1699,252 @@ JSON-SCHEMA:
 
         return await agent.resume_safeguard_tool(session_id)
 
+    def _module_display_name(self, module_name: str) -> str:
+        """Liefert den sichtbaren Namen eines Moduls für Status-/Fehlermeldungen."""
+        manifests = {m.name: m for m in self.registry.list_modules()}
+        return manifests.get(
+            module_name, type("", (), {"display_name": module_name})()
+        ).display_name
+
+    async def _invoke_module_agent(
+        self,
+        module_name: str,
+        *,
+        message: str,
+        chat_history: list[dict] | None,
+        session_id: str,
+        confirmed: bool,
+        status_message: str,
+        log_prefix: str,
+    ) -> tuple[str, str | None, bool]:
+        """Führt einen Modul-Agenten mit einheitlichem Status-/Fehlerhandling aus."""
+        agent = self.registry.get_agent(module_name)
+        if agent is None:
+            return (
+                _t(
+                    de=f"Fehler: Modul '{module_name}' ist nicht verfügbar oder nicht aktiviert.",
+                    en=f"Error: Module '{module_name}' is not available or not enabled.",
+                    fr=f"Erreur : Le module '{module_name}' n'est pas disponible ou n'est pas activé.",
+                    es=f"Error: El módulo '{module_name}' no está disponible o no está activado.",
+                    it=f"Errore: Il modulo '{module_name}' non è disponibile o non è attivato.",
+                    nl=f"Fout: Module '{module_name}' is niet beschikbaar of niet geactiveerd.",
+                    pl=f"Błąd: Moduł '{module_name}' nie jest dostępny lub nie jest włączony.",
+                    pt=f"Erro: Módulo '{module_name}' não disponível ou não ativado.",
+                    ja=f"エラー：モジュール '{module_name}' が利用できないか、有効になっていません。",
+                    zh=f"错误：模块 '{module_name}' 不可用或未启用。",
+                ),
+                module_name,
+                False,
+            )
+
+        await status_bus.emit(session_id, status_message)
+        logger.info("%s '%s': %s…", log_prefix, module_name, message[:80])
+        try:
+            response, did_compact = await agent.invoke(
+                message=message,
+                chat_history=chat_history,
+                session_id=session_id,
+                confirmed=confirmed,
+            )
+            return response, module_name, did_compact
+        except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
+            logger.error(
+                "%s '%s' Fehler: %s",
+                log_prefix,
+                module_name,
+                exc,
+                exc_info=True,
+            )
+            return (
+                _t(
+                    de=f"Fehler: Modul '{module_name}' hat einen Fehler gemeldet: {exc}.",
+                    en=f"Error: Module '{module_name}' reported an error: {exc}.",
+                    fr=f"Erreur : Le module '{module_name}' a signalé une erreur : {exc}.",
+                    es=f"Error: El módulo '{module_name}' reportó un error: {exc}.",
+                    it=f"Errore: Il modulo '{module_name}' ha segnalato un errore: {exc}.",
+                    nl=f"Fout: Module '{module_name}' heeft een fout gerapporteerd: {exc}.",
+                    pl=f"Błąd: Moduł '{module_name}' zgłosił błąd: {exc}.",
+                    pt=f"Erro: Módulo '{module_name}' relatou um erro: {exc}.",
+                    ja=f"エラー：モジュール '{module_name}' がエラーを報告しました: {exc}。",
+                    zh=f"错误：模块 '{module_name}' 报告了错误: {exc}。",
+                ),
+                module_name,
+                False,
+            )
+
+    async def _route_forced_target(
+        self,
+        force_module: str,
+        *,
+        message: str,
+        chat_history: list[dict] | None,
+        session_id: str,
+        confirmed: bool,
+    ) -> tuple[str, str | None, bool]:
+        """Direktes Routing an Modul oder Custom-Agent anhand force_module."""
+        agent = self.registry.get_agent(force_module)
+        if agent is None:
+            try:
+                from core.agent_pool import get_agent_pool
+
+                pool = get_agent_pool()
+                pool_agent, pool_name = pool.get_agent_by_id(force_module)
+                if pool_agent is not None:
+                    await status_bus.emit(
+                        session_id,
+                        _t(
+                            de=f"Rufe Agent '{pool_name}' direkt auf…",
+                            en=f"Calling agent '{pool_name}' directly…",
+                            fr=f"Appel de l'agent '{pool_name}' directement…",
+                            es=f"Llamando al agente '{pool_name}' directamente…",
+                            it=f"Chiamando l'agente '{pool_name}' direttamente…",
+                            nl=f"Agent '{pool_name}' direct aanroepen…",
+                            pl=f"Wywołuję agenta '{pool_name}' bezpośrednio…",
+                            pt=f"Chamando agente '{pool_name}' diretamente…",
+                            ja=f"エージェント '{pool_name}' を直接呼び出し中…",
+                            zh=f"正在直接调用代理 '{pool_name}'…",
+                        ),
+                    )
+                    logger.info(
+                        "Direktes Routing an Custom-Agent '%s' (id=%s): %s…",
+                        pool_name,
+                        force_module,
+                        message[:80],
+                    )
+                    try:
+                        response, did_compact = await pool_agent.invoke(
+                            message=message,
+                            chat_history=chat_history,
+                            session_id=session_id,
+                            confirmed=confirmed,
+                        )
+                        return response, force_module, did_compact
+                    except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
+                        logger.error(
+                            "Direktes Routing Custom-Agent '%s' Fehler: %s",
+                            force_module,
+                            exc,
+                            exc_info=True,
+                        )
+                        return (
+                            _t(
+                                f"Fehler: Agent '{pool_name}' hat einen Fehler gemeldet: {exc}.",
+                                f"Error: Agent '{pool_name}' reported an error: {exc}.",
+                            ),
+                            force_module,
+                            False,
+                        )
+            except _ORCH_RECOVERABLE_EXCEPTIONS as pool_exc:
+                logger.warning(
+                    "Custom-Agent '%s' aus Pool konnte nicht geladen werden: %s",
+                    force_module,
+                    pool_exc,
+                )
+
+        display = self._module_display_name(force_module)
+        return await self._invoke_module_agent(
+            force_module,
+            message=message,
+            chat_history=chat_history,
+            session_id=session_id,
+            confirmed=confirmed,
+            status_message=_t(
+                de=f"Rufe {display} direkt auf…",
+                en=f"Calling {display} directly…",
+                fr=f"Appel de {display} directement…",
+                es=f"Llamando a {display} directamente…",
+                it=f"Chiamando {display} direttamente…",
+                nl=f"{display} direct aanroepen…",
+                pl=f"Wywołuję {display} bezpośrednio…",
+                pt=f"Chamando {display} diretamente…",
+                ja=f"{display} を直接呼び出し中…",
+                zh=f"正在直接调用 {display}…",
+            ),
+            log_prefix="Direktes Routing an Modul",
+        )
+
+    async def _route_tier2_module(
+        self,
+        target_module: str,
+        *,
+        message: str,
+        chat_history: list[dict] | None,
+        session_id: str,
+        confirmed: bool,
+    ) -> tuple[str, str | None, bool] | None:
+        """Tier-2 Fast-Path: direktes Modulrouting inkl. Readonly-Subagent-Fallback."""
+        agent = self.registry.get_agent(target_module)
+        if agent is None:
+            logger.warning(
+                "Modul '%s' hat keinen registrierten Agent — Fallback auf ReAct-Loop.",
+                target_module,
+            )
+            return None
+
+        readonly_tools = self._get_readonly_tools_for_module(target_module)
+        if readonly_tools:
+            complexity = await self._check_task_complexity(message, target_module)
+            if complexity and complexity.get("is_complex"):
+                logger.info(
+                    "Tier 2.5: DataAnalysisSubagent für '%s' (Reason: %s)",
+                    target_module,
+                    complexity.get("reasoning", "unknown"),
+                )
+                await status_bus.emit(
+                    session_id,
+                    _t(
+                        de=f"Analysiere komplexe Daten in {target_module}…",
+                        en=f"Analyzing complex data in {target_module}…",
+                    ),
+                )
+
+                subagent = _get_or_create_subagent(
+                    session_id=session_id,
+                    module=target_module,
+                    tools=readonly_tools,
+                )
+                try:
+                    result = await subagent.invoke(
+                        task=message,
+                        chat_history=chat_history,
+                        sub_tasks=complexity.get("sub_tasks"),
+                    )
+                    if isinstance(result, tuple) and len(result) == 2:
+                        response, did_compact = result
+                    else:
+                        logger.warning(
+                            "DataAnalysisSubagent.invoke() hat kein (str, bool)-Tuple "
+                            "zurückgegeben (type=%s) — did_compact=False angenommen.",
+                            type(result).__name__,
+                        )
+                        response = result if isinstance(result, str) else str(result)
+                        did_compact = False
+                finally:
+                    _cleanup_subagent(session_id, target_module)
+                return response, target_module, did_compact
+
+        display = self._module_display_name(target_module)
+        return await self._invoke_module_agent(
+            target_module,
+            message=message,
+            chat_history=chat_history,
+            session_id=session_id,
+            confirmed=confirmed,
+            status_message=_t(
+                de=f"Rufe {display} auf…",
+                en=f"Calling {display}…",
+                fr=f"Appel de {display}…",
+                es=f"Llamando a {display}…",
+                it=f"Chiamando {display}…",
+                nl=f"{display} aanroepen…",
+                pl=f"Wywołuję {display}…",
+                pt=f"Chamando {display}…",
+                ja=f"{display} を呼び出し中…",
+                zh=f"正在调用 {display}…",
+            ),
+            log_prefix="Tier 2: Routing an Modul",
+        )
+
     async def route(
         self,
         message: str,
@@ -1667,140 +1983,19 @@ JSON-SCHEMA:
 
         self._refresh_routing_map()
         cfg = await self._load_routing_config(session_id)
-        cfg = self._proactive_routing_adjust(session_id, message, chat_history, cfg)
+        cfg = await self._proactive_routing_adjust(
+            session_id, message, chat_history, cfg
+        )
 
         # ── Direktes Modul-Routing (force_module) ────────────────────────────
         if force_module:
-            agent = self.registry.get_agent(force_module)
-            # Fallback: Custom Agent aus DynamicAgentPool (agent_id übergeben)
-            if agent is None:
-                try:
-                    from core.agent_pool import get_agent_pool
-
-                    pool = get_agent_pool()
-                    pool_agent, pool_name = pool.get_agent_by_id(force_module)
-                    if pool_agent is not None:
-                        await status_bus.emit(
-                            session_id,
-                            _t(
-                                de=f"Rufe Agent '{pool_name}' direkt auf…",
-                                en=f"Calling agent '{pool_name}' directly…",
-                                fr=f"Appel de l'agent '{pool_name}' directement…",
-                                es=f"Llamando al agente '{pool_name}' directamente…",
-                                it=f"Chiamando l'agente '{pool_name}' direttamente…",
-                                nl=f"Agent '{pool_name}' direct aanroepen…",
-                                pl=f"Wywołuję agenta '{pool_name}' bezpośrednio…",
-                                pt=f"Chamando agente '{pool_name}' diretamente…",
-                                ja=f"エージェント '{pool_name}' を直接呼び出し中…",
-                                zh=f"正在直接调用代理 '{pool_name}'…",
-                            ),
-                        )
-                        logger.info(
-                            "Direktes Routing an Custom-Agent '%s' (id=%s): %s…",
-                            pool_name,
-                            force_module,
-                            message[:80],
-                        )
-                        try:
-                            response, did_compact = await pool_agent.invoke(
-                                message=message,
-                                chat_history=chat_history,
-                                session_id=session_id,
-                                confirmed=confirmed,
-                            )
-                            return response, force_module, did_compact
-                        except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
-                            logger.error(
-                                "Direktes Routing Custom-Agent '%s' Fehler: %s",
-                                force_module,
-                                exc,
-                                exc_info=True,
-                            )
-                            return (
-                                _t(
-                                    f"Fehler: Agent '{pool_name}' hat einen Fehler gemeldet: {exc}.",
-                                    f"Error: Agent '{pool_name}' reported an error: {exc}.",
-                                ),
-                                force_module,
-                                False,
-                            )
-                except _ORCH_RECOVERABLE_EXCEPTIONS as pool_exc:
-                    logger.warning(
-                        "Custom-Agent '%s' aus Pool konnte nicht geladen werden: %s",
-                        force_module,
-                        pool_exc,
-                    )
-                    # Nicht ignorieren - wir wissen jetzt, dass es ein Pool-Problem gab
-            if agent is None:
-                return (
-                    _t(
-                        de=f"Fehler: Modul '{force_module}' ist nicht verfügbar oder nicht aktiviert.",
-                        en=f"Error: Module '{force_module}' is not available or not enabled.",
-                        fr=f"Erreur : Le module '{force_module}' n'est pas disponible ou n'est pas activé.",
-                        es=f"Error: El módulo '{force_module}' no está disponible o no está activado.",
-                        it=f"Errore: Il modulo '{force_module}' non è disponibile o non è attivato.",
-                        nl=f"Fout: Module '{force_module}' is niet beschikbaar of niet geactiveerd.",
-                        pl=f"Błąd: Moduł '{force_module}' nie jest dostępny lub nie jest włączony.",
-                        pt=f"Erro: Módulo '{force_module}' não disponível ou não ativado.",
-                        ja=f"エラー：モジュール '{force_module}' が利用できないか、有効になっていません。",
-                        zh=f"错误：模块 '{force_module}' 不可用或未启用。",
-                    ),
-                    force_module,
-                    False,
-                )
-            manifests = {m.name: m for m in self.registry.list_modules()}
-            display = manifests.get(
-                force_module, type("", (), {"display_name": force_module})()
-            ).display_name
-            await status_bus.emit(
-                session_id,
-                _t(
-                    de=f"Rufe {display} direkt auf…",
-                    en=f"Calling {display} directly…",
-                    fr=f"Appel de {display} directement…",
-                    es=f"Llamando a {display} directamente…",
-                    it=f"Chiamando {display} direttamente…",
-                    nl=f"{display} direct aanroepen…",
-                    pl=f"Wywołuję {display} bezpośrednio…",
-                    pt=f"Chamando {display} diretamente…",
-                    ja=f"{display} を直接呼び出し中…",
-                    zh=f"正在直接调用 {display}…",
-                ),
+            return await self._route_forced_target(
+                force_module,
+                message=message,
+                chat_history=chat_history,
+                session_id=session_id,
+                confirmed=confirmed,
             )
-            logger.info(
-                "Direktes Routing an Modul '%s': %s…", force_module, message[:80]
-            )
-            try:
-                response, did_compact = await agent.invoke(
-                    message=message,
-                    chat_history=chat_history,
-                    session_id=session_id,
-                    confirmed=confirmed,
-                )
-                return response, force_module, did_compact
-            except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
-                logger.error(
-                    "Direktes Routing: Modul '%s' Fehler: %s",
-                    force_module,
-                    exc,
-                    exc_info=True,
-                )
-                return (
-                    _t(
-                        de=f"Fehler: Modul '{force_module}' hat einen Fehler gemeldet: {exc}.",
-                        en=f"Error: Module '{force_module}' reported an error: {exc}.",
-                        fr=f"Erreur : Le module '{force_module}' a signalé une erreur : {exc}.",
-                        es=f"Error: El módulo '{force_module}' reportó un error: {exc}.",
-                        it=f"Errore: Il modulo '{force_module}' ha segnalato un errore: {exc}.",
-                        nl=f"Fout: Module '{force_module}' heeft een fout gerapporteerd: {exc}.",
-                        pl=f"Błąd: Moduł '{force_module}' zgłosił błąd: {exc}.",
-                        pt=f"Erro: Módulo '{force_module}' relatou um erro: {exc}.",
-                        ja=f"エラー：モジュール '{force_module}' がエラーを報告しました: {exc}。",
-                        zh=f"错误：模块 '{force_module}' 报告了错误: {exc}。",
-                    ),
-                    force_module,
-                    False,
-                )
 
         # ── Explizite Agent-Erstellung: deterministischer Create-Fast-Path ──
         # Verhindert "nur Anleitung", wenn der User klar "Agent erstellen" verlangt.
@@ -1826,7 +2021,7 @@ JSON-SCHEMA:
 
         tier, target_module = self._classify_tier(message, chat_history, cfg)
         self._last_tier_used = tier
-        self._update_session_stats(session_id, tier, target_module)
+        await self._update_session_stats(session_id, tier, target_module)
         logger.info("Routing-Tier %d gewählt für: %s…", tier, message[:80])
 
         # ── Tier 4: Multi-Modul-Pipeline-Planner ─────────────────────────
@@ -1841,111 +2036,15 @@ JSON-SCHEMA:
 
         # ── Tier 2: Keyword-Fast-Path direkt zum Modul-Agent ─────────────
         if tier == 2 and target_module:
-            agent = self.registry.get_agent(target_module)
-            if agent is not None:
-                readonly_tools = self._get_readonly_tools_for_module(target_module)
-                if readonly_tools:
-                    complexity = await self._check_task_complexity(
-                        message, target_module
-                    )
-                    if complexity and complexity.get("is_complex"):
-                        logger.info(
-                            "Tier 2.5: DataAnalysisSubagent für '%s' (Reason: %s)",
-                            target_module,
-                            complexity.get("reasoning", "unknown"),
-                        )
-                        await status_bus.emit(
-                            session_id,
-                            _t(
-                                de=f"Analysiere komplexe Daten in {target_module}…",
-                                en=f"Analyzing complex data in {target_module}…",
-                            ),
-                        )
-
-                        subagent = _get_or_create_subagent(
-                            session_id=session_id,
-                            module=target_module,
-                            tools=readonly_tools,
-                        )
-                        try:
-                            result = await subagent.invoke(
-                                task=message,
-                                chat_history=chat_history,
-                                sub_tasks=complexity.get("sub_tasks"),
-                            )
-                            # invoke() muss (str, bool) zurückgeben — defensiver Unpack
-                            if isinstance(result, tuple) and len(result) == 2:
-                                response, did_compact = result
-                            else:
-                                logger.warning(
-                                    "DataAnalysisSubagent.invoke() hat kein (str, bool)-Tuple "
-                                    "zurückgegeben (type=%s) — did_compact=False angenommen.",
-                                    type(result).__name__,
-                                )
-                                response = result if isinstance(result, str) else str(result)
-                                did_compact = False
-                        finally:
-                            _cleanup_subagent(session_id, target_module)
-                        return response, target_module, did_compact
-
-                manifests = {m.name: m for m in self.registry.list_modules()}
-                display = manifests.get(
-                    target_module, type("", (), {"display_name": target_module})()
-                ).display_name
-                await status_bus.emit(
-                    session_id,
-                    _t(
-                        de=f"Rufe {display} auf…",
-                        en=f"Calling {display}…",
-                        fr=f"Appel de {display}…",
-                        es=f"Llamando a {display}…",
-                        it=f"Chiamando {display}…",
-                        nl=f"{display} aanroepen…",
-                        pl=f"Wywołuję {display}…",
-                        pt=f"Chamando {display}…",
-                        ja=f"{display} を呼び出し中…",
-                        zh=f"正在调用 {display}…",
-                    ),
-                )
-                logger.info(
-                    "Tier 2: Routing an Modul '%s': %s…", target_module, message[:80]
-                )
-                try:
-                    response, did_compact = await agent.invoke(
-                        message=message,
-                        chat_history=chat_history,
-                        session_id=session_id,
-                        confirmed=confirmed,
-                    )
-                    return response, target_module, did_compact
-                except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
-                    logger.error(
-                        "Tier 2: Modul '%s' Fehler: %s",
-                        target_module,
-                        exc,
-                        exc_info=True,
-                    )
-                    return (
-                        _t(
-                            de=f"Fehler: Modul '{target_module}' hat einen Fehler gemeldet: {exc}.",
-                            en=f"Error: Module '{target_module}' reported an error: {exc}.",
-                            fr=f"Erreur : Le module '{target_module}' a signalé une erreur : {exc}.",
-                            es=f"Error: El módulo '{target_module}' reportó un error: {exc}.",
-                            it=f"Errore: Il modulo '{target_module}' ha segnalato un errore: {exc}.",
-                            nl=f"Fout: Module '{target_module}' heeft een fout gerapporteerd: {exc}.",
-                            pl=f"Błąd: Moduł '{target_module}' zgłosił błąd: {exc}.",
-                            pt=f"Erro: Módulo '{target_module}' relatou um erro: {exc}.",
-                            ja=f"エラー：モジュール '{target_module}' がエラーを報告しました: {exc}。",
-                            zh=f"错误：模块 '{target_module}' 报告了错误: {exc}。",
-                        ),
-                        target_module,
-                        False,
-                    )
-            else:
-                logger.warning(
-                    "Modul '%s' hat keinen registrierten Agent — Fallback auf ReAct-Loop.",
-                    target_module,
-                )
+            tier2_result = await self._route_tier2_module(
+                target_module,
+                message=message,
+                chat_history=chat_history,
+                session_id=session_id,
+                confirmed=confirmed,
+            )
+            if tier2_result is not None:
+                return tier2_result
         # ── Tier 1: Orchestrator-ReAct-Loop ─────────────────────────────
         # LLM entscheidet: call_module_agent, run_pipeline, create_custom_agent oder direkte Antwort.
         logger.info("Tier 1: Orchestrator-ReAct-Loop für: %s…", message[:80])

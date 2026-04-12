@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import re
+from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -50,9 +51,13 @@ class DynamicAgentPool:
 
     def __init__(self) -> None:
         # In-Memory: agent_id → BaseAgent instance
-        self._live_agents: dict[str, "BaseAgent"] = {}
+        self._live_agents: OrderedDict[str, "BaseAgent"] = OrderedDict()
         # Metadaten-Cache: agent_id → dict  (name, description, ...)
-        self._meta: dict[str, dict] = {}
+        self._meta: OrderedDict[str, dict] = OrderedDict()
+        # Vorgehashter Suchraum pro Agent für schnelles Matching
+        self._search_terms: dict[str, set[str]] = {}
+        # Inverted-Index: token -> scoped agent ids
+        self._token_index: dict[str, set[str]] = {}
         # Verhindert Race Condition bei gleichzeitigen register()-Aufrufen
         self._register_lock = asyncio.Lock()
 
@@ -132,13 +137,13 @@ class DynamicAgentPool:
         scoped_id = _scoped_id(tenant_id, agent_id)
         normalized_def = {**agent_def, "tenant_id": tenant_id}
 
-        # LRU-Eviction: Wenn Pool-Größe >= Limit, ältesten Eintrag entfernen
+        # LRU-Eviction: Wenn Pool-Größe >= Limit, am längsten ungenutzten Eintrag entfernen
         if (
             scoped_id not in self._live_agents
             and len(self._live_agents) >= _AGENT_POOL_MAX
         ):
-            evicted_id = next(iter(self._live_agents))
-            evicted_agent = self._live_agents.pop(evicted_id)
+            evicted_id, _ = self._live_agents.popitem(last=False)
+            self._remove_index(evicted_id)
             self._meta.pop(evicted_id, None)
             logger.info(
                 "DynamicAgentPool: LRU-Eviction: Agent '%s' entfernt (Pool-Limit %d)",
@@ -151,8 +156,11 @@ class DynamicAgentPool:
             system_prompt=normalized_def["system_prompt"],
             tools=self._get_dynamic_tools(),
         )
+        self._remove_index(scoped_id)
         self._live_agents[scoped_id] = agent
         self._meta[scoped_id] = normalized_def
+        self._index_agent(scoped_id, normalized_def)
+        self._mark_used(scoped_id)
         logger.info(
             "Dynamischer Agent instanziiert: '%s' (id=%s, scoped_id=%s, tenant=%s), "
             "Pool-Größe jetzt: %d",
@@ -163,6 +171,40 @@ class DynamicAgentPool:
             len(self._live_agents),
         )
         return agent
+
+    def _mark_used(self, scoped_id: str) -> None:
+        """Markiert einen Agenten als zuletzt verwendet, damit die Eviction echtes LRU bleibt."""
+        if scoped_id in self._live_agents:
+            self._live_agents.move_to_end(scoped_id)
+        if scoped_id in self._meta:
+            self._meta.move_to_end(scoped_id)
+
+    def _index_agent(self, scoped_id: str, meta: dict) -> None:
+        """Baut den invertierten Token-Index für einen Agenten auf."""
+        search_text = " ".join(
+            [
+                meta.get("name", ""),
+                meta.get("description", ""),
+                meta.get("system_prompt", "")[:300],
+            ]
+        )
+        search_words = set(_tokenize(search_text))
+        self._search_terms[scoped_id] = search_words
+        for token in search_words:
+            self._token_index.setdefault(token, set()).add(scoped_id)
+
+    def _remove_index(self, scoped_id: str) -> None:
+        """Entfernt einen Agenten aus dem invertierten Token-Index."""
+        old_terms = self._search_terms.pop(scoped_id, None)
+        if not old_terms:
+            return
+        for token in old_terms:
+            scoped_ids = self._token_index.get(token)
+            if not scoped_ids:
+                continue
+            scoped_ids.discard(scoped_id)
+            if not scoped_ids:
+                self._token_index.pop(token, None)
 
     # ──────────────────────────────────────────────────────────────────────
     # Suche / Matching
@@ -186,23 +228,24 @@ class DynamicAgentPool:
         best_id: str | None = None
         best_score = 0.0
         tenant = _effective_tenant_id()
+        candidate_ids: set[str] = set()
 
-        for agent_id, meta in self._meta.items():
+        for task_word in task_words:
+            candidate_ids.update(self._token_index.get(task_word, ()))
+
+        if not candidate_ids:
+            return None, ""
+
+        for agent_id in candidate_ids:
+            meta = self._meta.get(agent_id)
+            if not meta:
+                continue
             if not meta.get("enabled", True):
                 continue
             if _normalize_tenant(meta.get("tenant_id", "default")) != tenant:
                 continue
 
-            # Suchraum: Name + Description + erste 300 Zeichen System-Prompt
-            search_text = " ".join(
-                [
-                    meta.get("name", ""),
-                    meta.get("description", ""),
-                    meta.get("system_prompt", "")[:300],
-                ]
-            )
-            search_words = set(_tokenize(search_text))
-
+            search_words = self._search_terms.get(agent_id, set())
             if not search_words:
                 continue
 
@@ -215,6 +258,7 @@ class DynamicAgentPool:
 
         if best_id and best_score >= _MATCH_THRESHOLD:
             agent_name = self._meta[best_id].get("name", best_id)
+            self._mark_used(best_id)
             logger.debug(
                 "DynamicAgentPool: Bester Match '%s' mit Score %.2f",
                 agent_name,
@@ -242,6 +286,7 @@ class DynamicAgentPool:
         agent = self._live_agents.get(scoped)
         if agent:
             name = self._meta.get(scoped, {}).get("name", agent_id)
+            self._mark_used(scoped)
             logger.debug("get_agent_by_id: Gefunden mit scoped_id, name='%s'", name)
             return agent, name
 
@@ -249,6 +294,7 @@ class DynamicAgentPool:
         for sid, a in self._live_agents.items():
             if sid.endswith(f":{agent_id}"):
                 name = self._meta.get(sid, {}).get("name", agent_id)
+                self._mark_used(sid)
                 logger.debug(
                     "get_agent_by_id: Gefunden mit Fallback endsWith, name='%s'", name
                 )
@@ -343,9 +389,11 @@ class DynamicAgentPool:
         scoped = _scoped_id(tenant, agent_id)
         agent = self._live_agents.get(scoped)
         if agent:
+            self._mark_used(scoped)
             return agent
         for sid, a in self._live_agents.items():
             if sid.endswith(f":{agent_id}"):
+                self._mark_used(sid)
                 return a
         return None
 
@@ -401,6 +449,9 @@ class DynamicAgentPool:
                 except Exception:
                     pass
                 self._instantiate(agents[idx])
+            else:
+                self._remove_index(scoped_id)
+                self._index_agent(scoped_id, agents[idx])
 
         # Soul MD neu generieren wenn name oder description geändert wurde
         if name is not None or description is not None:

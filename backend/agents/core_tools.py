@@ -1558,13 +1558,13 @@ async def configure_routing(
     session_id = status_bus.get_session_id()
 
     if preset == "default":
-        clear_session_routing_config(session_id)
+        await clear_session_routing_config(session_id)
         return _t(
             "Routing zurückgesetzt auf Standard-Konfiguration (gilt für diese Session).",
             "Routing reset to default configuration (for this session).",
         )
 
-    current = get_session_routing_config(session_id) or RoutingConfig()
+    current = await get_session_routing_config(session_id) or RoutingConfig()
 
     if preset:
         if preset not in ROUTING_PRESETS:
@@ -1588,7 +1588,7 @@ async def configure_routing(
     if updates:
         current = RoutingConfig.from_dict({**current.to_dict(), **updates})
 
-    set_session_routing_config(session_id, current)
+    await set_session_routing_config(session_id, current)
 
     cfg_dict = current.to_dict()
     lines = [
@@ -1618,7 +1618,7 @@ async def get_routing_info() -> str:
 
     orch = get_orchestrator()
     session_id = status_bus.get_session_id()
-    session_cfg = get_session_routing_config(session_id)
+    session_cfg = await get_session_routing_config(session_id)
     cfg = session_cfg if session_cfg is not None else RoutingConfig()
     last_tier = getattr(orch, "_last_tier_used", "?") if orch else "?"
     source = "Session" if session_cfg is not None else "Default"

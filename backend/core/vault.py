@@ -5,6 +5,7 @@ Ninko Vault – Secrets Store mit HashiCorp Vault und SQLite-Fallback.
 from __future__ import annotations
 
 import base64
+import asyncio
 import hashlib
 import json
 import logging
@@ -202,11 +203,16 @@ class VaultClient:
             "möglicherweise mit altem/anderem Schlüssel verschlüsselt."
         )
 
+    async def _run_vault_io(self, func, *args):
+        """Führt blockierende HVAC-Operationen in einem Thread-Executor aus."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, lambda: func(*args))
+
     # ── Read ───────────────────────────────────────────
     async def get_secret(self, key: str) -> str | None:
         """Liest ein Secret aus dem konfigurierten Backend."""
         if self._backend == "vault":
-            return self._get_vault_secret(key)
+            return await self._run_vault_io(self._get_vault_secret, key)
         return await self._get_sqlite_secret(key)
 
     def _get_vault_secret(self, key: str) -> str | None:
@@ -301,7 +307,7 @@ class VaultClient:
     async def set_secret(self, key: str, value: str) -> None:
         """Schreibt ein Secret in das konfigurierte Backend."""
         if self._backend == "vault":
-            self._set_vault_secret(key, value)
+            await self._run_vault_io(self._set_vault_secret, key, value)
         else:
             await self._set_sqlite_secret(key, value)
 
@@ -336,7 +342,7 @@ class VaultClient:
     async def delete_secret(self, key: str) -> bool:
         """Löscht ein Secret."""
         if self._backend == "vault":
-            return self._delete_vault_secret(key)
+            return await self._run_vault_io(self._delete_vault_secret, key)
         return await self._delete_sqlite_secret(key)
 
     def _delete_vault_secret(self, key: str) -> bool:
@@ -369,7 +375,7 @@ class VaultClient:
     async def list_secrets(self) -> list[str]:
         """Listet alle Secret-Keys auf."""
         if self._backend == "vault":
-            return self._list_vault_secrets()
+            return await self._run_vault_io(self._list_vault_secrets)
         return await self._list_sqlite_secrets()
 
     def _list_vault_secrets(self) -> list[str]:
@@ -394,16 +400,7 @@ class VaultClient:
     async def health_check(self) -> dict:
         """Prüft das Secrets-Backend."""
         if self._backend == "vault":
-            try:
-                if self._hvac_client and self._hvac_client.is_authenticated():
-                    return {"status": "ok", "backend": "vault"}
-                return {
-                    "status": "error",
-                    "backend": "vault",
-                    "detail": "Nicht authentifiziert",
-                }
-            except _VAULT_EXCEPTIONS as exc:
-                return {"status": "error", "backend": "vault", "detail": str(exc)}
+            return await self._run_vault_io(self._health_check_vault)
         else:
             try:
                 async with aiosqlite.connect(self.SQLITE_DB_PATH) as db:
@@ -411,6 +408,19 @@ class VaultClient:
                 return {"status": "ok", "backend": "sqlite"}
             except _VAULT_IO_EXCEPTIONS as exc:
                 return {"status": "error", "backend": "sqlite", "detail": str(exc)}
+
+    def _health_check_vault(self) -> dict:
+        """Synchrone Vault-Health-Prüfung für Executor-Ausführung."""
+        try:
+            if self._hvac_client and self._hvac_client.is_authenticated():
+                return {"status": "ok", "backend": "vault"}
+            return {
+                "status": "error",
+                "backend": "vault",
+                "detail": "Nicht authentifiziert",
+            }
+        except _VAULT_EXCEPTIONS as exc:
+            return {"status": "error", "backend": "vault", "detail": str(exc)}
 
     @property
     def backend_type(self) -> str:
