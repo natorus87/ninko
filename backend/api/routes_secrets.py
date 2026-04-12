@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from schemas.secret import (
     SecretSetRequest,
@@ -14,11 +14,27 @@ from schemas.secret import (
     SecretListResponse,
     SecretDeleteResponse,
     VaultHealthResponse,
+    SECRET_KEY_PATTERN,
 )
 from core.vault import get_vault
+import re
 
 logger = logging.getLogger("ninko.api.secrets")
 router = APIRouter(prefix="/api/secrets", tags=["Secrets"])
+_SECRET_KEY_RE = re.compile(SECRET_KEY_PATTERN)
+
+
+def _validate_secret_key(key: str) -> str:
+    clean = (key or "").strip()
+    if not _SECRET_KEY_RE.fullmatch(clean):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Ungültiger Secret-Key. Erlaubt: 1-128 Zeichen, "
+                "beginnend alphanumerisch, danach nur [A-Za-z0-9_.:-]."
+            ),
+        )
+    return clean
 
 
 @router.get("/", response_model=SecretListResponse)
@@ -48,6 +64,7 @@ async def get_secret(key: str) -> dict:
     Liest ein Secret. Gibt nur eine Existenzprüfung zurück –
     Werte werden aus Sicherheitsgründen nicht über die API exponiert.
     """
+    key = _validate_secret_key(key)
     vault = get_vault()
     value = await vault.get_secret(key)
     return {
@@ -60,6 +77,7 @@ async def get_secret(key: str) -> dict:
 @router.delete("/{key}", response_model=SecretDeleteResponse)
 async def delete_secret(key: str) -> SecretDeleteResponse:
     """Löscht ein Secret."""
+    key = _validate_secret_key(key)
     vault = get_vault()
     deleted = await vault.delete_secret(key)
     return SecretDeleteResponse(key=key, deleted=deleted)

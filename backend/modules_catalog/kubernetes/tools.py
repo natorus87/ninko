@@ -17,6 +17,11 @@ from langchain_core.tools import tool
 
 logger = logging.getLogger("ninko.modules.kubernetes.tools")
 
+TOOL_REGISTRY_DEFAULTS = {
+    "required_bins": ("kubectl",),
+    "required_envs": (),
+}
+
 
 async def _get_k8s_client(
     connection_id: str = "",

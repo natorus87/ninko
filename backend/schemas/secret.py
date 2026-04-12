@@ -6,11 +6,18 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+SECRET_KEY_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+
 
 class SecretSetRequest(BaseModel):
     """Anfrage zum Setzen eines Secrets."""
 
-    key: str = Field(..., min_length=1, max_length=256)
+    key: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+        pattern=SECRET_KEY_PATTERN,
+    )
     value: str = Field(..., min_length=1)
 
 

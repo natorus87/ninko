@@ -18,6 +18,11 @@ from core.vault import get_vault
 
 logger = logging.getLogger("ninko.modules.docker.tools")
 
+TOOL_REGISTRY_DEFAULTS = {
+    "required_bins": ("docker",),
+    "required_envs": (),
+}
+
 
 def _format_bytes(b: int | float) -> str:
     """Format bytes into human-readable string."""

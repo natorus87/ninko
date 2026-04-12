@@ -12,6 +12,15 @@ from core.module_registry import ModuleManifest
 logger = logging.getLogger("ninko.modules.proxmox")
 
 
+def _warn_if_insecure_verify(source: str, verify_ssl: bool) -> None:
+    if not verify_ssl:
+        logger.warning(
+            "Proxmox SSL verification disabled for %s (verify_ssl=false). "
+            "This is insecure and should only be used in development environments.",
+            source,
+        )
+
+
 async def check_proxmox_health() -> dict:
     """Health check for Proxmox API connection via ConnectionManager."""
     try:
@@ -29,6 +38,7 @@ async def check_proxmox_health() -> dict:
             user = os.environ.get("PROXMOX_USER", "root@pam")
             token_id = os.environ.get("PROXMOX_TOKEN_ID", "")
             verify_ssl = os.environ.get("PROXMOX_VERIFY_SSL", "false").lower() == "true"
+            _warn_if_insecure_verify("env configuration", verify_ssl)
             vault = get_vault()
             token_secret = await vault.get_secret("PROXMOX_TOKEN_SECRET")
             if not token_secret:
@@ -43,6 +53,7 @@ async def check_proxmox_health() -> dict:
         user = conn.config.get("user", "root@pam")
         token_id = conn.config.get("token_id", "")
         verify_ssl = conn.config.get("verify_ssl", "false").lower() == "true"
+        _warn_if_insecure_verify(f"connection '{conn.name}'", verify_ssl)
 
         if not token_id and "!" in user:
             token_id = user.split("!", 1)[1]
@@ -57,16 +68,7 @@ async def check_proxmox_health() -> dict:
 
         host_addr = host.replace("https://", "").replace("http://", "").split(":")[0]
         proxmox = ProxmoxAPI(host_addr, port=8006, user=base_user, token_name=token_id, token_value=token_secret, verify_ssl=verify_ssl)
-
-        # SSL fallback for self-signed certs
-        try:
-            version = proxmox.version.get()
-        except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-            if verify_ssl and ("ssl" in str(exc).lower() or "certificate" in str(exc).lower()):
-                proxmox = ProxmoxAPI(host_addr, port=8006, user=base_user, token_name=token_id, token_value=token_secret, verify_ssl=False)
-                version = proxmox.version.get()
-            else:
-                raise
+        version = proxmox.version.get()
 
         return {"status": "ok", "detail": f"Proxmox VE {version.get('version', '?')} reachable ({conn.name})"}
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:

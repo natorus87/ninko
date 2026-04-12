@@ -13,6 +13,15 @@ from langchain_core.tools import tool
 logger = logging.getLogger("ninko.modules.proxmox.tools")
 
 
+def _warn_if_insecure_verify(source: str, verify_ssl: bool) -> None:
+    if not verify_ssl:
+        logger.warning(
+            "Proxmox SSL verification disabled for %s (verify_ssl=false). "
+            "This is insecure and should only be used in development environments.",
+            source,
+        )
+
+
 async def _get_proxmox_client(connection_id: str = "") -> object:
     """Creates an authenticated Proxmox API connection via ConnectionManager."""
     from proxmoxer import ProxmoxAPI
@@ -34,6 +43,7 @@ async def _get_proxmox_client(connection_id: str = "") -> object:
     user = conn.config.get("user", "root@pam")
     token_id = conn.config.get("token_id", "")
     verify_ssl = conn.config.get("verify_ssl", "false").lower() == "true"
+    _warn_if_insecure_verify(f"connection '{conn.name}'", verify_ssl)
 
     # Extract token ID from user field if not explicitly stored
     # (user field may contain "root@pam!Ninko" → token_id = "Ninko")
@@ -59,23 +69,10 @@ async def _get_proxmox_client(connection_id: str = "") -> object:
             token_value=token_secret,
             verify_ssl=verify_ssl,
         )
-
-        # Test call: detect SSL errors early and retry without verification
         if verify_ssl:
-            try:
-                px.version.get()
-            except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
-                err_str = str(e).lower()
-                if "ssl" in err_str or "certificate" in err_str:
-                    logger.warning("SSL verification failed, retrying without verify_ssl")
-                    px = ProxmoxAPI(
-                        host_addr,
-                        port=8006,
-                        user=base_user,
-                        token_name=token_id,
-                        token_value=token_secret,
-                        verify_ssl=False,
-                    )
+            # Probe once to surface certificate issues immediately, but never
+            # silently downgrade transport security.
+            px.version.get()
 
         return px
 

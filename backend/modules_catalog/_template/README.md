@@ -98,32 +98,37 @@ mymodule: [
 
 ---
 
-### 4. `backend/core/safeguard.py` — _TOOL_READONLY (read-only tools)
+### 4. `backend/modules_catalog/<name>/tools.py` — Tool Registry Metadata
 
-Register all **read-only** tools in the `_TOOL_READONLY` frozenset so they skip the safeguard confirmation:
+Neue Module müssen ihre Tool-Metadaten nicht mehr zentral in `core/tool_registry.py` oder `agents/base_agent.py`
+nachtragen. Die Registry entdeckt `@tool`-Funktionen automatisch aus `tools.py`.
+
+Optional kannst du Metadaten direkt im Modul definieren:
 
 ```python
-# _TOOL_READONLY frozenset
-"get_mymodule_status",
-"list_mymodule_items",
+TOOL_REGISTRY_DEFAULTS = {
+    "required_bins": ("kubectl",),
+    "required_envs": (),
+}
+
+TOOL_REGISTRY_OVERRIDES = {
+    "get_mymodule_status": {"readonly": True},
+    "restart_mymodule_service": {"readonly": False, "destructive": True},
+}
 ```
 
-Rule: `get_*`, `list_*`, `search_*`, `inspect_*`, `check_*` → add here.
-`create_*`, `delete_*`, `restart_*`, `set_*` → do NOT add (require confirmation).
-
-> **Important:** If a module has a generic catch-all tool (e.g. `send_*_command` that accepts arbitrary commands),
-> do NOT add it to `_TOOL_READONLY` — the safeguard LLM classifier must evaluate each call individually.
-> Write-tools like `set_*_power` or `restart_*_service` must also remain outside `_TOOL_READONLY`.
+Regeln:
+- `get_*`, `list_*`, `search_*`, `inspect_*`, `check_*` werden automatisch als read-only erkannt.
+- Schreib-Tools wie `create_*`, `delete_*`, `restart_*`, `set_*` bleiben standardmäßig bestätigungspflichtig.
+- Catch-all Tools wie `send_*_command` sollten explizit per Override klassifiziert werden.
 
 ---
 
-### 5. `backend/agents/base_agent.py` — _TOOL_LABELS (chat spinner text)
+### 5. Tool Status Labels (chat spinner text)
 
-```python
-# _TOOL_LABELS dict
-"get_mymodule_status": ("Prüfe Status",   "Checking status"),
-"list_mymodule_items": ("Lade Einträge",  "Loading items"),
-```
+Tool-Status-Labels werden jetzt zentral über `core/tool_registry.py:get_tool_status_label()` aufgelöst.
+Wenn ein Tool dort noch kein eigenes Label hat, fällt die UI automatisch auf `Title Case` des Tool-Namens zurück.
+Für neue Module ist kein zusätzlicher Integrationsschritt mehr erforderlich.
 
 ---
 
