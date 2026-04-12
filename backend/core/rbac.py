@@ -10,6 +10,7 @@ import hmac
 import json
 import os
 import time
+import unicodedata
 from typing import Any
 
 from core.auth import ROLE_ADMIN, ROLE_READ, ROLE_WRITE
@@ -30,6 +31,16 @@ def _normalize_module_id(module_id: str) -> str:
 def _normalize_tenant_id(tenant_id: str) -> str:
     t = (tenant_id or "").strip().lower().replace(" ", "_")
     return t or "default"
+
+
+def _normalize_password_input(password: str) -> str:
+    """
+    Normalize password input to a stable Unicode form before hashing/verification.
+
+    This avoids false mismatches when visually identical characters are entered in
+    different composed/decomposed forms (common with umlauts/accents on some layouts).
+    """
+    return unicodedata.normalize("NFC", str(password))
 
 
 def _default_roles() -> dict[str, dict[str, Any]]:
@@ -87,10 +98,11 @@ def _default_state() -> dict[str, Any]:
 
 
 def hash_password(password: str, *, salt_b64: str | None = None) -> str:
+    normalized_password = _normalize_password_input(password)
     salt = base64.b64decode(salt_b64) if salt_b64 else os.urandom(16)
     digest = hashlib.pbkdf2_hmac(
         "sha256",
-        password.encode("utf-8"),
+        normalized_password.encode("utf-8"),
         salt,
         PBKDF2_ITERATIONS,
     )
@@ -114,7 +126,7 @@ def verify_password(password: str, encoded_hash: str) -> bool:
 
     candidate = hashlib.pbkdf2_hmac(
         "sha256",
-        password.encode("utf-8"),
+        _normalize_password_input(password).encode("utf-8"),
         salt,
         iterations,
     )
