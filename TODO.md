@@ -1,9 +1,10 @@
 # Ninko – Open Issues & Review Tracker
 
-**Last updated:** 2026-04-11 (MEDIUM + LOW Fixes — 29 Issues Completed)
+**Last updated:** 2026-04-12 (A1 orchestrator refactor verified in container)
 
 **Full Review Reports:**
-- [Full Review 2026-04-11 – FINAL](./.claude/reports/full-review-2026-04-11-final.md) ← **PRODUCTION READY**
+- [Full Review 2026-04-11 v2](./.claude/reports/full-review-2026-04-11-v2.md) ← **AKTUELL**
+- [Full Review 2026-04-11 – FINAL](./.claude/reports/full-review-2026-04-11-final.md)
 - [Full Review 2026-04-11](./.claude/reports/full-review-2026-04-11.md)
 - [Full Review 2026-04-10](./.claude/reports/full-review-2026-04-10.md)
 
@@ -11,31 +12,48 @@
 > - 🔴 0 CRITICAL open
 > - 🟡 0 HIGH open
 > - 🟠 0 MEDIUM open
-> - 🟢 0 LOW open
+> - 🟢 0 LOW/ARCH open
 
 ---
 
 ## 🔴 CRITICAL – Open Issues
 
-*(alle behoben)*
+### API-Auth-Lücken (vor Deployment beheben)
+| # | Issue | Status |
+|---|-------|--------|
+| - | Keine offenen Critical Issues mehr | ✅ CLEAN |
 
 ---
 
 ## 🟡 HIGH – Open Issues
 
-*(alle behoben)*
+### Security
+| # | Issue | Status |
+|---|-------|--------|
+| - | Keine offenen High Issues mehr | ✅ CLEAN |
 
 ---
 
 ## 🟠 MEDIUM – Open Issues
 
-*(alle behoben – siehe Recently Completed)*
+### Security & Robustheit
+| # | Issue | Status |
+|---|-------|--------|
+| - | Keine offenen Medium Issues mehr | ✅ CLEAN |
 
 ---
 
-## 🟢 LOW – Deferred / Nice-to-Have
+## 🟢 LOW / Architektur-Schulden
 
-*(alle behoben – siehe Recently Completed)*
+| # | Issue | Status |
+|---|-------|--------|
+| A1 | **orchestrator.py** ~1800 Zeilen – `route()` God Method; Agent/Workflow-Builder auslagern | ✅ FIXED |
+| A2-BUG | **base_agent.py** – Duplikat-Key `add_user_to_group` in `_TOOL_LABELS` → falsches UI-Label | ✅ FIXED |
+| A2 | **base_agent.py** – `_TOOL_LABELS` (200+ Einträge) in tool_registry.py integrieren | ✅ FIXED |
+| A3 | **agent_pool.py** – LRU-Eviction ist FIFO (`OrderedDict.move_to_end` fehlt) | ✅ FIXED |
+| A4 | **agent_pool.py** – `find_best_match()` O(N×M) pro Request → Inverted-Index | ✅ FIXED |
+| A5 | **tool_registry.py** – Manuelle Synchronisation; Module sollten Tools selbst registrieren | ✅ FIXED |
+| F1 | **app.js:1132** – `h.id` in onclick ohne `_escapeAttr()` (inkonsistent) | ✅ FIXED |
 
 ---
 
@@ -115,6 +133,29 @@
 | | - Kein Breaking Change mehr – abwärtskompatibel | |
 | 2026-04-11 | CWE-379: `tls.py` – `/app/data/certs` mit mode=0o700/0o600 | ✅ FIXED |
 | 2026-04-11 | CWE-918: `routes_auth.py` – IP-Whitelist für `x-forwarded-proto` | ✅ FIXED |
+| 2026-04-11 | C1: `routes_skills.py` – State-changing Skill-Endpunkte jetzt mit Admin-Auth | ✅ FIXED |
+| 2026-04-11 | C2: `routes_plugins.py` – Plugin-Upload jetzt mit Admin-Auth | ✅ FIXED |
+| 2026-04-11 | C3: `routes_plugins.py` – Marketplace-Repo-CRUD jetzt mit Admin-Auth | ✅ FIXED |
+| 2026-04-11 | C4: `routes_transcription.py` – Transkriptions-Endpunkte jetzt auth-pflichtig | ✅ FIXED |
+| 2026-04-11 | C5: `knowledge_graph.py` – unsicheres `pickle.load()` entfernt, JSON-only Load | ✅ FIXED |
+| 2026-04-11 | C6: `routes_image_gen.py` – Image-Generation auth-pflichtig, Provider-Settings admin-only | ✅ FIXED |
+| 2026-04-11 | `skills_manager.py` – Runtime-Skills nutzen schreibbaren Fallback `DATA_DIR/runtime_skills` statt fehleranfälligem Legacy-Pfad | ✅ FIXED |
+| 2026-04-11 | H1: `auth.py` + `main.py` – gecachter async Auth-Resolver schließt Blacklist-Lücke für HTTP-Requests | ✅ FIXED |
+| 2026-04-11 | H2: `mcp_registry.py` – `stdio` spiegelt `auth_token` nicht mehr in Subprocess-ENV | ✅ FIXED |
+| 2026-04-11 | H3: `orchestrator.py` + `core_tools.py` – session-scoped Routing-State von Prozess-Globals nach Redis migriert | ✅ FIXED |
+| 2026-04-12 | M1: `routes_plugins.py` – Marketplace-Repo-CRUD nutzt jetzt Pydantic-Request-Schemas | ✅ FIXED |
+| 2026-04-12 | M2: `routes_plugins.py` – Upload-Fehlerpfad sanitisiert; kaputte ZIPs liefern kontrolliert `400` | ✅ FIXED |
+| 2026-04-12 | M3: `vault.py` – blockierende HVAC-Calls laufen jetzt über `run_in_executor` | ✅ FIXED |
+| 2026-04-12 | M4: `config.py` – Startup-Validator für Default-`SESSION_SECRET` bereits vorhanden und zur Laufzeit verifiziert | ✅ FIXED |
+| 2026-04-12 | M5: `routes_secrets.py` + `schemas/secret.py` – Secret-Keys haben jetzt Längen-/Format-Validierung | ✅ FIXED |
+| 2026-04-12 | M6: `proxmox/manifest.py` + `proxmox/tools.py` – kein stillschweigender SSL-Downgrade mehr auf `verify_ssl=False` | ✅ FIXED |
+| 2026-04-12 | A2-BUG: `base_agent.py` – `add_user_to_group` Label ist wieder eindeutig und nicht mehr vom Entra-Eintrag überschrieben | ✅ FIXED |
+| 2026-04-12 | A1: `orchestrator.py` – `route()` in Forced-/Tier-2-/Module-Invoke-Helfer zerlegt | ✅ FIXED |
+| 2026-04-12 | A2: `base_agent.py` – Tool-Status-Labels aus `_TOOL_LABELS` nach `tool_registry.py` zentralisiert | ✅ FIXED |
+| 2026-04-12 | A3: `agent_pool.py` – echter LRU-Zugriffs-Refresh via `OrderedDict.move_to_end()` | ✅ FIXED |
+| 2026-04-12 | A4: `agent_pool.py` – invertierter Token-Index ersetzt Full-Scan in `find_best_match()` | ✅ FIXED |
+| 2026-04-12 | A5: `tool_registry.py` – autodiscovery für `modules_catalog`/`modules`/`plugins`; neue Tools brauchen keinen manuellen Registry-Eintrag mehr | ✅ FIXED |
+| 2026-04-12 | F1: `app.js` – Chat-History escaped `h.id`/`title` konsistent vor `innerHTML` | ✅ FIXED |
 | 2026-04-07 | Synology Agent duplicate class definition | ✅ FIXED |
 | 2026-04-07 | image_gen __init__.py bereinigt | ✅ FIXED |
 | 2026-04-07 | slack tools.py – unused import entfernt | ✅ FIXED |
@@ -127,10 +168,26 @@
 |-----------|-----------|---------|------------|----------|------------|-------|
 | 🔴 CRITICAL | 0 | 0 | 0 | 0 | 0 | **0** |
 | 🟡 HIGH | 0 | 0 | 0 | 0 | 0 | **0** |
-| 🟠 MEDIUM | 7 | 5 | 0 | 2 | 2 | **16** |
-| 🟢 LOW | 1 | 4 | 0 | 1 | 4 | **10** |
+| 🟠 MEDIUM | 0 | 0 | 0 | 0 | 0 | **0** |
+| 🟢 LOW | 0 | 0 | 0 | 0 | 0 | **0** |
 
-**Total Open: 26 Issues**
+**Total Open: 0 Issues**
+
+---
+
+## 🎯 Tool System – Roadmap
+
+### Umsetzungsreihenfolge
+
+```
+Phase 0 (Fundament):
+├── core/tool_schema.py – ToolResponse, ToolParams BaseModels  [H1]
+└── core/tool_registry.py – Zentrale Registry mit Metadaten    [H2]
+
+Phase 1 (Ökosystem):
+├── Template-Update – Schema-Beispiele im _template             [M1]
+└── Gating-System – required_bins/env-Checks in ToolMetadata   [M3]
+```
 
 ---
 

@@ -79,6 +79,7 @@ from core.auth import (
     ROLE_WRITE,
     module_access_allows,
     resolve_request_auth,
+    resolve_request_auth_async,
     resolve_request_role,
     role_allows,
 )
@@ -722,7 +723,7 @@ async def api_security_middleware(request: Request, call_next) -> object:
     if path.startswith("/api/"):
         client_ip = request.client.host if request.client else "unknown"
 
-        auth_ctx = resolve_request_auth(request)
+        auth_ctx = await resolve_request_auth_async(request)
         if auth_ctx and str(auth_ctx.get("auth_source", "")) == "api_token":
             raw_token = _extract_api_key_from_request(request)
             username = str(auth_ctx.get("username", "")).strip()
@@ -777,7 +778,6 @@ async def api_security_middleware(request: Request, call_next) -> object:
         # Module-level ACL (module routes only, no effect on core API routes)
         module_id = _extract_module_id_from_path(path)
         if module_id and settings.API_AUTH_ENABLED:
-            auth_ctx = resolve_request_auth(request)
             if auth_ctx is None:
                 return JSONResponse(
                     status_code=401,
