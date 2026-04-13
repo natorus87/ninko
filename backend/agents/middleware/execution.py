@@ -35,8 +35,8 @@ class AgentExecutionMiddleware(BaseMiddleware):
         self._safeguard = safeguard
         self._get_lock = get_safeguard_session_lock
         self._run_sg = run_with_safeguard
-        self._paused = paused_agents or {}
-        self._paused_ts = paused_agents_ts or {}
+        self._paused = paused_agents if paused_agents is not None else {}
+        self._paused_ts = paused_agents_ts if paused_agents_ts is not None else {}
         self._paused_ttl = paused_ttl_secs
         self._callbacks_factory = callbacks_factory
 
