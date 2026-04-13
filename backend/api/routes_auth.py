@@ -317,7 +317,7 @@ async def logout(response: Response, request: Request) -> dict:
     token = request.cookies.get(cfg.SESSION_COOKIE_NAME, "").strip()
     if token:
         try:
-            from core.auth import _parse_session_token
+            from core.auth import _parse_session_token, _session_blacklist_key
 
             payload = _parse_session_token(token)
             if payload:
@@ -325,7 +325,7 @@ async def logout(response: Response, request: Request) -> dict:
                 if ttl > 0:
                     redis = get_redis()
                     await redis.connection.setex(
-                        f"ninko:session_blacklist:{token[:64]}",
+                        _session_blacklist_key(token),
                         ttl,
                         "1",
                     )
