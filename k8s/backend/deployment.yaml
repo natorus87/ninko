@@ -68,7 +68,9 @@ spec:
             - name: ADMIN_USERNAME
               value: "admin"
             - name: SESSION_COOKIE_SECURE
-              value: "true"
+              value: "false"
+            - name: CORS_ALLOW_ORIGINS
+              value: "https://ninko.conbro.local,http://ninko.conbro.local,http://localhost:8000,http://127.0.0.1:8000"
 
             # ─── Core-Module (immer verfügbar) ───
             - name: NINKO_MODULE_WEB_SEARCH
