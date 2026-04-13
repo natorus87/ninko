@@ -5,12 +5,13 @@ FastAPI Routes für DataViz Modul.
 import base64
 import io
 import json
-from typing import Optional
+import logging
+from html import escape
 
-from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import HTMLResponse, Response
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import HTMLResponse
 
-from backend.modules.dataviz.schemas import (
+from modules.dataviz.schemas import (
     ChartRequest,
     ChartResponse,
     MermaidRequest,
@@ -18,19 +19,26 @@ from backend.modules.dataviz.schemas import (
 )
 
 router = APIRouter(prefix="/dataviz", tags=["dataviz"])
+logger = logging.getLogger("ninko.modules.dataviz")
+
+
+def _ensure_matplotlib() -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
 
 
 @router.post("/chart", response_model=ChartResponse)
 async def create_chart(request: ChartRequest):
     """Erstellt ein Diagramm aus Daten."""
     try:
+        _ensure_matplotlib()
         import matplotlib.pyplot as plt
-        import matplotlib
-
-        matplotlib.use("Agg")
 
         labels = [d.label for d in request.data]
         values = [d.value for d in request.data]
+        if not labels:
+            raise HTTPException(status_code=400, detail="No chart data provided.")
 
         fig, ax = plt.subplots(figsize=(request.width / 100, request.height / 100))
 
@@ -43,7 +51,7 @@ async def create_chart(request: ChartRequest):
         elif request.chart_type == "scatter":
             ax.scatter(range(len(values)), values)
         elif request.chart_type == "area":
-            ax.fill_between(labels, values, alpha=0.5)
+            ax.fill_between(range(len(values)), values, alpha=0.5)
 
         ax.set_title(request.title)
         if request.x_label:
@@ -75,6 +83,35 @@ async def create_chart(request: ChartRequest):
             return ChartResponse(
                 success=True, chart_type=request.chart_type, format="svg", data=svg_data
             )
+        elif request.format == "html":
+            try:
+                import plotly.graph_objects as go
+                import plotly.io as pio
+
+                if request.chart_type == "pie":
+                    fig = go.Figure(data=[go.Pie(labels=labels, values=values)])
+                elif request.chart_type == "bar":
+                    fig = go.Figure(data=[go.Bar(x=labels, y=values)])
+                else:
+                    fig = go.Figure(
+                        data=[go.Scatter(x=labels, y=values, mode="lines+markers")]
+                    )
+                fig.update_layout(
+                    title=request.title,
+                    xaxis_title=request.x_label,
+                    yaxis_title=request.y_label,
+                    template="plotly_white",
+                )
+                html = pio.to_html(fig, full_html=True, include_plotlyjs="cdn")
+                return ChartResponse(
+                    success=True,
+                    chart_type=request.chart_type,
+                    format="html",
+                    data=html,
+                )
+            except Exception as exc:
+                logger.warning("Plotly HTML chart failed: %s", exc)
+                raise HTTPException(status_code=500, detail="Chart rendering failed.")
         else:
             plt.close(fig)
             return ChartResponse(
@@ -83,8 +120,11 @@ async def create_chart(request: ChartRequest):
                 format="json",
                 data=json.dumps({"labels": labels, "values": values}),
             )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Chart rendering failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Chart rendering failed.")
 
 
 @router.post("/mermaid", response_class=HTMLResponse)
@@ -108,7 +148,7 @@ async def create_mermaid(request: MermaidRequest):
     </style>
 </head>
 <body>
-    {f"<h2>{request.title}</h2>" if request.title else ""}
+    {f"<h2>{escape(request.title)}</h2>" if request.title else ""}
     <div class="mermaid">
 {request.code}
     </div>
