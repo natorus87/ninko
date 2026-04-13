@@ -140,6 +140,11 @@ def _parse_api_access_token(token: str) -> dict | None:
     return payload
 
 
+def _session_blacklist_key(token: str) -> str:
+    digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    return f"ninko:session_blacklist:{digest}"
+
+
 def verify_admin_credentials(username: str, password: str) -> bool:
     cfg = get_settings()
     expected_user = cfg.ADMIN_USERNAME or "admin"
@@ -232,7 +237,7 @@ async def _is_token_blacklisted(token: str) -> bool:
     try:
         from core.redis_client import get_redis
         redis = get_redis()
-        result = await redis.connection.get(f"ninko:session_blacklist:{token[:64]}")
+        result = await redis.connection.get(_session_blacklist_key(token))
         return result is not None
     except Exception:
         return False
