@@ -870,6 +870,15 @@ class TelegramBot:
 
         authorized, reason = await self._is_user_authorized(user_id, chat_id, is_group)
 
+        if cmd == "/chatid":
+            await self._send(
+                token,
+                chat_id,
+                f"🆔 Deine Telegram Chat-ID: <code>{chat_id}</code>",
+                parse_mode="HTML",
+            )
+            return
+
         if cmd == "/pair":
             if authorized:
                 await self._send(
@@ -965,15 +974,6 @@ class TelegramBot:
             voice_name = conn.config.get("voice_name") or None
 
         logger.info("Telegram message from chat %s: %s…", chat_id, text[:60])
-
-        if cmd == "/chatid":
-            await self._send(
-                token,
-                chat_id,
-                f"🆔 Deine Telegram Chat-ID: <code>{chat_id}</code>",
-                parse_mode="HTML",
-            )
-            return
 
         if cmd in ("/start", "/clear", "/reset"):
             session_id_local = f"telegram_{chat_id}"
