@@ -1,30 +1,23 @@
 # Ninko – Open Issues & Review Tracker
 
-**Last updated:** 2026-04-12 (K8s Debug Session – Secrets migrated, Chat empty responses, Login issues)
+**Last updated:** 2026-04-13 (K8s Auth + Middleware + Persistence Verification)
 
 ## 🚨 K8s Deployment – Aktuelle Probleme (2026-04-12)
 
-### 🔴 CRITICAL – Chat gibt leere Antworten
-**Status:** ❌ Nicht behoben  
-**Problem:** `AgentExecutionMiddleware.post_process()` hängt bei `jit_agent.ainvoke()`  
-**Debug:** LLM direkt funktioniert, Middleware-Kette nicht  
-**TODO:** 
-- [ ] Middleware-Logging hinzufügen um exakte Blockade zu finden
-- [ ] Test ohne Safeguard (`ctx.use_safeguard = False`)
-- [ ] Test ohne ChromaDB (Memory deaktivieren)
+### ✅ BEHOBEN – Chat gibt keine leeren Antworten mehr
+**Status:** ✅ Behoben  
+**Ursache:** Response-/Memory-Logik lag fälschlich in `pre_process()` statt in `post_process()` und lief nach der Agent-Ausführung nie.  
+**Fix:** `ResponseExtractionMiddleware` und `MemoryStorageMiddleware` auf echte `post_process()`-Hooks verschoben; zusätzlich Debug-Logging um `jit_agent.ainvoke()` ergänzt.
 
-### 🔴 CRITICAL – Login funktioniert nicht  
-**Status:** ⚠️ Teilweise behoben (`force_password=True` gesetzt)  
-**Problem:** Passwort-Hash wird aktualisiert, aber `verify_password()` gibt `False`  
-**Debug:** Encoding-Problem mit Sonderzeichen im Passwort  
-**TODO:**
-- [ ] Passwort-Hash-Encoding debuggen (`$` Zeichen im Hash)
-- [ ] Test mit einfachem Passwort (nur alphanumerisch)
+### ✅ BEHOBEN – Login funktioniert wieder
+**Status:** ✅ Behoben  
+**Ursache:** Mehrere Faktoren: Bootstrap-Passwort wurde beim Restart falsch behandelt, bestehende Redis-User behielten alte Hashes, und Unicode-äquivalente Passwort-Eingaben konnten unterschiedlich serialisiert werden.  
+**Fix:** `force_password=False` bleibt aktiv, damit Restarts keine Passwörter überschreiben; Passwort-Hashing/Verify normalisieren Eingaben jetzt via Unicode NFC; Redis-Altzustand muss bei geänderten Bootstrap-Passwörtern einmalig bereinigt werden.
 
-### 🟡 HIGH – Datenbank-Persistenz fehlt
-**Status:** ❌ Kein PVC  
-**Problem:** SQLite-DBs (`users.db`, `ninko.db`) werden bei Pod-Restart gelöscht  
-**Lösung:** PVC für `/app/data` anlegen
+### ✅ BEHOBEN – Datenbank-Persistenz konfiguriert
+**Status:** ✅ Behoben  
+**Ursache:** Der Tracker war veraltet; PVC/Mounts existierten bereits, aber die Kapazität war zu klein und die K8s-/Helm-Werte waren nicht sauber nachgeführt.  
+**Fix:** PVC für `/app/data` auf `10Gi` vereinheitlicht und Deployment/Chart verifiziert.
 
 ### ✅ BEHOBEN – Secrets-Migration
 **Status:** ✅ Alle 10 Secrets migriert (V1 → V3)  
@@ -46,7 +39,7 @@
 
 > **Status Overview:**
 > - 🔴 0 CRITICAL open
-> - 🟡 0 HIGH open
+> - 🟡 1 HIGH open
 > - 🟠 0 MEDIUM open
 > - 🟢 0 LOW/ARCH open
 
@@ -57,9 +50,7 @@
 ### K8s Deployment-Probleme
 | # | Issue | Status |
 |---|-------|--------|
-| K1 | Chat gibt leere Antworten – `AgentExecutionMiddleware.post_process()` hängt | ❌ OPEN |
-| K2 | Login funktioniert nicht – `verify_password()` gibt `False` trotz Hash-Update | ⚠️ PARTIAL |
-| K3 | Datenbank-Persistenz – Kein PVC für SQLite-DBs | ❌ OPEN |
+| - | Keine offenen Critical K8s-Issues mehr | ✅ CLEAN |
 
 ### API-Auth-Lücken (vor Deployment beheben)
 | # | Issue | Status |
@@ -73,7 +64,6 @@
 ### K8s/Infrastructure
 | # | Issue | Status |
 |---|-------|--------|
-| K4 | PVC für `/app/data` einrichten (10Gi) | ❌ OPEN |
 | K5 | Backup-Strategie für Redis/SQLite definieren | ❌ OPEN |
 
 ---
@@ -105,6 +95,11 @@
 
 | Date | Issue | Status |
 |------|-------|--------|
+| 2026-04-13 | K1: `postprocess.py` – Response-/Memory-Hooks laufen wieder korrekt in `post_process()` | ✅ FIXED |
+| 2026-04-13 | K2: `rbac.py` – Passwort-Hashing/Verify mit Unicode-Normalisierung (`NFC`) verifiziert | ✅ FIXED |
+| 2026-04-13 | K2: `main.py` – Bootstrap-Admin bleibt bei `force_password=False` und überschreibt keine Passwörter bei Restart | ✅ VERIFIED |
+| 2026-04-13 | K2/K4: K8s-/Helm-Auth – `SESSION_COOKIE_SECURE=false`, `CORS_ALLOW_ORIGINS` konfigurierbar/gesetzt | ✅ FIXED |
+| 2026-04-13 | K3/K4: Backend-PVC – `/app/data` in K8s/Helm auf `10Gi` vereinheitlicht | ✅ FIXED |
 | 2026-04-10 | Middleware-Stack Architektur – 12+ Middlewares mit Ordering | ✅ ON BRANCH |
 | 2026-04-10 | Harness/App Split – Package-Boundary + CI Test | ✅ ON BRANCH |
 | 2026-04-10 | Gateway Mode – RunManager + StreamBridge | ✅ ON BRANCH |
@@ -212,17 +207,15 @@
 
 | Priorität | Sicherheit | Backend | Performance | Frontend | Architektur | K8s/Infra | Total |
 |-----------|-----------|---------|------------|----------|------------|-----------|-------|
-| 🔴 CRITICAL | 0 | 1 | 0 | 0 | 0 | 2 | **3** |
-| 🟡 HIGH | 0 | 0 | 0 | 0 | 0 | 2 | **2** |
+| 🔴 CRITICAL | 0 | 0 | 0 | 0 | 0 | 0 | **0** |
+| 🟡 HIGH | 0 | 0 | 0 | 0 | 0 | 1 | **1** |
 | 🟠 MEDIUM | 0 | 0 | 0 | 0 | 0 | 0 | **0** |
 | 🟢 LOW | 0 | 0 | 0 | 0 | 0 | 0 | **0** |
 
-**Total Open: 5 Issues**
+**Total Open: 1 Issue**
 
-**Kritische K8s-Issues:**
-- K1: Chat empty responses (Middleware hangs)
-- K2: Login broken (verify_password fails)
-- K3: No PVC for SQLite DBs
+**Noch offen:**
+- K5: Backup-Strategie für Redis/SQLite definieren
 
 ---
 
