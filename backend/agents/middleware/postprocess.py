@@ -64,9 +64,11 @@ class MemoryStorageMiddleware(BaseMiddleware):
         background_tasks: set[asyncio.Task] | None = None,
     ):
         self._auto_memorize = auto_memorize_fn
-        self._excluded = excluded_agents or set()
-        self._cooldowns = cooldowns or {}
-        self._bg_tasks = background_tasks or set()
+        self._excluded = excluded_agents if excluded_agents is not None else set()
+        self._cooldowns = cooldowns if cooldowns is not None else {}
+        self._bg_tasks = (
+            background_tasks if background_tasks is not None else set()
+        )
 
     async def pre_process(self, ctx: MiddlewareContext) -> MiddlewareResult:
         return MiddlewareResult()
