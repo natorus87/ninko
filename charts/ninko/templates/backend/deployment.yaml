@@ -21,6 +21,19 @@ spec:
       {{- if .Values.serviceAccount.create }}
       serviceAccountName: {{ include "ninko.serviceAccountName" . }}
       {{- end }}
+      {{- $corsOrigins := .Values.backend.cors.allowOrigins | default "" }}
+      {{- if not $corsOrigins }}
+      {{- $originList := list "http://localhost:8000" "http://127.0.0.1:8000" }}
+      {{- if and .Values.ingress.enabled .Values.ingress.host }}
+      {{- $originList = append $originList (printf "https://%s" .Values.ingress.host) }}
+      {{- $originList = append $originList (printf "http://%s" .Values.ingress.host) }}
+      {{- end }}
+      {{- if and .Values.ingressRoute.enabled .Values.ingressRoute.host }}
+      {{- $originList = append $originList (printf "https://%s" .Values.ingressRoute.host) }}
+      {{- $originList = append $originList (printf "http://%s" .Values.ingressRoute.host) }}
+      {{- end }}
+      {{- $corsOrigins = join "," $originList }}
+      {{- end }}
       containers:
         - name: backend
           image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
@@ -101,6 +114,8 @@ spec:
               value: {{ .Values.backend.auth.adminUsername | quote }}
             - name: SESSION_COOKIE_SECURE
               value: {{ .Values.backend.auth.sessionCookieSecure | toString | quote }}
+            - name: CORS_ALLOW_ORIGINS
+              value: {{ $corsOrigins | quote }}
 
             # ─── Core Modules ───────────────────────────────
             - name: NINKO_MODULE_WEB_SEARCH
