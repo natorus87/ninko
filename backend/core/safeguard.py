@@ -1378,7 +1378,27 @@ class SafeguardMiddleware:
                 "path": "prefilter_short_safe",
             }
 
-        # 2. Extremely destructive CLI patterns (high-confidence block)
+        # 2. Explicit web search intents should be safe (read-only)
+        search_keywords = (
+            "websuche",
+            "web search",
+            "suche ",
+            "suche nach",
+            "search ",
+            "google ",
+            "recherche",
+            "recherchiere",
+            "recherchier",
+        )
+        if any(kw in lower for kw in search_keywords):
+            return {
+                "requires_confirmation": False,
+                "category": ActionCategory.SAFE,
+                "rationale": "Web search intent detected (safe).",
+                "path": "prefilter_short_safe",
+            }
+
+        # 3. Extremely destructive CLI patterns (high-confidence block)
         destructive_patterns = (
             "rm -rf",
             "rm -r",
@@ -1412,7 +1432,7 @@ class SafeguardMiddleware:
                 "path": "prefilter_short_block",
             }
 
-        # 3. Obvious state-changing patterns (high-confidence block)
+        # 4. Obvious state-changing patterns (high-confidence block)
         state_patterns = (
             "create",
             "deploy",

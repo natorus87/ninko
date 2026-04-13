@@ -627,6 +627,42 @@ class TelegramBot:
             logger.error("_send_photo error: %s", exc)
             return False
 
+    async def _send_photo_bytes(
+        self,
+        token: str,
+        chat_id: int,
+        image_bytes: bytes,
+        mime: str,
+        caption: str = "",
+    ) -> bool:
+        """Send raw image bytes as a photo via Telegram."""
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(
+                    f"https://api.telegram.org/bot{token}/sendPhoto",
+                    data={
+                        "chat_id": str(chat_id),
+                        "caption": caption,
+                        "parse_mode": "HTML",
+                    },
+                    files={"photo": ("chart", image_bytes, mime)},
+                )
+                if resp.status_code == 200 and resp.json().get("ok"):
+                    return True
+                logger.warning(
+                    "sendPhoto (bytes) Fehler: %s %s", resp.status_code, resp.text[:200]
+                )
+                return False
+        except (
+            RuntimeError,
+            ValueError,
+            TypeError,
+            KeyError,
+            OSError,
+            asyncio.TimeoutError,
+        ) as exc:
+            logger.error("_send_photo_bytes error: %s", exc)
+            return False
     async def _send_preview_message(
         self, token: str, chat_id: int, reply_to_message_id: int | None = None
     ) -> int | None:
@@ -1180,6 +1216,7 @@ class TelegramBot:
 
             # ── Image generation: detect marker, URL, or phrase ────────────
             image_path = None
+            data_url = None
             # 1. [NINKO_IMAGE:url] marker (backward-compat: KUMIO_IMAGE)
             m = re.search(
                 r"\[(?:NINKO_IMAGE|KUMIO_IMAGE):(/api/images/[^\]]+)\]", final_text
@@ -1190,7 +1227,15 @@ class TelegramBot:
             if m:
                 image_path = m.group(1)
                 logger.info("Image path detected in text: %s", image_path)
-            elif re.search(
+            if image_path is None:
+                # 3. data URL (data:image/...;base64,...) from DataViz
+                dm = re.search(
+                    r"data:image/(png|jpeg|jpg|webp);base64,([A-Za-z0-9+/=]+)",
+                    response_text,
+                )
+                if dm:
+                    data_url = dm
+            if image_path is None and data_url is None and re.search(
                 r"[Bb]ild\s+(?:erfolgreich\s+)?generiert|[Bb]ild\s+erstellt|generate_image",
                 response_text,
                 re.IGNORECASE,
@@ -1248,6 +1293,39 @@ class TelegramBot:
                     logger.warning(
                         "Image send failed, falling back to text: %s", img_err
                     )
+                    fallback = format_for_telegram(final_text)
+                    await self._send(
+                        token,
+                        chat_id,
+                        fallback,
+                        parse_mode="HTML",
+                        reply_to_message_id=message_id,
+                    )
+                return
+            if data_url:
+                caption = re.sub(
+                    r"data:image/(?:png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+",
+                    "",
+                    final_text,
+                ).strip()
+                caption = format_for_telegram(caption)[:1024]
+                try:
+                    img_bytes = base64.b64decode(data_url.group(2))
+                    mime = f"image/{data_url.group(1)}".replace("jpg", "jpeg")
+                    sent = await self._send_photo_bytes(
+                        token, chat_id, img_bytes, mime, caption
+                    )
+                    if not sent:
+                        fallback = format_for_telegram(final_text)
+                        await self._send(
+                            token,
+                            chat_id,
+                            fallback,
+                            parse_mode="HTML",
+                            reply_to_message_id=message_id,
+                        )
+                except Exception as exc:
+                    logger.warning("Data URL image send failed: %s", exc)
                     fallback = format_for_telegram(final_text)
                     await self._send(
                         token,

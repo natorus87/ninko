@@ -43,7 +43,8 @@ module_manifest = ModuleManifest(
     optional_secrets=[],
     routing_keywords=[
         "suche", "internet", "web", "googeln", "web search", "searxng", "news", "nachrichten",
-        "aktueller preis", "aktuelle kurse", "aktuelle news", "was kostet", "wie teuer"
+        "aktueller preis", "aktuelle kurse", "aktuelle news", "was kostet", "wie teuer",
+        "websuche", "web-suche", "websearch"
     ],
     api_prefix="/api/web-search",
     dashboard_tab={

@@ -28,6 +28,7 @@ module_manifest = ModuleManifest(
     version="1.0.0",
     routing_keywords=[
         "diagramm",
+        "diagram",
         "chart",
         "graph",
         "visualisierung",
@@ -35,6 +36,7 @@ module_manifest = ModuleManifest(
         "matplotlib",
         "plotly",
         "mermaid",
+        "dataviz",
         "balkendiagramm",
         "liniendiagramm",
         "kreisdiagramm",

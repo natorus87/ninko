@@ -72,7 +72,16 @@ _ORCH_RECOVERABLE_EXCEPTIONS = (
 
 # ── Tier-4 Konstanten ─────────────────────────────────────────────────────────
 
-# Utility-Module zählen für Compound-Scoring nur wenn explizit erwähnt
+# Utility-Module zählen für Compound-Scoring nur wenn explizit erwähnt.
+# Core-Module sind immer erlaubt, auch wenn sie nicht explizit genannt werden.
+_CORE_ALWAYS_MODULES: frozenset[str] = frozenset(
+    {
+        "web_search",
+        "image_gen",
+        "codelab",
+        "dataviz",
+    }
+)
 _UTILITY_MODULES: frozenset[str] = frozenset(
     {
         "web_search",
@@ -1303,12 +1312,30 @@ JSON-SCHEMA:
         in der aktuellen Nachricht erkannt wurden. "Logs anzeigen und dann neustart"
         (1 Modul) bleibt Tier 2.
         """
-        # Mindestens 2 Module mit ausreichendem Score in aktueller Nachricht
-        qualified = [mod for mod, score in current_scores.items() if score >= 2]
-        if len(qualified) < 2:
-            return False
         msg_lower = message.lower()
-        return any(p.search(msg_lower) for p in _MULTISTEP_PATTERNS)
+        has_multistep = any(p.search(msg_lower) for p in _MULTISTEP_PATTERNS)
+
+        # Mindestens 2 Module mit ausreichendem Score in aktueller Nachricht.
+        # Utility-Module (web_search, image_gen, telegram, email, teams) reichen bei Score>=1,
+        # wenn sie explizit erwähnt wurden.
+        qualified = []
+        for mod, score in current_scores.items():
+            if score >= 2:
+                qualified.append(mod)
+                continue
+            if mod in _UTILITY_MODULES and score >= 1:
+                qualified.append(mod)
+
+        if len(qualified) >= 2:
+            return has_multistep
+
+        # Fallback: expliziter Multistep + (Utility >=1) + (irgendein anderes Modul >=1)
+        if not has_multistep:
+            return False
+        weak_hits = [mod for mod, score in current_scores.items() if score >= 1]
+        has_utility = any(mod in _UTILITY_MODULES for mod in weak_hits)
+        has_other = any(mod not in _UTILITY_MODULES for mod in weak_hits)
+        return has_utility and has_other
 
     def _detect_module_fast(
         self,
@@ -1386,10 +1413,14 @@ JSON-SCHEMA:
             )
             return best, False
 
-        # Mehrere Module — Utility-Module filtern: nur wenn explizit erwähnt
+        # Mehrere Module — Utility-Module filtern: nur wenn explizit erwähnt,
+        # außer es handelt sich um Core-Module.
         filtered: dict[str, int] = {}
         for mod, score in current_scores.items():
             if mod in _UTILITY_MODULES:
+                if mod in _CORE_ALWAYS_MODULES:
+                    filtered[mod] = score
+                    continue
                 if (
                     mod in msg_lower
                     or mod.replace("_", " ") in msg_lower
@@ -1451,11 +1482,9 @@ JSON-SCHEMA:
         if cfg.tier4_enabled:
             if is_compound:
                 return 4, None
-            # Multistep-Check nur bei keinem eindeutigen Single-Match
-            if target_module is None:
-                current_scores = self._get_module_scores(routing_message)
-                if self._has_multistep_indicators(routing_message, current_scores):
-                    return 4, None
+            current_scores = self._get_module_scores(routing_message)
+            if self._has_multistep_indicators(routing_message, current_scores):
+                return 4, None
 
         # ── Tier 2: Keyword-Fast-Path ─────────────────────────────────────────
         if cfg.tier2_enabled and target_module:
@@ -1501,7 +1530,7 @@ JSON-SCHEMA:
         valid_module_names: set[str] = {m.name for m in modules}
         msg_lower = message.lower()
 
-        # Utility-Module nur wenn explizit im Text erwähnt
+        # Utility-Module nur wenn explizit im Text erwähnt (Core-Module sind immer erlaubt)
         utility_explicitly_mentioned: set[str] = set()
         for mod in _UTILITY_MODULES:
             if (
@@ -1532,10 +1561,10 @@ JSON-SCHEMA:
             f"1. Maximal 4 Schritte\n"
             f"2. Nur Module nutzen die der User EXPLIZIT benötigt oder die als "
             f"Datenzulieferer für den nächsten Schritt zwingend nötig sind\n"
-            f"3. Utility-Module (web_search, image_gen, telegram, email, teams) "
-            f"NUR wenn der User sie explizit erwähnt\n"
-            f"4. Jeder task-String muss die vollständige Aufgabe für das Modul enthalten\n"
-            f"5. NUR das JSON-Array zurückgeben — kein erklärender Text\n\n"
+            f"3. Utility-Module (telegram, email, teams) NUR wenn der User sie explizit erwähnt\n"
+            f"4. Core-Module (web_search, image_gen, codelab, dataviz) sind immer erlaubt\n"
+            f"5. Jeder task-String muss die vollständige Aufgabe für das Modul enthalten\n"
+            f"6. NUR das JSON-Array zurückgeben — kein erklärender Text\n\n"
             f'AUSGABE: [{{"module": "<name>", "task": "<vollständige aufgabe>"}}, ...]'
         )
 
@@ -1590,7 +1619,11 @@ JSON-SCHEMA:
             if mod not in valid_module_names:
                 logger.warning("Tier-4: Modul '%s' nicht in Registry → verworfen", mod)
                 continue
-            if mod in _UTILITY_MODULES and mod not in utility_explicitly_mentioned:
+            if (
+                mod in _UTILITY_MODULES
+                and mod not in utility_explicitly_mentioned
+                and mod not in _CORE_ALWAYS_MODULES
+            ):
                 logger.warning(
                     "Tier-4: Utility-Modul '%s' nicht explizit erwähnt → verworfen",
                     mod,
@@ -2018,6 +2051,31 @@ JSON-SCHEMA:
                 message, session_id
             )
             return response, "orchestrator", did_compact
+
+        # ── Deterministischer WebSearch → DataViz Fast-Path ─────────────────
+        msg_lower = message.lower()
+        web_terms = ("websuche", "web search", "searxng")
+        viz_terms = ("diagramm", "diagram", "chart", "dataviz", "plot")
+        if any(t in msg_lower for t in web_terms) and any(
+            t in msg_lower for t in viz_terms
+        ):
+            logger.info("Fast-Path: web_search → dataviz Pipeline erkannt.")
+            steps = [
+                {
+                    "module": "web_search",
+                    "task": f"Führe eine Websuche für folgende Anfrage durch und gib strukturierte Daten zurück:\n{message}",
+                },
+                {
+                    "module": "dataviz",
+                    "task": (
+                        "Erstelle ein Diagramm aus den Web-Suchergebnissen. "
+                        "Nutze zuerst analyze_data_for_chart, dann create_line_chart oder create_bar_chart. "
+                        "Gib ein data:image/png;base64,... zurück."
+                    ),
+                },
+            ]
+            result = await run_pipeline.ainvoke({"steps": steps})
+            return str(result), None, False
 
         tier, target_module = self._classify_tier(message, chat_history, cfg)
         self._last_tier_used = tier
