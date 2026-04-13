@@ -29,6 +29,33 @@ Tippe dazu einfach einen dieser Befehle in den Telegram-Chat mit dem Bot ein:
 
 Dies löscht das serverseitige Redis-Gedächtnis und Ninko beginnt den Chat kontextuell wieder von Null.
 
+## Pairing & Zugriff (DM Policy)
+Standardmäßig ist der Zugriff geschützt. Es gibt drei Wege, Nutzer zu autorisieren:
+
+1. **Pairing (empfohlen)**
+   - Nutzer schreibt dem Bot: `/pair`
+   - Bot antwortet mit einem 6‑stelligen Code (z. B. `13MZF8`)
+   - Ein bereits autorisierter Admin bestätigt im Telegram‑Chat:
+     - `/pair 13MZF8`
+
+2. **Allowlist (direkt)**
+   - In der Telegram‑Connection `allow_from` auf die **User‑ID** setzen
+   - `allow_from` kann eine Liste oder Komma‑Liste sein (z. B. `1260743556,987654321`)
+   - Optional: `dm_policy=allowlist` erzwingen
+
+3. **Open DM (nur temporär)**
+   - `dm_policy=open` erlaubt jedem DM‑Kontakt
+   - Nur für Tests oder initiales Setup empfohlen
+
+### Chat‑ID anzeigen
+Der Bot zeigt die Chat‑ID immer an (auch vor Pairing):
+- `/chatid`
+
+### Wichtige Hinweise
+- **`allow_from` nutzt User‑IDs**, nicht Chat‑IDs.
+- Für Gruppen gilt zusätzlich `allowed_chat_ids` (Legacy‑Allowlist).
+- Pairing‑Codes sind standardmäßig 1 Stunde gültig.
+
 ## Beispiel-Prompt (Chat)
 Alle Funktionen aller installierten Module stehen dir mobil sofort in der Hosentasche zur Verfügung:
 - *"Zeige mir alle Kubernetes-Pods, die crashen!"*
