@@ -81,13 +81,18 @@ backend:
   auth:
     enabled: true
     adminUsername: admin
-    sessionCookieSecure: true
+    sessionCookieSecure: false
+
+  cors:
+    # Comma-separated origins. Leave empty to auto-allow localhost plus the
+    # configured ingress/ingressRoute host when those are enabled.
+    allowOrigins: ""
 
   logLevel: INFO
   language: de
 
   persistence:
-    size: 2Gi
+    size: 10Gi
     storageClass: ""
     accessMode: ReadWriteOnce
 
