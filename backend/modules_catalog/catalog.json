@@ -169,6 +169,13 @@
       "author": "Ninko Team"
     },
     {
+      "name": "telegram",
+      "display_name": "Telegram",
+      "description": "Telegram Bot – Chatten mit Ninko über Messenger, Voice Messages, persistentes Chat-Memory.",
+      "version": "1.1.4",
+      "author": "Ninko Team"
+    },
+    {
       "name": "tasmota",
       "display_name": "Tasmota",
       "description": "Steuerung und Monitoring von Tasmota-Geräten (ESP8266/ESP32) via HTTP REST API.",
