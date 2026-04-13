@@ -8,13 +8,19 @@ import json
 from typing import List, Dict, Any, Optional, Union
 from langchain.tools import tool
 
-from backend.modules.dataviz.schemas import (
+from modules.dataviz.schemas import (
     ChartDataPoint,
     ChartRequest,
     MermaidRequest,
     MultiSeriesChartRequest,
 )
-from backend.agents.base_agent import _t
+from agents.base_agent import _t
+
+
+def _ensure_matplotlib() -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
 
 
 @tool
@@ -34,10 +40,8 @@ def create_line_chart(
         Base64-kodiertes PNG-Bild als Data-URL
     """
     try:
+        _ensure_matplotlib()
         import matplotlib.pyplot as plt
-        import matplotlib
-
-        matplotlib.use("Agg")  # Non-interactive backend
 
         data = json.loads(data_json)
         labels = [d["label"] for d in data]
@@ -85,10 +89,8 @@ def create_bar_chart(
         Base64-kodiertes PNG-Bild als Data-URL
     """
     try:
+        _ensure_matplotlib()
         import matplotlib.pyplot as plt
-        import matplotlib
-
-        matplotlib.use("Agg")
 
         data = json.loads(data_json)
         labels = [d["label"] for d in data]
@@ -145,10 +147,8 @@ def create_pie_chart(data_json: str, title: str) -> str:
         Base64-kodiertes PNG-Bild als Data-URL
     """
     try:
+        _ensure_matplotlib()
         import matplotlib.pyplot as plt
-        import matplotlib
-
-        matplotlib.use("Agg")
 
         data = json.loads(data_json)
         labels = [d["label"] for d in data]
