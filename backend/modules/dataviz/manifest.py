@@ -2,7 +2,7 @@
 DataViz Core Module - Diagramme und Visualisierungen für Ninko.
 """
 
-from backend.core.module_registry import ModuleManifest
+from core.module_registry import ModuleManifest
 
 
 async def check_dataviz_health() -> dict:
