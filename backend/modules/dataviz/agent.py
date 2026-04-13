@@ -2,7 +2,7 @@
 DataViz Agent - Diagramme und Visualisierungen.
 """
 
-from backend.agents.base_agent import BaseAgent
+from agents.base_agent import BaseAgent
 
 _SYSTEM_PROMPT = """
 You are the DataViz agent. You create charts, diagrams, and visualizations from data.
@@ -25,7 +25,7 @@ For percentage distributions: Use pie charts
 For processes/flows: Use Mermaid flowcharts
 """
 
-from backend.modules.dataviz.tools import (
+from modules.dataviz.tools import (
     create_line_chart,
     create_bar_chart,
     create_pie_chart,
