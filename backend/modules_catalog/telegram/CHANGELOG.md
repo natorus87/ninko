@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for voice message transcription
 - Dashboard integration with SVG icon
 
+## [1.1.3] - 2026-04-13
+
+### Fixed
+- `/chatid` command now works even when allowlist or pairing restrictions are active
+
 ## Module Information
 
 - **Name**: telegram
