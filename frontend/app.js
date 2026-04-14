@@ -2015,12 +2015,17 @@ const Ninko = {
         div.id = 'typing-indicator';
         div.innerHTML = `
             <div class="chat-bubble typing-bubble">
-                <div class="typing-steps" id="typing-steps">
-                    <div class="typing-step typing-step-active">
-                        <span class="typing-spinner"></span>
-                        <span class="typing-step-text">…</span>
-                    </div>
+                <div class="typing-live">
+                    <span class="typing-live-label" id="typing-live-label" data-active-text="…">…</span>
+                    <span class="typing-caret" aria-hidden="true"></span>
                 </div>
+                <details class="typing-steps-details" id="typing-steps-details">
+                    <summary>
+                        <span class="typing-summary-label">Zwischenschritte</span>
+                        <span class="typing-summary-count" id="typing-steps-count">0</span>
+                    </summary>
+                    <div class="typing-steps" id="typing-steps"></div>
+                </details>
             </div>
         `;
         container.appendChild(div);
@@ -2034,28 +2039,27 @@ const Ninko = {
 
     updateTypingStatus(text) {
         const stepsEl = document.getElementById('typing-steps');
-        if (!stepsEl) return;
+        const liveLabel = document.getElementById('typing-live-label');
+        const countEl = document.getElementById('typing-steps-count');
+        if (!stepsEl || !liveLabel) return;
 
-        // Aktiven Step als erledigt markieren
-        const activeStep = stepsEl.querySelector('.typing-step-active');
-        if (activeStep) {
-            activeStep.classList.remove('typing-step-active');
-            activeStep.classList.add('typing-step-done');
-            const spinner = activeStep.querySelector('.typing-spinner');
-            if (spinner) spinner.outerHTML = '<span class="typing-check">✓</span>';
+        const prevText = liveLabel.dataset.activeText || '';
+        if (prevText && prevText !== '…' && prevText !== text) {
+            this._typingSteps.push(prevText);
+            const doneStep = document.createElement('div');
+            doneStep.className = 'typing-step typing-step-done typing-step-enter';
+            doneStep.innerHTML = `<span class="typing-check">✓</span><span class="typing-step-text">${prevText}</span>`;
+            stepsEl.appendChild(doneStep);
+            requestAnimationFrame(() => doneStep.classList.add('typing-step-visible'));
+
+            // Begrenzen (max. 20 Schritte im DOM)
+            const done = stepsEl.querySelectorAll('.typing-step');
+            if (done.length > 20) done[0].remove();
         }
 
-        // Alten Steps begrenzen (max. 3 erledigte anzeigen)
-        const done = stepsEl.querySelectorAll('.typing-step-done');
-        if (done.length > 3) done[0].remove();
-
-        // Neuen aktiven Step hinzufügen
-        const newStep = document.createElement('div');
-        newStep.className = 'typing-step typing-step-active typing-step-enter';
-        newStep.innerHTML = `<span class="typing-spinner"></span><span class="typing-step-text">${text}</span>`;
-        stepsEl.appendChild(newStep);
-        // Animation starten
-        requestAnimationFrame(() => newStep.classList.add('typing-step-visible'));
+        liveLabel.dataset.activeText = text;
+        liveLabel.textContent = text;
+        if (countEl) countEl.textContent = String(this._typingSteps.length);
 
         const container = document.getElementById('chat-messages');
         if (container) container.scrollTop = container.scrollHeight;
