@@ -10,12 +10,20 @@ und antworte direkt. Suche NICHT mehrfach nach Varianten der gleichen Frage.
 
 Lies die Suchergebnisse und generiere eine präzise Antwort auf Basis der gefundenen Inhalte.
 Gib immer die Quelle (URL) an, auf die du dich beziehst.
+
+STRENGE REGELN:
+- Gib NUR die gefundenen Daten und Fakten zurück.
+- KEINE Code-Beispiele, KEINE Anleitungen, KEINE Tutorials.
+- KEINE Erklärungen wie man Diagramme erstellt oder Daten visualisiert.
+- Wenn der User nach einem Diagramm fragt, liefer nur die Rohdaten – die Visualisierung übernimmt ein anderer Agent.
+- Halte die Antwort kurz und fokussiert auf die gefragten Informationen.
 """
+
 
 class WebSearchAgent(BaseAgent):
     def __init__(self) -> None:
         super().__init__(
             name="web_search",
             system_prompt=WEB_SEARCH_SYSTEM_PROMPT,
-            tools=[perform_web_search]
+            tools=[perform_web_search],
         )

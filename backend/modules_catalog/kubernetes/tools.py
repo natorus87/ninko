@@ -194,8 +194,9 @@ async def get_all_pods(
 
 
 @tool
+@tool
 async def get_failing_pods(namespace: str = "", connection_id: str = "") -> list[dict]:
-    """Finds all failing pods (CrashLoop, ImagePull, OOMKilled, etc.)."""
+    """Finds all failing pods (CrashLoop, ImagePull, OOMKilled, Failed phase, Unknown phase)."""
     v1, _, _ = await _get_k8s_client(connection_id)
 
     if namespace:
@@ -206,9 +207,11 @@ async def get_failing_pods(namespace: str = "", connection_id: str = "") -> list
     failing = []
     for p in pods.items:
         issues: list[str] = []
+        is_failing = False
 
         if p.status.phase in ("Failed", "Unknown"):
             issues.append(f"Phase: {p.status.phase}")
+            is_failing = True
 
         for cs in p.status.container_statuses or []:
             if cs.state and cs.state.waiting:
@@ -220,23 +223,24 @@ async def get_failing_pods(namespace: str = "", connection_id: str = "") -> list
                     "CreateContainerConfigError",
                 ):
                     issues.append(f"{cs.name}: {reason}")
+                    is_failing = True
             if cs.state and cs.state.terminated:
                 reason = cs.state.terminated.reason or "Unknown"
                 if reason in ("OOMKilled", "Error"):
                     issues.append(f"{cs.name}: {reason}")
-            if cs.restart_count > 5:
-                issues.append(f"{cs.name}: {cs.restart_count} restarts")
+                    is_failing = True
 
-        if issues:
+        if is_failing:
             containers = p.status.container_statuses or []
             ready_count = sum(1 for c in containers if c.ready)
+            restart_count = sum(c.restart_count for c in containers)
             failing.append(
                 {
                     "name": p.metadata.name,
                     "namespace": p.metadata.namespace,
                     "status": p.status.phase,
                     "ready": f"{ready_count}/{len(containers)}",
-                    "restarts": sum(c.restart_count for c in containers),
+                    "restarts": restart_count,
                     "issues": issues,
                     "age": _pod_age(p.metadata.creation_timestamp),
                 }
@@ -767,12 +771,21 @@ async def patch_deployment(
     Args:
         name: Name of the deployment to patch.
         namespace: Namespace of the deployment.
-        image: New container image (e.g., nginx:1.25).
+        image: New container image (e.g. nginx:1.25).
         replicas: New replica count.
         env_vars: List of env vars to set/update [{"name": "KEY", "value": "val"}].
         resources: Dict with "limits" and/or "requests" cpu/memory.
         connection_id: Optional Kubernetes connection ID.
     """
+    if image is None and replicas is None and env_vars is None and resources is None:
+        return {
+            "action": "patch_deployment",
+            "name": name,
+            "namespace": namespace,
+            "status": "error",
+            "detail": "Keine Patch-Parameter angegeben. Mindestens einer benötigt: image, replicas, env_vars, oder resources. Für komplexere Änderungen (Ports, Config) verwende get_resource_yaml + apply_manifest.",
+        }
+
     _, apps_v1, _ = await _get_k8s_client(connection_id)
 
     body: dict = {"spec": {}}

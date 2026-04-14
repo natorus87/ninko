@@ -122,10 +122,6 @@ class _StatusEmitter(AsyncCallbackHandler):
         tool_name = serialized.get("name", "")
         run_id = str(kwargs.get("run_id", ""))
 
-        # Status-Update
-        label = get_tool_status_label(tool_name)
-        await status_bus.emit(self.session_id, f"{label}…")
-
         # Zeitmessung starten + Args für Audit merken
         self._tool_start_times[run_id] = time.monotonic()
         try:
@@ -134,6 +130,21 @@ class _StatusEmitter(AsyncCallbackHandler):
             self._tool_args[run_id] = (
                 {"_raw": str(input_str)[:200]} if input_str else {}
             )
+
+        # Nur strukturiertes Event – kein redundantes status-Emit mehr,
+        # da das Frontend den label aus dem tool_start-Event selbst anzeigt
+        label = get_tool_status_label(tool_name)
+        await status_bus.emit_event(
+            self.session_id,
+            {
+                "type": "tool_start",
+                "tool_name": tool_name,
+                "label": label,
+                "run_id": run_id,
+                "agent": self.agent_name,
+                "args": self._tool_args.get(run_id, {}),
+            },
+        )
 
     async def on_tool_end(self, output: Any, **kwargs) -> None:  # type: ignore[override]
         tool_name = kwargs.get("name", "")
@@ -156,6 +167,26 @@ class _StatusEmitter(AsyncCallbackHandler):
             result_str = str(output) if output else ""
 
         result_size = len(result_str)
+
+        # Ergebnis-Preview (sicher gekürzt, keine Secrets)
+        result_preview = ""
+        if result_str:
+            # Primitive Redaction
+            redacted = result_str
+            for key in ("password", "secret", "token", "api_key", "apikey", "key"):
+                redacted = re.sub(
+                    rf'("{key}"\\s*:\\s*)"[^"]+"',
+                    rf'\\1"***"',
+                    redacted,
+                    flags=re.IGNORECASE,
+                )
+                redacted = re.sub(
+                    rf"({key}\\s*[=:]\\s*)([^\\s,;]+)",
+                    rf"\\1***",
+                    redacted,
+                    flags=re.IGNORECASE,
+                )
+            result_preview = redacted[:400]
 
         # Args aus on_tool_start holen
         args = self._tool_args.pop(run_id, {})
@@ -191,6 +222,20 @@ class _StatusEmitter(AsyncCallbackHandler):
         except Exception:
             pass  # Audit-Tracking darf nie blockieren
 
+        await status_bus.emit_event(
+            self.session_id,
+            {
+                "type": "tool_end",
+                "tool_name": tool_name,
+                "run_id": run_id,
+                "agent": self.agent_name,
+                "duration_ms": round(duration_ms, 2),
+                "result_size": result_size,
+                "error": bool(error_str),
+                "preview": result_preview,
+            },
+        )
+
     async def on_llm_start(self, serialized: dict, messages: list, **kwargs) -> None:  # type: ignore[override]
         await status_bus.emit(
             self.session_id,
@@ -209,7 +254,8 @@ class _StatusEmitter(AsyncCallbackHandler):
         )
 
     async def on_llm_end(self, response: Any, **kwargs) -> None:  # type: ignore[override]
-        """Token-Usage aus LLM-Response extrahieren und tracken."""
+        """Token-Usage tracken + Reasoning-Text ans Frontend senden."""
+        # ── Token-Tracking ──────────────────────────────────────────────────
         try:
             usage = getattr(response, "usage_metadata", None)
             if usage and isinstance(usage, dict):
@@ -219,7 +265,6 @@ class _StatusEmitter(AsyncCallbackHandler):
                 completion_tokens = usage.get("output_tokens", 0) or usage.get(
                     "completion_tokens", 0
                 )
-
                 if prompt_tokens > 0 or completion_tokens > 0:
                     from core.metrics import record_llm_tokens
 
@@ -233,6 +278,47 @@ class _StatusEmitter(AsyncCallbackHandler):
                     _tok_task.add_done_callback(_log_bg_task_exception)
         except Exception as _tok_exc:
             logger.warning("Token-Tracking fehlgeschlagen (ignoriert): %s", _tok_exc)
+
+        # ── Reasoning-Text extrahieren – NUR bei Zwischenschritten mit Tool-Calls ──
+        # Bei der finalen Antwort (kein Tool-Call) NICHT emittieren,
+        # sonst landet der Antworttext im Thinking-Step statt in der Chat-Bubble.
+        try:
+            text: str = ""
+            has_tool_calls: bool = False
+            generations = getattr(response, "generations", None)
+            if generations:
+                gen = generations[0][0] if generations[0] else None
+                if gen is not None:
+                    msg = getattr(gen, "message", None)
+                    if msg is not None:
+                        # Prüfen ob Tool-Calls vorhanden (= Zwischenschritt)
+                        tool_calls = getattr(msg, "tool_calls", None) or []
+                        additional_kw = getattr(msg, "additional_kwargs", {}) or {}
+                        has_tool_calls = bool(tool_calls) or bool(
+                            additional_kw.get("tool_calls")
+                        )
+                        # Reasoning-Text extrahieren (nur wenn vorhanden)
+                        content = getattr(msg, "content", "")
+                        if isinstance(content, str):
+                            text = content.strip()
+                        elif isinstance(content, list):
+                            # Anthropic / strukturiertes Format
+                            text = " ".join(
+                                c.get("text", "")
+                                for c in content
+                                if isinstance(c, dict) and c.get("type") == "text"
+                            ).strip()
+                    if not text:
+                        text = (getattr(gen, "text", "") or "").strip()
+
+            # Nur emittieren wenn es ein Zwischenschritt ist (LLM ruft Tools auf)
+            if text and has_tool_calls:
+                await status_bus.emit_event(
+                    self.session_id,
+                    {"type": "thinking_content", "text": text[:600]},
+                )
+        except Exception:
+            pass  # Thinking-Content ist optional, darf nie blockieren
 
 
 _DEFAULT_AGENT_TIMEOUT_SECONDS = 1800

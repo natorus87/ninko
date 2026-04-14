@@ -936,6 +936,10 @@ const Ninko = {
                     const data = JSON.parse(e.data);
                     if (data.type === 'status') {
                         this.updateTypingStatus(data.text);
+                    } else if (data.type === 'tool_start' || data.type === 'tool_end') {
+                        this.handleToolEvent(data);
+                    } else if (data.type === 'thinking_content') {
+                        this._handleThinkingContent(data.text);
                     } else if (data.type === 'subagent_step') {
                         this._handleSubagentStepSSE(data);
                     } else if (data.type === 'done') {
@@ -1389,7 +1393,9 @@ const Ninko = {
         div.dataset.msgId = msgId;
         div.innerHTML = `
             <div class="chat-bubble-group">
-                <div class="chat-bubble">${this.formatText(text)}</div>
+                <div class="chat-bubble">
+                    <div class="chat-bubble-text">${this.formatText(text)}</div>
+                </div>
                 <div class="chat-actions">
                     ${ttsBtn}
                     ${retryBtn}
@@ -1397,6 +1403,14 @@ const Ninko = {
                 </div>
             </div>
         `;
+
+        // Steps aus dem letzten Typing-Cycle vor dem Text einbetten
+        if (role === 'ai' && this._savedSteps && this._savedSteps.children.length > 0) {
+            const bubble = div.querySelector('.chat-bubble');
+            this._savedSteps.classList.add('typing-steps-preserved');
+            bubble.insertBefore(this._savedSteps, bubble.querySelector('.chat-bubble-text'));
+            this._savedSteps = null;
+        }
 
         container.appendChild(div);
         container.scrollTop = container.scrollHeight;
@@ -2006,9 +2020,17 @@ const Ninko = {
     },
 
     _typingSteps: [],
+    _pendingToolSteps: {},
+    _thinkingStep: null,
+    _thinkingStepStart: null,
+    _savedSteps: null,
 
     showTyping() {
         this._typingSteps = [];
+        this._pendingToolSteps = {};
+        this._thinkingStep = null;
+        this._thinkingStepStart = null;
+        this._savedSteps = null;
         const container = document.getElementById('chat-messages');
         const div = document.createElement('div');
         div.className = 'chat-message ai';
@@ -2016,16 +2038,10 @@ const Ninko = {
         div.innerHTML = `
             <div class="chat-bubble typing-bubble">
                 <div class="typing-live">
-                    <span class="typing-live-label" id="typing-live-label" data-active-text="…">…</span>
-                    <span class="typing-caret" aria-hidden="true"></span>
+                    <span class="typing-live-label" id="typing-live-label" data-active-text=""></span>
                 </div>
-                <details class="typing-steps-details" id="typing-steps-details">
-                    <summary>
-                        <span class="typing-summary-label">Zwischenschritte</span>
-                        <span class="typing-summary-count" id="typing-steps-count">0</span>
-                    </summary>
-                    <div class="typing-steps" id="typing-steps"></div>
-                </details>
+                <div class="typing-steps-header">Zwischenschritte</div>
+                <div class="typing-steps" id="typing-steps"></div>
             </div>
         `;
         container.appendChild(div);
@@ -2033,36 +2049,314 @@ const Ninko = {
     },
 
     hideTyping() {
-        document.getElementById('typing-indicator')?.remove();
+        const indicator = document.getElementById('typing-indicator');
+        const stepsEl = indicator ? indicator.querySelector('.typing-steps') : null;
+
+        // Steps retten bevor Indicator entfernt wird
+        if (stepsEl && stepsEl.children.length > 0) {
+            const saved = stepsEl.cloneNode(true);
+
+            // ⚠️ KRITISCH: ID-Attribute aus dem Klon entfernen,
+            // sonst findet document.getElementById('typing-steps') den Klon
+            // statt des nächsten Typing-Indicators → neue Steps landen in alter Bubble
+            saved.removeAttribute('id');
+            saved.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
+
+            // Laufende Steps auf "done" setzen (Antwort ist da)
+            saved.querySelectorAll('.typing-step-running').forEach(el => {
+                el.classList.remove('typing-step-running');
+                el.classList.add('typing-step-done');
+            });
+            // Einblend-Animation entfernen (bereits abgespielt)
+            saved.querySelectorAll('.typing-step-enter').forEach(el =>
+                el.classList.remove('typing-step-enter')
+            );
+            this._savedSteps = saved;
+        } else {
+            this._savedSteps = null;
+        }
+
+        indicator?.remove();
         this._typingSteps = [];
+        this._pendingToolSteps = {};
+        this._thinkingStep = null;
+        this._thinkingStepStart = null;
+    },
+
+    _formatDuration(ms) {
+        if (!ms && ms !== 0) return '';
+        if (ms < 1000) return `${Math.round(ms)} ms`;
+        return `${(ms / 1000).toFixed(2)} s`;
+    },
+
+    _formatSize(bytes) {
+        if (!bytes && bytes !== 0) return '';
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    },
+
+    _sanitizeArgs(args) {
+        if (!args || typeof args !== 'object') return '';
+        // _raw-Fallback (kaputtes JSON vom Backend) → nicht anzeigen
+        if ('_raw' in args && Object.keys(args).length === 1) return '';
+        const sensitiveKeys = ['password', 'secret', 'token', 'api_key', 'apikey', 'key'];
+        const scrub = (obj) => {
+            if (Array.isArray(obj)) return obj.slice(0, 20).map(scrub);
+            if (obj && typeof obj === 'object') {
+                const out = {};
+                for (const [k, v] of Object.entries(obj)) {
+                    const lower = k.toLowerCase();
+                    if (sensitiveKeys.some(s => lower.includes(s))) {
+                        out[k] = '***';
+                    } else {
+                        out[k] = scrub(v);
+                    }
+                }
+                return out;
+            }
+            if (typeof obj === 'string') return obj.length > 180 ? obj.slice(0, 180) + '…' : obj;
+            return obj;
+        };
+        try {
+            const cleaned = scrub(args);
+            return JSON.stringify(cleaned, null, 2);
+        } catch {
+            return '';
+        }
+    },
+
+    _buildInlineHint(toolName, args) {
+        if (!args || typeof args !== 'object') return '';
+        // _raw-Key überspringen (Fallback aus kaputtem JSON-Parse)
+        if ('_raw' in args && Object.keys(args).length === 1) return '';
+
+        const fmt = (v) => {
+            const s = String(v);
+            return s.length > 55 ? s.slice(0, 52) + '…' : s;
+        };
+
+        // Primärer Wert (Pattern, Query, Input etc.)
+        const primary = args.pattern ?? args.query ?? args.input ?? args.command ?? args.text ?? null;
+        // Sekundärer Kontext (Pfad, Datei)
+        const secondary = args.path ?? args.file_path ?? args.filename ?? args.directory ?? null;
+
+        if (primary != null && secondary != null) {
+            return `"${fmt(primary)}" (in ${fmt(secondary)})`;
+        }
+        if (primary != null) return `"${fmt(primary)}"`;
+        if (secondary != null) return fmt(secondary);
+
+        // Erster kurzer String-Wert (kein _raw, kein UUID-artiger Wert)
+        const uuidRe = /^[0-9a-f\-]{20,}$/i;
+        for (const [k, v] of Object.entries(args)) {
+            if (k === '_raw') continue;
+            if (typeof v === 'string' && v.length > 0 && v.length < 80 && !uuidRe.test(v)) {
+                return fmt(v);
+            }
+        }
+        return '';
+    },
+
+    _appendStep(text, meta = {}) {
+        const stepsEl = document.getElementById('typing-steps');
+        if (!stepsEl) return null;
+
+        const hint = meta.hint ?? this._buildInlineHint(meta.tool, meta.args);
+        const hintHtml = hint ? ` <span class="step-hint">${this._escapeHtml(hint)}</span>` : '';
+        const durationHtml = meta.duration_ms != null
+            ? `<span class="step-duration">${this._escapeHtml(this._formatDuration(meta.duration_ms))}</span>`
+            : '';
+
+        const argsText = meta.args ? this._sanitizeArgs(meta.args) : '';
+        const argsBlock = argsText
+            ? `<pre class="typing-step-args">${this._escapeHtml(argsText)}</pre>`
+            : '';
+        const previewText = meta.preview ? this._escapeHtml(meta.preview) : '';
+        const previewBlock = previewText
+            ? `<pre class="typing-step-preview">${previewText}</pre>`
+            : '';
+
+        // Thinking-Steps immer mit aufklappbarem Body (Timing wird später eingefügt)
+        const isThinking = meta.isThinking === true;
+        const hasBody = !!(argsBlock || previewBlock || isThinking);
+
+        const step = document.createElement('details');
+        step.className = 'typing-step typing-step-enter';
+        if (meta.state) step.classList.add(`typing-step-${meta.state}`);
+        if (!hasBody) step.classList.add('typing-step-noexpand');
+        if (meta.runId) step.dataset.runId = meta.runId;
+
+        const thinkingPlaceholder = isThinking ? `<span class="typing-step-thinking-placeholder">${this._escapeHtml(this._getThinkingPlaceholder())}</span>` : '';
+        step.innerHTML = `
+            <summary>
+                <span class="typing-step-label">${this._escapeHtml(text)}${hintHtml}</span>
+                ${durationHtml}
+                ${hasBody ? '<span class="step-chevron">›</span>' : ''}
+            </summary>
+            <div class="typing-step-body">
+                ${isThinking ? `<div class="typing-step-thinking-note">${thinkingPlaceholder}</div>` : ''}
+                ${argsBlock}
+                ${previewBlock}
+            </div>
+        `;
+
+        // Details nur öffenbar wenn Body-Inhalt vorhanden
+        if (!hasBody) step.removeAttribute('open');
+
+        stepsEl.appendChild(step);
+        const all = stepsEl.querySelectorAll('.typing-step');
+        if (all.length > 30) all[0].remove();
+        return step;
     },
 
     updateTypingStatus(text) {
-        const stepsEl = document.getElementById('typing-steps');
-        const liveLabel = document.getElementById('typing-live-label');
-        const countEl = document.getElementById('typing-steps-count');
-        if (!stepsEl || !liveLabel) return;
-
-        const prevText = liveLabel.dataset.activeText || '';
-        if (prevText && prevText !== '…' && prevText !== text) {
-            this._typingSteps.push(prevText);
-            const doneStep = document.createElement('div');
-            doneStep.className = 'typing-step typing-step-done typing-step-enter';
-            doneStep.innerHTML = `<span class="typing-check">✓</span><span class="typing-step-text">${prevText}</span>`;
-            stepsEl.appendChild(doneStep);
-            requestAnimationFrame(() => doneStep.classList.add('typing-step-visible'));
-
-            // Begrenzen (max. 20 Schritte im DOM)
-            const done = stepsEl.querySelectorAll('.typing-step');
-            if (done.length > 20) done[0].remove();
+        if (!document.getElementById('typing-steps')) return;
+        if (!this._thinkingStep) {
+            // Erster Status-Event → Thinking-Step anlegen
+            this._thinkingStepStart = Date.now();
+            this._thinkingStep = this._appendStep(text, { state: 'running', isThinking: true });
+        } else {
+            // Folgender Status → Label aktualisieren
+            const label = this._thinkingStep.querySelector('.typing-step-label');
+            if (label) {
+                const hint = label.querySelector('.step-hint');
+                label.textContent = text;
+                if (hint) label.appendChild(hint);
+            }
         }
-
-        liveLabel.dataset.activeText = text;
-        liveLabel.textContent = text;
-        if (countEl) countEl.textContent = String(this._typingSteps.length);
-
         const container = document.getElementById('chat-messages');
         if (container) container.scrollTop = container.scrollHeight;
+    },
+
+    _handleThinkingContent(text) {
+        if (!text || !this._thinkingStep) return;
+        const note = this._thinkingStep.querySelector('.typing-step-thinking-note');
+        if (!note) return;
+        const placeholder = note.querySelector('.typing-step-thinking-placeholder');
+        if (placeholder) placeholder.remove();
+        const existing = note.textContent || '';
+        note.textContent = existing ? existing + '\n\n' + text : text;
+    },
+
+    _finalizeThinkingStep() {
+        if (!this._thinkingStep) return;
+        const step = this._thinkingStep;
+        const dur = this._thinkingStepStart ? Date.now() - this._thinkingStepStart : null;
+
+        step.classList.remove('typing-step-running');
+        step.classList.add('typing-step-done');
+
+        // Dauer in Summary eintragen
+        if (dur != null) {
+            const summary = step.querySelector('summary');
+            if (summary) {
+                let d = summary.querySelector('.step-duration');
+                if (!d) {
+                    d = document.createElement('span');
+                    d.className = 'step-duration';
+                    summary.insertBefore(d, summary.querySelector('.step-chevron'));
+                }
+                d.textContent = this._formatDuration(dur);
+            }
+        }
+
+        this._thinkingStep = null;
+        this._thinkingStepStart = null;
+    },
+
+    _getThinkingPlaceholder() {
+        const lang = (navigator.language || 'en').slice(0, 2).toLowerCase();
+        const hints = {
+            de: ['Kontext analysiert', 'Nächste Schritte geplant', 'Ergebnisse ausgewertet', 'Strategie gewählt', 'Informationen verarbeitet', 'Analysiert Daten', 'Bereitet Antwort vor'],
+            en: ['Context analysed', 'Next steps planned', 'Results evaluated', 'Strategy selected', 'Information processed', 'Analyzing data', 'Preparing response'],
+            fr: ['Contexte analysé', 'Étapes planifiées', 'Résultats évalués', 'Stratégie choisie', 'Analyse des données'],
+            es: ['Contexto analizado', 'Pasos planificados', 'Resultados evaluados', 'Estrategia seleccionada', 'Analizando datos'],
+            it: ['Contesto analizzato', 'Passi pianificati', 'Risultati valutati', 'Strategia scelta', 'Analisi dati'],
+            nl: ['Context geanalyseerd', 'Stappen gepland', 'Resultaten beoordeeld', 'Strategie gekozen', 'Gegevens analyseren'],
+            pl: ['Kontekst przeanalizowany', 'Kroki zaplanowane', 'Wyniki ocenione', 'Strategia wybrana', 'Analiza danych'],
+            pt: ['Contexto analisado', 'Passos planeados', 'Resultados avaliados', 'Estratégia selecionada', 'Analisando dados'],
+            ja: ['文脈を分析', '次のステップを計画', '結果を評価', '戦略を選択', 'データを分析'],
+            zh: ['已分析上下文', '已规划步骤', '已评估结果', '已选择策略', '正在分析数据'],
+            ru: ['Контекст проанализирован', 'Шаги запланированы', 'Результаты оценены', 'Стратегия выбрана', 'Анализ данных'],
+        };
+        const list = hints[lang] || hints.en;
+        return list[Math.floor(Math.random() * list.length)];
+    },
+
+    handleToolEvent(evt) {
+        if (!evt || !evt.type) return;
+        if (evt.type === 'tool_start') {
+            // Thinking-Step abschließen, bevor das erste Tool startet
+            if (this._thinkingStep) {
+                this._finalizeThinkingStep();
+            }
+
+            const label = evt.label || evt.tool_name || 'Tool läuft';
+            const step = this._appendStep(label, {
+                state: 'running',
+                tool: evt.tool_name,
+                agent: evt.agent,
+                runId: evt.run_id,
+                args: evt.args || null,
+            });
+            if (step && evt.run_id) {
+                this._pendingToolSteps[evt.run_id] = step;
+            }
+            return;
+        }
+        if (evt.type === 'tool_end') {
+            const step = evt.run_id ? this._pendingToolSteps[evt.run_id] : null;
+            if (step) {
+                // Zustand aktualisieren
+                step.classList.remove('typing-step-running');
+                step.classList.add(evt.error ? 'typing-step-error' : 'typing-step-done');
+
+                // Duration in die Summary eintragen
+                const summary = step.querySelector('summary');
+                if (summary && evt.duration_ms != null) {
+                    let dur = summary.querySelector('.step-duration');
+                    if (!dur) {
+                        dur = document.createElement('span');
+                        dur.className = 'step-duration';
+                        summary.insertBefore(dur, summary.querySelector('.step-chevron'));
+                    }
+                    dur.textContent = this._formatDuration(evt.duration_ms);
+                }
+
+                // Preview in den Body einfügen + Chevron sichtbar machen
+                if (evt.preview) {
+                    const body = step.querySelector('.typing-step-body');
+                    if (body) {
+                        const pre = document.createElement('pre');
+                        pre.className = 'typing-step-preview';
+                        pre.textContent = evt.preview;
+                        body.appendChild(pre);
+                    }
+                    // Chevron einblenden wenn noch nicht vorhanden
+                    if (summary && !summary.querySelector('.step-chevron')) {
+                        const ch = document.createElement('span');
+                        ch.className = 'step-chevron';
+                        ch.textContent = '›';
+                        summary.appendChild(ch);
+                    }
+                    step.classList.remove('typing-step-noexpand');
+                }
+
+                delete this._pendingToolSteps[evt.run_id];
+            } else {
+                // Kein Start-Step gefunden → eigenständigen Ergebnis-Step erzeugen
+                const resultLabel = evt.tool_name || 'Tool-Ergebnis';
+                this._appendStep(resultLabel, {
+                    state: evt.error ? 'error' : 'done',
+                    tool: evt.tool_name,
+                    duration_ms: evt.duration_ms,
+                    result_size: evt.result_size,
+                    error: evt.error,
+                    preview: evt.preview || '',
+                });
+            }
+        }
     },
 
     formatText(text) {
@@ -2076,6 +2370,8 @@ const Ninko = {
         // Fallback: nackte /api/images/ URLs im Text
         text = text.replace(/(?<![="])(\/api\/images\/[\w\-]+\.\w+)/g, (_, url) =>
             `<img src="${this._escapeAttr(url)}" alt="Generiertes Bild" style="max-width:100%;border-radius:8px;margin:0.5rem 0;box-shadow:0 2px 8px rgba(0,0,0,0.15);">`);
+        text = text.replace(/(data:image\/(?:png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+)/g, (_, dataUrl) =>
+            `<img src="${this._escapeAttr(dataUrl)}" alt="Generiertes Bild" style="max-width:100%;border-radius:8px;margin:0.5rem 0;box-shadow:0 2px 8px rgba(0,0,0,0.15);">`);
         if (typeof marked !== 'undefined') {
             // marked.js verfügbar: vollständiges Markdown-Rendering (Tabellen, Listen, etc.)
             const html = marked.parse(text, {
