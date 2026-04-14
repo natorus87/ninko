@@ -194,7 +194,6 @@ async def get_all_pods(
 
 
 @tool
-@tool
 async def get_failing_pods(namespace: str = "", connection_id: str = "") -> list[dict]:
     """Finds all failing pods (CrashLoop, ImagePull, OOMKilled, Failed phase, Unknown phase)."""
     v1, _, _ = await _get_k8s_client(connection_id)
