@@ -32,6 +32,26 @@ class ResponseExtractionMiddleware(BaseMiddleware):
 
         all_msgs = ctx.result.get("messages", [])
         ai_msgs = [m for m in all_msgs if isinstance(m, AIMessage) and m.content]
+        tool_msgs = [m for m in all_msgs if isinstance(m, ToolMessage) and m.content]
+
+        # Prefer tool outputs that contain images (data URLs or markers)
+        if tool_msgs:
+            for msg in reversed(tool_msgs):
+                tool_text = _extract_text(msg.content)
+                if "data:image/" in tool_text:
+                    ctx.response = tool_text
+                    logger.debug(
+                        "Agent '%s': using tool image output as response.",
+                        ctx.agent_name,
+                    )
+                    return
+                if "[NINKO_IMAGE:" in tool_text or "/api/images/" in tool_text:
+                    ctx.response = tool_text
+                    logger.debug(
+                        "Agent '%s': using tool image marker as response.",
+                        ctx.agent_name,
+                    )
+                    return
 
         if ai_msgs:
             raw = _extract_text(ai_msgs[-1].content)
@@ -41,7 +61,6 @@ class ResponseExtractionMiddleware(BaseMiddleware):
                 logger.debug("Agent '%s' Antwort: %s…", ctx.agent_name, response[:100])
                 return
 
-        tool_msgs = [m for m in all_msgs if isinstance(m, ToolMessage) and m.content]
         if tool_msgs:
             ctx.response = _extract_text(tool_msgs[-1].content)
             logger.debug(

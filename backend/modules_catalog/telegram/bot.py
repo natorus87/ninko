@@ -800,10 +800,13 @@ class TelegramBot:
                     session_id=session_id, role="assistant", content=response_text
                 )
                 if did_compact:
+                    summary = None
+                    if hasattr(orchestrator, "get_last_compaction_summary"):
+                        summary = orchestrator.get_last_compaction_summary()
                     await redis.store_chat_message(
                         session_id=session_id,
                         role="system_compaction",
-                        content="Conversation history has been compressed.",
+                        content=summary or "Conversation history has been compressed.",
                     )
                 await self._send(token, chat_id, response_text, parse_mode="HTML")
             except Exception as exc:
@@ -1168,10 +1171,13 @@ class TelegramBot:
                 )
             else:
                 if did_compact:
+                    summary = None
+                    if hasattr(orchestrator, "get_last_compaction_summary"):
+                        summary = orchestrator.get_last_compaction_summary()
                     await redis.store_chat_message(
                         session_id=session_id,
                         role="system_compaction",
-                        content="Conversation history has been compressed.",
+                        content=summary or "Conversation history has been compressed.",
                     )
                 await redis.store_chat_message(
                     session_id=session_id, role="user", content=text

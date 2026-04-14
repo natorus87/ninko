@@ -16,6 +16,35 @@ from core.config import get_settings
 logger = logging.getLogger("ninko.context")
 
 
+def _t(
+    de: str,
+    en: str,
+    fr: str = "",
+    es: str = "",
+    it: str = "",
+    nl: str = "",
+    pl: str = "",
+    pt: str = "",
+    ja: str = "",
+    zh: str = "",
+) -> str:
+    settings = get_settings()
+    lang = settings.LANGUAGE if settings else "de"
+    translations = {
+        "de": de,
+        "en": en,
+        "fr": fr or en,
+        "es": es or en,
+        "it": it or en,
+        "nl": nl or en,
+        "pl": pl or en,
+        "pt": pt or en,
+        "ja": ja or en,
+        "zh": zh or en,
+    }
+    return translations.get(lang, en)
+
+
 class ContextManager:
     """
     Verwaltet das Token-Budget für LLM-Aufrufe.
@@ -32,6 +61,7 @@ class ContextManager:
     def __init__(self) -> None:
         self._settings = get_settings()
         self._reset_threshold = self._settings.CONTEXT_RESET_THRESHOLD
+        self._last_summary: str | None = None
 
         # MAX_CONTEXT_TOKENS aus Config als initiales Limit (wird ggf. nach
         # erster Modell-Abfrage überschrieben via update_from_model_window())
@@ -204,6 +234,7 @@ class ContextManager:
         """
         total_tokens = self.count_messages_tokens(messages)
 
+        self._last_summary = None
         # Nur komprimieren wenn über Threshold
         if total_tokens < self._threshold_tokens:
             return messages, False
@@ -228,18 +259,35 @@ class ContextManager:
                 f"{'User' if m.get('role') == 'user' else 'Assistent'}: {m.get('content', '')[:400]}"
                 for m in old
             )
-            prompt = (
-                "Du fasst einen Gesprächsverlauf zusammen, damit er als kompakter Kontext "
-                "für das weitere Gespräch dienen kann.\n\n"
-                "Gib eine strukturierte Zusammenfassung in 5-8 Sätzen. Fokussiere dabei auf:\n"
-                "1. Was wurde bisher getan und erreicht?\n"
-                "2. Woran wird gerade gearbeitet?\n"
-                "3. Welche konkreten Werte wurden genannt "
-                "(IPs, Hostnamen, IDs, Konfigurationen, Tool-Ergebnisse)?\n"
-                "4. Welche Entscheidungen oder Einschränkungen hat der User geäußert?\n"
-                "5. Was steht noch aus oder wurde explizit gewünscht?\n\n"
-                "Antworte NUR mit der Zusammenfassung, ohne Einleitung oder Kommentar.\n\n"
-                f"Gesprächsverlauf:\n{summary_input}"
+            prompt = _t(
+                de=(
+                    "Du fasst einen Gesprächsverlauf zusammen, damit er als kompakter Kontext "
+                    "für das weitere Gespräch dienen kann.\n\n"
+                    "Gib eine strukturierte Zusammenfassung in 5-8 Sätzen. Fokussiere dabei auf:\n"
+                    "1. Was wurde bisher getan und erreicht?\n"
+                    "2. Woran wird gerade gearbeitet?\n"
+                    "3. Welche konkreten Werte wurden genannt "
+                    "(IPs, Hostnamen, IDs, Konfigurationen, Tool-Ergebnisse)?\n"
+                    "4. Welche Entscheidungen oder Einschränkungen hat der User geäußert?\n"
+                    "5. Was steht noch aus oder wurde explizit gewünscht?\n\n"
+                    "Antworte NUR mit der Zusammenfassung, ohne Einleitung oder Kommentar.\n"
+                    "Schreibe in der gleichen Sprache wie der User (bei Mischsprache: "
+                    "bevorzuge die Nutzersprache).\n\n"
+                    f"Gesprächsverlauf:\n{summary_input}"
+                ),
+                en=(
+                    "Summarize the conversation so it can serve as compact context for the next turn.\n\n"
+                    "Provide a structured summary in 5-8 sentences. Focus on:\n"
+                    "1. What was done and achieved so far?\n"
+                    "2. What is currently being worked on?\n"
+                    "3. Which concrete values were mentioned "
+                    "(IPs, hostnames, IDs, configurations, tool results)?\n"
+                    "4. What decisions or constraints did the user state?\n"
+                    "5. What remains open or was explicitly requested?\n\n"
+                    "Reply ONLY with the summary, no intro or commentary.\n"
+                    "Write in the same language as the user (if mixed, prefer the user's language).\n\n"
+                    f"Conversation:\n{summary_input}"
+                ),
             )
             result = await llm.ainvoke([HumanMessage(content=prompt)])
             summary_text = (
@@ -248,6 +296,7 @@ class ContextManager:
                 else str(result).strip()
             )
 
+            self._last_summary = summary_text
             compacted = [
                 {
                     "role": "system",
@@ -269,6 +318,9 @@ class ContextManager:
                 "Kontext-Komprimierung fehlgeschlagen, trimme stattdessen: %s", exc
             )
             return self.trim_messages(messages), False
+
+    def get_last_summary(self) -> str | None:
+        return self._last_summary
 
     def get_budget_info(self, messages: list[dict]) -> dict:
         """Gibt Informationen über das aktuelle Token-Budget zurück."""

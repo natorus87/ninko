@@ -241,10 +241,14 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
 
     # Bei Komprimierung: System-Nachricht sichtbar in History ablegen
     if did_compact:
+        summary = None
+        if hasattr(orchestrator, "get_last_compaction_summary"):
+            summary = orchestrator.get_last_compaction_summary()
         await redis.store_chat_message(
             session_id=scoped_session_id,
             role="system_compaction",
-            content=_t(
+            content=summary
+            or _t(
                 "Der Gesprächsverlauf wurde komprimiert, "
                 "um Platz für neue Nachrichten zu schaffen. "
                 "Die wichtigsten Informationen wurden zusammengefasst und bleiben erhalten.",

@@ -126,7 +126,7 @@ class CompactionSummaryMiddleware(BaseMiddleware):
     async def pre_process(self, ctx: MiddlewareContext) -> MiddlewareResult:
         seen: set[str] = set()
         for msg in ctx.trimmed_history:
-            if msg.get("role") == "system":
+            if msg.get("role") in ("system", "system_compaction"):
                 content = msg.get("content", "")
                 if content and content not in seen:
                     ctx.final_system_prompt += "\n\n" + content

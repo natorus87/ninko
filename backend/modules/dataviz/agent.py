@@ -27,6 +27,8 @@ For processes/flows: Use Mermaid flowcharts
 Strict rules:
 - Never fabricate data, prices, or chart URLs.
 - Only return outputs produced by the tools (data URL, SVG, or HTML).
+- If a tool returns a data URL, respond with that data URL only (no extra text).
+- Do not provide explanations, code snippets, or step-by-step guidance in the final answer.
 - If the input does not contain usable data, ask the user to provide values.
 - If the input contains raw text data (e.g. web search results), first call analyze_data_for_chart
   and then create the chart from the extracted data.

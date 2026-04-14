@@ -464,6 +464,7 @@ class BaseAgent:
         self._llm_generation = get_llm_generation()
         self._memory = get_memory()
         self._context_mgr = get_context_manager()
+        self._last_compaction_summary: str | None = None
 
         # LangGraph ReAct Agent erstellen
         self._agent = create_react_agent(
@@ -639,12 +640,14 @@ class BaseAgent:
                 trimmed_history,
                 did_compact,
             ) = await self._context_mgr.compact_messages_async(history, self._llm)
+            self._last_compaction_summary = self._context_mgr.get_last_summary()
         else:
             history = self._context_mgr.trim_large_messages(history)
             trimmed_history = self._context_mgr.trim_messages(
                 messages=history,
                 system_prompt=self.system_prompt,
             )
+            self._last_compaction_summary = None
 
         # Dynamischen Zusatz für den System Prompt
         appendix = await self._dynamic_prompt_appendix()
@@ -690,6 +693,9 @@ class BaseAgent:
             return ctx.response, did_compact
 
         return ctx.response, did_compact
+
+    def get_last_compaction_summary(self) -> str | None:
+        return self._last_compaction_summary
 
     def _extract_result_response(self, result: dict) -> str:
         """Extrahiert den Antwort-Text aus einem LangGraph-Ergebnis-Dict."""

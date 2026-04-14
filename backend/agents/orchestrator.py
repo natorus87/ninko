@@ -54,6 +54,12 @@ from agents.data_analysis_subagent import (
 from modules.image_gen.tools import generate_image
 from core import status_bus
 
+from core.prestructure import (
+    DeterministicTaskSketchBuilder,
+    create_module_metadata_from_registry,
+    TaskSketch,
+)
+
 if TYPE_CHECKING:
     from core.module_registry import ModuleRegistry
 
@@ -411,6 +417,9 @@ class OrchestratorAgent(BaseAgent):
         self._routing_config: RoutingConfig = RoutingConfig()
         self._routing_config_loaded_at: float = 0.0
         self._last_tier_used: int = 0
+        # ── Deterministic Task Pre-structuring ──
+        self._task_sketch_builder: DeterministicTaskSketchBuilder | None = None
+        self._last_task_sketch: TaskSketch | None = None
 
     async def _dynamic_prompt_appendix(self) -> str:
         """Fügt eine Übersicht aller verfügbaren Module und konfigurierten Verbindungen an."""
@@ -590,6 +599,49 @@ class OrchestratorAgent(BaseAgent):
             len(self._routing_map),
             len(set(self._routing_map.values())),
         )
+
+    def _ensure_task_sketch_builder(self) -> DeterministicTaskSketchBuilder:
+        """Initialize or return the TaskSketchBuilder with current module metadata."""
+        if self._task_sketch_builder is None:
+            module_metadata = create_module_metadata_from_registry(self.registry)
+            self._task_sketch_builder = DeterministicTaskSketchBuilder(module_metadata)
+        return self._task_sketch_builder
+
+    def build_task_sketch(
+        self,
+        message: str,
+        session_id: str = "",
+        conversation_turn_id: str | None = None,
+    ) -> TaskSketch:
+        """
+        Build deterministic TaskSketch from user message.
+
+        This provides structured pre-analysis for routing decisions
+        and observability without LLM calls.
+        """
+        builder = self._ensure_task_sketch_builder()
+        result = builder.build(
+            user_message=message,
+            session_id=session_id,
+            conversation_turn_id=conversation_turn_id,
+        )
+        self._last_task_sketch = result.sketch
+
+        # Log for observability
+        logger.debug(
+            "TaskSketch built in %.2fms: intent=%s, complexity=%s, risk=%s, modules=%s",
+            result.build_time_ms,
+            result.sketch.task.intent,
+            result.sketch.task.complexity,
+            result.sketch.risk.level,
+            [m.module for m in result.sketch.scope.candidate_modules_ranked],
+        )
+
+        return result.sketch
+
+    def get_last_task_sketch(self) -> TaskSketch | None:
+        """Return the last built TaskSketch for debugging/observability."""
+        return self._last_task_sketch
 
     def _get_readonly_tools_for_module(self, module: str) -> list:
         from core.safeguard import _TOOL_READONLY
@@ -1499,6 +1551,7 @@ JSON-SCHEMA:
         chat_history: list[dict] | None,
         session_id: str,
         confirmed: bool,
+        allowed_modules: list[str] | None = None,
     ) -> tuple[str, bool]:
         """Tier-4-Pipeline: LLM-Planner → Validierung → run_pipeline-Ausführung.
 
@@ -1527,6 +1580,15 @@ JSON-SCHEMA:
         )
 
         modules = self.registry.list_modules()
+        if allowed_modules:
+            allowed_set = set(allowed_modules)
+            filtered_modules = [m for m in modules if m.name in allowed_set]
+            if filtered_modules:
+                modules = filtered_modules
+            else:
+                logger.warning(
+                    "Tier-4: Allowed module list is empty after filtering; using all modules."
+                )
         valid_module_names: set[str] = {m.name for m in modules}
         msg_lower = message.lower()
 
@@ -1779,6 +1841,8 @@ JSON-SCHEMA:
                 session_id=session_id,
                 confirmed=confirmed,
             )
+            if did_compact and hasattr(agent, "get_last_compaction_summary"):
+                self._last_compaction_summary = agent.get_last_compaction_summary()
             return response, module_name, did_compact
         except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
             logger.error(
@@ -2015,6 +2079,21 @@ JSON-SCHEMA:
         )
 
         self._refresh_routing_map()
+
+        # ── Deterministic Task Pre-structuring ──────────────────────────────
+        # Build TaskSketch for structured routing guidance and observability
+        task_sketch = self.build_task_sketch(message, session_id)
+        candidate_modules = [
+            m.module for m in task_sketch.scope.candidate_modules_ranked
+        ]
+        allow_all_modules = (
+            task_sketch.uncertainty.ambiguous
+            and task_sketch.constraints.execution_mode == "planner_decides"
+        )
+        allowed_modules = None if allow_all_modules else candidate_modules
+        preferred_tier: int | None = None
+        preferred_target: str | None = None
+
         cfg = await self._load_routing_config(session_id)
         cfg = await self._proactive_routing_adjust(
             session_id, message, chat_history, cfg
@@ -2077,7 +2156,31 @@ JSON-SCHEMA:
             result = await run_pipeline.ainvoke({"steps": steps})
             return str(result), None, False
 
+        # ── TaskSketch Routing Hints ─────────────────────────────────────────
+        if task_sketch.routing_hints.should_avoid_direct_answer:
+            if (
+                task_sketch.routing_hints.preferred_worker_type in ("planner", "workflow")
+                and len(candidate_modules) > 1
+            ):
+                preferred_tier = 4
+            elif candidate_modules:
+                preferred_tier = 2
+                preferred_target = candidate_modules[0]
+
         tier, target_module = self._classify_tier(message, chat_history, cfg)
+        if preferred_tier is not None:
+            tier = preferred_tier
+            if preferred_target:
+                target_module = preferred_target
+        if (
+            allowed_modules
+            and target_module
+            and target_module not in allowed_modules
+            and candidate_modules
+        ):
+            # Enforce TaskSketch candidate modules for routing.
+            tier = 2 if len(candidate_modules) == 1 else 4
+            target_module = candidate_modules[0] if tier == 2 else None
         self._last_tier_used = tier
         await self._update_session_stats(session_id, tier, target_module)
         logger.info("Routing-Tier %d gewählt für: %s…", tier, message[:80])
@@ -2089,6 +2192,7 @@ JSON-SCHEMA:
                 chat_history=chat_history,
                 session_id=session_id,
                 confirmed=confirmed,
+                allowed_modules=allowed_modules,
             )
             return response, None, did_compact
 
