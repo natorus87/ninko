@@ -745,6 +745,11 @@
       "openPRs": "Pull Requests ouvertes",
       "loadError": "Erreur de chargement.",
       "error": "Erreur : "
+    },
+    "copy": {
+      "copy": "Copier",
+      "copied": "Copié!",
+      "error": "Erreur"
     }
   }
 }

@@ -1384,7 +1384,7 @@ const Ninko = {
             : '';
 
         const copyIcon = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
-        const copyBtn = `<button class="chat-action-btn chat-action-copy" title="Kopieren" onclick="Ninko.copyMessage('${msgId}', this)">${copyIcon}</button>`;
+        const copyBtn = `<button class="chat-action-btn chat-action-copy" title="${t('copy.copy')}" onclick="Ninko.copyMessage('${msgId}', this)">${copyIcon}</button>`;
 
         const speakerIcon = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`;
         const ttsBtn = (role === 'ai' && this._ttsAvailable)
@@ -1457,17 +1457,17 @@ const Ninko = {
         try {
             await navigator.clipboard.writeText(msg.text);
             const originalTitle = btnElement.title;
-            btnElement.title = "Kopiert!";
+            btnElement.title = t('copy.copied');
             btnElement.classList.add("copied");
             setTimeout(() => {
-                btnElement.title = originalTitle;
+                btnElement.title = t('copy.copy');
                 btnElement.classList.remove("copied");
             }, 2000);
         } catch (err) {
             console.error("Copy failed:", err);
-            btnElement.title = "Fehler";
+            btnElement.title = t('copy.error');
             setTimeout(() => {
-                btnElement.title = "Kopieren";
+                btnElement.title = t('copy.copy');
             }, 2000);
         }
     },

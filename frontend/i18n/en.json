@@ -753,6 +753,11 @@
       "openPRs": "Open Pull Requests",
       "loadError": "Error loading.",
       "error": "Error: "
+    },
+    "copy": {
+      "copy": "Copy",
+      "copied": "Copied!",
+      "error": "Error"
     }
   }
 }
