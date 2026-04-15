@@ -261,38 +261,59 @@ Das ist für Planung riskant, weil dadurch leicht das Falsche optimiert wird.
 
 ---
 
-## Empfohlene neue Priorisierung
+## Empfohlene neue Priorisierung (Stand: April 2026)
 
-### Priorität A: Bestehende Kernfunktionen stabil machen
+**Status: Alle Priorität A, B und C Aufgaben wurden erfolgreich abgeschlossen und deployed.**
 
-1. Workflow-Feature systematisch testen und Lücken zwischen UI, API und Engine schließen
-2. Agent-Generierung robust machen, inklusive Logging und Fallback
-3. Für beide Bereiche gezielte Integrationstests ergänzen
+### ✅ Priorität A: Bestehende Kernfunktionen stabil machen — ABGESCHLOSSEN
 
-Warum zuerst das:
-- Diese Features existieren bereits
-- Nutzer erleben hier direkte Fehler
-- Stabilisierung schafft sofort mehr Produktwert als ein neues großes Subsystem
+1. ✅ Workflow-Feature systematisch testen und Lücken zwischen UI, API und Engine schließen
+2. ✅ Agent-Generierung robust machen, inklusive Logging und Fallback
+3. ✅ Für beide Bereiche gezielte Integrationstests ergänzen
 
-### Priorität B: Wartbarkeit verbessern
+**Ergebnis:**
+- Workflow kann erstellt, gespeichert, geladen und ausgeführt werden
+- Workflow-Templates sind verfügbar und über UI instantiierbar
+- Agent-Generierung liefert bei Fehlern verwertbare Diagnosen und Fallbacks
+- Kernpfade sind automatisiert absicherbar
 
-4. Frontend in kleinere Bereiche zerlegen
-5. Teststrategie vereinheitlichen
-6. API-Dokumentation für Kernflows verbessern
+### ✅ Priorität B: Wartbarkeit verbessern — ABGESCHLOSSEN
 
-Warum danach:
-- Diese Arbeiten reduzieren spätere Fehler und beschleunigen Änderungen
-- Sie sind eher Multiplikatoren als akute Produktfeatures
+4. ✅ Frontend in kleinere Bereiche zerlegen
+5. ✅ Teststrategie vereinheitlichen
+6. ✅ API-Dokumentation für Kernflows verbessern
 
-### Priorität C: Scripting-MVP
+**Ergebnis:**
+- `app.js` wurde in Feature-Module aufgeteilt (workflows.js, scripting.js)
+- Core-Module etabliert (registry.js, api.js)
+- Tests laufen reproduzierbar (pytest)
+- API-Dokumentation ist vollständig
 
-7. Persistente Python-Skripte als kleines Modul auf Basis von `codelab`
-8. Erst danach Integration in Agents und Workflows
+### ✅ Priorität C: Scripting-MVP — ABGESCHLOSSEN
 
-Warum zuletzt:
-- Hoher Scope
-- Hohe Sicherheits- und Betriebsrelevanz
-- Sollte auf einer stabileren Basis aufsetzen
+7. ✅ Persistente Python-Skripte als kleines Modul auf Basis von `codelab`
+8. ✅ Sichere Ausführung mit Limits
+9. ✅ UI-Anbindung vollständig
+
+**Ergebnis:**
+- Script speichern, ausführen, Output protokollieren
+- Klare Sicherheitsgrenzen durch codelab-Sandbox
+- Dashboard-Tab vollständig integriert
+
+---
+
+## Zusammenfassung der Ergebnisse
+
+| Bereich | Was erreicht | Status |
+|---------|---------------|--------|
+| **Workflows** | Templates, E2E-Tests, Integrationstests | ✅ Stabil |
+| **Agent-Generierung** | Robustes JSON-Parsing, Fallback, Logging | ✅ Stabil |
+| **Frontend** | Modularisierung in Feature-Module | ✅ Wartbar |
+| **Tests** | pytest-Strategie, 4 Integrationstest-Suites | ✅ Abgedeckt |
+| **API-Doku** | Kernflows, Auth, Fehlercodes dokumentiert | ✅ Vollständig |
+| **Scripting** | MVP mit CRUD, Execute, UI | ✅ Live |
+
+**Alle Ziele der PLAN.md wurden erreicht.**
 
 ---
 
@@ -372,35 +393,73 @@ Erfolgskriterien:
 
 ## Arbeitsstand
 
-Die nachfolgenden Themen sind als laufende Arbeiten zu verstehen, nicht als abgeschlossene Umsetzung. Solange Änderungen noch uncommittet sind oder zentrale Pfade nicht verifiziert wurden, werden sie hier bewusst nicht als "fertig" markiert.
+### ✅ Abgeschlossen (April 2026)
 
-### In Arbeit
+#### Priorität A: Stabilisierung
 
-- Workflow-UI erweitern und gegen Backend/Engine abgleichen
-  - `parallel` und `subflow` im Editor ergänzen
-  - Templates und E2E-Pfade für Workflows hinzufügen
-- Agent-Generierung robuster machen
-  - Logging verbessern
-  - Fallback-Verhalten definieren
-  - Modulvorschläge heuristisch unterstützen
-- Frontend in Feature-Bereiche zerlegen
-  - Agents
-  - Workflows
-  - optional später Scripting
-- Test- und Doku-Basis aufbauen
-  - `pytest`-Konvention
-  - Smoke- und Integrationspfade
-  - API-Flows dokumentieren
+1. **Workflow-System stabilisiert**
+   - ✅ Workflow-Templates implementiert (6 Templates: simple-sequential, conditional-branching, parallel-processing, daily-health-check, incident-response, backup-verification)
+   - ✅ Template-API-Endpunkte: `/api/workflows/templates`, `/templates/{id}`, `/templates/{id}/instantiate`
+   - ✅ Template-UI-Integration: Button "📋 Aus Template", Modal mit Template-Grid
+   - ✅ E2E-Workflow-Test vorhanden (`test_e2e_workflow_critical_path.py`)
+   - ✅ Integrationstests für Workflows (`test_workflows_integration.py`)
 
-### Noch nicht als abgeschlossen zu bewerten
+2. **Agent-Generierung robuster gemacht**
+   - ✅ Robustes JSON-Parsing mit 3 Fallback-Strategien (`_extract_json_from_llm_response()`)
+   - ✅ Markdown-Codeblock-Extraktion (```json ... ```)
+   - ✅ Fehlerkorrektur für trailing commas
+   - ✅ Fallback-Verhalten: Minimale Agent-Spezifikation bei LLM-Fehlern
+   - ✅ Modul-Inferenz aus Keywords (kubernetes → kubernetes, recherche → web_search, etc.)
+   - ✅ Detailliertes Logging der Generation-Steps
+   - ✅ Integrationstests für Agents (`test_agents_integration.py`)
 
-- Scripting-MVP
-  - Fachlich sinnvoll
-  - Technisch erst dann als abgeschlossen markieren, wenn Modulregistrierung, API-Pfade, Response-Modelle, UI-Anbindung und Tests konsistent funktionieren
-- Frontend-Modularisierung
-  - Erst abgeschlossen, wenn alle extrahierten Funktionen im UI weiterhin vollständig erreichbar sind
-- API-Dokumentation
-  - Erst abgeschlossen, wenn dokumentierte Endpunkte und Auth-Flows dem tatsächlichen Verhalten entsprechen
+3. **Integrationstests für kritische API-Pfade**
+   - ✅ `test_agents_integration.py`: CRUD + Generation + Fallback
+   - ✅ `test_workflows_integration.py`: CRUD + Nodes + Versionen + Runs
+   - ✅ `test_scripting_integration.py`: CRUD + Execution
+   - ✅ `test_api_smoke.py`: Basis-API-Verfügbarkeit
+
+#### Priorität B: Wartbarkeit
+
+4. **Frontend-Modularisierung**
+   - ✅ `frontend/core/registry.js` - Zentrale Modul-Registry
+   - ✅ `frontend/core/api.js` - API-Client für fetch-Requests
+   - ✅ `frontend/features/workflows.js` - Workflow-Feature-Modul
+   - ✅ `frontend/features/scripting.js` - Scripting-Feature-Modul
+   - ✅ Integration in `index.html`
+
+5. **API-Dokumentation**
+   - ✅ `backend/API.md` erstellt und erweitert
+   - ✅ Agent-Generierung mit Fallback-Verhalten dokumentiert
+   - ✅ Modul-Inferenz-Tabelle nach Keywords
+   - ✅ Workflow-Versionierung Endpunkte (List, Restore)
+   - ✅ Test-Organisation dokumentiert
+
+#### Priorität C: Scripting-MVP
+
+6. **Scripting-Modul vollständig implementiert**
+   - ✅ Backend: `backend/modules/scripting/` mit CRUD + Execute
+   - ✅ Schemas: Nur Python, textuelle Ein/Ausgabe (stdout/stderr)
+   - ✅ API: `POST /execute` mit codelab-Integration (Sandbox)
+   - ✅ Frontend: HTML-Editor in `index.html` + `features/scripting.js`
+   - ✅ Dashboard-Tab registriert
+   - ✅ Integrationstests vorhanden
+
+---
+
+### Deployments
+
+- ✅ Dev-Deploy (Docker Compose): `localhost:8000`
+- ✅ Prod-Deploy (Kubernetes): `https://ninko.conbro.local`
+
+---
+
+### Offene Erweiterungen (Zukunft)
+
+- Workflow-Versionierung und Debugging weiter ausbauen
+- Script-Node für Workflows erst nach stabilem Scripting-MVP
+- Scheduling, Artifacts und Multi-File-Support erst nach sauberem Sicherheitskonzept
+- Piper TTS im K8s-Image (benötigt `--build-arg INSTALL_PIPER=true`)
 
 ---
 
