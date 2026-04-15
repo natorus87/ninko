@@ -79,7 +79,7 @@ pytest --cov=backend --cov-report=html
 import pytest
 from httpx import AsyncClient
 
-@pytest.mark.unit
+@pytest.mark.integration
 async def test_something():
     """Test description here."""
     async with AsyncClient(base_url="http://localhost:8000") as client:
@@ -109,7 +109,7 @@ pytest tests/test_api_smoke.py -v
 ```
 
 This tests:
-- `/api/health` - API availability
+- `/health` - API availability
 - `/api/agents/` - Agent management
 - `/api/workflows/` - Workflow management
 - `/api/modules/` - Module management

@@ -10,23 +10,22 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse
 
 from core.auth import auth_tenant_id, resolve_request_auth
 from core.redis_client import get_redis
 from modules.codelab.tools import execute_code
 from modules.scripting.schemas import (
-    Script,
     ScriptCreate,
     ScriptExecutionRequest,
     ScriptExecutionResult,
     ScriptExecutionHistory,
     ScriptListResponse,
+    ScriptSummary,
     ScriptUpdate,
 )
 
 logger = logging.getLogger("ninko.modules.scripting.routes")
-router = APIRouter(prefix="/api/scripting", tags=["Scripting"])
+router = APIRouter()
 
 REDIS_SCRIPTS_KEY = "ninko:scripting:scripts"
 REDIS_EXECUTIONS_KEY = "ninko:scripting:executions"
@@ -76,12 +75,15 @@ async def list_scripts(request: Request) -> ScriptListResponse:
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     scripts = await _load_scripts(redis, tenant_id)
     public = [_public_script(s) for s in scripts]
-    return ScriptListResponse(scripts=[Script(**s) for s in public], total=len(public))
+    return ScriptListResponse(
+        scripts=[ScriptSummary(**s) for s in public],
+        total=len(public),
+    )
 
 
-@router.get("/scripts/{script_id}")
-async def get_script(script_id: str, request: Request) -> dict:
-    """Ein Script abrufen (inkl. Code)."""
+@router.get("/scripts/{script_id}", response_model=ScriptSummary)
+async def get_script(script_id: str, request: Request) -> ScriptSummary:
+    """Ein Script abrufen (ohne Code)."""
     redis = get_redis()
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     scripts = await _load_scripts(redis, tenant_id)
@@ -90,7 +92,7 @@ async def get_script(script_id: str, request: Request) -> dict:
         raise HTTPException(
             status_code=404, detail=f"Script '{script_id}' nicht gefunden"
         )
-    return _public_script(script)
+    return ScriptSummary(**_public_script(script))
 
 
 @router.get("/scripts/{script_id}/code")
@@ -202,12 +204,12 @@ async def delete_script(script_id: str, request: Request) -> dict:
 @router.post("/scripts/{script_id}/execute")
 async def execute_script(
     script_id: str,
+    request: Request,
     body: ScriptExecutionRequest | None = None,
-    request: Request | None = None,
 ) -> ScriptExecutionResult:
     """Script ausführen."""
     redis = get_redis()
-    tenant_id = auth_tenant_id(resolve_request_auth(request)) if request else "default"
+    tenant_id = auth_tenant_id(resolve_request_auth(request))
     scripts = await _load_scripts(redis, tenant_id)
 
     script = next((s for s in scripts if s["id"] == script_id), None)

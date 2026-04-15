@@ -246,7 +246,7 @@ class TestWorkflowRuns:
         client.post("/api/workflows/", json=payload)
 
         run_resp = client.post(f"/api/workflows/{workflow_id}/run")
-        assert run_resp.status_code == 200
+        assert run_resp.status_code == 202
         run_data = run_resp.json()
 
         assert "run_id" in run_data
@@ -254,13 +254,13 @@ class TestWorkflowRuns:
 
         run_id = run_data["run_id"]
 
-        status_resp = client.get(f"/api/workflows/runs/{run_id}/status")
+        status_resp = client.get(f"/api/workflows/runs/{run_id}")
         assert status_resp.status_code == 200
         status_data = status_resp.json()
 
-        assert "run_id" in status_data
+        assert "id" in status_data
         assert "status" in status_data
-        assert status_data["run_id"] == run_id
+        assert status_data["id"] == run_id
 
     def test_list_workflow_runs(self) -> None:
         workflow_id = f"test-wf-{uuid.uuid4().hex[:8]}"

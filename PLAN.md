@@ -31,8 +31,8 @@ Bewertung:
   - Fehlende gezielte Tests für Workflow-Critical-Paths
 
 Wahrscheinliche Lücke:
-- In der UI sind aktuell klar sichtbare Node-Typen vor allem `trigger`, `agent`, `condition`, `loop`, `variable`, `end`.
-- In der ursprünglichen Analyse genannte Typen wie `parallel` und `subflow` sind im Backend/Engine-Kontext plausibel, aber nicht als voll integrierter UI-Flow nachgewiesen.
+- In der UI sind aktuell mindestens `trigger`, `agent`, `condition`, `loop`, `parallel`, `subflow`, `variable`, `end` sichtbar.
+- Trotzdem ist noch offen, ob alle Node-Typen über Editor, Persistenz und Engine durchgehend belastbar funktionieren.
 
 Verbesserte Formulierung:
 
@@ -201,7 +201,7 @@ Priorität:
 Verifiziert:
 - Es gibt mehrere Testdateien im Backend
 - Der Test-Stack ist gemischt: `unittest` und `pytest`
-- Ein zentral sichtbares `pytest.ini` oder `pyproject.toml` für Testkonfiguration wurde nicht gefunden
+- Auf dem aktuellen Branch sind zusätzlich `pytest.ini` und `pyproject.toml` angelegt, die Strategie ist aber weiterhin nicht konsistent umgesetzt
 
 Bewertung:
 - "Keine Tests" wäre falsch

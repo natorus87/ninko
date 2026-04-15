@@ -15,6 +15,10 @@
         _scripts: [],
         _currentScriptId: null,
 
+        init() {
+            return this.loadScripts();
+        },
+
         async loadScripts() {
             const container = document.getElementById('scripts-list');
             if (!container) return;

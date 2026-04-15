@@ -494,7 +494,7 @@ async def upload_branding_asset(file: UploadFile = File(...)) -> dict:
 
 
 @router.get("/branding/assets/{filename}")
-async def get_branding_asset(filename: str) -> "FileResponse":
+async def get_branding_asset(filename: str) -> object:
     """Branding-Asset aus persistentem Storage ausliefern."""
     from fastapi.responses import FileResponse
 

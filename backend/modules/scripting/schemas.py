@@ -49,10 +49,27 @@ class Script(BaseModel):
     last_run_status: Literal["idle", "running", "succeeded", "failed"] = "idle"
 
 
+class ScriptSummary(BaseModel):
+    """Öffentliche Script-Zusammenfassung ohne Quellcode."""
+
+    id: str
+    name: str
+    description: str = ""
+    language: str = "python"
+    timeout: int = 30
+    tags: list[str] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+    created_by: str = ""
+    run_count: int = 0
+    last_run_at: datetime | None = None
+    last_run_status: Literal["idle", "running", "succeeded", "failed"] = "idle"
+
+
 class ScriptListResponse(BaseModel):
     """Response für Script-Listen."""
 
-    scripts: list[Script]
+    scripts: list[ScriptSummary]
     total: int
 
 

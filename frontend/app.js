@@ -673,6 +673,9 @@ const Ninko = {
                 if (first) this.switchModuleTab((first.dashboard_tab?.id) || first.name);
             }
         }
+        if (tabId === 'scripting' && typeof this.loadScripts === 'function') {
+            this.loadScripts();
+        }
         if (tabId === 'logs') this.startLogPolling();
         if (tabId === 'settings') this.loadSettingsContent();
 

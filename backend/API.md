@@ -18,13 +18,13 @@ X-API-Key: your-api-key-here
 
 ### Getting an API Key
 
-API keys are configured per tenant in the settings. The default tenant (`default`) has an API key defined via environment variable or settings.
+API access can happen via configured API keys or signed API access tokens, depending on deployment and auth setup.
 
 ### Multi-Tenant Behavior
 
 Ninko supports multi-tenancy through tenant isolation:
 
-- **Tenant Identification**: The tenant is determined from the API key provided in the `X-API-Key` header
+- **Tenant Identification**: The tenant is derived from the resolved auth context (for example API key, API token, or session)
 - **Data Isolation**: Each tenant's data is stored separately in Redis with tenant-scoped keys
 - **Default Tenant**: If no tenant is identified, operations fall back to the `default` tenant
 
@@ -218,7 +218,7 @@ GET /api/workflows/{workflow_id}/runs
 
 #### Get run status
 ```http
-GET /api/workflows/runs/{run_id}/status
+GET /api/workflows/runs/{run_id}
 ```
 
 **Response:**
