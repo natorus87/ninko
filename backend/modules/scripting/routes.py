@@ -170,6 +170,8 @@ async def update_script(script_id: str, body: ScriptUpdate, request: Request) ->
         updated["description"] = body.description
     if body.code is not None:
         updated["code"] = body.code
+    if body.language is not None:
+        updated["language"] = body.language
     if body.timeout is not None:
         updated["timeout"] = body.timeout
     if body.tags is not None:

@@ -27,6 +27,7 @@ class ScriptUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=500)
     code: str | None = Field(default=None, min_length=1, max_length=50000)
+    language: Literal["python", "bash"] | None = None
     timeout: int | None = Field(default=None, ge=1, le=300)
     tags: list[str] | None = None
 
