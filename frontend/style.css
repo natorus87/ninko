@@ -1224,6 +1224,11 @@ body.light-mode .welcome-illustration {
     color: var(--error-color, #e05555);
 }
 
+.chat-action-copy.copied {
+    color: var(--accent-green, #22c55e);
+    background: rgba(34, 197, 94, 0.15);
+}
+
 .chat-action-tts.speaking {
     color: var(--accent-blue);
     background: rgba(92, 158, 235, 0.1);
