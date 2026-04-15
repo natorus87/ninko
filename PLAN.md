@@ -1,8 +1,8 @@
 1. modul dataviz an die anderen von der optik des dashboards angleichen, z.b. kubernetes, momentan sieht dataviz nicht professionell aus. das icon muss auch neu und soll auch zu den anderen passen, du kannst togetherai nutzen, api key ist .bashrc und das modell flux, um eins zu erstellen.
    ✅ DONE - Dashboard professionell umgestaltet mit Stats Cards, neuem Icon, moderner UI
 
-2. Ninko Logo von Text zu Logo, muss auch in den Theme Einstellungen angepasst werden.
-   ✅ DONE - Neues Logo generiert und in index.html eingebunden
+2. Ninko Logo: Icon + Text-Logo in Sidebar, altes logo_icon.png verwendet
+   ✅ DONE - Icon (logo_icon.png) + Text-Logo "Ninko" nebeneinander in der Sidebar
 
 3. Wenn das einstellungsmenü aufgerufen wird, sollen: neuer chat, automatisierung und Module nicht mehr angezeigt werden, sondern nur ein Button Zurück. beachte multilingual
    ✅ DONE - Einstellungsmenü zeigt jetzt nur Zurück-Button, alle 10 Sprachen haben nav.back

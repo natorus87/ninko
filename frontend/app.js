@@ -470,7 +470,10 @@ const Ninko = {
                 try {
                     const htmlRes = await fetch(`/api/modules/${mod.name}/frontend/tab.html`);
                     if (htmlRes.ok) {
-                        panel.innerHTML = await htmlRes.text();
+                        const html = await htmlRes.text();
+                        panel.innerHTML = (typeof DOMPurify !== 'undefined')
+                            ? DOMPurify.sanitize(html, { ADD_ATTR: ['target', 'rel'], FORBID_TAGS: ['script', 'style', 'iframe', 'form', 'input'] })
+                            : html;
                     } else {
                         panel.innerHTML = `<div class="module-tab-content"><p class="empty-state">${t('module.noDashboard', mod.display_name)}</p></div>`;
                     }
@@ -1015,10 +1018,6 @@ const Ninko = {
                     this._updateCtxIndicator(data.context_budget);
                 }
 
-                if (data.module_used) {
-                    this.addChatMeta(t('chat.moduleUsed', data.module_used));
-                }
-
                 // Save conversation to localStorage history
                 this._saveToHistory(text, data.response);
             } else {
@@ -1469,21 +1468,54 @@ const Ninko = {
         const msg = this._chatMessages.find(m => m.id === msgId);
         if (!msg) return;
 
-        try {
-            await navigator.clipboard.writeText(msg.text);
-            const originalTitle = btnElement.title;
+        const showCopied = () => {
             btnElement.title = t('copy.copied');
             btnElement.classList.add("copied");
             setTimeout(() => {
                 btnElement.title = t('copy.copy');
                 btnElement.classList.remove("copied");
             }, 2000);
-        } catch (err) {
-            console.error("Copy failed:", err);
+        };
+
+        const showError = () => {
             btnElement.title = t('copy.error');
             setTimeout(() => {
                 btnElement.title = t('copy.copy');
             }, 2000);
+        };
+
+        try {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(msg.text);
+                showCopied();
+                return;
+            }
+
+            const textArea = document.createElement("textarea");
+            textArea.value = msg.text;
+            textArea.style.position = "fixed";
+            textArea.style.left = "-9999px";
+            textArea.style.top = "0";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+
+            try {
+                const successful = document.execCommand('copy');
+                document.body.removeChild(textArea);
+                if (successful) {
+                    showCopied();
+                } else {
+                    showError();
+                }
+            } catch (err) {
+                document.body.removeChild(textArea);
+                console.error("Copy failed:", err);
+                showError();
+            }
+        } catch (err) {
+            console.error("Copy failed:", err);
+            showError();
         }
     },
 
@@ -1689,7 +1721,7 @@ const Ninko = {
         const sel = document.getElementById('sg-global-profile');
         if (!sel) return;
         sel.innerHTML = (this._safeguardProfiles || []).map(p =>
-            `<option value="${p.id}" ${p.id === this._safeguardActiveId ? 'selected' : ''}>${p.name}</option>`
+            `<option value="${this._escapeHtml(p.id)}" ${p.id === this._safeguardActiveId ? 'selected' : ''}>${this._escapeHtml(p.name)}</option>`
         ).join('');
         this._updateSgProfileDetails(this._safeguardActiveId);
     },
@@ -1707,7 +1739,7 @@ const Ninko = {
             : t('safeguard.scopeNone');
         badges.innerHTML = `
             <span class="sg-detail-badge${profile.auto_mode ? ' sg-cat-auto' : ''}">${scopeLabel}</span>
-            ${profile.confirm_categories.map(c => `<span class="sg-cat-badge sg-cat-${c.toLowerCase().replace('_','-')}">${c}</span>`).join('')}
+            ${profile.confirm_categories.map(c => `<span class="sg-cat-badge sg-cat-${this._escapeHtml(c.toLowerCase().replace('_','-'))}">${this._escapeHtml(c)}</span>`).join('')}
             ${profile.detect_prompt_injection ? `<span class="sg-detail-badge sg-injection-badge">${t('safeguard.injectionDetect')}</span>` : ''}
             ${profile.fail_open ? `<span class="sg-detail-badge sg-failopen-badge">${t('safeguard.failOpen')}</span>` : ''}
             ${profile.auto_mode ? `<span class="sg-cat-badge sg-cat-auto">⚡ ${t('safeguard.autoMode')}</span>` : ''}
@@ -1752,19 +1784,21 @@ const Ninko = {
 
     _renderSgProfileCard(p, readonly) {
         const cats = p.confirm_categories.map(c =>
-            `<span class="sg-cat-badge sg-cat-${c.toLowerCase().replace('_','-')}">${c}</span>`
+            `<span class="sg-cat-badge sg-cat-${this._escapeHtml(c.toLowerCase().replace('_','-'))}">${this._escapeHtml(c)}</span>`
         ).join('');
         const scopeIco = this._sgScopeBadge(p);
         const injIco = p.detect_prompt_injection ? ' 🔍' : '';
-        const autoIco = p.auto_mode ? ` <span class="sg-cat-badge sg-cat-auto" title="${t('safeguard.autoModeDesc')}">⚡ ${t('safeguard.autoMode')}</span>` : '';
+        const autoIco = p.auto_mode ? ` <span class="sg-cat-badge sg-cat-auto" title="${this._escapeHtml(t('safeguard.autoModeDesc'))}">⚡ ${this._escapeHtml(t('safeguard.autoMode'))}</span>` : '';
+        const escapedId = this._escapeHtml(p.id);
+        const escapedName = this._escapeHtml(p.name);
         return `<div class="sg-profile-card">
             <div class="sg-profile-card-header">
-                <span class="sg-profile-card-name">${p.name}</span>
-                <span class="sg-profile-card-id text-muted">${p.id}</span>
+                <span class="sg-profile-card-name">${escapedName}</span>
+                <span class="sg-profile-card-id text-muted">${escapedId}</span>
                 ${!readonly ? `
                     <div class="sg-profile-card-actions">
-                        <button class="btn btn-xs btn-outline" onclick="Ninko.openSafeguardProfileEditor('${p.id}')">${t('safeguard.edit')}</button>
-                        <button class="btn btn-xs btn-danger" onclick="Ninko.deleteSafeguardProfile('${p.id}')">${t('safeguard.delete')}</button>
+                        <button class="btn btn-xs btn-outline" onclick="Ninko.openSafeguardProfileEditor('${escapedId}')">${t('safeguard.edit')}</button>
+                        <button class="btn btn-xs btn-danger" onclick="Ninko.deleteSafeguardProfile('${escapedId}')">${t('safeguard.delete')}</button>
                     </div>` : ''}
             </div>
             <div class="sg-profile-card-meta">
@@ -2285,8 +2319,9 @@ const Ninko = {
         const step = this._thinkingStep;
         const dur = this._thinkingStepStart ? Date.now() - this._thinkingStepStart : null;
 
-        step.classList.remove('typing-step-running');
+        step.classList.remove('typing-step-running', 'typing-step-enter');
         step.classList.add('typing-step-done');
+        void step.offsetHeight;
 
         // Dauer in Summary eintragen
         if (dur != null) {
@@ -2349,9 +2384,9 @@ const Ninko = {
         if (evt.type === 'tool_end') {
             const step = evt.run_id ? this._pendingToolSteps[evt.run_id] : null;
             if (step) {
-                // Zustand aktualisieren
-                step.classList.remove('typing-step-running');
+                step.classList.remove('typing-step-running', 'typing-step-enter');
                 step.classList.add(evt.error ? 'typing-step-error' : 'typing-step-done');
+                void step.offsetHeight;
 
                 // Duration in die Summary eintragen
                 const summary = step.querySelector('summary');
@@ -7748,8 +7783,7 @@ const Ninko = {
 
     _formatOutput(text) {
         if (!text) return '';
-        // Einfache Formatierung für Zeilenumbrüche und escaping
-        return this._escapeHtml(text);
+        return this.formatText(text);
     },
 
     // ═══════════════════════════════════════════════════════
