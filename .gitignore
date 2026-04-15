@@ -92,6 +92,12 @@ AGENTS.md
 .codex
 skills-lock.json
 
+# Lokale Tool-Konfigurationen
+.brv/
+
+# Sisyphus Pläne (lokale Entwicklungspläne)
+.sisyphus/
+
 # Interne Entwicklungs-Todos
 TODO.md
 DONE.md
