@@ -37,9 +37,8 @@
                         <div class="logo">
                             <span class="logo-icon">
                                 <img src="/static/images/logo_icon.png" alt="Ninko"
-                                    style="width: 28px; height: 28px; object-fit: contain;" />
+                                    style="width: 32px; height: 32px; object-fit: contain; border-radius: 6px;" />
                             </span>
-                            <span class="logo-text">Ninko</span>
                         </div>
                         <div style="display:flex;align-items:center;gap:.45rem;">
                             <span class="status-dot" id="status-dot"></span>
@@ -62,6 +61,13 @@
                         </li>
                     </ul>
 
+                    <ul class="nav-tabs" id="nav-tabs-back" style="display:none;">
+                        <li class="nav-tab" onclick="Ninko.switchTab('chat')">
+                            <span class="tab-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg></span>
+                            <span class="tab-label" data-i18n="nav.back">Zurück</span>
+                        </li>
+                    </ul>
+
                     <!-- Bottom Nav -->
                     <ul class="nav-tabs nav-tabs-bottom" id="nav-tabs-bottom">
                         <li class="nav-tab" data-tab="modules">
@@ -69,7 +75,7 @@
                                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
                                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <path
-                                        d="M12.89 1.45l8 4A2 2 0 0 1 22 7.24v9.52a2 2 0 0 1-1.11 1.79l-8 4a2 2 0 0 1-1.78 0l-8-4A2 2 0 0 1 2 16.76V7.24a2 2 0 0 1 1.11-1.79l8-4a2 2 0 0 1 1.78 0z">
+                                        d="M12.89 1.45l8 4A2 2 0 0 1 22 7.24v9.52a2 2 0 0 1-1.11 1.79l-8 4a2 2 0 0 1-1.78 0l-8-4A2 2 0 0 1 2 16.76V7.24a2 2 0 0 1 1.11-1.79l-8-4a2 2 0 0 1 1.78 0z">
                                     </path>
                                     <polyline points="2.32 6.16 12 11 21.68 6.16"></polyline>
                                     <line x1="12" y1="22.76" x2="12" y2="11"></line>

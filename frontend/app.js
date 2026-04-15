@@ -641,6 +641,21 @@ const Ninko = {
             }
         }
 
+        const navTop = document.getElementById('nav-tabs-top');
+        const navBottom = document.getElementById('nav-tabs-bottom');
+        const navBack = document.getElementById('nav-tabs-back');
+        if (navTop && navBottom && navBack) {
+            if (tabId === 'settings') {
+                navTop.style.display = 'none';
+                navBottom.style.display = 'none';
+                navBack.style.display = '';
+            } else {
+                navTop.style.display = '';
+                navBottom.style.display = '';
+                navBack.style.display = 'none';
+            }
+        }
+
         // Tab-specific init
         if (tabId === 'automatisierung') {
             // Show last active sub-tab, default to tasks

@@ -1552,6 +1552,7 @@ JSON-SCHEMA:
         session_id: str,
         confirmed: bool,
         allowed_modules: list[str] | None = None,
+        task_sketch: "TaskSketch | None" = None,
     ) -> tuple[str, bool]:
         """Tier-4-Pipeline: LLM-Planner → Validierung → run_pipeline-Ausführung.
 
@@ -1559,9 +1560,12 @@ JSON-SCHEMA:
         Schritt gegen die Registry, filtert halluzinierte Utility-Module heraus und führt
         den Plan via run_pipeline aus.
 
+        Uses TaskSketch if provided for structured planning guidance.
+
         Fallback: Tier 1 (ReAct-Loop) bei Timeout, Parse-Fehler oder leerem Validierungsresultat.
         """
         from core.llm_factory import get_llm
+        from core.prestructure.schemas import TaskSketch
 
         await status_bus.emit(
             session_id,
@@ -1615,20 +1619,80 @@ JSON-SCHEMA:
             module_lines.append(line)
         module_descriptions = "\n".join(module_lines)
 
-        planner_prompt = (
-            f"Du bist ein Aufgaben-Planer. Erstelle einen Ausführungsplan.\n\n"
-            f"ANFRAGE: {message}\n\n"
-            f"VERFÜGBARE MODULE:\n{module_descriptions}\n\n"
-            f"REGELN:\n"
-            f"1. Maximal 4 Schritte\n"
-            f"2. Nur Module nutzen die der User EXPLIZIT benötigt oder die als "
-            f"Datenzulieferer für den nächsten Schritt zwingend nötig sind\n"
-            f"3. Utility-Module (telegram, email, teams) NUR wenn der User sie explizit erwähnt\n"
-            f"4. Core-Module (web_search, image_gen, codelab, dataviz) sind immer erlaubt\n"
-            f"5. Jeder task-String muss die vollständige Aufgabe für das Modul enthalten\n"
-            f"6. NUR das JSON-Array zurückgeben — kein erklärender Text\n\n"
-            f'AUSGABE: [{{"module": "<name>", "task": "<vollständige aufgabe>"}}, ...]'
+        planner_sections = [
+            "Du bist ein Aufgaben-Planer. Erstelle einen Ausführungsplan.",
+            "",
+            f"ANFRAGE: {message}",
+        ]
+
+        if task_sketch:
+            planner_sections.extend(
+                [
+                    "",
+                    "TASK-STRUKTUR (automatisch analysiert):",
+                    f"- Intent: {task_sketch.task.intent}",
+                    f"- Hauptziel: {task_sketch.task.primary_goal}",
+                    f"- Komplexität: {task_sketch.task.complexity}",
+                    f"- Risiko: {task_sketch.risk.level}",
+                    f"- Gewünschte Ausgabe: {', '.join(task_sketch.task.requested_output) if task_sketch.task.requested_output else 'nicht spezifiziert'}",
+                ]
+            )
+            if task_sketch.constraints.must_not_do:
+                planner_sections.append(
+                    f"- VERBOTEN: {', '.join(task_sketch.constraints.must_not_do)}"
+                )
+            if task_sketch.constraints.must_include:
+                planner_sections.append(
+                    f"- ERFORDERLICH: {', '.join(task_sketch.constraints.must_include)}"
+                )
+            if task_sketch.uncertainty.missing_information:
+                planner_sections.append(
+                    f"- FEHLENDE INFOS: {', '.join(task_sketch.uncertainty.missing_information)}"
+                )
+
+        planner_sections.extend(
+            [
+                "",
+                f"VERFÜGBARE MODULE:\n{module_descriptions}",
+                "",
+                "REGELN:",
+                "1. Maximal 4 Schritte",
+                "2. Nur Module nutzen die der User EXPLIZIT benötigt oder die als Datenzulieferer zwingend nötig sind",
+                "3. Utility-Module (telegram, email, teams) NUR wenn der User sie explizit erwähnt",
+                "4. Core-Module (web_search, image_gen, codelab, dataviz) sind immer erlaubt",
+                "5. Jeder task-String muss die vollständige Aufgabe für das Modul enthalten",
+            ]
         )
+
+        if task_sketch:
+            planner_sections.append(
+                "6. Beachte TASK-STRUKTUR oben: Intent, Risiko, Constraints"
+            )
+            planner_sections.append(
+                "7. Wenn Risiko=high/critical: nur lesende Operationen, keine Schreibzugriffe"
+            )
+            planner_sections.append(
+                "8. Wenn 'evidence' in ERFORDERLICH: sammel Nachweise/Zustandsdaten"
+            )
+            planner_sections.append(
+                "9. Wenn 'safe_next_step' in ERFORDERLICH: nur den nächsten sicheren Schritt planen"
+            )
+            planner_sections.append(
+                "10. NUR das JSON-Array zurückgeben — kein erklärender Text"
+            )
+        else:
+            planner_sections.append(
+                "6. NUR das JSON-Array zurückgeben — kein erklärender Text"
+            )
+
+        planner_sections.extend(
+            [
+                "",
+                'AUSGABE: [{"module": "<name>", "task": "<vollständige aufgabe>"}, ...]',
+            ]
+        )
+
+        planner_prompt = "\n".join(planner_sections)
 
         try:
             llm = get_llm()
@@ -1691,6 +1755,40 @@ JSON-SCHEMA:
                     mod,
                 )
                 continue
+
+            if task_sketch:
+                should_skip = False
+                for constraint in task_sketch.constraints.must_not_do:
+                    if constraint.lower() in task.lower():
+                        logger.warning(
+                            "Tier-4: Schritt verstößt gegen Constraint '%s' → verworfen",
+                            constraint,
+                        )
+                        should_skip = True
+                        break
+
+                if should_skip:
+                    continue
+
+                if task_sketch.risk.level in ("high", "critical"):
+                    write_verbs = [
+                        "delete",
+                        "remove",
+                        "drop",
+                        "stop",
+                        "restart",
+                        "update",
+                        "change",
+                        "modify",
+                        "create",
+                        "add",
+                    ]
+                    if any(verb in task.lower() for verb in write_verbs):
+                        logger.warning(
+                            "Tier-4: Schreiboperation bei Risiko=%s erkannt, aber Task erlaubt → Schritt beibehalten",
+                            task_sketch.risk.level,
+                        )
+
             valid_steps.append({"module": mod, "task": task})
             if len(valid_steps) >= 4:
                 break
@@ -2159,7 +2257,8 @@ JSON-SCHEMA:
         # ── TaskSketch Routing Hints ─────────────────────────────────────────
         if task_sketch.routing_hints.should_avoid_direct_answer:
             if (
-                task_sketch.routing_hints.preferred_worker_type in ("planner", "workflow")
+                task_sketch.routing_hints.preferred_worker_type
+                in ("planner", "workflow")
                 and len(candidate_modules) > 1
             ):
                 preferred_tier = 4
@@ -2193,6 +2292,7 @@ JSON-SCHEMA:
                 session_id=session_id,
                 confirmed=confirmed,
                 allowed_modules=allowed_modules,
+                task_sketch=task_sketch,
             )
             return response, None, did_compact
 

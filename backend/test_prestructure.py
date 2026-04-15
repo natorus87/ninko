@@ -417,5 +417,85 @@ class TestDeterministicTaskSketchBuilder(unittest.TestCase):
         self.assertEqual(sketch.source.user_message, "Was ist Kubernetes?")
 
 
+class TestTaskSketchPlannerIntegration(unittest.TestCase):
+    """Tests for TaskSketch and Planner integration."""
+
+    def test_task_sketch_includes_risk_info(self):
+        """TaskSketch should include risk assessment for Planner consumption."""
+        builder = DeterministicTaskSketchBuilder(TEST_MODULES)
+        result = builder.build("Lösche alle Pods im production Namespace")
+
+        self.assertTrue(result.valid)
+        # High risk for delete operations
+        self.assertEqual(result.sketch.risk.level, "critical")
+        self.assertTrue(result.sketch.risk.destructive_potential)
+        self.assertTrue(result.sketch.risk.approval_required)
+
+    def test_task_sketch_includes_constraints(self):
+        """TaskSketch should include constraints for Planner validation."""
+        builder = DeterministicTaskSketchBuilder(TEST_MODULES)
+        result = builder.build(
+            "Prüf den GitLab Status und sag mir den nächsten Schritt"
+        )
+
+        self.assertTrue(result.valid)
+        # Should require evidence for investigate intent
+        self.assertTrue(result.sketch.task.needs_evidence)
+        # Should include safe_next_step in must_include
+        self.assertIn("safe_next_step", result.sketch.constraints.must_include)
+
+    def test_task_sketch_candidate_modules_ranked(self):
+        """TaskSketch should provide ranked candidate modules."""
+        builder = DeterministicTaskSketchBuilder(TEST_MODULES)
+        result = builder.build("Check die PostgreSQL Datenbank und GitLab Pipeline")
+
+        self.assertTrue(result.valid)
+        # Should have multiple candidate modules
+        self.assertTrue(len(result.sketch.scope.candidate_modules_ranked) >= 2)
+        # Each ranked module should have a score and reasons
+        for ranked in result.sketch.scope.candidate_modules_ranked:
+            self.assertGreater(ranked.score, 0)
+            self.assertTrue(len(ranked.reasons) > 0)
+
+    def test_task_sketch_routing_hints_for_planner(self):
+        """TaskSketch should provide routing hints for orchestrator decisions."""
+        builder = DeterministicTaskSketchBuilder(TEST_MODULES)
+
+        # Multi-module compound query should suggest planner
+        result = builder.build(
+            "Mein GitLab spinnt seit dem letzten Deployment, prüf bitte ob PostgreSQL "
+            "oder der Ingress schuld ist und sag mir den nächsten sicheren Schritt."
+        )
+
+        self.assertTrue(result.valid)
+        self.assertTrue(result.sketch.routing_hints.should_avoid_direct_answer)
+        self.assertEqual(result.sketch.routing_hints.preferred_worker_type, "planner")
+        self.assertTrue(result.sketch.routing_hints.should_collect_state_before_answer)
+
+    def test_task_sketch_uncertainty_marking(self):
+        """TaskSketch should mark uncertainty when input is ambiguous."""
+        builder = DeterministicTaskSketchBuilder(TEST_MODULES)
+        result = builder.build("Kannst du mal schauen?")
+
+        self.assertTrue(result.valid)
+        # Should be marked as ambiguous
+        self.assertTrue(result.sketch.uncertainty.ambiguous)
+        self.assertTrue(len(result.sketch.uncertainty.missing_information) > 0)
+        # Should have low confidence
+        self.assertLess(result.sketch.uncertainty.confidence, 0.7)
+
+    def test_task_sketch_execution_mode(self):
+        """TaskSketch should determine appropriate execution mode."""
+        builder = DeterministicTaskSketchBuilder(TEST_MODULES)
+
+        # Read-only diagnostic
+        result1 = builder.build("Was ist Kubernetes?")
+        self.assertEqual(result1.sketch.constraints.execution_mode, "read_only")
+
+        # Write operation should be guarded
+        result2 = builder.build("Starte die Pipeline")
+        self.assertEqual(result2.sketch.constraints.execution_mode, "guarded_write")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
