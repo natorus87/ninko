@@ -1,0 +1,58 @@
+{
+  "id": "template-parallel-processing",
+  "name": "Parallele Verarbeitung",
+  "description": "Führt mehrere Aufgaben gleichzeitig aus und sammelt die Ergebnisse.",
+  "nodes": [
+    {
+      "id": "node-1",
+      "type": "trigger",
+      "label": "Start",
+      "config": {"mode": "manual"},
+      "position": {"x": 100, "y": 100}
+    },
+    {
+      "id": "node-2",
+      "type": "variable",
+      "label": "Thema setzen",
+      "config": {"name": "topic", "value": "Kubernetes"},
+      "position": {"x": 400, "y": 100}
+    },
+    {
+      "id": "node-3",
+      "type": "parallel",
+      "label": "Parallel recherchieren",
+      "config": {
+        "prompts": [
+          "Recherchiere Vorteile von {topic}",
+          "Recherchiere Nachteile von {topic}",
+          "Recherchiere Best Practices für {topic}"
+        ]
+      },
+      "position": {"x": 700, "y": 100}
+    },
+    {
+      "id": "node-4",
+      "type": "variable",
+      "label": "Ergebnisse speichern",
+      "config": {"name": "results", "value": "{parallel_results}"},
+      "position": {"x": 1000, "y": 100}
+    },
+    {
+      "id": "node-5",
+      "type": "end",
+      "label": "Fertig",
+      "config": {"status": "succeeded"},
+      "position": {"x": 1300, "y": 100}
+    }
+  ],
+  "edges": [
+    {"id": "edge-1", "source_id": "node-1", "target_id": "node-2"},
+    {"id": "edge-2", "source_id": "node-2", "target_id": "node-3"},
+    {"id": "edge-3", "source_id": "node-3", "target_id": "node-4"},
+    {"id": "edge-4", "source_id": "node-4", "target_id": "node-5"}
+  ],
+  "variables": [
+    {"name": "topic", "value": ""},
+    {"name": "results", "value": ""}
+  ]
+}

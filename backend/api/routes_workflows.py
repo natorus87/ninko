@@ -16,8 +16,11 @@ from fastapi import APIRouter, HTTPException, Request
 from core.auth import auth_tenant_id, resolve_request_auth
 from core.redis_client import get_redis
 from schemas.workflows import (
-    WorkflowDefinition, WorkflowCreate, WorkflowListResponse,
-    WorkflowRun, WorkflowRunListResponse
+    WorkflowDefinition,
+    WorkflowCreate,
+    WorkflowListResponse,
+    WorkflowRun,
+    WorkflowRunListResponse,
 )
 
 logger = logging.getLogger("ninko.api.workflows")
@@ -41,7 +44,11 @@ def _tenant_workflow_id(tenant_id: str, workflow_id: str) -> str:
 
 
 def _public_workflow_id(tenant_scoped_workflow_id: str) -> str:
-    return tenant_scoped_workflow_id.split("::", 1)[1] if "::" in tenant_scoped_workflow_id else tenant_scoped_workflow_id
+    return (
+        tenant_scoped_workflow_id.split("::", 1)[1]
+        if "::" in tenant_scoped_workflow_id
+        else tenant_scoped_workflow_id
+    )
 
 
 def _versions_key(tenant_id: str, scoped_workflow_id: str) -> str:
@@ -68,7 +75,9 @@ async def list_workflows(request: Request) -> WorkflowListResponse:
     for wf in workflows:
         wf_id = wf["id"]
         public_id = _public_workflow_id(wf_id)
-        runs_raw = await redis.connection.get(f"{_tenant_key(REDIS_KEY_RUNS_PREFIX, tenant_id)}{wf_id}")
+        runs_raw = await redis.connection.get(
+            f"{_tenant_key(REDIS_KEY_RUNS_PREFIX, tenant_id)}{wf_id}"
+        )
         runs = json.loads(runs_raw) if runs_raw else []
         if runs:
             latest = runs[-1]
@@ -79,7 +88,9 @@ async def list_workflows(request: Request) -> WorkflowListResponse:
             wf["last_run_at"] = None
         wf["id"] = public_id
         enriched.append(wf)
-    return WorkflowListResponse(workflows=[WorkflowDefinition(**w) for w in enriched], total=len(enriched))
+    return WorkflowListResponse(
+        workflows=[WorkflowDefinition(**w) for w in enriched], total=len(enriched)
+    )
 
 
 @router.post("/", status_code=201)
@@ -229,6 +240,7 @@ async def run_workflow(workflow_id: str, request: Request) -> dict:
     # Workflow asynchron in Background ausführen
     try:
         from core.workflow_engine import WorkflowEngine
+
         orchestrator = request.app.state.orchestrator
         engine = WorkflowEngine(redis, orchestrator)
         asyncio.create_task(engine.execute(wf, run_id))
@@ -292,14 +304,15 @@ async def restore_workflow_version(workflow_id: str, version: int, request: Requ
     return {"id": workflow_id, "status": "restored", "version": restored["version"]}
 
 
-
 @router.get("/{workflow_id}/runs", response_model=WorkflowRunListResponse)
 async def get_workflow_runs(workflow_id: str, request: Request) -> WorkflowRunListResponse:
     """Run-Historie eines Workflows."""
     redis = get_redis()
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     scoped_id = _tenant_workflow_id(tenant_id, workflow_id)
-    runs_raw = await redis.connection.get(f"{_tenant_key(REDIS_KEY_RUNS_PREFIX, tenant_id)}{scoped_id}")
+    runs_raw = await redis.connection.get(
+        f"{_tenant_key(REDIS_KEY_RUNS_PREFIX, tenant_id)}{scoped_id}"
+    )
     runs = json.loads(runs_raw) if runs_raw else []
     # Neueste zuerst
     runs = list(reversed(runs))
@@ -318,10 +331,60 @@ async def get_run_status(run_id: str, request: Request) -> dict:
     workflow_id = run_index.get(run_id)
 
     if workflow_id:
-        runs_raw = await redis.connection.get(f"{_tenant_key(REDIS_KEY_RUNS_PREFIX, tenant_id)}{workflow_id}")
+        runs_raw = await redis.connection.get(
+            f"{_tenant_key(REDIS_KEY_RUNS_PREFIX, tenant_id)}{workflow_id}"
+        )
         runs = json.loads(runs_raw) if runs_raw else []
         run = next((r for r in runs if r["id"] == run_id), None)
         if run:
             return run
 
     raise HTTPException(status_code=404, detail=f"Run '{run_id}' nicht gefunden")
+
+
+@router.get("/templates")
+async def get_workflow_templates() -> dict:
+    """Returns all built-in workflow templates."""
+    from core.workflow_templates import get_workflow_templates
+
+    return {"templates": get_workflow_templates()}
+
+
+@router.get("/templates/{template_id}")
+async def get_workflow_template_definition(template_id: str) -> dict:
+    """Returns a specific template with full definition (nodes, edges)."""
+    from core.workflow_templates import load_template_definition
+
+    definition = load_template_definition(template_id)
+    if not definition:
+        raise HTTPException(status_code=404, detail=f"Template '{template_id}' nicht gefunden")
+    return definition
+
+
+@router.post("/templates/{template_id}/instantiate")
+async def instantiate_workflow_template(
+    template_id: str, request: Request, name: str | None = None
+) -> dict:
+    """Creates a new workflow from a template."""
+    from core.workflow_templates import instantiate_template
+    from schemas.workflows import WorkflowCreate
+
+    instance = instantiate_template(template_id, name)
+    if not instance:
+        raise HTTPException(status_code=404, detail=f"Template '{template_id}' nicht gefunden")
+
+    redis = get_redis()
+    tenant_id = auth_tenant_id(resolve_request_auth(request))
+    workflows = await _load_workflows(redis, tenant_id)
+
+    now = datetime.now(timezone.utc).isoformat()
+    workflow_def = WorkflowDefinition(
+        **instance,
+        created_at=now,
+        updated_at=now,
+    )
+    workflows.append({**workflow_def.model_dump(), "tenant_id": tenant_id})
+    await _save_workflows(redis, tenant_id, workflows)
+
+    logger.info("Workflow aus Template erstellt: %s (%s)", workflow_def.name, workflow_def.id)
+    return {"id": workflow_def.id, "status": "created", "template_id": template_id}

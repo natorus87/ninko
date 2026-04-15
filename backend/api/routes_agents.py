@@ -11,10 +11,11 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from core.auth import auth_tenant_id, resolve_request_auth
 from core.redis_client import get_redis
+from core.module_registry import get_registry
 from schemas.agents import AgentDefinition, AgentCreate, AgentListResponse
 
 logger = logging.getLogger("ninko.api.agents")
@@ -24,6 +25,22 @@ router = APIRouter(prefix="/api/agents", tags=["Agents"])
 class AgentGenerateRequest(BaseModel):
     use_case: str
     allowed_modules: list[str] = []
+
+
+class AgentCard(BaseModel):
+    name: str
+    display_name: str
+    description: str = ""
+    version: str = ""
+    capabilities: list[str] = Field(default_factory=list)
+    keywords: list[str] = Field(default_factory=list)
+    api_prefix: str = ""
+    has_dashboard_tab: bool = False
+
+
+class AgentCardsResponse(BaseModel):
+    cards: list[AgentCard]
+    total: int
 
 
 REDIS_KEY = "ninko:agents"
@@ -49,9 +66,148 @@ def _public_agent(agent: dict) -> dict:
     return a
 
 
+def _infer_modules_from_use_case(use_case: str) -> list[str]:
+    use_case_lower = use_case.lower()
+    keywords_to_modules = {
+        "kubernetes": ["kubernetes"],
+        "k8s": ["kubernetes"],
+        "pod": ["kubernetes"],
+        "container": ["kubernetes", "docker"],
+        "docker": ["docker"],
+        "linux": ["linux_server"],
+        "server": ["linux_server"],
+        "ssh": ["linux_server"],
+        "proxmox": ["proxmox"],
+        "vm": ["proxmox"],
+        "firewall": ["opnsense"],
+        "dns": ["pihole"],
+        "blocking": ["pihole"],
+        "smart home": ["homeassistant"],
+        "home assistant": ["homeassistant"],
+        "licht": ["homeassistant"],
+        "heizung": ["homeassistant"],
+        "ticket": ["glpi"],
+        "helpdesk": ["glpi"],
+        "monitoring": ["checkmk"],
+        "alert": ["checkmk"],
+        "github": ["github"],
+        "gitlab": ["gitlab"],
+        "ci/cd": ["github", "gitlab"],
+        "pipeline": ["github", "gitlab"],
+        "web_search": ["web_search"],
+        "recherche": ["web_search"],
+        "suchen": ["web_search"],
+        "internet": ["web_search"],
+        "bild": ["image_gen"],
+        "image": ["image_gen"],
+        "foto": ["image_gen"],
+    }
+
+    suggested = set()
+    for keyword, modules in keywords_to_modules.items():
+        if keyword in use_case_lower:
+            suggested.update(modules)
+
+    return list(suggested)[:4]
+
+
+def _build_minimal_spec(use_case: str, inferred_modules: list[str]) -> dict:
+    name = use_case.split()[:3]
+    name = " ".join(name) if name else "Custom Agent"
+    name = name[:40]
+
+    modules_str = ", ".join(inferred_modules) if inferred_modules else "web_search"
+
+    return {
+        "name": name,
+        "description": f"Agent für: {use_case[:80]}",
+        "system_prompt": f"""Du bist ein spezialisierter Agent für: {use_case}
+
+## Aufgaben
+- Analysiere Anfragen im Kontext von: {use_case}
+- Nutze verfügbare Module für spezifische Operationen
+- Dokumentiere durchgeführte Aktionen
+
+## Arbeitsweise
+- Präzise und effizient
+- Ergebnisse strukturiert aufbereiten
+- Bei Unklarheiten nachfragen
+
+## Kritische Aktionen
+- Destruktive Operationen immer bestätigen lassen
+- Keine autonomen Änderungen ohne Freigabe
+
+## Verfügbare Module
+{modules_str}""",
+        "suggested_modules": inferred_modules if inferred_modules else ["web_search"],
+    }
+
+
+def _extract_json_from_llm_response(raw: str) -> dict:
+    """Extract JSON from LLM response - handles Markdown and formatting issues."""
+    import re
+
+    raw = re.sub(r".*?", "", raw, flags=re.DOTALL).strip()
+
+    patterns = [
+        (r"```json\s*(.*?)```", re.DOTALL),
+        (r"```\s*(.*?)```", re.DOTALL),
+        (r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", re.DOTALL),
+    ]
+
+    for pattern, flags in patterns:
+        if pattern.startswith("```"):
+            matches = re.findall(pattern, raw, flags)
+        else:
+            matches = [re.search(pattern, raw, flags)]
+        for match in matches:
+            if match is None:
+                continue
+            text = match.strip() if isinstance(match, str) else match.group().strip()
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                fixed = re.sub(r",\s*\}", "}", text)
+                fixed = re.sub(r",\s*\]", "]", fixed)
+                try:
+                    return json.loads(fixed)
+                except json.JSONDecodeError:
+                    continue
+
+    raise ValueError(f"No valid JSON found in LLM response. Raw (first 500 chars): {raw[:500]}")
+
+
+def _validate_agent_spec(spec: dict, use_case: str, inferred_modules: list[str]) -> dict:
+    """Validate and complete agent specification ensuring all required fields exist."""
+    validated = {
+        "name": spec.get("name", "").strip() or f"Agent für {use_case[:30]}",
+        "description": spec.get("description", "").strip() or f"Spezialisiert für: {use_case[:80]}",
+        "system_prompt": spec.get("system_prompt", "").strip(),
+        "suggested_modules": spec.get("suggested_modules", inferred_modules) or inferred_modules,
+    }
+
+    if not validated["system_prompt"]:
+        validated["system_prompt"] = _build_minimal_spec(use_case, inferred_modules)[
+            "system_prompt"
+        ]
+
+    if not isinstance(validated["suggested_modules"], list):
+        validated["suggested_modules"] = inferred_modules
+    else:
+        validated["suggested_modules"] = [
+            m for m in validated["suggested_modules"] if isinstance(m, str) and m.strip()
+        ]
+        if not validated["suggested_modules"]:
+            validated["suggested_modules"] = inferred_modules
+
+    validated["name"] = validated["name"][:60]
+    validated["description"] = validated["description"][:200]
+
+    return validated
+
+
 @router.get("/", response_model=AgentListResponse)
 async def list_agents(request: Request) -> AgentListResponse:
-    """Alle konfigurierten Agenten auflisten."""
     redis = get_redis()
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     agents = await _load_agents(redis, tenant_id)
@@ -61,7 +217,6 @@ async def list_agents(request: Request) -> AgentListResponse:
 
 @router.post("/", status_code=201)
 async def create_agent(body: AgentCreate, request: Request) -> dict:
-    """Neuen Agenten erstellen."""
     redis = get_redis()
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     agents = await _load_agents(redis, tenant_id)
@@ -80,17 +235,13 @@ async def create_agent(body: AgentCreate, request: Request) -> dict:
 
 @router.get("/{agent_id}")
 async def get_agent(agent_id: str, request: Request) -> dict:
-    """Einen Agenten abrufen (inkl. Soul MD wenn vorhanden)."""
     redis = get_redis()
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     agents = await _load_agents(redis, tenant_id)
     agent = next((a for a in agents if a["id"] == agent_id), None)
     if not agent:
-        raise HTTPException(
-            status_code=404, detail=f"Agent '{agent_id}' nicht gefunden"
-        )
+        raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' nicht gefunden")
 
-    # Soul MD anhängen (wenn vorhanden)
     try:
         from core.soul_manager import get_soul_manager
 
@@ -113,16 +264,13 @@ async def get_agent(agent_id: str, request: Request) -> dict:
 
 @router.put("/{agent_id}")
 async def update_agent(agent_id: str, body: AgentCreate, request: Request) -> dict:
-    """Agenten bearbeiten."""
     redis = get_redis()
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     agents = await _load_agents(redis, tenant_id)
 
     idx = next((i for i, a in enumerate(agents) if a["id"] == agent_id), None)
     if idx is None:
-        raise HTTPException(
-            status_code=404, detail=f"Agent '{agent_id}' nicht gefunden"
-        )
+        raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' nicht gefunden")
 
     now = datetime.now(timezone.utc).isoformat()
     updated = {
@@ -140,20 +288,16 @@ async def update_agent(agent_id: str, body: AgentCreate, request: Request) -> di
 
 @router.delete("/{agent_id}")
 async def delete_agent(agent_id: str, request: Request) -> dict:
-    """Agenten löschen (inkl. Soul MD Cleanup)."""
     redis = get_redis()
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     agents = await _load_agents(redis, tenant_id)
     deleted_agent = next((a for a in agents if a["id"] == agent_id), None)
     if not deleted_agent:
-        raise HTTPException(
-            status_code=404, detail=f"Agent '{agent_id}' nicht gefunden"
-        )
+        raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' nicht gefunden")
 
     agents = [a for a in agents if a["id"] != agent_id]
     await _save_agents(redis, tenant_id, agents)
 
-    # Soul MD des gelöschten Agenten aufräumen
     try:
         from core.soul_manager import get_soul_manager
 
@@ -177,7 +321,6 @@ async def delete_agent(agent_id: str, request: Request) -> dict:
 
 @router.get("/templates")
 async def get_agent_templates() -> dict:
-    """Built-in Agent-Vorlagen für den Agent Builder zurückgeben."""
     from core.agent_templates import AGENT_TEMPLATES
 
     return {"templates": AGENT_TEMPLATES}
@@ -185,25 +328,28 @@ async def get_agent_templates() -> dict:
 
 @router.post("/generate")
 async def generate_agent_spec(body: AgentGenerateRequest) -> dict:
-    """
-    Generiert eine Agent-Spezifikation (Name, System-Prompt, Beschreibung) aus einem Use-Case.
-    Ruft das aktive LLM auf um einen hochwertigen, strukturierten System-Prompt zu erstellen.
-    """
+    """Generate agent specification from use case using LLM with robust fallback."""
     use_case = body.use_case.strip()
     if not use_case:
         raise HTTPException(status_code=422, detail="use_case darf nicht leer sein")
 
-    try:
-        from core.llm_factory import get_llm_client
-        from core.module_registry import get_registry
-        from langchain_core.messages import HumanMessage
+    inferred_modules = _infer_modules_from_use_case(use_case)
+    generation_log = {
+        "use_case": use_case,
+        "inferred_modules": inferred_modules,
+        "allowed_modules": body.allowed_modules,
+        "step": "init",
+        "raw_response": None,
+        "error": None,
+    }
 
-        # Verfügbare Module für Kontext
+    try:
+        generation_log["step"] = "registry_lookup"
         try:
             registry = get_registry()
             all_modules = [
                 f"{m.name} ({m.description[:60]})"
-                for m in registry.list_manifests()
+                for m in registry.list_modules()
                 if m.enabled_by_default
             ]
             module_context = (
@@ -218,13 +364,16 @@ async def generate_agent_spec(body: AgentGenerateRequest) -> dict:
             KeyError,
             OSError,
             ImportError,
-            json.JSONDecodeError,
         ):
-            module_context = "kubernetes, linux_server, docker, pihole, homeassistant, opnsense, glpi, telegram"
+            module_context = (
+                "kubernetes, linux_server, docker, pihole, homeassistant, opnsense, glpi, telegram"
+            )
 
         allowed_hint = ""
         if body.allowed_modules:
             allowed_hint = f"\nBevorzugte Module: {', '.join(body.allowed_modules)}"
+        elif inferred_modules:
+            allowed_hint = f"\nBevorzugte Module: {', '.join(inferred_modules)}"
 
         prompt = f"""Du bist ein Agent-Builder-Experte für das Ninko IT-Operations-System.
 
@@ -237,12 +386,12 @@ VERFÜGBARE MODULE: {module_context}
 ANFORDERUNGEN AN DEN SYSTEM-PROMPT:
 - Klar strukturiert mit ## Aufgaben, ## Arbeitsweise, ## Kritische Aktionen, ## Eskalation
 - Spezifische, handlungsorientierte Bullet-Points
-- Destruktive Aktionen explizit gegattet ("immer bestätigen lassen")
+- Destruktive Aktionen explizit gekennzeichnet ("immer bestätigen lassen")
 - Eskalationsregel: "Aufgabe außerhalb Scope → an Ninko zurückgeben"
 - Module via call_module_agent("<modul>", "...") erwähnen wenn relevant
 - Kompakt: 200–400 Zeichen
 
-Antworte AUSSCHLIESSLICH mit einem JSON-Objekt ohne Markdown-Umrahmung:
+Antworte AUSSCHLIESSLICH mit einem JSON-Objekt:
 {{
   "name": "Kurzer funktionsbeschreibender Name (max 4 Wörter)",
   "description": "Ein präziser Satz was der Agent konkret macht",
@@ -250,30 +399,31 @@ Antworte AUSSCHLIESSLICH mit einem JSON-Objekt ohne Markdown-Umrahmung:
   "suggested_modules": ["modul1", "modul2"]
 }}"""
 
-        llm = get_llm_client(max_tokens=600)
+        generation_log["step"] = "llm_invoke"
+        from core.llm_factory import get_llm
+        from langchain_core.messages import HumanMessage
+
+        llm = get_llm()
         response = await llm.ainvoke([HumanMessage(content=prompt)])
         raw = response.content if hasattr(response, "content") else str(response)
+        generation_log["raw_response"] = raw[:2000]
 
-        # <think>-Blöcke entfernen (Thinking-Modelle)
-        import re
+        generation_log["step"] = "json_extract"
+        spec = _extract_json_from_llm_response(raw)
 
-        raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
+        generation_log["step"] = "validate"
+        validated = _validate_agent_spec(spec, use_case, inferred_modules)
 
-        # Erstes JSON-Objekt extrahieren
-        m = re.search(r"\{.*\}", raw, re.DOTALL)
-        if not m:
-            raise ValueError("Kein JSON in LLM-Antwort gefunden")
-
-        import json
-
-        spec = json.loads(m.group())
-
-        return {
-            "name": spec.get("name", ""),
-            "description": spec.get("description", ""),
-            "system_prompt": spec.get("system_prompt", ""),
-            "suggested_modules": spec.get("suggested_modules", []),
+        result = {
+            **validated,
+            "_generation_info": {
+                "used_inferred_modules": bool(inferred_modules and not body.allowed_modules),
+                "fallback_used": False,
+            },
         }
+
+        logger.info("Agent-Spezifikation generiert: %s", result["name"])
+        return result
 
     except (
         RuntimeError,
@@ -284,23 +434,31 @@ Antworte AUSSCHLIESSLICH mit einem JSON-Objekt ohne Markdown-Umrahmung:
         ImportError,
         json.JSONDecodeError,
     ) as exc:
-        logger.warning("Agent-Generierung fehlgeschlagen: %s", exc)
-        raise HTTPException(
-            status_code=500, detail=f"Generierung fehlgeschlagen: {exc}"
+        generation_log["step"] = f"error_{generation_log['step']}"
+        generation_log["error"] = str(exc)
+        logger.warning(
+            "Agent-Generierung fehlgeschlagen (Fallback wird verwendet): %s | Log: %s",
+            exc,
+            json.dumps(generation_log, ensure_ascii=False),
         )
+
+        fallback = _build_minimal_spec(use_case, inferred_modules)
+        fallback["_generation_info"] = {
+            "used_inferred_modules": bool(inferred_modules),
+            "fallback_used": True,
+            "original_error": str(exc)[:100],
+        }
+        return fallback
 
 
 @router.post("/{agent_id}/duplicate", status_code=201)
 async def duplicate_agent(agent_id: str, request: Request) -> dict:
-    """Agenten duplizieren."""
     redis = get_redis()
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     agents = await _load_agents(redis, tenant_id)
     original = next((a for a in agents if a["id"] == agent_id), None)
     if not original:
-        raise HTTPException(
-            status_code=404, detail=f"Agent '{agent_id}' nicht gefunden"
-        )
+        raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' nicht gefunden")
 
     now = datetime.now(timezone.utc).isoformat()
     duplicate = {
@@ -317,39 +475,9 @@ async def duplicate_agent(agent_id: str, request: Request) -> dict:
     return {"id": duplicate["id"], "status": "created"}
 
 
-# ── AgentCards Endpoint ───────────────────────────────────────
-
-from core.module_registry import get_registry
-from pydantic import Field
-
-
-class AgentCard(BaseModel):
-    """AgentCard – strukturierte Modul-Information für externe Integrationen."""
-
-    name: str
-    display_name: str
-    description: str = ""
-    version: str = ""
-    capabilities: list[str] = Field(default_factory=list)
-    keywords: list[str] = Field(default_factory=list)
-    api_prefix: str = ""
-    has_dashboard_tab: bool = False
-
-
-class AgentCardsResponse(BaseModel):
-    """Response für AgentCards."""
-
-    cards: list[AgentCard]
-    total: int
-
-
 @router.get("/cards", response_model=AgentCardsResponse)
 async def get_agent_cards(request: Request) -> AgentCardsResponse:
-    """
-    Gibt alle Module als strukturierte AgentCards zurück.
-
-    Nützlich für externe Integrationen und das Routing-Debugging.
-    """
+    """Return all modules as structured AgentCards for external integrations."""
     _ = auth_tenant_id(resolve_request_auth(request))
 
     registry = get_registry()

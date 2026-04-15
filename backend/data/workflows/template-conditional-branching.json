@@ -1,0 +1,62 @@
+{
+  "id": "template-conditional-branching",
+  "name": "Bedingte Verzweigung",
+  "description": "Workflow mit Bedingung: Der Pfad wird basierend auf dem Agent-Ergebnis gewählt.",
+  "nodes": [
+    {
+      "id": "node-1",
+      "type": "trigger",
+      "label": "Start",
+      "config": {"mode": "manual"},
+      "position": {"x": 100, "y": 100}
+    },
+    {
+      "id": "node-2",
+      "type": "agent",
+      "label": "Daten prüfen",
+      "config": {"agent_id": "", "prompt": "Prüfe die Daten und gib 'OK' oder 'Fehler' zurück"},
+      "position": {"x": 400, "y": 100}
+    },
+    {
+      "id": "node-3",
+      "type": "condition",
+      "label": "Ergebnis?",
+      "config": {
+        "expression": "output.contains('OK')",
+        "true_label": "Erfolg",
+        "false_label": "Fehler"
+      },
+      "position": {"x": 700, "y": 100}
+    },
+    {
+      "id": "node-4",
+      "type": "variable",
+      "label": "Erfolg speichern",
+      "config": {"name": "status", "value": "erfolgreich"},
+      "position": {"x": 1000, "y": 50}
+    },
+    {
+      "id": "node-5",
+      "type": "variable",
+      "label": "Fehler speichern",
+      "config": {"name": "status", "value": "fehlgeschlagen"},
+      "position": {"x": 1000, "y": 150}
+    },
+    {
+      "id": "node-6",
+      "type": "end",
+      "label": "Ende",
+      "config": {"status": "succeeded"},
+      "position": {"x": 1300, "y": 100}
+    }
+  ],
+  "edges": [
+    {"id": "edge-1", "source_id": "node-1", "target_id": "node-2"},
+    {"id": "edge-2", "source_id": "node-2", "target_id": "node-3"},
+    {"id": "edge-3", "source_id": "node-3", "target_id": "node-4", "label": "Erfolg"},
+    {"id": "edge-4", "source_id": "node-3", "target_id": "node-5", "label": "Fehler"},
+    {"id": "edge-5", "source_id": "node-4", "target_id": "node-6"},
+    {"id": "edge-6", "source_id": "node-5", "target_id": "node-6"}
+  ],
+  "variables": [{"name": "status", "value": ""}]
+}
