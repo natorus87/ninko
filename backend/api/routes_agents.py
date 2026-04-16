@@ -402,9 +402,21 @@ Antworte AUSSCHLIESSLICH mit einem JSON-Objekt:
         generation_log["step"] = "llm_invoke"
         from core.llm_factory import get_llm
         from langchain_core.messages import HumanMessage
+        import asyncio
 
         llm = get_llm()
-        response = await llm.ainvoke([HumanMessage(content=prompt)])
+
+        AGENT_GENERATION_TIMEOUT_SECONDS = 30.0
+        try:
+            response = await asyncio.wait_for(
+                llm.ainvoke([HumanMessage(content=prompt)]),
+                timeout=AGENT_GENERATION_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError as exc:
+            raise RuntimeError(
+                f"LLM-Aufruf für Agent-Generierung hat Timeout ({AGENT_GENERATION_TIMEOUT_SECONDS}s) überschritten"
+            ) from exc
+
         raw = response.content if hasattr(response, "content") else str(response)
         generation_log["raw_response"] = raw[:2000]
 

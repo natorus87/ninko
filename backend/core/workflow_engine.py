@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import re
+import shlex
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -83,7 +84,8 @@ class WorkflowEngine:
         workflow_id = workflow["id"]
         workflow_name = workflow.get("name", "")
         workflow_version = int(workflow.get("version", 1) or 1)
-        tenant_id = _tenant_from_scoped_workflow_id(workflow_id)
+        tenant_id = (workflow.get("tenant_id") or _tenant_from_scoped_workflow_id(workflow_id)).strip()
+        workflow_session_id = f"{tenant_id}:{run_id}"
 
         # Run-Index für schnelle Lookup
         run_index_key = _tenant_key(REDIS_KEY_RUN_INDEX, tenant_id)
@@ -175,6 +177,7 @@ class WorkflowEngine:
                             variables=variables,
                             tenant_id=tenant_id,
                             parent_run_id=run_id,
+                            workflow_session_id=workflow_session_id,
                         )
                         t_end = datetime.now(timezone.utc)
                         duration = int((t_end - t_start).total_seconds() * 1000)
@@ -186,14 +189,12 @@ class WorkflowEngine:
                         step["attempts"] = attempts
                         return node_id, next_label
 
-                    except _WORKFLOW_EXCEPTIONS as exc:
+                    except Exception as exc:
                         t_end = datetime.now(timezone.utc)
                         step["status"] = "failed"
                         step["finished_at"] = t_end.isoformat()
                         step["error"] = str(exc)[:300]
-                        logger.error(
-                            "Workflow-Step fehlgeschlagen: node=%s err=%s", node_id, exc
-                        )
+                        logger.error("Workflow-Step fehlgeschlagen: node=%s err=%s", node_id, exc)
                         raise
 
                 # Batch ausführen
@@ -232,16 +233,9 @@ class WorkflowEngine:
                         if edge["source_id"] != node_id:
                             continue
                         # Bei Conditions: nur den Pfad mit passendem Label nehmen
-                        if (
-                            next_label
-                            and edge.get("label")
-                            and edge["label"] != next_label
-                        ):
+                        if next_label and edge.get("label") and edge["label"] != next_label:
                             target = edge["target_id"]
-                            if (
-                                target in step_map
-                                and step_map[target]["status"] == "pending"
-                            ):
+                            if target in step_map and step_map[target]["status"] == "pending":
                                 step_map[target]["status"] = "skipped"
                             continue
                         target_id = edge["target_id"]
@@ -251,6 +245,9 @@ class WorkflowEngine:
         except _WORKFLOW_EXCEPTIONS as exc:
             logger.error("Workflow-Ausführung fehlgeschlagen: %s", exc)
             final_status = "failed"
+        except Exception as exc:
+            logger.exception("Workflow-Ausführung unerwartet fehlgeschlagen: %s", exc)
+            final_status = "failed"
 
         finally:
             # Verbleibende pending Steps als skipped markieren
@@ -258,9 +255,7 @@ class WorkflowEngine:
                 if step["status"] == "pending":
                     step["status"] = "skipped"
 
-            run_duration_ms = int(
-                (datetime.now(timezone.utc) - t_run_start).total_seconds() * 1000
-            )
+            run_duration_ms = int((datetime.now(timezone.utc) - t_run_start).total_seconds() * 1000)
             await self._update_run(
                 tenant_id,
                 workflow_id,
@@ -286,6 +281,7 @@ class WorkflowEngine:
         variables: dict,
         tenant_id: str,
         parent_run_id: str,
+        workflow_session_id: str,
     ) -> tuple[Any, str | None, int]:
         retries = min(max(0, int(config.get("retries", 0) or 0)), MAX_NODE_RETRIES)
         retry_delay_ms = max(0, int(config.get("retry_delay_ms", 0) or 0))
@@ -301,6 +297,7 @@ class WorkflowEngine:
                     variables=variables,
                     tenant_id=tenant_id,
                     parent_run_id=parent_run_id,
+                    workflow_session_id=workflow_session_id,
                 )
                 return output, next_label, attempts
             except _WORKFLOW_EXCEPTIONS as exc:
@@ -322,6 +319,7 @@ class WorkflowEngine:
         variables: dict,
         tenant_id: str,
         parent_run_id: str,
+        workflow_session_id: str,
     ) -> tuple[Any, str | None]:
         """Führt einen einzelnen Node-Typ aus. Gibt (output, next_label) zurück."""
 
@@ -345,11 +343,19 @@ class WorkflowEngine:
                 variables,
             )
             if self.orchestrator:
-                # Wenn agent_id gesetzt, route direkt zu diesem Agenten
+                # "orchestrator" ist der Default-Agent und kein Modulname.
+                # force_module darf hier NICHT gesetzt werden, sonst schlägt
+                # das Routing mit "Modul ... nicht verfügbar" fehl.
+                force_target = str(agent_id or "").strip()
+                if force_target.lower() in {"", "orchestrator"}:
+                    force_target = None
+
+                # Wenn ein konkreter Agent/Modul gesetzt ist, route direkt dorthin.
                 response_text, _, _ = await self.orchestrator.route(
                     message=prompt,
                     chat_history=[],
-                    force_module=agent_id if agent_id else None,
+                    session_id=workflow_session_id,
+                    force_module=force_target,
                 )
                 variables["previous_output"] = response_text
                 return response_text, None
@@ -368,6 +374,7 @@ class WorkflowEngine:
                     resp, _, _ = await self.orchestrator.route(
                         message=prompt,
                         chat_history=[],
+                        session_id=workflow_session_id,
                     )
                     return resp
                 return prompt
@@ -399,9 +406,7 @@ class WorkflowEngine:
             scoped_sub_id = f"{tenant_id}::{sub_workflow_public_id}"
             sub_wf = next((w for w in workflows if w.get("id") == scoped_sub_id), None)
             if not sub_wf:
-                raise ValueError(
-                    f"Sub-Workflow '{sub_workflow_public_id}' nicht gefunden"
-                )
+                raise ValueError(f"Sub-Workflow '{sub_workflow_public_id}' nicht gefunden")
 
             sub_run_id = str(uuid.uuid4())
             sub_engine = WorkflowEngine(self.redis, self.orchestrator)
@@ -411,9 +416,7 @@ class WorkflowEngine:
                 triggered_by="subflow",
                 parent_run_id=parent_run_id,
             )
-            variables["previous_output"] = (
-                f"Subflow {sub_workflow_public_id} abgeschlossen"
-            )
+            variables["previous_output"] = f"Subflow {sub_workflow_public_id} abgeschlossen"
             variables["subflow_run_id"] = sub_run_id
             return f"Subflow '{sub_workflow_public_id}' ausgeführt", None
 
@@ -422,9 +425,7 @@ class WorkflowEngine:
             previous = variables.get("previous_output", "")
             result = self._evaluate_condition(expr, previous, variables)
             label = (
-                config.get("true_label", "true")
-                if result
-                else config.get("false_label", "false")
+                config.get("true_label", "true") if result else config.get("false_label", "false")
             )
             return f"Bedingung: {result}", label
 
@@ -457,6 +458,7 @@ class WorkflowEngine:
                         resp, _, _ = await self.orchestrator.route(
                             message=prompt,
                             chat_history=[],
+                            session_id=workflow_session_id,
                         )
                         iter_results.append(f"[{i}] {resp}")
                         variables["previous_output"] = resp
@@ -477,6 +479,7 @@ class WorkflowEngine:
                         resp, _, _ = await self.orchestrator.route(
                             message=prompt,
                             chat_history=[],
+                            session_id=workflow_session_id,
                         )
                         iter_results.append(f"[{i}] {resp}")
                         variables["previous_output"] = resp
@@ -485,6 +488,69 @@ class WorkflowEngine:
 
             variables["loop_results"] = "\n".join(iter_results)
             return f"Loop: {len(iter_results)} Iterationen abgeschlossen", None
+
+        if node_type == "script":
+            script_id = config.get("script_id", "").strip()
+            if not script_id:
+                raise ValueError("script.script_id fehlt oder ist leer")
+
+            scripts_raw = await self.redis.connection.get(f"ninko:scripting:scripts:{tenant_id}")
+            scripts = json.loads(scripts_raw) if scripts_raw else []
+            script = next((s for s in scripts if s.get("id") == script_id), None)
+
+            if not script:
+                raise ValueError(f"Script '{script_id}' nicht gefunden")
+
+            # Script-Code vorbereiten
+            script_code = script.get("code", "")
+            if not script_code:
+                raise ValueError(f"Script '{script_id}' hat keinen Code")
+            language = str(script.get("language", "python") or "python").strip().lower()
+
+            # Timeout aus Config (codelab unterstützt maximal 60s)
+            timeout = min(max(int(config.get("timeout", 30) or 30), 1), 60)
+
+            # Input-Variable als Script-Variable verfügbar machen (codelab unterstützt kein stdin)
+            input_var = config.get("input_var", "")
+            input_data = ""
+            if input_var:
+                input_data = str(variables.get(input_var, ""))
+                variables["script_input"] = input_data
+                if language == "python":
+                    script_code = f"script_input = {json.dumps(input_data)}\n{script_code}"
+                elif language in {"bash", "sh"}:
+                    script_code = f"export SCRIPT_INPUT={shlex.quote(input_data)}\n{script_code}"
+
+            # Code ausführen via codelab
+            try:
+                from modules.codelab.tools import execute_code
+
+                result = await execute_code.ainvoke(
+                    {
+                        "language": language,
+                        "code": script_code,
+                        "timeout": timeout,
+                    }
+                )
+
+                # Ergebnis verarbeiten
+                stdout = result.get("stdout", "")
+                stderr = result.get("stderr", "")
+                exit_code = result.get("exit_code", 1)
+
+                # Output in Variablen speichern
+                variables["script_output"] = stdout
+                variables["script_error"] = stderr
+                variables["script_exit_code"] = str(exit_code)
+                variables["previous_output"] = stdout if stdout else stderr
+
+                if exit_code != 0:
+                    raise RuntimeError(f"Script failed with exit code {exit_code}: {stderr[:200]}")
+
+                return f"Script executed: {stdout[:200]}", None
+
+            except Exception as exc:
+                raise RuntimeError(f"Script execution failed: {exc}") from exc
 
         return f"Unbekannter Node-Typ: {node_type}", None
 
@@ -605,10 +671,232 @@ class WorkflowEngine:
                 runs[run_idx]["status"] = status
                 runs[run_idx]["steps"] = steps
                 runs[run_idx]["variables"] = variables
-                if error:
+                if error is not None:
                     runs[run_idx]["error"] = error
+                elif status != "failed":
+                    runs[run_idx]["error"] = None
                 if status in ("succeeded", "failed"):
                     runs[run_idx]["finished_at"] = now
                     if duration_ms is not None:
                         runs[run_idx]["duration_ms"] = duration_ms
                 await self.redis.connection.set(key, json.dumps(runs))
+
+    def _compute_retry_targets(
+        self,
+        *,
+        source_node_id: str,
+        next_label: str | None,
+        edges: list[dict],
+        step_map: dict[str, dict],
+    ) -> list[str]:
+        """Ermittelt Downstream-Nodes nach einem erfolgreichen Retry."""
+        targets: list[str] = []
+        for edge in edges:
+            if edge.get("source_id") != source_node_id:
+                continue
+            target_id = edge.get("target_id")
+            edge_label = edge.get("label")
+            if next_label and edge_label and edge_label != next_label:
+                target_step = step_map.get(target_id)
+                if target_step and target_step.get("status") == "pending":
+                    target_step["status"] = "skipped"
+                continue
+            if target_id in step_map and step_map[target_id].get("status") in {"pending", "skipped"}:
+                step_map[target_id]["status"] = "pending"
+                targets.append(target_id)
+        return targets
+
+    async def execute_step(
+        self,
+        workflow_def: dict,
+        run_id: str,
+        step_index: int,
+        initial_variables: dict,
+    ) -> None:
+        """Führt einen fehlgeschlagenen Step erneut aus und setzt den Workflow fort."""
+        workflow_id = workflow_def.get("id", "unknown")
+        tenant_id = workflow_def.get("tenant_id") or _tenant_from_scoped_workflow_id(workflow_id)
+        workflow_name = workflow_def.get("name", "Unnamed")
+        nodes = workflow_def.get("nodes", [])
+        node_map = {node.get("id"): node for node in nodes}
+        edges = workflow_def.get("edges", [])
+
+        # Run laden
+        runs_key = f"{_tenant_key(REDIS_KEY_RUNS_PREFIX, tenant_id)}{workflow_id}"
+        runs_raw = await self.redis.connection.get(runs_key)
+        runs = json.loads(runs_raw) if runs_raw else []
+        run = next((r for r in runs if r.get("id") == run_id), None)
+
+        if not run:
+            raise ValueError(f"Run {run_id} nicht gefunden")
+
+        steps = run.get("steps", [])
+        if step_index >= len(steps):
+            raise ValueError(f"Ungültiger step_index: {step_index}")
+
+        step = steps[step_index]
+        node_id = step.get("node_id")
+        node = node_map.get(node_id)
+
+        if not node:
+            raise ValueError(f"Node {node_id} nicht im Workflow gefunden")
+
+        # Variablen aus Run laden + initial_variables mergen
+        variables = {**initial_variables, **run.get("variables", {})}
+        step_map = {item.get("node_id"): item for item in steps}
+        workflow_session_id = f"{tenant_id}:{run_id}"
+
+        # Step ausführen
+        t_start = datetime.now(timezone.utc)
+        step["started_at"] = t_start.isoformat()
+        step["status"] = "running"
+
+        # Zwischenstand speichern
+        await self._update_run(tenant_id, workflow_id, run_id, "running", steps, variables)
+
+        try:
+            node_type = node.get("type", "unknown")
+            config = node.get("config", {})
+            attempts = step.get("attempts", 0) + 1
+
+            output, next_label, retry_attempts = await self._execute_with_retries(
+                node_type=node_type,
+                config=config,
+                variables=variables,
+                tenant_id=tenant_id,
+                parent_run_id=run_id,
+                workflow_session_id=workflow_session_id,
+            )
+
+            t_end = datetime.now(timezone.utc)
+            duration = int((t_end - t_start).total_seconds() * 1000)
+
+            step["status"] = "succeeded"
+            step["finished_at"] = t_end.isoformat()
+            step["duration_ms"] = duration
+            step["output"] = str(output)[:500] if output else None
+            step["error"] = None
+            step["attempts"] = max(attempts, retry_attempts)
+
+            await self._update_run(tenant_id, workflow_id, run_id, "running", steps, variables)
+
+            queue = self._compute_retry_targets(
+                source_node_id=node_id,
+                next_label=next_label,
+                edges=edges,
+                step_map=step_map,
+            )
+            visited: set[str] = {node_id}
+
+            while queue:
+                batch_ids = [candidate for candidate in queue if candidate not in visited]
+                queue = []
+                if not batch_ids:
+                    continue
+
+                async def _run_node(target_node_id: str) -> tuple[str, str | None]:
+                    visited.add(target_node_id)
+                    target_node = node_map.get(target_node_id)
+                    if not target_node:
+                        return target_node_id, None
+
+                    target_step = step_map[target_node_id]
+                    target_type = target_node.get("type", "")
+                    target_config = target_node.get("config", {})
+                    target_started = datetime.now(timezone.utc)
+
+                    target_step["status"] = "running"
+                    target_step["started_at"] = target_started.isoformat()
+                    target_step["error"] = None
+
+                    try:
+                        target_output, target_label, target_attempts = await self._execute_with_retries(
+                            node_type=target_type,
+                            config=target_config,
+                            variables=variables,
+                            tenant_id=tenant_id,
+                            parent_run_id=run_id,
+                            workflow_session_id=workflow_session_id,
+                        )
+                        target_finished = datetime.now(timezone.utc)
+                        target_step["status"] = "succeeded"
+                        target_step["finished_at"] = target_finished.isoformat()
+                        target_step["duration_ms"] = int(
+                            (target_finished - target_started).total_seconds() * 1000
+                        )
+                        target_step["output"] = str(target_output)[:500] if target_output else None
+                        target_step["attempts"] = target_attempts
+                        return target_node_id, target_label
+                    except Exception as exc:
+                        target_finished = datetime.now(timezone.utc)
+                        target_step["status"] = "failed"
+                        target_step["finished_at"] = target_finished.isoformat()
+                        target_step["duration_ms"] = int(
+                            (target_finished - target_started).total_seconds() * 1000
+                        )
+                        target_step["error"] = str(exc)[:300]
+                        logger.error(
+                            "Workflow-Step im Retry fehlgeschlagen: node=%s err=%s",
+                            target_node_id,
+                            exc,
+                        )
+                        raise
+
+                results = await asyncio.gather(
+                    *[_run_node(candidate) for candidate in batch_ids],
+                    return_exceptions=True,
+                )
+                await self._update_run(tenant_id, workflow_id, run_id, "running", steps, variables)
+
+                for item in results:
+                    if isinstance(item, Exception):
+                        await self._update_run(
+                            tenant_id,
+                            workflow_id,
+                            run_id,
+                            "failed",
+                            steps,
+                            variables,
+                            error=str(item)[:300],
+                        )
+                        return
+
+                for current_node_id, current_next_label in results:
+                    queue.extend(
+                        self._compute_retry_targets(
+                            source_node_id=current_node_id,
+                            next_label=current_next_label,
+                            edges=edges,
+                            step_map=step_map,
+                        )
+                    )
+
+            final_status = (
+                "failed"
+                if any(item.get("status") == "failed" for item in steps)
+                else "succeeded"
+            )
+            await self._update_run(tenant_id, workflow_id, run_id, final_status, steps, variables)
+            logger.info(
+                "Workflow-Retry abgeschlossen: workflow=%s run=%s status=%s",
+                workflow_name,
+                run_id,
+                final_status,
+            )
+
+        except Exception as exc:
+            t_end = datetime.now(timezone.utc)
+            step["status"] = "failed"
+            step["finished_at"] = t_end.isoformat()
+            step["error"] = str(exc)[:300]
+
+            await self._update_run(
+                tenant_id,
+                workflow_id,
+                run_id,
+                run.get("status", "running"),
+                steps,
+                variables,
+                error=f"Step {step_index} retry failed: {exc}",
+            )
+            raise

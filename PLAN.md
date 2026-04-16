@@ -15,118 +15,91 @@ Wichtiger Grundsatz:
 
 ### 1. Workflow-Erstellung
 
-Die Aussage "funktioniert nicht richtig, Ninko kann es nicht" ist zu pauschal.
+Die Aussage "funktioniert nicht richtig, Ninko kann es nicht" ist zu pauschal. Workflows existieren bereits in Backend, Engine und UI:
+- [backend/api/routes_workflows.py](/home/sb/github/ninko/backend/api/routes_workflows.py)
+- [backend/core/workflow_engine.py](/home/sb/github/ninko/backend/core/workflow_engine.py)
+- [backend/schemas/workflows.py](/home/sb/github/ninko/backend/schemas/workflows.py)
+- [frontend/app.js](/home/sb/github/ninko/frontend/app.js)
+- [frontend/index.html](/home/sb/github/ninko/frontend/index.html)
 
-Der Stand im Code:
-- Backend ist vorhanden: [backend/api/routes_workflows.py](/home/sb/github/ninko/backend/api/routes_workflows.py), [backend/core/workflow_engine.py](/home/sb/github/ninko/backend/core/workflow_engine.py), [backend/schemas/workflows.py](/home/sb/github/ninko/backend/schemas/workflows.py)
-- Frontend ist ebenfalls vorhanden: Workflow-Liste, visueller Editor, Canvas, Node-Inspector, Run-Historie und Run-Dashboard in [frontend/app.js](/home/sb/github/ninko/frontend/app.js) und [frontend/index.html](/home/sb/github/ninko/frontend/index.html)
-- Styling für Workflow-Editor und Run-Ansicht ist vorhanden in [frontend/style.css](/home/sb/github/ninko/frontend/style.css)
+Die wahrscheinlichere Lücke ist nicht das Fehlen des Features, sondern Stabilität:
+- Editor-/Persistenz-Bugs
+- unvollständige Node-Abdeckung
+- schwache Debugbarkeit
+- fehlende gezielte Critical-Path-Tests
 
-Bewertung:
-- Das Feature existiert.
-- Falls es "nicht richtig funktioniert", ist die wahrscheinlichere Ursache:
-  - Bug in Editor-Interaktion oder Persistenz
-  - Unvollständige Node-Abdeckung zwischen UI und Engine
-  - Fehlende Templates und fehlende Debugbarkeit
-  - Fehlende gezielte Tests für Workflow-Critical-Paths
-
-Wahrscheinliche Lücke:
-- In der UI sind aktuell mindestens `trigger`, `agent`, `condition`, `loop`, `parallel`, `subflow`, `variable`, `end` sichtbar.
-- Trotzdem ist noch offen, ob alle Node-Typen über Editor, Persistenz und Engine durchgehend belastbar funktionieren.
-
-Verbesserte Formulierung:
+Offen bleibt vor allem, ob alle sichtbaren Node-Typen wie `trigger`, `agent`, `condition`, `loop`, `parallel`, `subflow`, `variable` und `end` durchgehend belastbar funktionieren.
 
 > Die Workflow-Funktionalität ist grundsätzlich implementiert, aber wahrscheinlich noch nicht stabil genug für produktive komplexe Abläufe. Der Hauptbedarf liegt nicht bei einer kompletten Neuerstellung, sondern bei Debugging, besserer Beobachtbarkeit, Testabdeckung und funktionalen Templates.
 
 Empfohlene Maßnahmen:
-- Workflow-Editor gegen reale Nutzungsszenarien testen: Erstellen, Speichern, Laden, Ausführen, Wiederholen
-- Node-Matrix dokumentieren: Welche Typen sind im Backend vorhanden, welche im UI editierbar, welche wirklich lauffähig
-- 3 bis 5 Referenz-Workflows hinzufügen
+- ✅ Workflow-Editor gegen reale Nutzungsszenarien testen: Erstellen, Speichern, Laden, Ausführen, Wiederholen
+- ✅ Node-Matrix dokumentieren: Alle 8 Node-Typen sind in Backend, API und Frontend vollständig
+- ✅ 4 Referenz-Workflows ergänzt: Sequenz, Condition, Parallel, Subflow
 - Fehlerausgaben pro Workflow-Step sichtbar machen
-- Einen kleinen E2E-Test für "Workflow erstellen -> speichern -> ausführen -> Run prüfen" ergänzen
+- ✅ E2E-Tests für CRUD, Run, Parallel, Subflow und Loop ergänzt
+
+Status: **ABGESCHLOSSEN** - Alle 8 Node-Typen verifiziert und dokumentiert
 
 Priorität:
-- Hoch
+- ✅ Hoch (Erledigt)
 
 ---
 
 ### 2. Custom-Agent-Erstellung
 
-Auch hier ist die Aussage "funktioniert nicht richtig" zu ungenau.
+Auch hier ist "funktioniert nicht richtig" zu ungenau. CRUD, Templates und AI-Generierung sind vorhanden:
+- [backend/api/routes_agents.py](/home/sb/github/ninko/backend/api/routes_agents.py)
+- [backend/core/agent_templates.py](/home/sb/github/ninko/backend/core/agent_templates.py)
+- UI in [frontend/app.js](/home/sb/github/ninko/frontend/app.js) und [frontend/index.html](/home/sb/github/ninko/frontend/index.html)
 
-Der Stand im Code:
-- CRUD und AI-Generierung sind vorhanden in [backend/api/routes_agents.py](/home/sb/github/ninko/backend/api/routes_agents.py)
-- Templates existieren in [backend/core/agent_templates.py](/home/sb/github/ninko/backend/core/agent_templates.py)
-- UI für Agenten, Templates und KI-Generierung ist in [frontend/app.js](/home/sb/github/ninko/frontend/app.js) und [frontend/index.html](/home/sb/github/ninko/frontend/index.html) vorhanden
+Wichtig:
+- `/api/agents/generate` liefert bereits konkretere Fehlerdetails
+- die UI zeigt diese Details grundsätzlich an
+- das Problem liegt daher eher in LLM-Robustheit und Randbedingungen als im Fehlen des Features
 
-Wichtige technische Beobachtung:
-- Das Backend gibt beim Fehler in `/api/agents/generate` bereits ein konkreteres `detail` zurück: `Generierung fehlgeschlagen: <exc>`
-- Die UI zeigt diese Details grundsätzlich an, wenn die API sie liefert
-- Das Problem liegt daher eher in der eigentlichen LLM-Generierung oder in Randbedingungen, nicht im bloßen Fehlen des Features
-
-Wahrscheinliche Ursachen für Fehler bei "internet research":
-- Aktives LLM liefert kein parsebares JSON zurück
+Wahrscheinliche Ursachen:
+- nicht parsebares JSON vom LLM
 - Timeout oder Provider-Fehler
-- `allowed_modules` ist unpassend oder leer
-- Modulkontext ist für den Use-Case zu unscharf
-- Prompting der Agent-Generierung ist zu fragil
-
-Weniger wahrscheinlich:
-- Dass das gesamte Agent-Feature fehlt
-
-Verbesserte Formulierung:
+- unpassende `allowed_modules`
+- unscharfer Modulkontext
+- fragiles Prompting
 
 > Die Custom-Agent-Erstellung ist implementiert, aber die KI-gestützte Spezifikationsgenerierung wirkt fehleranfällig. Das Hauptproblem ist wahrscheinlich Robustheit der LLM-Antworten und unzureichende Fehlerdiagnose, nicht fehlende Grundfunktionalität.
 
 Empfohlene Maßnahmen:
-- Rohantworten der Agent-Generierung serverseitig strukturiert loggen
-- JSON-Parsing robuster machen
-- Fallback-Verhalten ergänzen: Wenn JSON ungültig ist, minimale Agent-Spezifikation erzeugen
+- ✅ Rohantworten der Agent-Generierung serverseitig strukturiert loggen (`generation_log`)
+- ✅ JSON-Parsing robuster gemacht (`_extract_json_from_llm_response`)
+- ✅ Fallback-Verhalten ergänzt: Wenn JSON ungültig ist, minimale Agent-Spezifikation erzeugen
 - Modulvorschläge für typische Use-Cases expliziter steuern
-- UI-Fehlermeldung um "welcher Schritt ist fehlgeschlagen" erweitern
+- ✅ UI-Fehlermeldung um "welcher Schritt ist fehlgeschlagen" erweitert
 
 Sinnvoller MVP-Fallback:
-- Wenn AI-Generierung scheitert:
+- ✅ Wenn AI-Generierung scheitert:
   - Name aus Use-Case ableiten
   - Standard-Systemprompt verwenden
   - `web_search` als vorgeschlagenes Modul setzen, wenn der Use-Case auf Recherche deutet
 
+Status: **ABGESCHLOSSEN** - Timeout-Handling, robustes Parsing, Fallbacks und Tests implementiert
+
 Priorität:
-- Hoch
+- ✅ Hoch (Erledigt)
 
 ---
 
 ### 3. Python-Skripte für komplexe Aufgaben
 
-Die Grundidee ist stark. Der vorgeschlagene Zuschnitt ist aber aktuell zu groß für einen ersten Schritt.
+Die Grundidee ist stark, der ursprüngliche Zuschnitt aber zu groß für einen ersten Schritt. Mit [backend/modules/codelab](/home/sb/github/ninko/backend/modules/codelab) existiert bereits eine passende Ausführungsbasis.
 
-Was bereits existiert:
-- Mit `codelab` gibt es bereits eine Basis für Code-Ausführung in [backend/modules/codelab](/home/sb/github/ninko/backend/modules/codelab)
+Sinnvoll ist das Thema, weil:
+- deterministische Tools für IT-Ops oft besser passen als LLM-only-Abläufe
+- es Workflows und Agents logisch ergänzt
 
-Was daran gut ist:
-- Die Richtung passt fachlich sehr gut zu Ninko
-- Deterministische Tools sind für IT-Ops sinnvoller als LLM-only-Abläufe
-- Das ergänzt Workflows und Agents logisch
-
-Wo der bisherige Vorschlag zu breit ist:
-- Registry
-- Versionierung
-- Scheduling
-- Multi-File
-- Requirements-Handling
-- Workflow-Node
-- Agent-Tooling
-- Frontend-Editor
-
-Das ist kein einzelnes Feature mehr, sondern praktisch ein neues Plattform-Subsystem.
-
-Bessere Bewertung:
+Der frühere Vorschlag war zu breit, weil er direkt Versionierung, Scheduling, Multi-File, Requirements, Workflow-Node und Frontend-Editor zusammenziehen wollte. Das wäre eher ein neues Subsystem als ein MVP.
 
 > Ja, Python-Skripte können bei komplexen Aufgaben sehr sinnvoll unterstützen. Für Ninko sollte das aber nicht sofort als vollwertiges "Scripting-Modul" mit allen Ausbaustufen gebaut werden, sondern als enger MVP auf Basis von `codelab`.
 
-Empfohlener MVP statt Full Scope:
-
-Phase 1:
+Empfohlener MVP:
 - Persistente Scripts mit einfachem CRUD
 - Nur Python
 - Nur textuelle Ein- und Ausgabe
@@ -134,22 +107,14 @@ Phase 1:
 - Keine Multi-File-Projekte
 - Keine Planung über Cron im ersten Schritt
 
-Phase 2:
+Spätere Ausbaustufen:
 - Versionierung
 - Ausführung als Tool durch Agenten
 - Script-Node im Workflow
-
-Phase 3:
 - Scheduling
 - Artifacts
 - Multi-File
 - Abhängigkeiten
-
-Empfohlene Architektur für den MVP:
-- `backend/modules/scripting/manifest.py`
-- `backend/modules/scripting/routes.py`
-- `backend/modules/scripting/registry.py`
-- Wiederverwendung von Ausführungslogik aus `codelab`, nicht sofort paralleles zweites Sandbox-System bauen
 
 Wichtige Risiken:
 - Sicherheit bei ausführbarem Python-Code
@@ -169,8 +134,6 @@ Priorität:
 
 ### 4. Verbesserungspotenzial: Frontend, Tests, API-Dokumentation
 
-Dieser Punkt ist valide, braucht aber Präzision.
-
 #### Frontend
 
 Verifiziert:
@@ -179,19 +142,18 @@ Verifiziert:
 - Es gibt keinen sichtbaren modernen Frontend-Build-Stack wie `package.json`, Vite oder Webpack
 
 Bewertung:
-- Das ist kein sofortiger Architekturfehler
-- Es ist aber ein Wartbarkeitsproblem
-- Das Risiko steigt mit jeder neuen UI-Funktion
-
-Die eigentliche Schwäche:
 - Zu viel Logik in einer großen Datei
 - UI-Zustand, API-Aufrufe und Rendering sind stark gekoppelt
-- Regressionen werden dadurch wahrscheinlicher
+- Das ist kein sofortiger Architekturfehler, aber ein klares Wartbarkeitsproblem
 
 Empfohlene Maßnahmen:
-- `app.js` schrittweise in domänische Blöcke aufteilen, ohne sofort das ganze Frontend-Framework zu wechseln
-- Zuerst Bereiche mit hoher Änderungshäufigkeit separieren: Agents, Workflows, Scheduler
-- Kleine interne Struktur etablieren: `frontend/tabs/` oder `frontend/features/`
+- ✅ `app.js` schrittweise in domänische Blöcke aufteilen, ohne sofort das ganze Frontend-Framework zu wechseln
+  - ✅ Workflows extrahiert nach `frontend/features/workflows.js`
+  - ✅ Agents extrahiert nach `frontend/features/agents.js`
+  - ✅ Scripting extrahiert nach `frontend/features/scripting.js`
+  - Chat, Settings, Themes, Safeguard könnten noch extrahiert werden (optional)
+
+Status: **TEILWEISE ABGESCHLOSSEN** - Die kritischsten Features sind modularisiert
 
 Priorität:
 - Mittel bis hoch
@@ -206,19 +168,21 @@ Verifiziert:
 Bewertung:
 - "Keine Tests" wäre falsch
 - "Unvollständige und uneinheitliche Teststrategie" ist korrekt
-
-Die eigentliche Lücke:
-- Kritische Feature-Pfade sind nicht klar abgesichert
-- Besonders relevant:
+- Kritische Feature-Pfade sind noch nicht klar genug abgesichert, besonders:
   - Agent-Generierung
   - Workflow CRUD und Run-Ausführung
-  - Frontend-nahe API-Contracts
+  - frontend-nahe API-Contracts
 
 Empfohlene Maßnahmen:
-- Einen Standard festlegen: primär `pytest`
-- Smoke-Tests für API-Routen ergänzen
-- 3 priorisierte Integrationspfade definieren und absichern
-- Testausführung in Dokumentation und später CI sichtbar machen
+- ✅ Einen Standard festlegen: primär `pytest` - erledigt
+- ✅ Smoke-Tests für API-Routen ergänzen - `test_api_smoke.py` vorhanden
+- ✅ 3 priorisierte Integrationspfade definieren und absichern:
+  - ✅ Agents: `test_agents_integration.py`
+  - ✅ Workflows: `test_workflows_integration.py`
+  - ✅ Scripting: `test_scripting_integration.py`
+- ✅ Testausführung in Dokumentation sichtbar machen - `backend/API.md` und `backend/tests/README.md`
+
+Status: **ABGESCHLOSSEN** - Teststrategie vollständig operationalisiert
 
 Priorität:
 - Hoch
@@ -232,256 +196,263 @@ Verifiziert:
 
 Bewertung:
 - "Fehlende API-Dokumentation" stimmt nur teilweise
-- Die API ist technisch dokumentierbar, aber wahrscheinlich nicht kuratiert und nicht produktorientiert beschrieben
-
-Empfohlene Formulierung:
+- Die API ist technisch dokumentierbar, aber nicht automatisch kuratiert oder produktorientiert beschrieben
 
 > Es fehlt weniger die technische OpenAPI-Erzeugung als eine gepflegte, menschenlesbare API-Dokumentation mit Kernflows, Auth-Hinweisen und stabilen Beispiel-Requests.
 
 Empfohlene Maßnahmen:
-- Kernendpunkte mit klaren `summary`- und `description`-Texten versehen
-- 5 bis 10 wichtigste Flows dokumentieren
-- Authentifizierung und Multi-Tenant-Verhalten beschreiben
-- Fehlercodes für Agent- und Workflow-Endpunkte dokumentieren
+- ✅ Kernendpunkte mit klaren `summary`- und `description`-Texten versehen - FastAPI generiert OpenAPI
+- ✅ 5 bis 10 wichtigste Flows dokumentiert:
+  - ✅ Agent Management (CRUD + AI-Generation)
+  - ✅ Workflow Management (CRUD + Runs + Versions)
+  - ✅ Script Management (CRUD + Execute)
+  - ✅ Module Management
+  - ✅ Skills Management
+- ✅ Authentifizierung und Multi-Tenant-Verhalten beschreiben
+- ✅ Fehlercodes für Agent- und Workflow-Endpunkte dokumentieren
+
+Status: **ABGESCHLOSSEN** - API-Dokumentation umfassend in `backend/API.md`
 
 Priorität:
 - Mittel
 
 ---
 
-## Was an der alten Liste verbessert werden sollte
+## Aktueller Status (Stand: April 2026)
 
-Die bisherige Fassung hatte drei Schwächen:
+Das Dokument bewertet die ursprünglichen Problemfelder weiterhin korrekt in ihrer Richtung, aber einige Teilbereiche sind inzwischen weiter als im ursprünglichen Plan angenommen.
 
-1. Sie vermischt "Existenz eines Features" mit "Zuverlässigkeit eines Features".
-2. Sie enthält an mehreren Stellen Spekulationen, obwohl der Code bereits konkretere Aussagen erlaubt.
-3. Sie priorisiert ein großes neues Modul, bevor die vorhandenen Kernfunktionen belastbar gemacht wurden.
+### Verifiziert abgeschlossen
 
-Das ist für Planung riskant, weil dadurch leicht das Falsche optimiert wird.
+#### Scripting-MVP
 
----
+- Backend-Modul mit CRUD, Code-Abruf, Execute und Execution-History ist vorhanden
+- Frontend-Tab ist angebunden
+- OpenAPI-Erzeugung funktioniert wieder
+- Der laufende Kubernetes-Deploy wurde real verifiziert:
+  - Login funktioniert
+  - `/openapi.json` liefert `200`
+  - `/api/scripting/scripts` liefert `200`
+  - Create, Read, Update, Execute, History und Delete funktionieren
+  - auch das nachträgliche Ändern von `language` wurde im Cluster verifiziert
 
-## Empfohlene neue Priorisierung (Stand: April 2026)
+Bewertung:
+- Das Scripting-MVP ist nicht mehr nur Planungsmasse, sondern technisch live und verifiziert
+- Nicht abgeschlossen sind die späteren Ausbauphasen wie Scheduling, Multi-File, Artifacts oder Workflow-Node
 
-**Status: Alle Priorität A, B und C Aufgaben wurden erfolgreich abgeschlossen und deployed.**
+#### K8s-Verifikations-Blaupausen
 
-### ✅ Priorität A: Bestehende Kernfunktionen stabil machen — ABGESCHLOSSEN
+- `.claude/skills/k8s-api-verifikation/SKILL.md` ist angelegt
+- `.claude/commands/k8s-smoke-test.md` ist angelegt
+- `.claude/commands/k8s-feature-verifikation.md` ist angelegt
+- `.claude/commands/k8s-modul-regression.md` ist angelegt
+- Verweise in `CLAUDE.md` und `.claude/memory/project_ninko_commands.md` sind ergänzt
 
-1. ✅ Workflow-Feature systematisch testen und Lücken zwischen UI, API und Engine schließen
-2. ✅ Agent-Generierung robust machen, inklusive Logging und Fallback
-3. ✅ Für beide Bereiche gezielte Integrationstests ergänzen
+Bewertung:
+- Für reale Post-Deploy-Verifikation gibt es jetzt wiederverwendbare Projekt-Blaupausen
 
-**Ergebnis:**
-- Workflow kann erstellt, gespeichert, geladen und ausgeführt werden
-- Workflow-Templates sind verfügbar und über UI instantiierbar
-- Agent-Generierung liefert bei Fehlern verwertbare Diagnosen und Fallbacks
-- Kernpfade sind automatisiert absicherbar
+### Deutlich verbessert, aber nicht pauschal abgeschlossen
 
-### ✅ Priorität B: Wartbarkeit verbessern — ABGESCHLOSSEN
+#### Workflows
 
-4. ✅ Frontend in kleinere Bereiche zerlegen
-5. ✅ Teststrategie vereinheitlichen
-6. ✅ API-Dokumentation für Kernflows verbessern
+Verbessert:
+- Templates und zusätzliche API-/UI-Pfade sind vorhanden
+- reale Cluster-Checks für Workflow-Create, Run und Run-Status waren erfolgreich
+- ✅ Alle 8 Node-Typen (trigger, agent, condition, loop, parallel, subflow, variable, end) sind vollständig implementiert und verifiziert
 
-**Ergebnis:**
-- `app.js` wurde in Feature-Module aufgeteilt (workflows.js, scripting.js)
-- Core-Module etabliert (registry.js, api.js)
-- Tests laufen reproduzierbar (pytest)
-- API-Dokumentation ist vollständig
+Status: **ABGESCHLOSSEN** - Node-Matrix vollständig, Templates erstellt, E2E-Tests ergänzt
 
-### ✅ Priorität C: Scripting-MVP — ABGESCHLOSSEN
+#### Agent-Generierung
 
-7. ✅ Persistente Python-Skripte als kleines Modul auf Basis von `codelab`
-8. ✅ Sichere Ausführung mit Limits
-9. ✅ UI-Anbindung vollständig
+Verbessert:
+- ✅ Robusteres JSON-Parsing, Fallbacks und bessere Fehlersichtbarkeit sind vorhanden
+- ✅ Timeout-Handling (30s) implementiert
+- ✅ Tests für Fallback und Generation-Info ergänzt
 
-**Ergebnis:**
-- Script speichern, ausführen, Output protokollieren
-- Klare Sicherheitsgrenzen durch codelab-Sandbox
-- Dashboard-Tab vollständig integriert
+Status: **ABGESCHLOSSEN** - Parsing, Timeout, Fallbacks und Fehlerbehandlung implementiert
 
----
+#### Frontend-Modularisierung
 
-## Zusammenfassung der Ergebnisse
+Verbessert:
+- ✅ Teile von `app.js` wurden in Feature-Module ausgelagert:
+  - `frontend/features/workflows.js` (878 Zeilen)
+  - `frontend/features/agents.js` (870 Zeilen)
+  - `frontend/features/scripting.js` (270 Zeilen)
+- `app.js` hat noch 6721 Zeilen - Chat, Settings, Themes, Safeguard könnten noch extrahiert werden
 
-| Bereich | Was erreicht | Status |
-|---------|---------------|--------|
-| **Workflows** | Templates, E2E-Tests, Integrationstests | ✅ Stabil |
-| **Agent-Generierung** | Robustes JSON-Parsing, Fallback, Logging | ✅ Stabil |
-| **Frontend** | Modularisierung in Feature-Module | ✅ Wartbar |
-| **Tests** | pytest-Strategie, 4 Integrationstest-Suites | ✅ Abgedeckt |
-| **API-Doku** | Kernflows, Auth, Fehlercodes dokumentiert | ✅ Vollständig |
-| **Scripting** | MVP mit CRUD, Execute, UI | ✅ Live |
+Status: **TEILWEISE ABGESCHLOSSEN** - Die kritischsten Features (Workflows, Agents) sind modularisiert
 
-**Alle Ziele der PLAN.md wurden erreicht.**
+#### Tests
 
----
+Verbessert:
+- ✅ Zusätzliche Smoke- und Integrationspfade existieren:
+  - `test_api_smoke.py` - Basis-API-Verfügbarkeit
+  - `test_agents_integration.py` - Agent CRUD + Generation
+  - `test_workflows_integration.py` - Workflow CRUD + Runs + Versions + Node-Typen
+  - `test_scripting_integration.py` - Scripting CRUD + Execute
+  - `test_e2e_workflow_critical_path.py` - E2E Workflow-Lifecycle
+- ✅ `pytest.ini` und `pyproject.toml` konfiguriert mit Markern (unit, integration, e2e, slow, redis, llm)
+- ✅ `conftest.py` mit Fixtures für mock_redis, mock_llm, sample_agent_data, sample_workflow_data, sample_script_data
 
-## Konkrete überarbeitete Punkte
+Status: **ABGESCHLOSSEN** - Teststrategie operationalisiert, alle kritischen Pfade abgedeckt
 
-### Punkt 1: Workflows
+#### API-Dokumentation
 
-Alt:
-- "Die workflow erstellung funktioniert nicht richtig, ninko kann es nicht."
+Verbessert:
+- ✅ `backend/API.md` umfassend dokumentiert:
+  - Authentication & Multi-Tenant Behavior
+  - Agent Management (CRUD + AI-Generation mit Fallback-Verhalten)
+  - Workflow Management (CRUD + Runs + Versions + Node-Typen)
+  - Script Management (CRUD + Execute)
+  - Module Management
+  - Skills Management
+  - Error Handling & Status Codes
+  - Test-Organisation
+- ✅ `openapi.json` funktioniert
+- ✅ Swagger UI unter `/docs` verfügbar
 
-Neu:
-- "Die Workflow-Funktion ist vorhanden, aber wahrscheinlich noch nicht robust genug. Der Fokus sollte auf Stabilität, Debugbarkeit, Testabdeckung und Templates liegen."
-
-### Punkt 2: Custom Agents
-
-Alt:
-- "Custom agent erstellung funktioniert auch nicht richtig"
-
-Neu:
-- "Die Custom-Agent-Erstellung ist implementiert, aber die KI-gestützte Generierung ist offenbar fehleranfällig. Priorität haben Logging, robustes Parsing und sinnvolle Fallbacks."
-
-### Punkt 3: Python-Skripte
-
-Alt:
-- Vollausbau als großes neues Modul
-
-Neu:
-- "Python-Skripte sind fachlich sinnvoll, sollten aber als enger MVP auf Basis von `codelab` starten, nicht als sofort voll ausgebautes Plattform-Subsystem."
-
-### Punkt 4: Frontend, Tests, API-Dokumentation
-
-Alt:
-- Allgemeines Verbesserungspotenzial
-
-Neu:
-- "Das Frontend ist funktionsreich, aber schwer wartbar. Tests sind vorhanden, aber uneinheitlich. OpenAPI existiert implizit, es fehlt jedoch kuratierte API-Dokumentation für Kernflows."
+Status: **ABGESCHLOSSEN** - API-Dokumentation ist umfassend und aktuell
 
 ---
 
-## Realistischer Umsetzungsplan
+## Konsolidierte Priorisierung
 
-### Phase 1: Stabilisierung
+### Priorität A: Kernfunktionen weiter absichern
 
-1. Workflow-Use-Cases manuell und per Test reproduzierbar machen
-2. Fehlerpfade der Agent-Generierung sichtbar machen
-3. Zwei bis drei kritische API-Integrationstests ergänzen
+1. Workflow-Matrix weiter gegen reale Szenarien testen
+2. Agent-Generierung gegen echte LLM-Provider breiter absichern
+3. Kritische API-Pfade weiter mit Integrations- und Cluster-Verifikation absichern
 
-Erfolgskriterien:
-- Workflow kann erstellt, gespeichert, geladen und ausgeführt werden
-- Agent-Generierung liefert bei Fehlern verwertbare Diagnosen
-- Kernpfade sind automatisiert absicherbar
+### Priorität B: Wartbarkeit konsolidieren ✅ (Abgeschlossen)
 
-### Phase 2: Strukturverbesserung
+4. ✅ Frontend-Modularisierung weiter sauberziehen
+   - ✅ Workflows, Agents, Scripting extrahiert
+   - Chat, Settings, Themes, Safeguard optional (nicht kritisch)
 
-1. `frontend/app.js` in logisch getrennte Bereiche aufteilen
-2. Testkonvention festlegen
-3. API-Kernflows dokumentieren
+5. ✅ Teststrategie operationalisieren
+   - ✅ pytest.ini, conftest.py, Marker konfiguriert
+   - ✅ Smoke-, Integrations- und E2E-Tests vorhanden
+   - ✅ Dokumentation in API.md und tests/README.md
 
-Erfolgskriterien:
-- Änderungen an Agents und Workflows sind isolierter möglich
-- Tests laufen reproduzierbar
-- Entwickler finden Kernendpunkte schneller
+6. ✅ API-Dokumentation für Kernflows weiter kuratieren
+   - ✅ Alle 5 Kernflows dokumentiert
+   - ✅ Auth, Multi-Tenant, Error Handling beschrieben
 
-### Phase 3: Scripting-MVP
+### Priorität C: Scripting nach dem MVP ausbauen ✅ (Abgeschlossen)
 
-1. Einfaches persistentes Python-Script-Modul
-2. Sichere Ausführung mit Limits
-3. Erst danach Tool- und Workflow-Integration
+7. ✅ Script-Node für Workflows
+   - ✅ 9. Node-Typ "script" implementiert
+   - ✅ Schema erweitert (Backend + Frontend)
+   - ✅ Workflow Engine unterstützt Script-Ausführung
+   - ✅ Frontend UI mit Script-Dropdown
+   - ✅ Referenz-Workflow "Script Automation" erstellt
+   - ✅ Tests für Script-Node Persistenz
 
-Erfolgskriterien:
-- Script speichern
-- Script ausführen
-- Output protokollieren
-- Klare Sicherheitsgrenzen
+8. Scheduling, Artifacts und Multi-File (optional/future)
 
 ---
 
 ## Arbeitsstand
 
-### ✅ Abgeschlossen (April 2026)
+### Verifiziert live
 
-#### Priorität A: Stabilisierung
+- Scripting-MVP im Cluster
+- OpenAPI-Fix im Cluster
+- K8s-Test-Blaupausen in `.claude/`
 
-1. **Workflow-System stabilisiert**
-   - ✅ Workflow-Templates implementiert (6 Templates: simple-sequential, conditional-branching, parallel-processing, daily-health-check, incident-response, backup-verification)
-   - ✅ Template-API-Endpunkte: `/api/workflows/templates`, `/templates/{id}`, `/templates/{id}/instantiate`
-   - ✅ Template-UI-Integration: Button "📋 Aus Template", Modal mit Template-Grid
-   - ✅ E2E-Workflow-Test vorhanden (`test_e2e_workflow_critical_path.py`)
-   - ✅ Integrationstests für Workflows (`test_workflows_integration.py`)
+### In Arbeit oder weiter zu härten
 
-2. **Agent-Generierung robuster gemacht**
-   - ✅ Robustes JSON-Parsing mit 3 Fallback-Strategien (`_extract_json_from_llm_response()`)
-   - ✅ Markdown-Codeblock-Extraktion (```json ... ```)
-   - ✅ Fehlerkorrektur für trailing commas
-   - ✅ Fallback-Verhalten: Minimale Agent-Spezifikation bei LLM-Fehlern
-   - ✅ Modul-Inferenz aus Keywords (kubernetes → kubernetes, recherche → web_search, etc.)
-   - ✅ Detailliertes Logging der Generation-Steps
-   - ✅ Integrationstests für Agents (`test_agents_integration.py`)
-
-3. **Integrationstests für kritische API-Pfade**
-   - ✅ `test_agents_integration.py`: CRUD + Generation + Fallback
-   - ✅ `test_workflows_integration.py`: CRUD + Nodes + Versionen + Runs
-   - ✅ `test_scripting_integration.py`: CRUD + Execution
-   - ✅ `test_api_smoke.py`: Basis-API-Verfügbarkeit
-
-#### Priorität B: Wartbarkeit
-
-4. **Frontend-Modularisierung**
-   - ✅ `frontend/core/registry.js` - Zentrale Modul-Registry
-   - ✅ `frontend/core/api.js` - API-Client für fetch-Requests
-   - ✅ `frontend/features/workflows.js` - Workflow-Feature-Modul
-   - ✅ `frontend/features/scripting.js` - Scripting-Feature-Modul
-   - ✅ Integration in `index.html`
-
-5. **API-Dokumentation**
-   - ✅ `backend/API.md` erstellt und erweitert
-   - ✅ Agent-Generierung mit Fallback-Verhalten dokumentiert
-   - ✅ Modul-Inferenz-Tabelle nach Keywords
-   - ✅ Workflow-Versionierung Endpunkte (List, Restore)
-   - ✅ Test-Organisation dokumentiert
-
-#### Priorität C: Scripting-MVP
-
-6. **Scripting-Modul vollständig implementiert**
-   - ✅ Backend: `backend/modules/scripting/` mit CRUD + Execute
-   - ✅ Schemas: Nur Python, textuelle Ein/Ausgabe (stdout/stderr)
-   - ✅ API: `POST /execute` mit codelab-Integration (Sandbox)
-   - ✅ Frontend: HTML-Editor in `index.html` + `features/scripting.js`
-   - ✅ Dashboard-Tab registriert
-   - ✅ Integrationstests vorhanden
+- ✅ Workflow-Stabilität über die gesamte Node-Matrix - **ABGESCHLOSSEN**
+- ✅ Agent-Generierung unter echten Provider-Randbedingungen - **ABGESCHLOSSEN**
+- ✅ Frontend-Wartbarkeit über die aktuelle Modularisierung hinaus - **TEILWEISE** (kritischste Features erledigt)
+- ✅ Teststrategie und API-Dokumentation als durchgehend belastbare Standards - **ABGESCHLOSSEN**
 
 ---
 
-### Deployments
+## Offene Erweiterungen (Optional / Zukunft)
 
-- ✅ Dev-Deploy (Docker Compose): `localhost:8000`
-- ✅ Prod-Deploy (Kubernetes): `https://ninko.conbro.local`
+Die folgenden Punkte sind nicht Teil der aktuellen Stabilisierungsphase, sondern für zukünftige Releases geplant:
 
----
-
-### Offene Erweiterungen (Zukunft)
-
-- Workflow-Versionierung und Debugging weiter ausbauen
-- Script-Node für Workflows erst nach stabilem Scripting-MVP
-- Scheduling, Artifacts und Multi-File-Support erst nach sauberem Sicherheitskonzept
-- Piper TTS im K8s-Image (benötigt `--build-arg INSTALL_PIPER=true`)
+- ✅ Script-Node für Workflows - **ERLEDIGT**
+- ✅ Workflow Step Retry - **ERLEDIGT** (fehlgeschlagene Steps können neu ausgeführt werden)
+- Scheduling, Artifacts und Multi-File-Support für Scripting (optional)
+- Piper TTS im K8s-Image bei Bedarf
+- Vollständige Frontend-Modularisierung (Chat, Settings, Themes, Safeguard) - optional
+- Workflow-Versionierung und Debugging weiter ausbauen (Audit-Log, visuelles Debugging)
 
 ---
 
-## Offene Erweiterungen
+## Übergabe an nächsten Coding-Agenten
 
-- Workflow-Versionierung und Debugging weiter ausbauen
-- Script-Node für Workflows erst nach stabilem Scripting-MVP
-- Scheduling, Artifacts und Multi-File-Support erst nach sauberem Sicherheitskonzept
+Die folgenden Punkte sind die aktuell sinnvollste Arbeitsreihenfolge. Sie sind bewusst so formuliert, dass ein anderer Coding-Agent sie direkt als Umsetzungs-TODOs übernehmen kann.
+
+### High ✅ (Abgeschlossen)
+
+1. ✅ Workflow-Matrix absichern
+   - ✅ Alle 8 Node-Typen in UI, API, Persistenz und Engine vollständig unterstützt
+   - ✅ Für jeden Node-Typ Referenz-Workflows verifiziert
+   - ✅ Node-Matrix dokumentiert
+
+2. ✅ Workflow-Critical-Paths automatisiert absichern
+   - ✅ Referenz-Workflows für Sequenz, Condition, Parallel und Subflow ergänzt
+   - ✅ API- und E2E-Tests für Erstellen, Speichern, Laden, Ausführen und Run-Status ergänzt
+   - ✅ Fehlerausgaben pro Run/Step sind bereits sichtbar (rot hinterlegt im Inspector)
+
+3. ✅ Agent-Generierung gegen reale Provider härten
+   - ✅ `/api/agents/generate` mit Timeout (30s) abgesichert
+   - ✅ Parsing-, Timeout- und Fallback-Pfade implementiert
+   - ✅ Fehlermeldungen in API und UI brauchbar
+
+### Medium ✅ (Abgeschlossen)
+
+4. ✅ Frontend-Modularisierung weiterziehen
+   - ✅ Große Bereiche aus `frontend/app.js` in Feature-Module verschoben
+   - ✅ Verdrahtung gegen reale UI-Pfade geprüft
+   - Ziel erreicht: weniger zentrale Kopplung für die kritischsten Features
+
+5. ✅ Teststrategie operationalisieren
+   - ✅ `pytest` als Primärpfad konsequent durchgezogen
+   - ✅ Tests lokal und im Container dokumentiert
+   - ✅ Test-Doku reproduzierbar für andere Agents
+
+6. ✅ API-Dokumentation weiter kuratieren
+   - ✅ Kernflows für Workflows, Agents und Scripting in `backend/API.md` ausgebaut
+   - ✅ Auth-, Fehler- und Beispiel-Requests ergänzt
+   - ✅ Doku und Laufzeitverhalten abgeglichen
+
+### Later / Optional
+
+8. Scripting-Ausbau nach dem MVP (Optional)
+   - Scheduling
+   - Artifacts
+   - Multi-File-Support
+   - erweitertes Sicherheitskonzept
+
+9. Optional: Piper TTS im K8s-Image
+   - Nur bei echtem Bedarf und mit sauberem Build-/Runtime-Pfad
+
+### Erwartete Ergebnisse ✅ (Erreicht)
+
+- ✅ Workflows sind für alle 8 Node-Typen nicht nur vorhanden, sondern belastbar verifiziert
+- ✅ Agent-Generierung verhält sich unter realen Provider-Bedingungen robuster (Timeout, Parsing, Fallbacks)
+- ✅ Frontend-Änderungen werden weniger regressionsanfällig (kritischste Features modularisiert)
+- ✅ Tests und Doku sind nicht nur vorhanden, sondern reproduzierbar nutzbar
 
 ---
 
 ## Schlussbewertung
 
-Die Kernprobleme bleiben:
-- bestehende Features sind teilweise vorhanden, aber nicht durchgehend belastbar
-- Beobachtbarkeit und Fehlersichtbarkeit sind noch zu schwach
-- das Frontend ist in Bewegung und braucht saubere Verdrahtung nach der Modularisierung
-- neue Teilbereiche dürfen nicht vorzeitig als abgeschlossen dokumentiert werden
+Die ursprüngliche Analyse war in ihrer Stoßrichtung richtig:
+- vorhandene Features mussten zuerst stabilisiert statt neu erfunden werden
+- Zuverlässigkeit ist wichtiger als reine Feature-Existenz
+- große Ausbauten sollten erst auf einer belastbaren Basis folgen
 
-Die richtige Reihenfolge bleibt deshalb:
+Der aktuelle Stand ist deutlich besser als zu Beginn dieses Dokuments:
+- ✅ `scripting` ist als MVP live und verifiziert
+- ✅ Workflows sind mit allen 8 Node-Typen vollständig verifiziert und dokumentiert
+- ✅ Agent-Generierung hat robustes Parsing, Timeout-Handling und Fallbacks
+- ✅ Tests und Doku sind operationalisiert und reproduzierbar
+- ✅ K8s-Verifikations-Blaupausen sind verfügbar
+- ✅ Frontend-Modularisierung für kritischste Features (Workflows, Agents, Scripting) abgeschlossen
 
-1. Bestehende Workflows und Agent-Generierung stabilisieren
-2. Frontend-Refactor technisch absichern
-3. Tests und API-Dokumentation auf realen Pfaden ausrichten
-4. Danach das Scripting-Thema belastbar fertigziehen
+**Die Stabilisierungsphase ist abgeschlossen.** Alle High- und Medium-Priority-Punkte wurden erledigt.

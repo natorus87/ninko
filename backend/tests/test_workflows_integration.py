@@ -217,6 +217,132 @@ class TestWorkflowNodeTypes:
         response = client.post("/api/workflows/", json=payload)
         assert response.status_code == 201
 
+    def test_workflow_with_subflow_node(self) -> None:
+        """Test that workflows with subflow nodes are accepted and persisted correctly."""
+        workflow_id = f"test-wf-{uuid.uuid4().hex[:8]}"
+        payload = {
+            "id": workflow_id,
+            "name": "Subflow Test Workflow",
+            "description": "Test subflow node type",
+            "enabled": True,
+            "nodes": [
+                {
+                    "id": "trigger-1",
+                    "type": "trigger",
+                    "label": "Start",
+                    "config": {"mode": "manual"},
+                    "position": {"x": 100, "y": 100},
+                },
+                {
+                    "id": "subflow-1",
+                    "type": "subflow",
+                    "label": "Call Subflow",
+                    "config": {"workflow_id": "some-other-workflow"},
+                    "position": {"x": 400, "y": 100},
+                },
+                {
+                    "id": "end-1",
+                    "type": "end",
+                    "label": "End",
+                    "config": {"status": "succeeded"},
+                    "position": {"x": 700, "y": 100},
+                },
+            ],
+            "edges": [
+                {"id": "e1", "source_id": "trigger-1", "target_id": "subflow-1"},
+                {"id": "e2", "source_id": "subflow-1", "target_id": "end-1"},
+            ],
+            "variables": [],
+        }
+
+        response = client.post("/api/workflows/", json=payload)
+        assert response.status_code == 201
+
+        # Verify the workflow can be retrieved with correct node types
+        get_resp = client.get(f"/api/workflows/{workflow_id}")
+        assert get_resp.status_code == 200
+        data = get_resp.json()
+        nodes = data.get("nodes", [])
+        node_types = {n.get("type") for n in nodes}
+        assert "subflow" in node_types, "Subflow node type should be persisted"
+
+    def test_workflow_with_script_node(self) -> None:
+        """Test that workflows with script nodes are accepted and persisted correctly."""
+        workflow_id = f"test-wf-{uuid.uuid4().hex[:8]}"
+        payload = {
+            "id": workflow_id,
+            "name": "Script Test Workflow",
+            "description": "Test script node type",
+            "enabled": True,
+            "nodes": [
+                {
+                    "id": "trigger-1",
+                    "type": "trigger",
+                    "label": "Start",
+                    "config": {"mode": "manual"},
+                    "position": {"x": 100, "y": 100},
+                },
+                {
+                    "id": "script-1",
+                    "type": "script",
+                    "label": "Execute Script",
+                    "config": {"script_id": "test-script-123", "input_var": "", "timeout": "30"},
+                    "position": {"x": 400, "y": 100},
+                },
+                {
+                    "id": "end-1",
+                    "type": "end",
+                    "label": "End",
+                    "config": {"status": "succeeded"},
+                    "position": {"x": 700, "y": 100},
+                },
+            ],
+            "edges": [
+                {"id": "e1", "source_id": "trigger-1", "target_id": "script-1"},
+                {"id": "e2", "source_id": "script-1", "target_id": "end-1"},
+            ],
+            "variables": [],
+        }
+
+        response = client.post("/api/workflows/", json=payload)
+        assert response.status_code == 201
+
+        # Verify the workflow can be retrieved with correct node types
+        get_resp = client.get(f"/api/workflows/{workflow_id}")
+        assert get_resp.status_code == 200
+        data = get_resp.json()
+        nodes = data.get("nodes", [])
+        node_types = {n.get("type") for n in nodes}
+        assert "script" in node_types, "Script node type should be persisted"
+
+        # Find the script node and verify its config
+        script_node = next((n for n in nodes if n.get("type") == "script"), None)
+        assert script_node is not None
+        assert script_node.get("config", {}).get("script_id") == "test-script-123"
+        assert script_node.get("config", {}).get("timeout") == "30"
+
+
+class TestWorkflowTemplates:
+    def test_templates_endpoint_returns_template_list(self) -> None:
+        response = client.get("/api/workflows/templates")
+        assert response.status_code == 200
+        data = response.json()
+        assert "templates" in data
+        assert isinstance(data["templates"], list)
+        assert any(item.get("id") == "script-automation" for item in data["templates"])
+
+    def test_instantiate_template_creates_fetchable_workflow(self) -> None:
+        response = client.post("/api/workflows/templates/script-automation/instantiate")
+        assert response.status_code == 200
+        data = response.json()
+        workflow_id = data["id"]
+
+        get_resp = client.get(f"/api/workflows/{workflow_id}")
+        assert get_resp.status_code == 200
+        workflow = get_resp.json()
+        assert workflow["id"] == workflow_id
+        assert workflow["name"]
+
 
 class TestWorkflowVersions:
     def test_list_workflow_versions(self) -> None:
@@ -275,6 +401,35 @@ class TestWorkflowRuns:
 
         assert "runs" in runs_data
         assert len(runs_data["runs"]) >= 1
+
+
+class TestWorkflowStepRetry:
+    """Test suite for Workflow Step Retry functionality."""
+
+    def test_retry_endpoint_exists(self) -> None:
+        """Test that retry endpoint returns appropriate error for non-existent run."""
+        fake_run_id = "non-existent-run-12345"
+        response = client.post(f"/api/workflows/runs/{fake_run_id}/steps/0/retry")
+        assert response.status_code == 404
+
+    def test_retry_requires_failed_step(self) -> None:
+        """Test that retry only works on failed steps."""
+        # Create and run a workflow to get a real run_id
+        workflow_id = f"test-retry-wf-{uuid.uuid4().hex[:8]}"
+        payload = _create_test_workflow_payload(workflow_id)
+        client.post("/api/workflows/", json=payload)
+
+        # Start run
+        run_resp = client.post(f"/api/workflows/{workflow_id}/run")
+        assert run_resp.status_code == 202
+        run_data = run_resp.json()
+        run_id = run_data["run_id"]
+
+        # Try to retry step 0 (which is trigger - not failed)
+        # This should fail because step is not in failed state
+        retry_resp = client.post(f"/api/workflows/runs/{run_id}/steps/0/retry")
+        # Returns 400 because step is not failed, or 404 if run not yet persisted
+        assert retry_resp.status_code in [400, 404]
 
 
 if __name__ == "__main__":

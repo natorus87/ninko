@@ -1,0 +1,68 @@
+{
+  "id": "template-script-automation",
+  "name": "Script Automation",
+  "description": "Workflow mit Script-Node: Führt ein Python-Script aus und verarbeitet dessen Output. Ideal für deterministische Datenverarbeitung.",
+  "nodes": [
+    {
+      "id": "node-1",
+      "type": "trigger",
+      "label": "Start",
+      "config": {"mode": "manual"},
+      "position": {"x": 100, "y": 100}
+    },
+    {
+      "id": "node-2",
+      "type": "variable",
+      "label": "Input setzen",
+      "config": {"name": "raw_data", "value": "10,20,30,40,50"},
+      "position": {"x": 400, "y": 100}
+    },
+    {
+      "id": "node-3",
+      "type": "script",
+      "label": "Daten verarbeiten",
+      "config": {
+        "script_id": "",
+        "input_var": "raw_data",
+        "timeout": "30"
+      },
+      "position": {"x": 700, "y": 100}
+    },
+    {
+      "id": "node-4",
+      "type": "condition",
+      "label": "Erfolgreich?",
+      "config": {
+        "expression": "output.contains('error')",
+        "true_label": "Fehler",
+        "false_label": "OK"
+      },
+      "position": {"x": 1000, "y": 100}
+    },
+    {
+      "id": "node-5",
+      "type": "end",
+      "label": "Fertig",
+      "config": {"status": "succeeded"},
+      "position": {"x": 1300, "y": 50}
+    },
+    {
+      "id": "node-6",
+      "type": "end",
+      "label": "Fehler",
+      "config": {"status": "failed"},
+      "position": {"x": 1300, "y": 150}
+    }
+  ],
+  "edges": [
+    {"id": "edge-1", "source_id": "node-1", "target_id": "node-2"},
+    {"id": "edge-2", "source_id": "node-2", "target_id": "node-3"},
+    {"id": "edge-3", "source_id": "node-3", "target_id": "node-4"},
+    {"id": "edge-4", "source_id": "node-4", "target_id": "node-5", "label": "OK"},
+    {"id": "edge-5", "source_id": "node-4", "target_id": "node-6", "label": "Fehler"}
+  ],
+  "variables": [
+    {"name": "raw_data", "value": ""},
+    {"name": "script_output", "value": ""}
+  ]
+}

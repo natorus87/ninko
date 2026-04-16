@@ -754,6 +754,42 @@ Antworte NUR mit JSON:
             return False
         return any(p.search(msg) for p in _WORKFLOW_CREATE_PATTERNS)
 
+    @staticmethod
+    def _fallback_workflow_spec(message: str) -> dict:
+        """
+        Robuster Fallback für Workflow-Erstellung, wenn die LLM-JSON-Spec
+        nicht zuverlässig geparst werden kann.
+        """
+        msg = (message or "").strip()
+        lower = msg.lower()
+
+        is_proxmox = "proxmox" in lower
+        wants_telegram = "telegram" in lower
+
+        if is_proxmox and wants_telegram:
+            return {
+                "name": "proxmox_cluster_monitor",
+                "description": "Überwacht den Proxmox-Cluster und sendet bei Problemen eine Telegram-Benachrichtigung.",
+                "steps": [
+                    "[module:proxmox] Prüfe den Proxmox-Cluster auf Node-Status, Storage-Gesundheit und kritische VM-Zustände.",
+                    "Fasse die Prüfergebnisse in 'OK' oder 'PROBLEM' zusammen und liste konkrete Auffälligkeiten auf.",
+                    "[module:telegram] Wenn der Status 'PROBLEM' ist, sende eine Warnmeldung mit den Auffälligkeiten aus dem vorherigen Ergebnis; bei 'OK' sende keine Nachricht.",
+                    "Gib eine kurze Abschlussmeldung mit den durchgeführten Prüfungen und dem Endstatus zurück.",
+                ],
+            }
+
+        base_name = re.sub(r"[^a-z0-9]+", "_", lower)[:48].strip("_") or "workflow_auto"
+        return {
+            "name": f"{base_name}_monitor",
+            "description": "Automatisch erzeugter Monitoring-Workflow auf Basis der Benutzeranfrage.",
+            "steps": [
+                "Analysiere die Anfrage und identifiziere die zu prüfenden Systeme und Services.",
+                "Führe die relevanten Prüfungen aus und sammle alle Ergebnisse strukturiert.",
+                "Bewerte die Ergebnisse und markiere den Gesamtstatus als 'OK' oder 'PROBLEM'.",
+                "Wenn der Gesamtstatus 'PROBLEM' ist, sende eine passende Benachrichtigung; sonst nur den positiven Status zurückmelden.",
+            ],
+        }
+
     async def _auto_create_custom_agent(
         self, message: str, session_id: str
     ) -> tuple[str, bool]:
@@ -1213,7 +1249,7 @@ JSON-SCHEMA:
             llm = get_llm()
             response = await asyncio.wait_for(
                 llm.ainvoke([HumanMessage(content=prompt)]),
-                timeout=12.0,
+                timeout=18.0,
             )
             raw = response.content if hasattr(response, "content") else str(response)
             raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
@@ -1225,27 +1261,22 @@ JSON-SCHEMA:
             logger.warning(
                 "Auto-Create-Workflow: Spec-Generierung fehlgeschlagen: %s", exc
             )
-            return _t(
-                de="Fehler: Die Workflow-Spezifikation konnte nicht erzeugt werden. "
-                "Bitte beschreibe Ablauf und Ziel klarer.",
-                en="Error: Failed to generate the workflow specification. "
-                "Please describe flow and goal more clearly.",
-                fr="Erreur : La spécification du workflow n'a pas pu être générée. "
-                "Veuillez décrire plus clairement le flux et l'objectif.",
-                es="Error: No se pudo generar la especificación del workflow. "
-                "Por favor, describe el flujo y el objetivo con más claridad.",
-                it="Errore: impossibile generare la specifica del workflow. "
-                "Descrivi più chiaramente il flusso e l'obiettivo.",
-                nl="Fout: De workflow-specificatie kon niet worden gegenereerd. "
-                "Beschrijf de stroom en het doel duidelijker.",
-                pl="Błąd: Nie można wygenerować specyfikacji workflow. "
-                "Opisz jasniej przepływ i cel.",
-                pt="Erro: Falha ao gerar a especificação do workflow. "
-                "Por favor, descreva o fluxo e o objetivo com mais clareza.",
-                ja="エラー：ワークフロー仕様を生成できませんでした。"
-                "フローと目標を明確に説明してください。",
-                zh="错误：无法生成工作流规范。请更清楚地描述流程和目标。",
-            ), False
+            spec = self._fallback_workflow_spec(message)
+            await status_bus.emit(
+                session_id,
+                _t(
+                    de="Workflow-Spezifikation per Fallback erzeugt.",
+                    en="Workflow specification generated via fallback.",
+                    fr="Spécification du workflow générée via fallback.",
+                    es="Especificación del workflow generada mediante fallback.",
+                    it="Specifica workflow generata tramite fallback.",
+                    nl="Workflow-specificatie via fallback gegenereerd.",
+                    pl="Specyfikacja workflow wygenerowana przez fallback.",
+                    pt="Especificação do workflow gerada via fallback.",
+                    ja="フォールバックでワークフロー仕様を生成しました。",
+                    zh="已通过回退机制生成工作流规范。",
+                ),
+            )
 
         name = str(spec.get("name", "")).strip()[:120]
         description = str(spec.get("description", "")).strip()[:500]
@@ -1256,31 +1287,28 @@ JSON-SCHEMA:
             if str(s).strip()
         ]
 
-        if not name:
+        if not name or len(steps) < 2:
+            fallback = self._fallback_workflow_spec(message)
+            name = str(fallback.get("name", "")).strip()[:120]
+            description = str(fallback.get("description", "")).strip()[:500]
+            steps = [
+                str(s).strip()
+                for s in fallback.get("steps", [])
+                if str(s).strip()
+            ][:6]
+
+        if not name or len(steps) < 2:
             return _t(
-                de="Fehler: Die Workflow-Spezifikation enthält keinen gültigen Namen.",
-                en="Error: The workflow specification has no valid name.",
-                fr="Erreur : La spécification du workflow ne contient pas de nom valide.",
-                es="Error: La especificación del workflow no contiene un nombre válido.",
-                it="Errore: La specifica del workflow non contiene un nome valido.",
-                nl="Fout: De workflow-specificatie bevat geen geldige naam.",
-                pl="Błąd: Specyfikacja workflow nie zawiera prawidłowej nazwy.",
-                pt="Erro: A especificação do workflow não contém um nome válido.",
-                ja="エラー：ワークフロー仕様に有効な名前が含まれていません。",
-                zh="错误：工作流规范没有有效的名称。",
-            ), False
-        if len(steps) < 2:
-            return _t(
-                de="Fehler: Für einen Workflow werden mindestens 2 Schritte benötigt.",
-                en="Error: A workflow needs at least 2 steps.",
-                fr="Erreur : Un workflow nécessite au moins 2 étapes.",
-                es="Error: Un workflow necesita al menos 2 pasos.",
-                it="Errore: Un workflow richiede almeno 2 passaggi.",
-                nl="Fout: Een workflow heeft minimaal 2 stappen nodig.",
-                pl="Błąd: Workflow wymaga co najmniej 2 kroków.",
-                pt="Erro: Um workflow precisa de pelo menos 2 etapas.",
-                ja="エラー：ワークフローには少なくとも2つのステップが必要です。",
-                zh="错误：工作流至少需要2个步骤。",
+                de="Fehler: Für den Workflow konnte keine gültige Spezifikation erzeugt werden.",
+                en="Error: Could not produce a valid workflow specification.",
+                fr="Erreur : Impossible de produire une spécification de workflow valide.",
+                es="Error: No se pudo generar una especificación de workflow válida.",
+                it="Errore: impossibile produrre una specifica workflow valida.",
+                nl="Fout: Kon geen geldige workflow-specificatie genereren.",
+                pl="Błąd: Nie udało się wygenerować poprawnej specyfikacji workflow.",
+                pt="Erro: Não foi possível gerar uma especificação de workflow válida.",
+                ja="エラー：有効なワークフロー仕様を生成できませんでした。",
+                zh="错误：无法生成有效的工作流规范。",
             ), False
         if len(steps) > 6:
             steps = steps[:6]

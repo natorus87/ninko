@@ -152,9 +152,7 @@ def test_workflow_crud() -> tuple[bool, str]:
         "variables": [{"name": "test_var", "value": "test_value"}],
         "enabled": True,
     }
-    status, resp = _request(
-        "PUT", f"/api/workflows/{workflow_id}", payload=update_payload
-    )
+    status, resp = _request("PUT", f"/api/workflows/{workflow_id}", payload=update_payload)
     if status != 200:
         return False, f"Update failed: status={status}"
 
@@ -315,6 +313,78 @@ def test_parallel_and_subflow_nodes() -> tuple[bool, str]:
     return True, "Advanced nodes accepted by backend"
 
 
+def test_loop_node() -> tuple[bool, str]:
+    """Test workflow with loop node execution."""
+    workflow_id = f"test-loop-{uuid.uuid4().hex[:8]}"
+
+    create_payload = {
+        "id": workflow_id,
+        "name": "Loop Node Test",
+        "description": "Test loop node with variable iteration",
+        "enabled": True,
+        "nodes": [
+            {
+                "id": "t1",
+                "type": "trigger",
+                "label": "Trigger",
+                "config": {"mode": "manual"},
+                "position": {"x": 100, "y": 100},
+            },
+            {
+                "id": "v1",
+                "type": "variable",
+                "label": "Set Items",
+                "config": {"name": "items", "value": "item1,item2,item3"},
+                "position": {"x": 400, "y": 100},
+            },
+            {
+                "id": "l1",
+                "type": "loop",
+                "label": "Process Items",
+                "config": {
+                    "mode": "foreach",
+                    "variable": "items",
+                    "prompt": "Process: {loop_item}",
+                    "max_iterations": "5",
+                },
+                "position": {"x": 700, "y": 100},
+            },
+            {
+                "id": "e1",
+                "type": "end",
+                "label": "End",
+                "config": {"status": "succeeded"},
+                "position": {"x": 1000, "y": 100},
+            },
+        ],
+        "edges": [
+            {"id": "e1-t1-v1", "source_id": "t1", "target_id": "v1"},
+            {"id": "e2-v1-l1", "source_id": "v1", "target_id": "l1"},
+            {"id": "e3-l1-e1", "source_id": "l1", "target_id": "e1"},
+        ],
+        "variables": [],
+    }
+
+    status, resp = _request("POST", "/api/workflows/", payload=create_payload)
+    if status != 201:
+        return False, f"Create with loop node failed: status={status}"
+
+    status, resp = _request("GET", f"/api/workflows/{workflow_id}")
+    if status != 200:
+        return False, f"Load failed: status={status}"
+
+    loaded = resp if isinstance(resp, dict) else {}
+    nodes = loaded.get("nodes", [])
+    node_types = {n.get("type") for n in nodes}
+
+    if "loop" not in node_types:
+        return False, "Loop node not persisted correctly"
+
+    _request("DELETE", f"/api/workflows/{workflow_id}")
+
+    return True, "Loop node accepted by backend"
+
+
 def main() -> int:
     failures = 0
 
@@ -330,7 +400,11 @@ def main() -> int:
     _print_result("parallel_subflow_nodes", ok, detail)
     failures += 0 if ok else 1
 
-    summary = {"base_url": BASE_URL, "tests_run": 3, "failures": failures}
+    ok, detail = test_loop_node()
+    _print_result("loop_node", ok, detail)
+    failures += 0 if ok else 1
+
+    summary = {"base_url": BASE_URL, "tests_run": 4, "failures": failures}
     print(json.dumps(summary, ensure_ascii=False))
     return 1 if failures else 0
 

@@ -25,6 +25,7 @@ from schemas.workflows import (
 
 logger = logging.getLogger("ninko.api.workflows")
 router = APIRouter(prefix="/api/workflows", tags=["Workflows"])
+_bg_workflow_tasks: set[asyncio.Task] = set()
 
 REDIS_KEY_WORKFLOWS = "ninko:workflows"
 REDIS_KEY_RUNS_PREFIX = "ninko:workflow:runs:"
@@ -32,6 +33,22 @@ REDIS_KEY_RUN_INDEX = "ninko:workflow:run_index"
 REDIS_KEY_WORKFLOW_VERSIONS = "ninko:workflow:versions"
 MAX_RUNS_PER_WORKFLOW = 50
 MAX_VERSIONS_PER_WORKFLOW = 25
+
+
+def _track_workflow_task(task: asyncio.Task) -> None:
+    """Hält Background-Tasks referenziert und loggt ungefangene Exceptions."""
+    _bg_workflow_tasks.add(task)
+
+    def _on_done(done_task: asyncio.Task) -> None:
+        _bg_workflow_tasks.discard(done_task)
+        try:
+            exc = done_task.exception()
+        except asyncio.CancelledError:
+            return
+        if exc:
+            logger.exception("Workflow-Background-Task abgestürzt: %s", exc)
+
+    task.add_done_callback(_on_done)
 
 
 def _tenant_key(base: str, tenant_id: str) -> str:
@@ -109,10 +126,62 @@ async def create_workflow(body: WorkflowCreate, request: Request) -> dict:
         created_at=now,
         updated_at=now,
     )
-    workflows.append(new_wf.model_dump())
+    workflows.append({**new_wf.model_dump(), "tenant_id": tenant_id})
     await _save_workflows(redis, tenant_id, workflows)
     logger.info("Workflow erstellt: %s (%s)", new_wf.name, scoped_id)
     return {"id": body.id, "status": "created"}
+
+
+@router.get("/templates")
+async def get_workflow_templates() -> dict:
+    """Returns all built-in workflow templates."""
+    from core.workflow_templates import get_workflow_templates
+
+    return {"templates": get_workflow_templates()}
+
+
+@router.get("/templates/{template_id}")
+async def get_workflow_template_definition(template_id: str) -> dict:
+    """Returns a specific template with full definition (nodes, edges)."""
+    from core.workflow_templates import load_template_definition
+
+    definition = load_template_definition(template_id)
+    if not definition:
+        raise HTTPException(status_code=404, detail=f"Template '{template_id}' nicht gefunden")
+    return definition
+
+
+@router.post("/templates/{template_id}/instantiate")
+async def instantiate_workflow_template(
+    template_id: str, request: Request, name: str | None = None
+) -> dict:
+    """Creates a new workflow from a template."""
+    from core.workflow_templates import instantiate_template
+
+    instance = instantiate_template(template_id, name)
+    if not instance:
+        raise HTTPException(status_code=404, detail=f"Template '{template_id}' nicht gefunden")
+
+    redis = get_redis()
+    tenant_id = auth_tenant_id(resolve_request_auth(request))
+    workflows = await _load_workflows(redis, tenant_id)
+    public_id = str(instance["id"])
+    scoped_id = _tenant_workflow_id(tenant_id, public_id)
+
+    if any(w.get("id") == scoped_id for w in workflows):
+        raise HTTPException(status_code=409, detail=f"Workflow '{public_id}' existiert bereits")
+
+    now = datetime.now(timezone.utc).isoformat()
+    workflow_def = WorkflowDefinition(
+        **{**instance, "id": scoped_id},
+        created_at=now,
+        updated_at=now,
+    )
+    workflows.append({**workflow_def.model_dump(), "tenant_id": tenant_id})
+    await _save_workflows(redis, tenant_id, workflows)
+
+    logger.info("Workflow aus Template erstellt: %s (%s)", workflow_def.name, scoped_id)
+    return {"id": public_id, "status": "created", "template_id": template_id}
 
 
 @router.get("/{workflow_id}")
@@ -243,7 +312,7 @@ async def run_workflow(workflow_id: str, request: Request) -> dict:
 
         orchestrator = request.app.state.orchestrator
         engine = WorkflowEngine(redis, orchestrator)
-        asyncio.create_task(engine.execute(wf, run_id))
+        _track_workflow_task(asyncio.create_task(engine.execute(wf, run_id)))
     except (RuntimeError, ValueError, TypeError, KeyError, OSError) as exc:
         logger.warning("Workflow-Engine konnte nicht gestartet werden: %s", exc)
 
@@ -342,49 +411,70 @@ async def get_run_status(run_id: str, request: Request) -> dict:
     raise HTTPException(status_code=404, detail=f"Run '{run_id}' nicht gefunden")
 
 
-@router.get("/templates")
-async def get_workflow_templates() -> dict:
-    """Returns all built-in workflow templates."""
-    from core.workflow_templates import get_workflow_templates
-
-    return {"templates": get_workflow_templates()}
-
-
-@router.get("/templates/{template_id}")
-async def get_workflow_template_definition(template_id: str) -> dict:
-    """Returns a specific template with full definition (nodes, edges)."""
-    from core.workflow_templates import load_template_definition
-
-    definition = load_template_definition(template_id)
-    if not definition:
-        raise HTTPException(status_code=404, detail=f"Template '{template_id}' nicht gefunden")
-    return definition
-
-
-@router.post("/templates/{template_id}/instantiate")
-async def instantiate_workflow_template(
-    template_id: str, request: Request, name: str | None = None
-) -> dict:
-    """Creates a new workflow from a template."""
-    from core.workflow_templates import instantiate_template
-    from schemas.workflows import WorkflowCreate
-
-    instance = instantiate_template(template_id, name)
-    if not instance:
-        raise HTTPException(status_code=404, detail=f"Template '{template_id}' nicht gefunden")
-
+@router.post("/runs/{run_id}/steps/{step_index}/retry", status_code=202)
+async def retry_workflow_step(run_id: str, step_index: int, request: Request) -> dict:
+    """Einzelnen fehlgeschlagenen Workflow-Step neu ausführen."""
     redis = get_redis()
     tenant_id = auth_tenant_id(resolve_request_auth(request))
+
+    # Run finden
+    run_index_key = _tenant_key(REDIS_KEY_RUN_INDEX, tenant_id)
+    index_raw = await redis.connection.get(run_index_key)
+    run_index = json.loads(index_raw) if index_raw else {}
+    workflow_id = run_index.get(run_id)
+
+    if not workflow_id:
+        raise HTTPException(status_code=404, detail=f"Run '{run_id}' nicht gefunden")
+
+    # Run laden
+    runs_key = f"{_tenant_key(REDIS_KEY_RUNS_PREFIX, tenant_id)}{workflow_id}"
+    runs_raw = await redis.connection.get(runs_key)
+    runs = json.loads(runs_raw) if runs_raw else []
+    run = next((r for r in runs if r["id"] == run_id), None)
+
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run '{run_id}' nicht gefunden")
+
+    # Step validieren
+    steps = run.get("steps", [])
+    if step_index < 0 or step_index >= len(steps):
+        raise HTTPException(status_code=400, detail=f"Ungültiger Step-Index: {step_index}")
+
+    step = steps[step_index]
+    if step.get("status") not in ["failed", "error"]:
+        raise HTTPException(
+            status_code=400, detail="Nur fehlgeschlagene Steps können retry't werden"
+        )
+
+    # Workflow laden
     workflows = await _load_workflows(redis, tenant_id)
+    wf = next((w for w in workflows if w["id"] == workflow_id), None)
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow nicht gefunden")
 
-    now = datetime.now(timezone.utc).isoformat()
-    workflow_def = WorkflowDefinition(
-        **instance,
-        created_at=now,
-        updated_at=now,
-    )
-    workflows.append({**workflow_def.model_dump(), "tenant_id": tenant_id})
-    await _save_workflows(redis, tenant_id, workflows)
+    # Step zurücksetzen
+    step["status"] = "pending"
+    step["error"] = None
+    step["output"] = None
+    step["started_at"] = None
+    step["finished_at"] = None
+    step["duration_ms"] = None
+    step["attempts"] = (step.get("attempts") or 0) + 1
 
-    logger.info("Workflow aus Template erstellt: %s (%s)", workflow_def.name, workflow_def.id)
-    return {"id": workflow_def.id, "status": "created", "template_id": template_id}
+    # Aktualisierten Run speichern
+    await redis.connection.set(runs_key, json.dumps(runs))
+
+    # Step asynchron neu ausführen
+    try:
+        from core.workflow_engine import WorkflowEngine
+
+        orchestrator = request.app.state.orchestrator
+        engine = WorkflowEngine(redis, orchestrator)
+        _track_workflow_task(
+            asyncio.create_task(engine.execute_step(wf, run_id, step_index, run.get("variables", {})))
+        )
+    except Exception as exc:
+        logger.warning("Step-Retry konnte nicht gestartet werden: %s", exc)
+        raise HTTPException(status_code=500, detail=f"Retry konnte nicht gestartet werden: {exc}")
+
+    return {"run_id": run_id, "step_index": step_index, "status": "retrying"}

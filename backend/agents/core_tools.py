@@ -5,6 +5,7 @@ These tools provide fundamental system capabilities rather than domain-specific 
 
 import asyncio
 import logging
+import re
 from langchain_core.tools import tool
 from core.task_registry import get_task_registry
 from core.tool_permissions import (
@@ -120,6 +121,72 @@ _ALLOWED_COMMANDS = {
 }
 
 logger = logging.getLogger("ninko.agents.core_tools")
+
+REDIS_KEY_WORKFLOWS = "ninko:workflows"
+REDIS_KEY_RUNS_PREFIX = "ninko:workflow:runs:"
+
+
+def _normalize_tenant_id(tenant_id: str) -> str:
+    t = (tenant_id or "default").strip().lower().replace(" ", "_")
+    return t or "default"
+
+
+def _tenant_key(base: str, tenant_id: str) -> str:
+    return f"{base}:{_normalize_tenant_id(tenant_id)}"
+
+
+def _scoped_workflow_id(tenant_id: str, workflow_id: str) -> str:
+    return f"{_normalize_tenant_id(tenant_id)}::{workflow_id}"
+
+
+def _public_workflow_id(tenant_scoped_workflow_id: str) -> str:
+    return (
+        tenant_scoped_workflow_id.split("::", 1)[1]
+        if "::" in tenant_scoped_workflow_id
+        else tenant_scoped_workflow_id
+    )
+
+
+def _current_tenant_id() -> str:
+    """
+    Ermittelt den aktuellen Tenant aus der orchestrator-session_id (tenant:session_uuid).
+    Fallback ist 'default'.
+    """
+    try:
+        from core import status_bus
+
+        sid = status_bus.get_session_id().strip()
+    except _CORE_IMPORT_EXCEPTIONS:
+        sid = ""
+    if ":" in sid:
+        return _normalize_tenant_id(sid.split(":", 1)[0])
+    return "default"
+
+
+def _extract_step_agent_hint(step_prompt: str) -> tuple[str, str]:
+    """
+    Ermittelt optionalen Agent/Modul-Hint aus einem Workflow-Step.
+
+    Unterstützt explizites Prefix:
+      [module:<name>] Schritttext
+      [agent:<name>] Schritttext
+
+    Fallback-Heuristik für häufige Fälle:
+      - enthält "proxmox"  -> agent_id "proxmox"
+      - enthält "telegram" -> agent_id "telegram"
+    """
+    raw = str(step_prompt or "").strip()
+    m = re.match(r"^\[(?:module|agent)\s*:\s*([a-zA-Z0-9._-]+)\]\s*(.+)$", raw)
+    if m:
+        return m.group(1).strip(), m.group(2).strip()
+
+    low = raw.lower()
+    if "proxmox" in low:
+        return "proxmox", raw
+    if "telegram" in low:
+        return "telegram", raw
+
+    return "orchestrator", raw
 
 
 def _truncate_output(text: str, max_chars: int = 0, max_lines: int = 0) -> str:
@@ -507,14 +574,17 @@ async def create_dag_workflow(
             )
 
     redis = get_redis()
-    raw = await redis.connection.get("ninko:workflows")
+    tenant_id = _current_tenant_id()
+    raw = await redis.connection.get(_tenant_key(REDIS_KEY_WORKFLOWS, tenant_id))
     workflows = json.loads(raw) if raw else []
 
-    wf_id = str(uuid.uuid4())
+    public_wf_id = str(uuid.uuid4())
+    wf_id = _scoped_workflow_id(tenant_id, public_wf_id)
     now = datetime.now(timezone.utc).isoformat()
 
     new_wf = {
         "id": wf_id,
+        "tenant_id": tenant_id,
         "name": name,
         "description": description,
         "nodes": built_nodes,
@@ -526,18 +596,21 @@ async def create_dag_workflow(
     }
 
     workflows.append(new_wf)
-    await redis.connection.set("ninko:workflows", json.dumps(workflows))
+    await redis.connection.set(
+        _tenant_key(REDIS_KEY_WORKFLOWS, tenant_id), json.dumps(workflows)
+    )
     logger.info(
-        "DAG-Workflow via Tool erstellt: %s (%s, %d nodes, %d edges)",
+        "DAG-Workflow via Tool erstellt: %s (%s, tenant=%s, %d nodes, %d edges)",
         name,
-        wf_id,
+        public_wf_id,
+        tenant_id,
         len(built_nodes),
         len(built_edges),
     )
 
     return _t(
-        f"Workflow '{name}' (ID: {wf_id}) mit {len(built_nodes)} Nodes und {len(built_edges)} Edges wurde erfolgreich erstellt.",
-        f"Workflow '{name}' (ID: {wf_id}) with {len(built_nodes)} nodes and {len(built_edges)} edges was successfully created.",
+        f"Workflow '{name}' (ID: {public_wf_id}) mit {len(built_nodes)} Nodes und {len(built_edges)} Edges wurde erfolgreich erstellt.",
+        f"Workflow '{name}' (ID: {public_wf_id}) with {len(built_nodes)} nodes and {len(built_edges)} edges was successfully created.",
     )
 
 
@@ -572,13 +645,14 @@ async def create_linear_workflow(name: str, description: str, steps: list[str]) 
     prev_id = trigger_id
     y_pos = 250
     for i, step_prompt in enumerate(steps):
+        agent_hint, prompt_text = _extract_step_agent_hint(step_prompt)
         node_id = str(uuid.uuid4())[:8]
         nodes.append(
             {
                 "id": node_id,
                 "type": "agent",
                 "label": f"Step {i + 1}",
-                "config": {"agent_id": "orchestrator", "prompt": step_prompt},
+                "config": {"agent_id": agent_hint, "prompt": prompt_text},
                 "position": {"x": 100, "y": y_pos},
             }
         )
@@ -594,14 +668,17 @@ async def create_linear_workflow(name: str, description: str, steps: list[str]) 
         y_pos += 150
 
     redis = get_redis()
-    raw = await redis.connection.get("ninko:workflows")
+    tenant_id = _current_tenant_id()
+    raw = await redis.connection.get(_tenant_key(REDIS_KEY_WORKFLOWS, tenant_id))
     workflows = json.loads(raw) if raw else []
 
-    wf_id = str(uuid.uuid4())
+    public_wf_id = str(uuid.uuid4())
+    wf_id = _scoped_workflow_id(tenant_id, public_wf_id)
     now = datetime.now(timezone.utc).isoformat()
 
     new_wf = {
         "id": wf_id,
+        "tenant_id": tenant_id,
         "name": name,
         "description": description,
         "nodes": nodes,
@@ -613,12 +690,19 @@ async def create_linear_workflow(name: str, description: str, steps: list[str]) 
     }
 
     workflows.append(new_wf)
-    await redis.connection.set("ninko:workflows", json.dumps(workflows))
-    logger.info("Linearer Workflow via Tool erstellt: %s (%s)", name, wf_id)
+    await redis.connection.set(
+        _tenant_key(REDIS_KEY_WORKFLOWS, tenant_id), json.dumps(workflows)
+    )
+    logger.info(
+        "Linearer Workflow via Tool erstellt: %s (%s, tenant=%s)",
+        name,
+        public_wf_id,
+        tenant_id,
+    )
 
     return _t(
-        f"Workflow '{name}' (ID: {wf_id}) wurde erfolgreich erstellt.",
-        f"Workflow '{name}' (ID: {wf_id}) was successfully created.",
+        f"Workflow '{name}' (ID: {public_wf_id}) wurde erfolgreich erstellt.",
+        f"Workflow '{name}' (ID: {public_wf_id}) was successfully created.",
     )
 
 
@@ -636,14 +720,17 @@ async def execute_workflow(workflow_name_or_id: str) -> str:
     from core.redis_client import get_redis
 
     redis = get_redis()
-    raw = await redis.connection.get("ninko:workflows")
+    tenant_id = _current_tenant_id()
+    raw = await redis.connection.get(_tenant_key(REDIS_KEY_WORKFLOWS, tenant_id))
     workflows = json.loads(raw) if raw else []
+    scoped_lookup_id = _scoped_workflow_id(tenant_id, workflow_name_or_id)
 
     wf = next(
         (
             w
             for w in workflows
             if w["id"] == workflow_name_or_id
+            or w["id"] == scoped_lookup_id
             or w["name"].lower() == workflow_name_or_id.lower()
         ),
         None,
@@ -678,7 +765,7 @@ async def execute_workflow(workflow_name_or_id: str) -> str:
         triggered_by="AI_Agent",
     )
 
-    runs_key = f"ninko:workflow:runs:{wf_id}"
+    runs_key = f"{_tenant_key(REDIS_KEY_RUNS_PREFIX, tenant_id)}{wf_id}"
     runs_raw = await redis.connection.get(runs_key)
     runs = json.loads(runs_raw) if runs_raw else []
     runs.append(run_obj.model_dump())

@@ -2,7 +2,7 @@
  * Ninko – Main Application JavaScript
  */
 
-// ─── i18n ─────────────────────────────────────────────
+// --- i18n ---------------------------------------------
 const I18n = {
     _translations: {},
     _lang: 'de',
@@ -67,7 +67,7 @@ function tf(key, fallback, ...args) {
     return translated === key ? fallback : translated;
 }
 
-// ──────────────────────────────────────────────────────
+// ------------------------------------------------------
 
 const Ninko = {
     ws: null,
@@ -119,7 +119,7 @@ const Ninko = {
     _sidebarAccountMenuOpen: false,
     t: tf,
 
-    // ─── SVG Icon Library (Lucide-style, currentColor) ───
+    // --- SVG Icon Library (Lucide-style, currentColor) ---
     _ic: {
         // 14×14 – Action-Button Icons
         edit:    `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
@@ -141,6 +141,7 @@ const Ninko = {
         loop:    `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>`,
         box:     `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>`,
         stopci:  `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><rect x="9" y="9" width="6" height="6"/></svg>`,
+        script:  `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>`,
         // 18×18 – Run-Step Status Icons
         hourglass:`<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>`,
         loader:  `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:ic-spin .9s linear infinite"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>`,
@@ -149,72 +150,103 @@ const Ninko = {
         skip:    `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>`,
     },
 
-    // ─── Init ───
+    // --- Init ---
     async init() {
         console.log('Ninko: Initializing v1.0.1...');
 
-        // Sprache laden (aus localStorage oder API)
-        const savedLang = localStorage.getItem('ninko_lang') || 'de';
-        await I18n.load(savedLang);
+        try {
+            // Sprache laden (aus localStorage oder API)
+            const savedLang = localStorage.getItem('ninko_lang') || 'de';
+            await I18n.load(savedLang);
 
-        // Sprache aus Backend übernehmen wenn noch keine lokale gespeichert
-        if (!localStorage.getItem('ninko_lang')) {
-            try {
-                const r = await fetch('/api/settings/language');
-                if (r.ok) {
-                    const d = await r.json();
-                    if (d.language && d.language !== savedLang) {
-                        await I18n.load(d.language);
-                        localStorage.setItem('ninko_lang', d.language);
+            // Sprache aus Backend übernehmen wenn noch keine lokale gespeichert
+            if (!localStorage.getItem('ninko_lang')) {
+                try {
+                    const r = await fetch('/api/settings/language');
+                    if (r.ok) {
+                        const d = await r.json();
+                        if (d.language && d.language !== savedLang) {
+                            await I18n.load(d.language);
+                            localStorage.setItem('ninko_lang', d.language);
+                        }
                     }
-                }
-            } catch { /* Fallback */ }
-        }
-
-        // Auth-Guard: verhindert unautorisierte App-Initialisierung (auch bei /index.html Direktaufruf)
-        const isAuthed = await this.ensureAuthenticated();
-        if (!isAuthed) return;
-
-        await this.loadBrandingSettings();
-        this.applyBranding();
-
-        this.switchTab('chat');
-
-        document.addEventListener('change', (e) => {
-            if (e.target.name === 'sched-type') {
-                this.toggleSchedType();
+                } catch { /* Fallback */ }
             }
-        });
-        this.sessionId = this.getSessionId();
-        this.restoreTheme();
-        await this.loadActiveTheme();
-        this.applyActiveThemeTokens();
-        await this.loadHistory();
 
-        // Initial chat state: centered (welcome message visible)
-        this._setChatState('centered');
+            // Auth-Guard: verhindert unautorisierte App-Initialisierung (auch bei /index.html Direktaufruf)
+            const isAuthed = await this.ensureAuthenticated();
+            if (!isAuthed) return;
 
-        // Modal Event-Handler (Cancel)
-        document.getElementById('ninko-confirm-cancel')?.addEventListener('click', () => {
-            this._confirmResolver?.(false);
-            this._hideConfirm();
-        });
-        document.getElementById('ninko-confirm-ok')?.addEventListener('click', () => {
-            this._confirmResolver?.(true);
-            this._hideConfirm();
-        });
-        await this.loadModules();
-        this.connectWebSocket();
-        this.autoResizeTextarea();
-        this.initResizers();
-        this.initSidebarTransitions();
-        this._checkTtsAvailable();
-        this.initSafeguard();
-        this._initCtxIndicator();
-        this.initSidebarAccountMenu();
-        this.initMobileMenu();
-        document.documentElement.classList.remove('light-mode-pre');
-        document.body.style.opacity = '1';
+            await this.loadBrandingSettings();
+            this.applyBranding();
+
+            this.switchTab('chat');
+
+            document.addEventListener('change', (e) => {
+                if (e.target.name === 'sched-type') {
+                    this.toggleSchedType();
+                }
+            });
+            this.sessionId = this.getSessionId();
+            this.restoreTheme();
+            await this.loadActiveTheme();
+            this.applyActiveThemeTokens();
+            await this.loadHistory();
+
+            // Initial chat state: centered (welcome message visible)
+            this._setChatState('centered');
+
+            // Modal Event-Handler (Cancel)
+            document.getElementById('ninko-confirm-cancel')?.addEventListener('click', () => {
+                this._confirmResolver?.(false);
+                this._hideConfirm();
+            });
+            document.getElementById('ninko-confirm-ok')?.addEventListener('click', () => {
+                this._confirmResolver?.(true);
+                this._hideConfirm();
+            });
+            await this.loadModules();
+            this.connectWebSocket();
+            this.autoResizeTextarea();
+            this.initResizers();
+            this.initSidebarTransitions();
+            this._checkTtsAvailable();
+            this.initSafeguard();
+            this._initCtxIndicator();
+            this._bindCtxIndicatorAction();
+            this.initSidebarAccountMenu();
+            this.initMobileMenu();
+        } catch (err) {
+            console.error('Ninko init failed:', err);
+            this._showInitError(err);
+        } finally {
+            document.documentElement.classList.remove('light-mode-pre');
+            document.body.style.opacity = '1';
+        }
+    },
+
+    _showInitError(err) {
+        const message = (err && err.message) ? err.message : 'Unbekannter Initialisierungsfehler';
+        const target = document.getElementById('main-content') || document.body;
+        if (!target || document.getElementById('ninko-init-error')) return;
+        const box = document.createElement('div');
+        box.id = 'ninko-init-error';
+        box.style.cssText = [
+            'margin:16px',
+            'padding:14px 16px',
+            'border-radius:12px',
+            'border:1px solid rgba(239,68,68,.35)',
+            'background:rgba(127,29,29,.18)',
+            'color:var(--text-primary, #fff)',
+            'font-size:.95rem',
+            'line-height:1.45'
+        ].join(';');
+        box.innerHTML = `
+            <strong style="display:block;margin-bottom:6px;">Dashboard konnte nicht vollständig initialisiert werden.</strong>
+            <div style="opacity:.92">Fehler: ${this._escapeHtml(String(message))}</div>
+            <div style="margin-top:6px;opacity:.75">Browser-Konsole öffnen und Seite neu laden. Der Rest der Oberfläche bleibt sichtbar.</div>
+        `;
+        target.prepend(box);
     },
 
     async ensureAuthenticated() {
@@ -428,7 +460,7 @@ const Ninko = {
         return this._sessionId;
     },
 
-    // ─── Modules ───
+    // --- Modules ---
     async loadModules() {
         // Register click handlers for all primary nav tabs
         document.querySelectorAll('#nav-tabs-top .nav-tab[data-tab], #nav-tabs-bottom .nav-tab[data-tab]').forEach(tab => {
@@ -590,7 +622,7 @@ const Ninko = {
     },
 
 
-    // ─── Tab Switching ───
+    // --- Tab Switching ---
     switchTab(tabId) {
         // Redirect tasks/agents/workflows through the automatisierung tab
         if (['tasks', 'agents', 'workflows'].includes(tabId)) {
@@ -687,7 +719,7 @@ const Ninko = {
         }
     },
 
-    // ─── Automatisierung Sub-Tab Switching ───
+    // --- Automatisierung Sub-Tab Switching ---
     switchAutoTab(tabId) {
         // Stop workflows timer when leaving workflows sub-tab
         if (this._activeAutoTab === 'workflows' && tabId !== 'workflows') {
@@ -723,7 +755,7 @@ const Ninko = {
         if (tabId === 'workflows') this.loadWorkflows();
     },
 
-    // ─── Module Sub-Tab Switching ───
+    // --- Module Sub-Tab Switching ---
     switchModuleTab(tabId) {
         // Restore previous module panel back to main-content
         if (this._activeModuleTab && this._activeModuleTab !== tabId) {
@@ -783,7 +815,7 @@ const Ninko = {
         return map[tabId] || this._pluginTabs[tabId] || null;
     },
 
-    // ─── Chat ───
+    // --- Chat ---
     _setChatBusy(busy) {
         const btnSend = document.getElementById('btn-send');
         const input = document.getElementById('chat-input');
@@ -818,7 +850,7 @@ const Ninko = {
         }
     },
 
-    // ─── Spracheingabe ───
+    // --- Spracheingabe ---
     _mediaRecorder: null,
     _audioChunks: [],
     _isRecording: false,
@@ -1099,7 +1131,7 @@ const Ninko = {
         }
     },
 
-    // ─── Chat History ───
+    // --- Chat History ---
     async loadHistory() {
         // SECURITY: Chat history wird NICHT in localStorage gespeichert (XSS/CWE-200)
         // da sie potenziell sensitive Daten enthalten kann.
@@ -1275,7 +1307,7 @@ const Ninko = {
         this._setChatState('centered');
     },
 
-    // ─── Context Clear ───
+    // --- Context Clear ---
     async clearContext() {
         if (!await this.confirm(t('chat.clearContextConfirm'))) return;
 
@@ -1294,7 +1326,7 @@ const Ninko = {
         showNotification(t('chat.contextClearedNotif'), 'info');
     },
 
-    // ─── Theme Toggle ───
+    // --- Theme Toggle ---
     _setThemeToggleIcon(isLight) {
         const btn = document.getElementById('theme-toggle');
         if (!btn) return;
@@ -1532,7 +1564,7 @@ const Ninko = {
         } catch { /* TTS bleibt deaktiviert */ }
     },
 
-    // ─── SafeGuard (Profile-System) ─────────────────────────────────────────
+    // --- SafeGuard (Profile-System) -----------------------------------------
 
     // _safeguardProfiles: alle Profile (built-in + custom)
     // _safeguardActiveId: aktuell globales Profil
@@ -1700,7 +1732,7 @@ const Ninko = {
         document.getElementById('safeguard-confirm-prompt')?.remove();
     },
 
-    // ─── SafeGuard Settings Panel ───────────────────────────────────────────
+    // --- SafeGuard Settings Panel -------------------------------------------
 
     async renderSafeguardSettingsPanel() {
         try {
@@ -2051,6 +2083,29 @@ const Ninko = {
         } catch { /* kein Fehler anzeigen — optionale Initialisierung */ }
     },
 
+    _bindCtxIndicatorAction() {
+        const el = document.getElementById('ctx-indicator');
+        if (!el || el.dataset.clearBound === '1') return;
+
+        el.dataset.clearBound = '1';
+        el.setAttribute('role', 'button');
+        el.setAttribute('tabindex', '0');
+        el.setAttribute('aria-label', t('chat.clearContext'));
+        if (!el.title) el.title = t('chat.clearContext');
+
+        el.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            this.clearContext();
+        });
+
+        el.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            this.clearContext();
+        });
+    },
+
     _updateCtxIndicator(budget) {
         const el  = document.getElementById('ctx-indicator');
         const arc = document.getElementById('ctx-arc');
@@ -2080,7 +2135,7 @@ const Ninko = {
         // Tooltip
         const fmt = n => n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
         const remaining = Math.max(0, limit - used_tokens);
-        el.title = `Kontext: ${fmt(used_tokens)} / ${fmt(limit)} Tokens\nKomprimierung in ~${fmt(remaining)} Tokens`;
+        el.title = `Kontext: ${fmt(used_tokens)} / ${fmt(limit)} Tokens\nKomprimierung in ~${fmt(remaining)} Tokens\n${t('chat.clearContext')}`;
 
         el.classList.add('visible');
     },
@@ -2477,7 +2532,7 @@ const Ninko = {
             .replace(/\n/g, '<br>');
     },
 
-    // ─── WebSocket ───
+    // --- WebSocket ---
     connectWebSocket() {
         const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${proto}//${location.host}/ws`;
@@ -2546,7 +2601,7 @@ const Ninko = {
         }
     },
 
-    // ─── Settings ───
+    // --- Settings ---
     async loadBrandingSettings() {
         try {
             const res = await fetch('/api/settings/branding', { cache: 'no-store' });
@@ -2951,7 +3006,7 @@ const Ninko = {
         if (tabId === 'alerts') this.loadAlerts();
     },
 
-    // ─── Language ───
+    // --- Language ---
     async setLanguage(lang) {
         // UI sofort aktualisieren
         await I18n.load(lang);
@@ -3017,7 +3072,7 @@ const Ninko = {
         this.loadEmbedModel();
     },
 
-    // ─── Themes ───
+    // --- Themes ---
     async loadThemesSettings() {
         await this.loadActiveTheme();
         await this.loadThemesCatalog();
@@ -3365,7 +3420,7 @@ const Ninko = {
         }
     },
 
-    // ─── STT Settings ───
+    // --- STT Settings ---
     onSttProviderChange() {
         const provider = document.getElementById('stt-provider')?.value;
         document.getElementById('stt-whisper-fields')?.classList.toggle('hidden', provider !== 'whisper');
@@ -3461,7 +3516,7 @@ const Ninko = {
         }
     },
 
-    // ─── OCR Settings ───
+    // --- OCR Settings ---
     onOcrProviderChange() {
         const provider = document.getElementById('ocr-provider')?.value;
         document.getElementById('ocr-python-fields')?.classList.toggle('hidden', provider !== 'python');
@@ -3556,7 +3611,7 @@ const Ninko = {
         }
     },
 
-    // ─── TTS Settings ───
+    // --- TTS Settings ---
     async loadTtsSettings() {
         // Stimmen laden und Select befüllen
         let voices = [];
@@ -3756,7 +3811,7 @@ const Ninko = {
         }
     },
 
-    // ─── LLM Settings ───
+    // --- LLM Settings ---
     async loadLlmSettings() {
         try {
             const res = await fetch('/api/settings/llm');
@@ -3809,7 +3864,7 @@ const Ninko = {
         }
     },
 
-    // ─── Image Generation Provider ───
+    // --- Image Generation Provider ---
     async loadImageGenProvider() {
         try {
             const res = await fetch('/api/settings/image-provider');
@@ -3865,7 +3920,7 @@ const Ninko = {
         modelInput.placeholder = placeholders[backend] || 'Leer = Standard-Modell';
     },
 
-    // ─── Access / RBAC Settings ───
+    // --- Access / RBAC Settings ---
     async loadRbacSettings() {
         const root = document.getElementById('rbac-root');
         if (!root) return;
@@ -4461,7 +4516,7 @@ const Ninko = {
         }
     },
 
-    // ─── Module Settings & Connections ───
+    // --- Module Settings & Connections ---
     ACTION_FIELDS: {
         proxmox: [
             { key: 'host', label: 'Host / URL', placeholder: '192.168.1.100:8006' },
@@ -5255,7 +5310,7 @@ const Ninko = {
         }
     },
 
-    // ─── Textarea Auto-Resize ───
+    // --- Textarea Auto-Resize ---
     autoResizeTextarea() {
         const textarea = document.getElementById('chat-input');
         if (textarea) {
@@ -5266,7 +5321,7 @@ const Ninko = {
         }
     },
 
-    // ─── Resizing ───
+    // --- Resizing ---
     initResizers() {
         // Migrate sidebar width: boost by 20% for unified sidebar with history
         if (!localStorage.getItem('ninko_sidebar_migrated')) {
@@ -5326,7 +5381,7 @@ const Ninko = {
     },
 
 
-    // ─── Scheduled Tasks ───
+    // --- Scheduled Tasks ---
     openTaskEditor() {
         document.getElementById('tasks-overview')?.classList.add('hidden');
         document.getElementById('tasks-logs')?.classList.add('hidden');
@@ -5792,7 +5847,7 @@ const Ninko = {
         }
     },
 
-    // ── Marketplace (Multi-Repo) ──────────────────────────────────────────────
+    // -- Marketplace (Multi-Repo) ----------------------------------------------
 
     async loadMarketplaceConfig() {
         await this._loadMarketplaceRepos();
@@ -6163,9 +6218,9 @@ const Ninko = {
         }
     },
 
-    // ═══════════════════════════════════════════════════════
+    // -------------------------------------------------------
     //  LOGS
-    // ═══════════════════════════════════════════════════════
+    // -------------------------------------------------------
 
     _logActiveLevels: new Set(['INFO', 'WARN', 'ERROR', 'CRIT']),
     _logAutoScroll: true,
@@ -6285,9 +6340,9 @@ const Ninko = {
         a.click(); URL.revokeObjectURL(url);
     },
 
-    // ═══════════════════════════════════════════════════════
+    // -------------------------------------------------------
     //  LLM MULTI-PROVIDER
-    // ═══════════════════════════════════════════════════════
+    // -------------------------------------------------------
 
     async loadLlmProviders() {
         const container = document.getElementById('llm-providers-list');
@@ -6505,7 +6560,7 @@ const Ninko = {
     // Legacy – falls irgendwo noch direkt aufgerufen
     async saveEmbedModel() { await this.saveEmbedProvider(); },
 
-    // ─── Alert Management ───
+    // --- Alert Management ---
     _alertsCache: [],
 
     async loadAlerts() {
@@ -6693,7 +6748,7 @@ const Ninko = {
 };
 
 
-// ─── Global Helpers ───
+// --- Global Helpers ---
 function showNotification(message, type = 'info') {
     const container = document.getElementById('notifications');
     const div = document.createElement('div');
@@ -6713,9 +6768,26 @@ function switchTab(tabId) {
     Ninko.switchTab(tabId);
 }
 
-// ─── Export für HTML-Event-Handler ───
+// --- Export für HTML-Event-Handler ---
 window.Ninko = Ninko;
 window.I18n = I18n;
 
-// ─── Boot ───
-document.addEventListener('DOMContentLoaded', () => Ninko.init());
+// --- Boot ---
+(() => {
+    let bootStarted = false;
+    const boot = () => {
+        if (bootStarted) return;
+        bootStarted = true;
+        Ninko.init();
+    };
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', boot, { once: true });
+    } else {
+        boot();
+    }
+
+    window.addEventListener('pageshow', () => {
+        if (!bootStarted) boot();
+    });
+})();

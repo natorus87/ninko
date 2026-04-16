@@ -15,7 +15,7 @@
         _scripts: [],
         _currentScriptId: null,
 
-        init() {
+        initScriptingFeature() {
             return this.loadScripts();
         },
 

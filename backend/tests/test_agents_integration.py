@@ -199,6 +199,26 @@ class TestAgentGeneration:
 
         assert "web_search" in data.get("suggested_modules", [])
 
+    def test_generate_agent_provides_generation_info(self) -> None:
+        """Verify that agent generation includes metadata about the process."""
+        payload = {"use_case": "Kubernetes monitoring"}
+
+        response = client.post("/api/agents/generate", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+
+        assert "_generation_info" in data
+        gen_info = data["_generation_info"]
+
+        assert "used_inferred_modules" in gen_info
+        assert "fallback_used" in gen_info
+        assert isinstance(gen_info["used_inferred_modules"], bool)
+        assert isinstance(gen_info["fallback_used"], bool)
+
+        if gen_info["fallback_used"]:
+            assert "original_error" in gen_info
+            assert len(gen_info["original_error"]) > 0
+
 
 class TestAgentTemplates:
     """Test suite for Agent templates endpoint."""

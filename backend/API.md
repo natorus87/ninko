@@ -135,6 +135,14 @@ The generation endpoint includes robust error handling:
 | web_search, recherche, suchen, internet | web_search |
 | bild, image, foto | image_gen |
 
+**Generation Fallback:**
+If LLM generation fails, the API returns a minimal valid agent specification with:
+- `name`: Derived from use case
+- `description`: Use case summary
+- `system_prompt`: Standard template
+- `suggested_modules`: Inferred from keywords
+- `_generation_info.fallback_used`: `true` to indicate fallback
+
 ### 2. Workflow Management
 
 #### List all workflows
@@ -231,6 +239,27 @@ GET /api/workflows/runs/{run_id}
   "steps_total": 5
 }
 ```
+
+#### Retry failed step
+```http
+POST /api/workflows/runs/{run_id}/steps/{step_index}/retry
+```
+
+Retries a single failed workflow step. Only steps with status `failed` or `error` can be retried.
+
+**Response:**
+```json
+{
+  "run_id": "run-456",
+  "step_index": 2,
+  "status": "retrying"
+}
+```
+
+**Error Cases:**
+- Step not in failed state → 400 Bad Request
+- Run not found → 404 Not Found
+- Invalid step index → 400 Bad Request
 
 #### List workflow versions
 ```http

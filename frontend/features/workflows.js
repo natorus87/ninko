@@ -12,9 +12,9 @@
     'use strict';
 
     const WorkflowsFeature = {
-        // ═══════════════════════════════════════════════════════
+        // -------------------------------------------------------
         //  WORKFLOWS
-        // ═══════════════════════════════════════════════════════
+        // -------------------------------------------------------
 
         _wfNodes: [],
         _wfEdges: [],
@@ -122,6 +122,7 @@
                 loop: this._ic.loop,
                 parallel: this._ic.parallel || '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h4v-4H4v4zm6 0h4v-4h-4v4zm6 0h4v-4h-4v4z"/></svg>',
                 subflow: this._ic.subflow || '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h6l-2-2m2 2l-2 2M12 12h8"/></svg>',
+                script: this._ic.script || '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
                 variable: this._ic.box,
                 end: this._ic.stopci
             }[type] || '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>';
@@ -135,6 +136,7 @@
                 loop: { label: 'Loop', config: { mode: 'foreach', variable: 'items', prompt: 'Verarbeite: {loop_item}', max_iterations: '10' } },
                 parallel: { label: 'Parallel', config: { prompts: ['Task 1', 'Task 2'] } },
                 subflow: { label: 'Subflow', config: { workflow_id: '' } },
+                script: { label: 'Script', config: { script_id: '', input_var: '', timeout: '30' } },
                 variable: { label: 'Variable', config: { name: 'myVar', value: '' } },
                 end: { label: 'Ende', config: { status: 'succeeded' } },
             };
@@ -402,6 +404,26 @@
                             <option value="">– Laden… –</option>
                         </select>
                     </div>`;
+                } else if (node.type === 'script' && k === 'script_id') {
+                    html += `<div class="form-row"><label class="form-label">Script</label>
+                        <select id="wf-inspect-script_id" class="form-select"
+                            onchange="Ninko._wfUpdateNodeConfig('${nodeId}', 'script_id', this.value)">
+                            <option value="">– Laden… –</option>
+                        </select>
+                    </div>`;
+                } else if (node.type === 'script' && k === 'input_var') {
+                    html += `<div class="form-row"><label class="form-label">Input Variable (optional)</label>
+                        <input type="text" class="form-input" value="${this._escapeHtml(String(v ?? ''))}"
+                            placeholder="Variablenname für Script-Input"
+                            onchange="Ninko._wfUpdateNodeConfig('${nodeId}', 'input_var', this.value)">
+                        <small style="color:var(--text-muted)">Variable wird als {script_input} verfügbar</small>
+                    </div>`;
+                } else if (node.type === 'script' && k === 'timeout') {
+                    html += `<div class="form-row"><label class="form-label">Timeout (Sekunden)</label>
+                        <input type="number" class="form-input" min="1" max="300" value="${this._escapeHtml(String(v ?? '30'))}"
+                            onchange="Ninko._wfUpdateNodeConfig('${nodeId}', 'timeout', this.value)">
+                        <small style="color:var(--text-muted)">1-300 Sekunden (Default: 30)</small>
+                    </div>`;
                 } else {
                     html += `<div class="form-row"><label class="form-label">${this._escapeHtml(k)}</label>
                         <input type="text" class="form-input" value="${this._escapeHtml(String(v ?? ''))}"
@@ -460,6 +482,21 @@
                                 `<option value="${wf.id}" ${wf.id === node.config.workflow_id ? 'selected' : ''}>${wf.name}</option>`
                             ).join('');
                         if (node.config.workflow_id) sel.value = node.config.workflow_id;
+                    }
+                } catch { }
+            }
+
+            if (node.type === 'script') {
+                try {
+                    const res = await fetch('/api/scripting/scripts');
+                    const data = await res.json();
+                    const sel = document.getElementById('wf-inspect-script_id');
+                    if (sel) {
+                        sel.innerHTML = '<option value="">– Script wählen –</option>' +
+                            (data.scripts || []).map(s =>
+                                `<option value="${s.id}" ${s.id === node.config.script_id ? 'selected' : ''}>${s.name}</option>`
+                            ).join('');
+                        if (node.config.script_id) sel.value = node.config.script_id;
                     }
                 } catch { }
             }
@@ -642,7 +679,7 @@
             const svg = document.getElementById('wf-run-edges-svg');
             if (!canvas || !svg) return;
             const stepMap = {};
-            steps.forEach(s => { stepMap[s.node_id] = s; });
+            steps.forEach((s, idx) => { stepMap[s.node_id] = { ...s, _stepIndex: idx }; });
             canvas.innerHTML = '';
             this._wfRunNodes.forEach(node => {
                 const step = stepMap[node.id] || {};
@@ -664,7 +701,7 @@
                 `;
                 if (step.status) {
                     el.style.cursor = 'pointer';
-                    el.addEventListener('click', () => this._wfRunShowStepDetail(step, node));
+                    el.addEventListener('click', () => this._wfRunShowStepDetail(step, node, steps));
                 }
                 canvas.appendChild(el);
             });
@@ -716,7 +753,7 @@
             }, 60);
         },
 
-        _wfRunShowStepDetail(step, node) {
+        _wfRunShowStepDetail(step, node, allSteps) {
             const inspector = document.getElementById('wf-run-inspector');
             const content = document.getElementById('wf-run-inspector-content');
             if (!inspector || !content) return;
@@ -726,6 +763,10 @@
             const outputHtml = step.output
                 ? `<pre class="wf-run-output">${this._escapeHtml(step.output)}</pre>`
                 : '<p style="font-size:0.85rem;color:var(--text-muted);margin:0;">Keine Ausgabe.</p>';
+            const stepIndex = step._stepIndex !== undefined ? step._stepIndex : (allSteps ? allSteps.indexOf(step) : -1);
+            const retryBtn = (step.status === 'failed' && this._wfCurrentRunId && stepIndex >= 0)
+                ? `<div class="form-row"><button class="btn btn-sm btn-primary" onclick="Ninko._retryWorkflowStep(${stepIndex})">🔄 Step neu ausführen</button></div>`
+                : '';
             content.innerHTML = `
                 <div class="form-row">
                     <label class="form-label">Status</label>
@@ -736,11 +777,28 @@
                     <span style="font-size:0.85rem;">${step.duration_ms != null ? step.duration_ms + ' ms' : '–'}</span>
                 </div>
                 ${step.error ? `<div class="form-row"><label class="form-label" style="color:var(--error-color);">Fehler</label><div class="wf-run-error">${this._escapeHtml(step.error)}</div></div>` : ''}
+                ${retryBtn}
                 <div class="form-row" style="flex:1;display:flex;flex-direction:column;min-height:0;">
                     <label class="form-label">Ausgabe</label>
                     ${outputHtml}
                 </div>
             `;
+        },
+
+        async _retryWorkflowStep(stepIndex) {
+            if (!this._wfCurrentRunId) return;
+            try {
+                const res = await fetch(`/api/workflows/runs/${this._wfCurrentRunId}/steps/${stepIndex}/retry`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                showNotification('Step wird neu ausgeführt...', 'info');
+                // Poll für Update
+                setTimeout(() => this._refreshRunStatus(), 2000);
+            } catch (e) {
+                showNotification(`Retry fehlgeschlagen: ${e.message}`, 'error');
+            }
         },
 
         _wfRunCloseInspector() {

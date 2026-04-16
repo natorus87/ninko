@@ -11,6 +11,7 @@ import uuid
 
 # ── Workflow Node ────────────────────────────────────
 
+
 class NodePosition(BaseModel):
     x: float = 0.0
     y: float = 0.0
@@ -18,8 +19,11 @@ class NodePosition(BaseModel):
 
 class WorkflowNode(BaseModel):
     """Ein Node im Workflow-DAG."""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
-    type: Literal["trigger", "agent", "condition", "loop", "variable", "parallel", "subflow", "end"] = "agent"
+    type: Literal[
+        "trigger", "agent", "condition", "loop", "variable", "parallel", "subflow", "script", "end"
+    ] = "agent"
     label: str = ""
     config: dict = Field(default_factory=dict)
     # config examples:
@@ -28,21 +32,25 @@ class WorkflowNode(BaseModel):
     #   condition: {"expression": "output.contains('error')", "true_label": "Fehler", "false_label": "OK"}
     #   loop:      {"mode": "foreach" | "while", "variable": "items", "condition": "i < 10"}
     #   variable:  {"name": "myVar", "value": "static_or_{template}"}
+    #   script:    {"script_id": "...", "input_var": "data", "timeout": 30}
     #   end:       {"status": "succeeded" | "failed"}
     position: NodePosition = Field(default_factory=NodePosition)
 
 
 # ── Workflow Edge ────────────────────────────────────
 
+
 class WorkflowEdge(BaseModel):
     """Gerichtete Verbindung zwischen zwei Nodes."""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
     source_id: str
     target_id: str
-    label: str = ""   # z.B. "true" / "false"
+    label: str = ""  # z.B. "true" / "false"
 
 
 # ── Workflow Definition ──────────────────────────────
+
 
 class WorkflowVariable(BaseModel):
     name: str
@@ -51,6 +59,7 @@ class WorkflowVariable(BaseModel):
 
 class WorkflowDefinition(BaseModel):
     """Vollständige Workflow-Definition (DAG)."""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
     description: str = ""
@@ -65,6 +74,7 @@ class WorkflowDefinition(BaseModel):
 
 class WorkflowCreate(BaseModel):
     """Payload zum Erstellen/Aktualisieren eines Workflows."""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = Field(..., min_length=1, max_length=128)
     description: str = ""
@@ -76,8 +86,10 @@ class WorkflowCreate(BaseModel):
 
 # ── Workflow Run ─────────────────────────────────────
 
+
 class WorkflowRunStep(BaseModel):
     """Ergebnis eines einzelnen Steps in einem Run."""
+
     node_id: str
     node_type: str
     node_label: str = ""
@@ -92,6 +104,7 @@ class WorkflowRunStep(BaseModel):
 
 class WorkflowRun(BaseModel):
     """Ein Workflow-Ausführungsprotokoll."""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     workflow_id: str
     workflow_name: str = ""
