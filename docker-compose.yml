@@ -3,7 +3,7 @@ name: ninko
 services:
   # ─── ChromaDB (Semantic Memory) ────────────────
   chromadb:
-    image: chromadb/chroma:0.6.0
+    image: chromadb/chroma:1.5.8
     container_name: ninko-chromadb
     ports:
       - "8100:8000"
