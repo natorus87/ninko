@@ -18,6 +18,80 @@ from langchain_core.tools import tool
 
 logger = logging.getLogger("ninko.modules.codelab")
 
+# Pfade, die read-only in den bwrap-Namespace gemountet werden.
+_BWRAP_RO_BIND_CANDIDATES = [
+    "/usr",
+    "/bin",
+    "/sbin",
+    "/lib",
+    "/lib64",
+    "/lib32",
+    "/etc/localtime",
+    "/etc/ssl/certs",
+    "/etc/ca-certificates",
+]
+
+
+def _bwrap_available() -> bool:
+    """Gibt True zurück wenn bwrap installiert und ausführbar ist."""
+    return shutil.which("bwrap") is not None
+
+
+def _build_bwrap_cmd(exec_cmd: list[str], tmp_dir: str) -> list[str]:
+    """
+    Wraps exec_cmd mit bubblewrap (bwrap) für Filesystem-Isolation.
+
+    Der Sandbox-Prozess erhält:
+    - Read-only Zugriff auf System-Binaries und -Libraries
+    - Vollständig isoliertes /tmp (tmpfs)
+    - Read/Write-Zugriff nur auf tmp_dir (für das Script)
+    - Neuen proc/dev-Namespace
+    - Keine Sichtbarkeit des Host-Filesystems außerhalb der erlaubten Pfade
+
+    Netzwerk wird bewusst NICHT isoliert, damit IT-Ops-Scripts externe
+    Hosts erreichen können. Filesystem-Isolation ist der primäre Schutz.
+    """
+    bwrap_bin = shutil.which("bwrap")
+    if not bwrap_bin:
+        return exec_cmd
+
+    args: list[str] = [bwrap_bin]
+
+    # Read-only System-Pfade einbinden (nur wenn vorhanden)
+    for path in _BWRAP_RO_BIND_CANDIDATES:
+        if os.path.islink(path):
+            # Symlinks (z.B. /bin -> usr/bin) als Symlink weitergeben
+            target = os.readlink(path)
+            args += ["--symlink", target, path]
+        elif os.path.isdir(path) or os.path.isfile(path):
+            args += ["--ro-bind", path, path]
+
+    # proc und dev Namespace
+    args += ["--proc", "/proc", "--dev", "/dev"]
+
+    # Isoliertes /tmp (tmpfs — kein Zugriff auf Host-/tmp)
+    args += ["--tmpfs", "/tmp"]
+
+    # Script-Verzeichnis read/write einbinden
+    args += ["--bind", tmp_dir, tmp_dir]
+
+    # Working Directory
+    args += ["--chdir", tmp_dir]
+
+    # Alle Namespaces außer Netzwerk isolieren
+    args += [
+        "--unshare-user",
+        "--unshare-ipc",
+        "--unshare-pid",
+        "--unshare-uts",
+        "--unshare-cgroup",
+        "--die-with-parent",
+        "--new-session",
+    ]
+
+    args += ["--", *exec_cmd]
+    return args
+
 # Resource limits loaded from core config
 
 
@@ -169,7 +243,9 @@ async def execute_code(code: str, language: str = "python", timeout: int = 15) -
         tmp_path = str(Path(tmp_dir) / f"main{cfg['ext']}")
         Path(tmp_path).write_text(code, encoding="utf-8")
 
-        cmd = cfg["cmd"](tmp_path)
+        inner_cmd = cfg["cmd"](tmp_path)
+        use_bwrap = os.name == "posix" and _bwrap_available()
+        cmd = _build_bwrap_cmd(inner_cmd, tmp_dir) if use_bwrap else inner_cmd
         t_start = time.perf_counter()
         sandbox_env = _build_sandbox_env(tmp_dir)
         preexec = (
@@ -183,6 +259,9 @@ async def execute_code(code: str, language: str = "python", timeout: int = 15) -
             if os.name == "posix"
             else None
         )
+
+        if use_bwrap:
+            logger.debug("CodeLab: bwrap-Sandbox aktiv für %s", language)
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -229,10 +308,11 @@ async def execute_code(code: str, language: str = "python", timeout: int = 15) -
             )
 
         logger.info(
-            "CodeLab: %s ausgeführt, exit=%d, %.0fms",
+            "CodeLab: %s ausgeführt, exit=%d, %.0fms, bwrap=%s",
             language,
             proc.returncode,
             duration_ms,
+            use_bwrap,
         )
 
         return {
