@@ -95,6 +95,47 @@ Die folgenden Punkte sind nicht Teil der aktuellen Stabilisierungsphase, sondern
 - Themes-Modul extrahieren
 - SafeGuard-Modul extrahieren
 
+### Ideen aus AIfred-Intelligence (2026-04-17)
+
+Analyse von [github.com/Peuqui/AIfred-Intelligence](https://github.com/Peuqui/AIfred-Intelligence) — verwertbare Konzepte für Ninko:
+
+#### Priorität: Dringend
+
+**Sandboxed Code Execution** *(Aufwand: Mittel | Mehrwert: Hoch)*
+Scripts laufen aktuell unsandboxed. Seit Scripts als LLM-Tools aufrufbar sind, ist das ein direkter Pfad vom Chat in unkontrollierte Prozesse. AIfred nutzt `bwrap` + `RLIMIT_AS`/`RLIMIT_CPU` + Timeout-Enforcement.
+- RAM- und CPU-Limits pro Script-Ausführung setzen
+- `bwrap` oder Subprocess-Isolation für das Scripting-Modul
+- Gilt auch für `execute_code` in codelab
+
+**Outbound Secret Sanitization** *(Aufwand: Klein | Mehrwert: Hoch)*
+Ninko prüft eingehende Nachrichten per SafeGuard, aber Tool-Outputs werden ungefiltert ans LLM zurückgegeben. Risiko: Config-Reads oder DB-Queries leaken Secrets in den LLM-Kontext.
+- Regex-Scanner auf Tool-Outputs (API-Key/Passwort-Pattern)
+- `![...](...)` Markdown-Bild-Exfiltration aus Tool-Responses blockieren
+- Sinnvoll in `core/tool_error_handling.py` oder als Middleware
+
+#### Priorität: Mittelfristig
+
+**Multi-Agent-Debatte System** *(Aufwand: Mittel | Mehrwert: Hoch)*
+Mehrere Agents debattieren strukturiert mit Rollen (Hauptagent, Kritiker, Richter) und Voting-Mechanismus. Modi: Auto-Consensus, Tribunal, Symposion. Für Ninko besonders wertvoll bei Incident-Analyse und Change-Risk-Assessment.
+- Baut auf bestehendem Agent-Pool + Workflow-Engine auf
+- Perspektiven-aware History: jeder Agent sieht eigene Msgs als `assistant`, fremde als `user [NAME]:`
+
+**5-Level Tool Permission Tiers** *(Aufwand: Mittel | Mehrwert: Hoch)*
+Ergänzung zum LLM-Classifier: Jedes Tool deklariert statisch einen Tier (READONLY / COMMUNICATE / WRITE_DATA / WRITE_SYSTEM / ADMIN). Deterministisch, kein 8s-Timeout. Hybrid: statische Tiers + LLM-Classifier als Override für Grenzfälle.
+- Ninko hat `_TOOL_READONLY` — das Konzept auf 5 Stufen erweitern
+- Besonders relevant wenn externe Channels (Email, Discord) hinzukommen
+
+**Chat als HTML exportieren** *(Aufwand: Klein | Mehrwert: Mittel)*
+Standalone HTML mit inlinen Fonts, offline lesbar. Nützlich für Incident-Reports, Audit-Trails, Weitergabe an Nicht-Nutzer.
+
+#### Priorität: Langfristig / Strategisch
+
+**Message Hub (externe Channels)** *(Aufwand: Groß | Mehrwert: Hoch)*
+Email (IMAP IDLE), Discord Bot, Telegram als Background-Worker. SQLite-Routing-Tabelle mappt Channel + Channel-ID auf Sessions. Auto-Restart mit Exponential Backoff.
+- Ninko würde damit direkt in nativen IT-Ops-Kommunikationskanälen erreichbar
+- Alerts könnten bidirektional antworten
+- Voraussetzung: 5-Level Permission Tiers (externe Requests bekommen reduzierten Tier)
+
 ### Weitere Features
 
 - Piper TTS im K8s-Image (bei Bedarf)
