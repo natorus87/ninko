@@ -17,12 +17,12 @@ spec:
     spec:
       containers:
         - name: chromadb
-          image: chromadb/chroma:0.6.0
+          image: chromadb/chroma:1.5.8
           ports:
             - containerPort: 8000
           volumeMounts:
             - name: chroma-data
-              mountPath: /chroma/chroma
+              mountPath: /data
           env:
             - name: IS_PERSISTENT
               value: "TRUE"
