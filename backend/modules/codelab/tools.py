@@ -32,11 +32,6 @@ _BWRAP_RO_BIND_CANDIDATES = [
 ]
 
 
-def _bwrap_available() -> bool:
-    """Gibt True zurück wenn bwrap installiert und ausführbar ist."""
-    return shutil.which("bwrap") is not None
-
-
 def _build_bwrap_cmd(exec_cmd: list[str], tmp_dir: str, bwrap_bin: str) -> list[str]:
     """
     Wraps exec_cmd mit bubblewrap (bwrap) für Filesystem-Isolation.
@@ -164,9 +159,8 @@ def _available_languages() -> list[str]:
 
 def _build_sandbox_env(tmp_dir: str) -> dict[str, str]:
     """Erzeugt ein minimales Environment für Subprozesse."""
-    safe_path = os.environ.get("PATH", "/usr/bin:/bin")
     return {
-        "PATH": safe_path,
+        "PATH": "/usr/local/bin:/usr/bin:/bin",
         "HOME": tmp_dir,
         "TMPDIR": tmp_dir,
         "LANG": "C.UTF-8",
@@ -261,10 +255,12 @@ async def execute_code(code: str, language: str = "python", timeout: int = 15) -
         Path(tmp_path).write_text(code, encoding="utf-8")
 
         inner_cmd = cfg["cmd"](tmp_path)
-        bwrap_bin = shutil.which("bwrap") if os.name == "posix" else None
+        _bwrap_candidate = shutil.which("bwrap") if os.name == "posix" else None
+        # Nur absoluten Pfad akzeptieren — verhindert Injection via manipuliertem PATH
+        bwrap_bin = _bwrap_candidate if (_bwrap_candidate and os.path.isabs(_bwrap_candidate)) else None
         use_bwrap = bwrap_bin is not None
         if use_bwrap:
-            cmd = _build_bwrap_cmd(inner_cmd, tmp_dir, bwrap_bin)  # type: ignore[arg-type]
+            cmd = _build_bwrap_cmd(inner_cmd, tmp_dir, bwrap_bin)
             logger.debug("CodeLab: bwrap-Sandbox aktiv für %s", language)
         else:
             cmd = inner_cmd
