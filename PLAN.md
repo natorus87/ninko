@@ -97,17 +97,11 @@ Analyse von [github.com/Peuqui/AIfred-Intelligence](https://github.com/Peuqui/AI
 
 #### Priorität: Dringend
 
-**Sandboxed Code Execution** *(Aufwand: Mittel | Mehrwert: Hoch)*
-Scripts laufen aktuell unsandboxed. Seit Scripts als LLM-Tools aufrufbar sind, ist das ein direkter Pfad vom Chat in unkontrollierte Prozesse. AIfred nutzt `bwrap` + `RLIMIT_AS`/`RLIMIT_CPU` + Timeout-Enforcement.
-- RAM- und CPU-Limits pro Script-Ausführung setzen
-- `bwrap` oder Subprocess-Isolation für das Scripting-Modul
-- Gilt auch für `execute_code` in codelab
-
-**Outbound Secret Sanitization** *(Aufwand: Klein | Mehrwert: Hoch)*
-Ninko prüft eingehende Nachrichten per SafeGuard, aber Tool-Outputs werden ungefiltert ans LLM zurückgegeben. Risiko: Config-Reads oder DB-Queries leaken Secrets in den LLM-Kontext.
-- Regex-Scanner auf Tool-Outputs (API-Key/Passwort-Pattern)
-- `![...](...)` Markdown-Bild-Exfiltration aus Tool-Responses blockieren
-- Sinnvoll in `core/tool_error_handling.py` oder als Middleware
+**Sandboxed Code Execution** *(✅ Abgeschlossen 2026-04-17)*
+`bwrap` + `RLIMIT_*` + Timeout-Enforcement in `codelab/tools.py` implementiert. Script-Modul nutzt `execute_code` als Unterbau → beide abgedeckt.
+- ✅ RAM/CPU-Limits via `RLIMIT_AS`, `RLIMIT_CPU`, `RLIMIT_FSIZE`, `RLIMIT_NPROC`, `RLIMIT_CORE`
+- ✅ `bwrap` Filesystem-Namespace-Isolation (kein Zugriff auf Host-FS außer System-Bins)
+- ✅ Graceful Fallback wenn `bwrap` nicht verfügbar (Container ohne user_namespaces)
 
 #### Priorität: Mittelfristig
 
