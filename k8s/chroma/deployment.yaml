@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: chromadb
-          image: chromadb/chroma:0.4.24
+          image: chromadb/chroma:0.6.0
           ports:
             - containerPort: 8000
           volumeMounts:
