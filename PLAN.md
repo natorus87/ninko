@@ -107,6 +107,11 @@ Scripts laufen aktuell unsandboxed. Seit Scripts als LLM-Tools aufrufbar sind, i
 - `bwrap` oder Subprocess-Isolation für das Scripting-Modul
 - Gilt auch für `execute_code` in codelab
 
+**5-Level Tool Permission Tiers** *(Aufwand: Mittel | Mehrwert: Hoch)*
+Ergänzung zum LLM-Classifier: Jedes Tool deklariert statisch einen Tier (READONLY / COMMUNICATE / WRITE_DATA / WRITE_SYSTEM / ADMIN). Deterministisch, kein 8s-Timeout. Hybrid: statische Tiers + LLM-Classifier als Override für Grenzfälle.
+- Ninko hat `_TOOL_READONLY` — das Konzept auf 5 Stufen erweitern
+- Besonders relevant wenn externe Channels (Email, Discord) hinzukommen
+
 **Outbound Secret Sanitization** *(Aufwand: Klein | Mehrwert: Hoch)*
 Ninko prüft eingehende Nachrichten per SafeGuard, aber Tool-Outputs werden ungefiltert ans LLM zurückgegeben. Risiko: Config-Reads oder DB-Queries leaken Secrets in den LLM-Kontext.
 - Regex-Scanner auf Tool-Outputs (API-Key/Passwort-Pattern)
@@ -120,11 +125,6 @@ Mehrere Agents debattieren strukturiert mit Rollen (Hauptagent, Kritiker, Richte
 - Baut auf bestehendem Agent-Pool + Workflow-Engine auf
 - Perspektiven-aware History: jeder Agent sieht eigene Msgs als `assistant`, fremde als `user [NAME]:`
 
-**5-Level Tool Permission Tiers** *(Aufwand: Mittel | Mehrwert: Hoch)*
-Ergänzung zum LLM-Classifier: Jedes Tool deklariert statisch einen Tier (READONLY / COMMUNICATE / WRITE_DATA / WRITE_SYSTEM / ADMIN). Deterministisch, kein 8s-Timeout. Hybrid: statische Tiers + LLM-Classifier als Override für Grenzfälle.
-- Ninko hat `_TOOL_READONLY` — das Konzept auf 5 Stufen erweitern
-- Besonders relevant wenn externe Channels (Email, Discord) hinzukommen
-
 **Chat als HTML exportieren** *(Aufwand: Klein | Mehrwert: Mittel)*
 Standalone HTML mit inlinen Fonts, offline lesbar. Nützlich für Incident-Reports, Audit-Trails, Weitergabe an Nicht-Nutzer.
 
@@ -135,6 +135,26 @@ Email (IMAP IDLE), Discord Bot, Telegram als Background-Worker. SQLite-Routing-T
 - Ninko würde damit direkt in nativen IT-Ops-Kommunikationskanälen erreichbar
 - Alerts könnten bidirektional antworten
 - Voraussetzung: 5-Level Permission Tiers (externe Requests bekommen reduzierten Tier)
+
+#### 30/60/90-Tage-Roadmap (empfohlen)
+
+**30 Tage (Security-Baseline)**
+- Sandbox für Script- und codelab-Ausführung: harte CPU/RAM/Timeout-Limits
+- 5-Level Permission-Tiers als statische Tool-Metadaten + Enforcement
+- Outbound-Output-Sanitization als Middleware (Secrets + Markdown-Exfiltration)
+- DoD: Kein unsandboxed Tool-Codepfad mehr in Production
+
+**60 Tage (Betrieb & Governance)**
+- Safeguard und Permission-Tiers integrieren (klarer Entscheidungsbaum)
+- Audit-Erweiterung: Permission-Entscheidung, Tool-Tier, Sanitization-Hits
+- Chat-Export als HTML für Incident-/Audit-Reporting
+- DoD: Jeder Tool-Aufruf ist nachvollziehbar und reproduzierbar
+
+**90 Tage (Erweiterung)**
+- Multi-Agent-Debatte als optionaler Modus für Risk/Incident-Analysen
+- Message Hub pilotieren (zuerst ein externer Kanal, z. B. Telegram oder Discord)
+- Kanal-spezifische Default-Policy (externe Requests mit reduziertem Tier)
+- DoD: Externer Kanal produktiv mit restriktiver Permission-Policy
 
 ### Weitere Features
 
