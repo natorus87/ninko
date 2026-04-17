@@ -37,7 +37,7 @@ def _bwrap_available() -> bool:
     return shutil.which("bwrap") is not None
 
 
-def _build_bwrap_cmd(exec_cmd: list[str], tmp_dir: str) -> list[str]:
+def _build_bwrap_cmd(exec_cmd: list[str], tmp_dir: str, bwrap_bin: str) -> list[str]:
     """
     Wraps exec_cmd mit bubblewrap (bwrap) für Filesystem-Isolation.
 
@@ -46,25 +46,36 @@ def _build_bwrap_cmd(exec_cmd: list[str], tmp_dir: str) -> list[str]:
     - Vollständig isoliertes /tmp (tmpfs)
     - Read/Write-Zugriff nur auf tmp_dir (für das Script)
     - Neuen proc/dev-Namespace
+    - Alle Linux-Capabilities gedroppt (--cap-drop all)
     - Keine Sichtbarkeit des Host-Filesystems außerhalb der erlaubten Pfade
 
     Netzwerk wird bewusst NICHT isoliert, damit IT-Ops-Scripts externe
     Hosts erreichen können. Filesystem-Isolation ist der primäre Schutz.
     """
-    bwrap_bin = shutil.which("bwrap")
-    if not bwrap_bin:
-        return exec_cmd
-
     args: list[str] = [bwrap_bin]
 
-    # Read-only System-Pfade einbinden (nur wenn vorhanden)
+    # Read-only System-Pfade einbinden (nur wenn vorhanden).
+    # Symlinks (z.B. /bin -> usr/bin) werden als Symlink in den Namespace übernommen.
+    # Das Symlink-Ziel wird zusätzlich per --ro-bind eingebunden, damit es auch
+    # tatsächlich erreichbar ist (os.readlink gibt den Rohwert zurück, der relativ
+    # sein kann — der aufgelöste realpath wird direkt gebunden).
+    already_bound: set[str] = set()
     for path in _BWRAP_RO_BIND_CANDIDATES:
         if os.path.islink(path):
-            # Symlinks (z.B. /bin -> usr/bin) als Symlink weitergeben
-            target = os.readlink(path)
-            args += ["--symlink", target, path]
+            raw_target = os.readlink(path)
+            # Symlink im Namespace anlegen (mit dem Originalwert, z.B. "usr/bin")
+            args += ["--symlink", raw_target, path]
+            # Realpath des Ziels einbinden, damit die Auflösung innerhalb des
+            # Namespace nicht ins Leere läuft
+            real = os.path.realpath(path)
+            if real not in already_bound and (os.path.isdir(real) or os.path.isfile(real)):
+                args += ["--ro-bind", real, real]
+                already_bound.add(real)
         elif os.path.isdir(path) or os.path.isfile(path):
-            args += ["--ro-bind", path, path]
+            real = os.path.realpath(path)
+            if real not in already_bound:
+                args += ["--ro-bind", path, path]
+                already_bound.add(real)
 
     # proc und dev Namespace
     args += ["--proc", "/proc", "--dev", "/dev"]
@@ -75,10 +86,12 @@ def _build_bwrap_cmd(exec_cmd: list[str], tmp_dir: str) -> list[str]:
     # Script-Verzeichnis read/write einbinden
     args += ["--bind", tmp_dir, tmp_dir]
 
-    # Working Directory
+    # Working Directory im Sandbox-Namespace
     args += ["--chdir", tmp_dir]
 
-    # Alle Namespaces außer Netzwerk isolieren
+    # Alle Namespaces außer Netzwerk isolieren.
+    # --unshare-pid: bwrap wird PID 1 im neuen Namespace — alle Kindprozesse
+    # sterben beim Tod von PID 1 (Kernel-Garantie, stärker als --die-with-parent).
     args += [
         "--unshare-user",
         "--unshare-ipc",
@@ -88,6 +101,10 @@ def _build_bwrap_cmd(exec_cmd: list[str], tmp_dir: str) -> list[str]:
         "--die-with-parent",
         "--new-session",
     ]
+
+    # Alle Linux-Capabilities droppen — verhindert privilegierte Syscalls
+    # (cap_net_raw, cap_sys_ptrace, etc.) aus LLM-generiertem Code.
+    args += ["--cap-drop", "all"]
 
     args += ["--", *exec_cmd]
     return args
@@ -244,8 +261,17 @@ async def execute_code(code: str, language: str = "python", timeout: int = 15) -
         Path(tmp_path).write_text(code, encoding="utf-8")
 
         inner_cmd = cfg["cmd"](tmp_path)
-        use_bwrap = os.name == "posix" and _bwrap_available()
-        cmd = _build_bwrap_cmd(inner_cmd, tmp_dir) if use_bwrap else inner_cmd
+        bwrap_bin = shutil.which("bwrap") if os.name == "posix" else None
+        use_bwrap = bwrap_bin is not None
+        if use_bwrap:
+            cmd = _build_bwrap_cmd(inner_cmd, tmp_dir, bwrap_bin)  # type: ignore[arg-type]
+            logger.debug("CodeLab: bwrap-Sandbox aktiv für %s", language)
+        else:
+            cmd = inner_cmd
+            logger.warning(
+                "CodeLab: bwrap nicht verfügbar — kein Filesystem-Namespace-Schutz! "
+                "Scripts laufen mit RLIMIT_*-Limits, aber ohne Filesystem-Isolation."
+            )
         t_start = time.perf_counter()
         sandbox_env = _build_sandbox_env(tmp_dir)
         preexec = (
@@ -259,9 +285,6 @@ async def execute_code(code: str, language: str = "python", timeout: int = 15) -
             if os.name == "posix"
             else None
         )
-
-        if use_bwrap:
-            logger.debug("CodeLab: bwrap-Sandbox aktiv für %s", language)
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -278,13 +301,18 @@ async def execute_code(code: str, language: str = "python", timeout: int = 15) -
                 proc.communicate(), timeout=timeout
             )
         except asyncio.TimeoutError:
-            if os.name == "posix":
-                try:
-                    os.killpg(proc.pid, signal.SIGKILL)
-                except (ProcessLookupError, OSError, RuntimeError):
+            # Bei bwrap: proc ist der bwrap-Wrapper. Da --unshare-pid aktiv ist,
+            # ist bwrap PID 1 im neuen Namespace — der Kernel beendet alle
+            # Kindprozesse beim Tod von PID 1. proc.kill() reicht daher aus.
+            # Ohne bwrap: os.setsid() im preexec erzeugt eine neue Session;
+            # killpg trifft die gesamte Prozessgruppe.
+            try:
+                if use_bwrap or os.name != "posix":
                     proc.kill()
-            else:
-                proc.kill()
+                else:
+                    os.killpg(proc.pid, signal.SIGKILL)
+            except (ProcessLookupError, OSError, RuntimeError):
+                pass
             await proc.communicate()
             return {
                 "stdout": "",
