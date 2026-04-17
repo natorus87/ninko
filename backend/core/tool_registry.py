@@ -592,6 +592,9 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
         ToolMetadata("task_output", "core", readonly=True),
         ToolMetadata("generate_image", "core", readonly=True),
         ToolMetadata("get_routing_info", "core", readonly=True),
+        ToolMetadata("list_scheduled_tasks", "core", readonly=True),
+        ToolMetadata("create_scheduled_task", "core", readonly=True),
+        ToolMetadata("delete_scheduled_task", "core", readonly=True),
     ]
     registry.register_many(core_tools)
 
