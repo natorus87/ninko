@@ -4,8 +4,10 @@ These tools provide fundamental system capabilities rather than domain-specific 
 """
 
 import asyncio
+import json
 import logging
 import re
+import shlex
 from langchain_core.tools import tool
 from core.task_registry import get_task_registry
 from core.tool_permissions import (
@@ -44,6 +46,9 @@ __all__ = [
     "get_routing_info",
     "wait",
     "generate_pdf_report",
+    "create_scheduled_task",
+    "list_scheduled_tasks",
+    "delete_scheduled_task",
 ]
 
 _CORE_TOOL_EXCEPTIONS = (
@@ -248,6 +253,51 @@ async def execute_cli_command(command: str) -> str:
     """
     logger.info("Führe lokales CLI-Kommando aus: %s", command)
     try:
+        # Compatibility bridge:
+        # Wenn das LLM Script-Tools fälschlich als CLI-Kommando ausführt,
+        # leite auf die echten Tool-Funktionen um statt an der CLI-Allowlist zu scheitern.
+        try:
+            parts = shlex.split(command)
+        except (ValueError, TypeError):
+            parts = []
+        if parts:
+            cmd = parts[0].strip().lower()
+            if cmd in {"run_script_tool", "list_script_tools"}:
+                from agents.script_tools import list_script_tools, run_script_tool
+
+                if cmd == "list_script_tools":
+                    return await list_script_tools.ainvoke({})
+
+                # run_script_tool <tool_name> [<json_input>]
+                if len(parts) < 2:
+                    return _t(
+                        "Fehler: Nutzung ist `run_script_tool <tool_name> [json_input]`.",
+                        "Error: usage is `run_script_tool <tool_name> [json_input]`.",
+                    )
+
+                tool_name = parts[1]
+                input_data = None
+                if len(parts) >= 3:
+                    raw_json = " ".join(parts[2:]).strip()
+                    try:
+                        parsed = json.loads(raw_json)
+                        if isinstance(parsed, dict):
+                            input_data = parsed
+                        else:
+                            return _t(
+                                "Fehler: json_input muss ein JSON-Objekt sein.",
+                                "Error: json_input must be a JSON object.",
+                            )
+                    except json.JSONDecodeError:
+                        return _t(
+                            "Fehler: json_input ist kein gültiges JSON.",
+                            "Error: json_input is not valid JSON.",
+                        )
+
+                return await run_script_tool.ainvoke(
+                    {"tool_name": tool_name, "input_data": input_data}
+                )
+
         try:
             args = validate_cli_command(command, _ALLOWED_COMMANDS)
         except PermissionDeniedError as e:
@@ -2218,3 +2268,177 @@ async def generate_pdf_report(
             f"Fehler bei der PDF-Generierung: {exc}",
             f"Error generating PDF: {exc}",
         )
+
+
+# ── Scheduler Tools ────────────────────────────────────────────────────────────
+
+
+@tool
+async def create_scheduled_task(
+    name: str,
+    cron: str,
+    prompt: str = "",
+    workflow_id: str = "",
+    agent_id: str = "",
+) -> str:
+    """Legt eine neue geplante Automatisierung (Cronjob) an.
+
+    Ninko führt die Automatisierung automatisch zum angegebenen Zeitpunkt aus.
+    Es kann entweder ein freier Prompt an den Orchestrator, ein bestehender
+    Workflow oder ein dynamischer Agent angegeben werden.
+
+    Args:
+        name: Beschreibender Name der Automatisierung (z.B. "Täglich Logs prüfen")
+        cron: Cron-Ausdruck für den Zeitplan, z.B. "0 8 * * *" (täglich 08:00)
+        prompt: Freitext-Aufgabe, die der Orchestrator ausführen soll (optional)
+        workflow_id: ID eines bestehenden Workflows (optional, überschreibt prompt)
+        agent_id: ID eines dynamischen Agenten (optional, überschreibt prompt)
+
+    Returns:
+        Bestätigung mit Task-ID und nächstem geplanten Ausführungszeitpunkt
+    """
+    try:
+        from agents.scheduler_agent import get_scheduler_agent, SchedulerAgent
+
+        scheduler: SchedulerAgent | None = get_scheduler_agent()
+        if scheduler is None:
+            return _t(
+                "Fehler: Scheduler-Agent nicht verfügbar.",
+                "Error: Scheduler agent not available.",
+            )
+
+        data: dict = {"name": name, "cron": cron, "enabled": True}
+        if workflow_id:
+            data["workflow_id"] = workflow_id
+        elif agent_id:
+            data["agent_id"] = agent_id
+        elif prompt:
+            data["prompt"] = prompt
+        else:
+            return _t(
+                "Fehler: Bitte prompt, workflow_id oder agent_id angeben.",
+                "Error: Please provide prompt, workflow_id, or agent_id.",
+            )
+
+        task = await scheduler.create_task(data)
+        next_run = task.get("next_run", "unbekannt")
+        return _t(
+            f"✅ Automatisierung '{name}' angelegt (ID: {task['id']}).\n"
+            f"Zeitplan: {cron}\nNächste Ausführung: {next_run}",
+            f"✅ Automation '{name}' created (ID: {task['id']}).\n"
+            f"Schedule: {cron}\nNext run: {next_run}",
+        )
+
+    except ValueError as exc:
+        return _t(
+            f"Fehler beim Anlegen der Automatisierung: {exc}",
+            f"Error creating automation: {exc}",
+        )
+    except _CORE_TOOL_EXCEPTIONS as exc:
+        logger.error("create_scheduled_task failed: %s", exc)
+        return _t(
+            f"Fehler: {exc}",
+            f"Error: {exc}",
+        )
+
+
+@tool
+async def list_scheduled_tasks() -> str:
+    """Listet alle angelegten Automatisierungen (Cronjobs) auf.
+
+    Returns:
+        Übersicht aller Automatisierungen mit Status, Zeitplan und letztem Lauf
+    """
+    try:
+        from agents.scheduler_agent import get_scheduler_agent
+
+        scheduler = get_scheduler_agent()
+        if scheduler is None:
+            return _t(
+                "Fehler: Scheduler-Agent nicht verfügbar.",
+                "Error: Scheduler agent not available.",
+            )
+
+        tasks = await scheduler.get_all_tasks()
+        if not tasks:
+            return _t(
+                "Keine Automatisierungen angelegt.",
+                "No automations configured.",
+            )
+
+        lines = [_t("Geplante Automatisierungen:", "Scheduled automations:")]
+        for t in tasks:
+            status_icon = "✅" if t.get("enabled") else "⏸"
+            task_type = "Workflow" if t.get("workflow_id") else ("Agent" if t.get("agent_id") else "Prompt")
+            last = t.get("last_run") or _t("noch nie", "never")
+            next_r = t.get("next_run") or _t("unbekannt", "unknown")
+            lines.append(
+                f"{status_icon} [{t['id'][:8]}] {t['name']} "
+                f"({t['cron']}, {task_type}) — "
+                f"{_t('letzter Lauf', 'last run')}: {last} | "
+                f"{_t('nächster Lauf', 'next run')}: {next_r}"
+            )
+        return "\n".join(lines)
+
+    except (ValueError, *_CORE_TOOL_EXCEPTIONS) as exc:
+        logger.error("list_scheduled_tasks failed: %s", exc)
+        return _t(f"Fehler: {exc}", f"Error: {exc}")
+
+
+@tool
+async def delete_scheduled_task(task_id: str) -> str:
+    """Löscht eine geplante Automatisierung (Cronjob) anhand ihrer ID.
+
+    Args:
+        task_id: Die vollständige ID der Automatisierung (aus list_scheduled_tasks)
+
+    Returns:
+        Bestätigung oder Fehlermeldung
+    """
+    try:
+        from agents.scheduler_agent import get_scheduler_agent
+
+        scheduler = get_scheduler_agent()
+        if scheduler is None:
+            return _t(
+                "Fehler: Scheduler-Agent nicht verfügbar.",
+                "Error: Scheduler agent not available.",
+            )
+
+        if not task_id.strip():
+            return _t(
+                "Fehler: task_id darf nicht leer sein.",
+                "Error: task_id must not be empty.",
+            )
+
+        # Partial-ID-Match (erste 8 Zeichen) für Benutzerfreundlichkeit
+        if len(task_id) < 36:
+            all_tasks = await scheduler.get_all_tasks()
+            matches = [t for t in all_tasks if t["id"].startswith(task_id)]
+            if len(matches) == 0:
+                return _t(
+                    f"Automatisierung '{task_id}' nicht gefunden.",
+                    f"Automation '{task_id}' not found.",
+                )
+            if len(matches) > 1:
+                ids = ", ".join(t["id"][:8] for t in matches)
+                return _t(
+                    f"Mehrdeutige ID '{task_id}': {ids}. Bitte vollständige ID angeben.",
+                    f"Ambiguous ID '{task_id}': {ids}. Please provide the full ID.",
+                )
+            task_id = matches[0]["id"]
+
+        deleted = await scheduler.delete_task(task_id)
+        if deleted:
+            return _t(
+                f"✅ Automatisierung '{task_id}' gelöscht.",
+                f"✅ Automation '{task_id}' deleted.",
+            )
+        return _t(
+            f"Automatisierung '{task_id}' nicht gefunden.",
+            f"Automation '{task_id}' not found.",
+        )
+
+    except (ValueError, *_CORE_TOOL_EXCEPTIONS) as exc:
+        logger.error("delete_scheduled_task failed: %s", exc)
+        return _t(f"Fehler: {exc}", f"Error: {exc}")
