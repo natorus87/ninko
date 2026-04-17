@@ -37,13 +37,13 @@ spec:
               cpu: "1"
           livenessProbe:
             httpGet:
-              path: /api/v1/heartbeat
+              path: /api/v2/heartbeat
               port: 8000
             initialDelaySeconds: 15
             periodSeconds: 30
           readinessProbe:
             httpGet:
-              path: /api/v1/heartbeat
+              path: /api/v2/heartbeat
               port: 8000
             initialDelaySeconds: 5
             periodSeconds: 10
