@@ -1,9 +1,5 @@
 # PLAN
 
-**Status: Stabilisierungsphase abgeschlossen (April 2026)**
-
-Alle High- und Medium-Priority-Punkte wurden erledigt. Das Dokument enthält nur noch offene Erweiterungen und optionale Future-Features.
-
 ---
 
 ## Aktueller Stand
@@ -107,11 +103,6 @@ Scripts laufen aktuell unsandboxed. Seit Scripts als LLM-Tools aufrufbar sind, i
 - `bwrap` oder Subprocess-Isolation für das Scripting-Modul
 - Gilt auch für `execute_code` in codelab
 
-**5-Level Tool Permission Tiers** *(Aufwand: Mittel | Mehrwert: Hoch)*
-Ergänzung zum LLM-Classifier: Jedes Tool deklariert statisch einen Tier (READONLY / COMMUNICATE / WRITE_DATA / WRITE_SYSTEM / ADMIN). Deterministisch, kein 8s-Timeout. Hybrid: statische Tiers + LLM-Classifier als Override für Grenzfälle.
-- Ninko hat `_TOOL_READONLY` — das Konzept auf 5 Stufen erweitern
-- Besonders relevant wenn externe Channels (Email, Discord) hinzukommen
-
 **Outbound Secret Sanitization** *(Aufwand: Klein | Mehrwert: Hoch)*
 Ninko prüft eingehende Nachrichten per SafeGuard, aber Tool-Outputs werden ungefiltert ans LLM zurückgegeben. Risiko: Config-Reads oder DB-Queries leaken Secrets in den LLM-Kontext.
 - Regex-Scanner auf Tool-Outputs (API-Key/Passwort-Pattern)
@@ -125,6 +116,11 @@ Mehrere Agents debattieren strukturiert mit Rollen (Hauptagent, Kritiker, Richte
 - Baut auf bestehendem Agent-Pool + Workflow-Engine auf
 - Perspektiven-aware History: jeder Agent sieht eigene Msgs als `assistant`, fremde als `user [NAME]:`
 
+**5-Level Tool Permission Tiers** *(Aufwand: Mittel | Mehrwert: Hoch)*
+Ergänzung zum LLM-Classifier: Jedes Tool deklariert statisch einen Tier (READONLY / COMMUNICATE / WRITE_DATA / WRITE_SYSTEM / ADMIN). Deterministisch, kein 8s-Timeout. Hybrid: statische Tiers + LLM-Classifier als Override für Grenzfälle.
+- Ninko hat `_TOOL_READONLY` — das Konzept auf 5 Stufen erweitern
+- Besonders relevant wenn externe Channels (Email, Discord) hinzukommen
+
 **Chat als HTML exportieren** *(Aufwand: Klein | Mehrwert: Mittel)*
 Standalone HTML mit inlinen Fonts, offline lesbar. Nützlich für Incident-Reports, Audit-Trails, Weitergabe an Nicht-Nutzer.
 
@@ -136,25 +132,48 @@ Email (IMAP IDLE), Discord Bot, Telegram als Background-Worker. SQLite-Routing-T
 - Alerts könnten bidirektional antworten
 - Voraussetzung: 5-Level Permission Tiers (externe Requests bekommen reduzierten Tier)
 
-#### 30/60/90-Tage-Roadmap (empfohlen)
+### ChromaDB-Upgrade: 0.4.24 → aktuell (2026-04-17)
 
-**30 Tage (Security-Baseline)**
-- Sandbox für Script- und codelab-Ausführung: harte CPU/RAM/Timeout-Limits
-- 5-Level Permission-Tiers als statische Tool-Metadaten + Enforcement
-- Outbound-Output-Sanitization als Middleware (Secrets + Markdown-Exfiltration)
-- DoD: Kein unsandboxed Tool-Codepfad mehr in Production
+**Ausgangslage**
 
-**60 Tage (Betrieb & Governance)**
-- Safeguard und Permission-Tiers integrieren (klarer Entscheidungsbaum)
-- Audit-Erweiterung: Permission-Entscheidung, Tool-Tier, Sanitization-Hits
-- Chat-Export als HTML für Incident-/Audit-Reporting
-- DoD: Jeder Tool-Aufruf ist nachvollziehbar und reproduzierbar
+`requirements.txt` pinnt `chromadb==0.4.24` und `numpy<2.0`. ChromaDB 0.4.x wurde gegen numpy 1.x kompiliert — alle neueren Packages die numpy 2.x benötigen werden durch den Pin blockiert. ChromaDB 0.5+ hat breaking API-Changes eingeführt.
 
-**90 Tage (Erweiterung)**
-- Multi-Agent-Debatte als optionaler Modus für Risk/Incident-Analysen
-- Message Hub pilotieren (zuerst ein externer Kanal, z. B. Telegram oder Discord)
-- Kanal-spezifische Default-Policy (externe Requests mit reduziertem Tier)
-- DoD: Externer Kanal produktiv mit restriktiver Permission-Policy
+**Betroffene Dateien**
+
+- `backend/requirements.txt` — Versions-Pin entfernen/aktualisieren
+- `backend/core/memory.py` — einzige Datei die ChromaDB direkt nutzt (via `chromadb.HttpClient`)
+- `docker-compose.yml` — ChromaDB Service-Image-Version
+- `k8s/` — ggf. ChromaDB Deployment-Manifest
+
+**Breaking Changes 0.4.x → 0.5.x**
+
+| Alt (0.4.x) | Neu (0.5.x+) |
+|---|---|
+| `from chromadb.config import Settings` | `from chromadb import Settings` (0.5+) |
+| `chromadb.HttpClient(host, port, settings=...)` | Parameter-Namen unverändert |
+| `collection.query(include=["distances"])` | Kompatibel |
+| `collection.add(embeddings=[...])` | Kompatibel |
+| Collection-Metadaten `{"hnsw:space": "cosine"}` | Kompatibel |
+
+**Migrationsschritte**
+
+1. ChromaDB-Container auf neue Version updaten, isoliert testen
+2. `requirements.txt`: `chromadb==0.4.24` → `chromadb>=0.5.0`, `numpy<2.0` → entfernen
+3. `core/memory.py`: Import-Pfad anpassen (`from chromadb import Settings`)
+4. Smoke-Test: Memory store/search/delete im Dev-Stack verifizieren
+5. Docker-Image: ChromaDB Service-Image in `docker-compose.yml` + K8s-Manifest updaten
+6. Prod-Deploy: bestehende Collections bleiben erhalten (persistentes Volume)
+
+**Risiken**
+
+- Bestehende Embeddings im Volume sind kompatibel (HNSW-Format unverändert)
+- `numpy<2.0`-Pin entfernen kann weitere Package-Konflikte aufdecken → vollständiges `pip install` im Test nötig
+
+**Akzeptanzkriterien**
+
+- `remember_fact` / `recall_memory` / `forget_fact` funktionieren nach Upgrade
+- Kein `numpy<2.0`-Pin mehr in `requirements.txt`
+- ChromaDB-Service läuft auf aktueller Version im Dev-Stack
 
 ### Weitere Features
 
