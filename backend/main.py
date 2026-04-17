@@ -187,11 +187,15 @@ async def lifespan(app: FastAPI) -> object:
             )
             if bootstrap_password:
                 rbac_store = RbacStore()
+                # force_password=True nur bei BOOTSTRAP_ADMIN_PASSWORD (nicht ADMIN_PASSWORD):
+                # Damit wird ein geändertes Bootstrap-Passwort beim nächsten Start übernommen,
+                # aber selbst gesetzte Passwörter (via ADMIN_PASSWORD) bleiben erhalten.
+                using_bootstrap = not bool(settings.ADMIN_PASSWORD)
                 await rbac_store.bootstrap_admin_if_needed(
                     settings.ADMIN_USERNAME or "admin",
                     bootstrap_password,
-                    force_password=False,  # Fix: Never overwrite existing password on restart
-                    must_change_password=not bool(settings.ADMIN_PASSWORD),
+                    force_password=using_bootstrap,
+                    must_change_password=using_bootstrap,
                 )
                 if not settings.ADMIN_PASSWORD:
                     logger.warning(
