@@ -19,6 +19,10 @@ class ScriptCreate(BaseModel):
     language: Literal["python", "bash"] = "python"
     timeout: int = Field(default=30, ge=1, le=300)
     tags: list[str] = Field(default_factory=list)
+    tool_enabled: bool = Field(default=False)
+    tool_name: str | None = Field(default=None, max_length=50)
+    tool_description: str | None = Field(default=None, max_length=200)
+    tool_input_schema: dict | None = Field(default=None)
 
 
 class ScriptUpdate(BaseModel):
@@ -30,6 +34,10 @@ class ScriptUpdate(BaseModel):
     language: Literal["python", "bash"] | None = None
     timeout: int | None = Field(default=None, ge=1, le=300)
     tags: list[str] | None = None
+    tool_enabled: bool | None = None
+    tool_name: str | None = Field(default=None, max_length=50)
+    tool_description: str | None = Field(default=None, max_length=200)
+    tool_input_schema: dict | None = None
 
 
 class Script(BaseModel):
@@ -48,6 +56,10 @@ class Script(BaseModel):
     run_count: int = 0
     last_run_at: datetime | None = None
     last_run_status: Literal["idle", "running", "succeeded", "failed"] = "idle"
+    tool_enabled: bool = False
+    tool_name: str | None = None
+    tool_description: str | None = None
+    tool_input_schema: dict | None = None
 
 
 class ScriptSummary(BaseModel):
@@ -65,6 +77,9 @@ class ScriptSummary(BaseModel):
     run_count: int = 0
     last_run_at: datetime | None = None
     last_run_status: Literal["idle", "running", "succeeded", "failed"] = "idle"
+    tool_enabled: bool = False
+    tool_name: str | None = None
+    tool_description: str | None = None
 
 
 class ScriptListResponse(BaseModel):
@@ -102,4 +117,31 @@ class ScriptExecutionHistory(BaseModel):
     """Response für Script-Ausführungshistorie."""
 
     executions: list[ScriptExecutionResult]
+    total: int
+
+
+class ScriptToolInvocation(BaseModel):
+    """Schema für einen Tool-Aufruf eines Scripts."""
+
+    id: str
+    script_id: str
+    script_name: str
+    tool_name: str
+    tenant_id: str
+    input_data: dict | None = None
+    started_at: datetime
+    finished_at: datetime | None = None
+    status: Literal["running", "succeeded", "failed", "timeout"]
+    stdout: str = ""
+    stderr: str = ""
+    exit_code: int | None = None
+    duration_ms: float = 0.0
+    invoked_by: str = ""  # user_id or agent_id
+    invocation_source: Literal["orchestrator", "api", "workflow"] = "orchestrator"
+
+
+class ScriptToolInvocationHistory(BaseModel):
+    """Response für Tool-Invocation-Historie."""
+
+    invocations: list[ScriptToolInvocation]
     total: int

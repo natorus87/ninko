@@ -40,12 +40,16 @@ from agents.core_tools import (
     configure_routing,
     get_routing_info,
     wait,
+    create_scheduled_task,
+    list_scheduled_tasks,
+    delete_scheduled_task,
 )
 from agents.alert_tools import (
     check_alert_state,
     record_alert,
     resolve_alert,
 )
+from agents.script_tools import run_script_tool, list_script_tools
 from agents.data_analysis_subagent import (
     DataAnalysisSubagent,
     _get_or_create_subagent,
@@ -53,6 +57,7 @@ from agents.data_analysis_subagent import (
 )
 from modules.image_gen.tools import generate_image
 from core import status_bus
+from core.config import get_settings
 
 from core.prestructure import (
     DeterministicTaskSketchBuilder,
@@ -192,9 +197,7 @@ _SPEED_SIGNALS = frozenset(
 # Explizite Agent-Erstellungs-Intention (DE + EN)
 _AGENT_CREATE_PATTERNS: tuple[re.Pattern, ...] = (
     re.compile(r"\berstell(?:e|en|t)?\b.{0,40}\bagent(?:en)?\b", re.IGNORECASE),
-    re.compile(
-        r"\bleg(?:e|en|t)?\b.{0,40}\bagent(?:en)?\b.{0,20}\ban\b", re.IGNORECASE
-    ),
+    re.compile(r"\bleg(?:e|en|t)?\b.{0,40}\bagent(?:en)?\b.{0,20}\ban\b", re.IGNORECASE),
     re.compile(r"\bbau(?:e|en|t)?\b.{0,40}\bagent(?:en)?\b", re.IGNORECASE),
     re.compile(r"\bcreate\b.{0,40}\bagent\b", re.IGNORECASE),
     re.compile(r"\bbuild\b.{0,40}\bagent\b", re.IGNORECASE),
@@ -221,16 +224,12 @@ _WORKFLOW_CREATE_PATTERNS: tuple[re.Pattern, ...] = (
     re.compile(r"\bbau(?:e|en|t)?\b.{0,40}\bworkflow\b", re.IGNORECASE),
     re.compile(r"\bcreate\b.{0,40}\bworkflow\b", re.IGNORECASE),
     re.compile(r"\bbuild\b.{0,40}\bworkflow\b", re.IGNORECASE),
-    re.compile(
-        r"\bautomatisier\w*\b.{0,40}\b(ablauf|prozess|workflow)\b", re.IGNORECASE
-    ),
+    re.compile(r"\bautomatisier\w*\b.{0,40}\b(ablauf|prozess|workflow)\b", re.IGNORECASE),
 )
 
 # How-to / Anleitung statt Ausführung
 _WORKFLOW_HOWTO_PATTERNS: tuple[re.Pattern, ...] = (
-    re.compile(
-        r"\bwie\b.{0,30}\bworkflow\b.{0,20}\b(erstell|anleg|bau)\w*", re.IGNORECASE
-    ),
+    re.compile(r"\bwie\b.{0,30}\bworkflow\b.{0,20}\b(erstell|anleg|bau)\w*", re.IGNORECASE),
     re.compile(
         r"\bhow\b.{0,20}\b(to\b.{0,10})?(create|build|make)\b.{0,30}\bworkflow\b",
         re.IGNORECASE,
@@ -382,32 +381,39 @@ class OrchestratorAgent(BaseAgent):
     """
 
     def __init__(self, registry: ModuleRegistry) -> None:
+        tools = [
+            execute_cli_command,
+            create_custom_agent,
+            update_custom_agent,
+            install_skill,
+            create_dag_workflow,
+            create_linear_workflow,
+            execute_workflow,
+            remember_fact,
+            recall_memory,
+            forget_fact,
+            confirm_forget,
+            call_module_agent,
+            run_pipeline,
+            run_parallel_pipeline,
+            generate_image,
+            check_alert_state,
+            record_alert,
+            resolve_alert,
+            configure_routing,
+            get_routing_info,
+            wait,
+        ]
+
+        if get_settings().SCRIPT_TOOLS_ENABLED:
+            tools.extend([run_script_tool, list_script_tools])
+
+        tools.extend([create_scheduled_task, list_scheduled_tasks, delete_scheduled_task])
+
         super().__init__(
             name="orchestrator",
             system_prompt=SYSTEM_PROMPT,
-            tools=[
-                execute_cli_command,
-                create_custom_agent,
-                update_custom_agent,
-                install_skill,
-                create_dag_workflow,
-                create_linear_workflow,
-                execute_workflow,
-                remember_fact,
-                recall_memory,
-                forget_fact,
-                confirm_forget,
-                call_module_agent,
-                run_pipeline,
-                run_parallel_pipeline,
-                generate_image,
-                check_alert_state,
-                record_alert,
-                resolve_alert,
-                configure_routing,
-                get_routing_info,
-                wait,
-            ],
+            tools=tools,
         )
         self.registry = registry
         self._routing_map: dict[str, str] = {}
@@ -455,9 +461,7 @@ class OrchestratorAgent(BaseAgent):
                     "der User eingreifen will, falls die Frage ungenau ist (z.B. 'prod' vs 'staging')."
                 )
         except _ORCH_RECOVERABLE_EXCEPTIONS as e:
-            logger.warning(
-                "Konnte globale Connections für Orchestrator nicht laden: %s", e
-            )
+            logger.warning("Konnte globale Connections für Orchestrator nicht laden: %s", e)
 
         # 3. Registrierte dynamische Agenten aus dem Pool
         try:
@@ -485,6 +489,25 @@ class OrchestratorAgent(BaseAgent):
                 )
         except _ORCH_RECOVERABLE_EXCEPTIONS as e:
             logger.warning("Konnte Agent-Pool für Orchestrator nicht laden: %s", e)
+
+        if get_settings().SCRIPT_TOOLS_ENABLED:
+            try:
+                from agents.script_tools import get_available_script_tools
+                from core.auth import get_current_tenant_id
+
+                tenant_id = get_current_tenant_id() or "default"
+                script_tools = await get_available_script_tools(tenant_id)
+                if script_tools:
+                    tool_lines = [
+                        f"- {t['name']}: {t.get('description', '')}" for t in script_tools
+                    ]
+                    parts.append(
+                        "SCRIPT-TOOLS (verfügbare Automatisierungen):\n"
+                        + "\n".join(tool_lines)
+                        + "\n\nNutze `run_script_tool` mit dem Tool-Namen um diese auszuführen."
+                    )
+            except _ORCH_RECOVERABLE_EXCEPTIONS as e:
+                logger.debug("Konnte Script-Tools nicht laden: %s", e)
 
         return "\n\n".join(parts)
 
@@ -520,9 +543,7 @@ class OrchestratorAgent(BaseAgent):
 
         # ── Heuristik 1: Speed-Signale → Fast-Preset für diese Session ──────
         if cfg.preset != "fast" and words & _SPEED_SIGNALS:
-            new_cfg = RoutingConfig.from_dict(
-                {**RoutingConfig().to_dict(), "preset": "fast"}
-            )
+            new_cfg = RoutingConfig.from_dict({**RoutingConfig().to_dict(), "preset": "fast"})
             await set_session_routing_config(session_id, new_cfg)
             logger.info(
                 "Proaktives Routing: Speed-Signal erkannt → Fast-Preset für Session '%s'",
@@ -560,9 +581,7 @@ class OrchestratorAgent(BaseAgent):
             and not cfg.preset.startswith("focus:")
         ):
             dominant = recent_modules[0]
-            new_cfg = RoutingConfig.from_dict(
-                {**cfg.to_dict(), "preset": f"focus:{dominant}"}
-            )
+            new_cfg = RoutingConfig.from_dict({**cfg.to_dict(), "preset": f"focus:{dominant}"})
             await set_session_routing_config(session_id, new_cfg)
             logger.info(
                 "Proaktives Routing: Modul-Fokus '%s' erkannt (Session '%s')",
@@ -573,9 +592,7 @@ class OrchestratorAgent(BaseAgent):
 
         return cfg
 
-    async def _update_session_stats(
-        self, session_id: str, tier: int, module: str | None
-    ) -> None:
+    async def _update_session_stats(self, session_id: str, tier: int, module: str | None) -> None:
         """Trackt Tier-Nutzung und Modul-Verteilung pro Session für proaktive Heuristiken."""
         if not session_id:
             return
@@ -704,13 +721,9 @@ Antworte NUR mit JSON:
 
             is_complex = bool(result.get("is_complex", False))
             sub_tasks = (
-                result.get("sub_tasks", [])
-                if isinstance(result.get("sub_tasks"), list)
-                else []
+                result.get("sub_tasks", []) if isinstance(result.get("sub_tasks"), list) else []
             )
-            suggested_count = max(
-                1, min(2, int(result.get("suggested_subagent_count", 1)))
-            )
+            suggested_count = max(1, min(2, int(result.get("suggested_subagent_count", 1))))
             reasoning = str(result.get("reasoning", ""))[:200]
 
             logger.info(
@@ -790,9 +803,7 @@ Antworte NUR mit JSON:
             ],
         }
 
-    async def _auto_create_custom_agent(
-        self, message: str, session_id: str
-    ) -> tuple[str, bool]:
+    async def _auto_create_custom_agent(self, message: str, session_id: str) -> tuple[str, bool]:
         """Erstellt bei explizitem User-Wunsch deterministisch einen Custom-Agenten.
 
         Verhindert den Fall, dass der ReAct-Loop nur eine Anleitung ausgibt,
@@ -820,9 +831,7 @@ Antworte NUR mit JSON:
         modules = self.registry.list_modules()
         module_names = [m.name for m in modules]
         module_line = (
-            ", ".join(module_names)
-            if module_names
-            else "kubernetes, linux_server, docker"
+            ", ".join(module_names) if module_names else "kubernetes, linux_server, docker"
         )
 
         prompt = f"""Du bist ein Agent-Builder für Ninko. Analysiere die User-Anfrage und erzeuge eine vollständige Agent-Spezifikation.
@@ -890,9 +899,7 @@ ANTWORTE NUR MIT JSON, keine Erklärungen davor oder danach:
                 raise ValueError("Kein JSON-Objekt in der LLM-Antwort gefunden.")
             spec = _json.loads(m.group(0))
         except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
-            logger.warning(
-                "Auto-Create-Agent: Spec-Generierung fehlgeschlagen: %s", exc
-            )
+            logger.warning("Auto-Create-Agent: Spec-Generierung fehlgeschlagen: %s", exc)
             return _t(
                 de="Fehler: Die Agent-Spezifikation konnte nicht erzeugt werden. "
                 "Mögliche Ursachen:\n"
@@ -1202,9 +1209,7 @@ ANTWORTE NUR MIT JSON, keine Erklärungen davor oder danach:
             f"您现在可以在代理编辑器中对其进行调整或直接使用。",
         ), False
 
-    async def _auto_create_workflow(
-        self, message: str, session_id: str
-    ) -> tuple[str, bool]:
+    async def _auto_create_workflow(self, message: str, session_id: str) -> tuple[str, bool]:
         """Erstellt bei explizitem User-Wunsch deterministisch einen Workflow."""
         await status_bus.emit(
             session_id,
@@ -1258,9 +1263,7 @@ JSON-SCHEMA:
                 raise ValueError("Kein JSON-Objekt in der LLM-Antwort gefunden.")
             spec = _json.loads(m.group(0))
         except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
-            logger.warning(
-                "Auto-Create-Workflow: Spec-Generierung fehlgeschlagen: %s", exc
-            )
+            logger.warning("Auto-Create-Workflow: Spec-Generierung fehlgeschlagen: %s", exc)
             spec = self._fallback_workflow_spec(message)
             await status_bus.emit(
                 session_id,
@@ -1291,11 +1294,7 @@ JSON-SCHEMA:
             fallback = self._fallback_workflow_spec(message)
             name = str(fallback.get("name", "")).strip()[:120]
             description = str(fallback.get("description", "")).strip()[:500]
-            steps = [
-                str(s).strip()
-                for s in fallback.get("steps", [])
-                if str(s).strip()
-            ][:6]
+            steps = [str(s).strip() for s in fallback.get("steps", []) if str(s).strip()][:6]
 
         if not name or len(steps) < 2:
             return _t(
@@ -1372,10 +1371,7 @@ JSON-SCHEMA:
             if len(kw_compact) >= 7 and matches == 0 and kw_compact in text_compact:
                 matches = 1
             weight = (
-                5
-                if kw_lower
-                in [module_name.lower(), module_name.lower().replace("-", "")]
-                else 1
+                5 if kw_lower in [module_name.lower(), module_name.lower().replace("-", "")] else 1
             )
             if matches > 0:
                 scores[module_name] = scores.get(module_name, 0) + (matches * weight)
@@ -1451,9 +1447,7 @@ JSON-SCHEMA:
         msg_lower = message.lower()
         for pattern in core_patterns:
             if re.search(pattern, msg_lower):
-                logger.info(
-                    "Core-Override erkannt ('%s'), überspringe Modul-Routing.", pattern
-                )
+                logger.info("Core-Override erkannt ('%s'), überspringe Modul-Routing.", pattern)
                 return None, False
 
         # Scoring der aktuellen Nachricht
@@ -1470,17 +1464,13 @@ JSON-SCHEMA:
                 return best, False
             elif history_scores:
                 # Mehrere Treffer aus History → ReAct entscheiden lassen (nie Compound)
-                sorted_h = sorted(
-                    history_scores.items(), key=lambda x: x[1], reverse=True
-                )
+                sorted_h = sorted(history_scores.items(), key=lambda x: x[1], reverse=True)
                 logger.info("History-Ambiguität %s → ReAct-Loop", sorted_h)
                 return None, False
             return None, False
 
         if not current_scores:
-            logger.info(
-                "Kein Keyword-Treffer → ReAct-Loop entscheidet für: '%s…'", message[:60]
-            )
+            logger.info("Kein Keyword-Treffer → ReAct-Loop entscheidet für: '%s…'", message[:60])
             return None, False
 
         if len(current_scores) == 1:
@@ -1554,9 +1544,7 @@ JSON-SCHEMA:
             cfg = RoutingConfig()
 
         routing_message = self._strip_bot_context(message)
-        target_module, is_compound = self._detect_module_fast(
-            routing_message, chat_history
-        )
+        target_module, is_compound = self._detect_module_fast(routing_message, chat_history)
 
         # ── Tier 4: Multi-Modul-Pipeline ─────────────────────────────────────
         if cfg.tier4_enabled:
@@ -1693,9 +1681,7 @@ JSON-SCHEMA:
         )
 
         if task_sketch:
-            planner_sections.append(
-                "6. Beachte TASK-STRUKTUR oben: Intent, Risiko, Constraints"
-            )
+            planner_sections.append("6. Beachte TASK-STRUKTUR oben: Intent, Risiko, Constraints")
             planner_sections.append(
                 "7. Wenn Risiko=high/critical: nur lesende Operationen, keine Schreibzugriffe"
             )
@@ -1705,13 +1691,9 @@ JSON-SCHEMA:
             planner_sections.append(
                 "9. Wenn 'safe_next_step' in ERFORDERLICH: nur den nächsten sicheren Schritt planen"
             )
-            planner_sections.append(
-                "10. NUR das JSON-Array zurückgeben — kein erklärender Text"
-            )
+            planner_sections.append("10. NUR das JSON-Array zurückgeben — kein erklärender Text")
         else:
-            planner_sections.append(
-                "6. NUR das JSON-Array zurückgeben — kein erklärender Text"
-            )
+            planner_sections.append("6. NUR das JSON-Array zurückgeben — kein erklärender Text")
 
         planner_sections.extend(
             [
@@ -1822,9 +1804,7 @@ JSON-SCHEMA:
                 break
 
         if not valid_steps:
-            logger.warning(
-                "Tier-4: Keine validen Schritte nach Validierung → Fallback Tier 1"
-            )
+            logger.warning("Tier-4: Keine validen Schritte nach Validierung → Fallback Tier 1")
             return await self.invoke(
                 message=message,
                 chat_history=chat_history,
@@ -1866,9 +1846,7 @@ JSON-SCHEMA:
         from core.redis_client import get_redis
 
         redis = get_redis()
-        pending_raw = await redis.connection.get(
-            f"ninko:safeguard_tool_pending:{session_id}"
-        )
+        pending_raw = await redis.connection.get(f"ninko:safeguard_tool_pending:{session_id}")
         if not pending_raw:
             return _t(
                 de="Fehler: Kein ausstehender Tool-Aufruf für diese Session.",
@@ -2005,6 +1983,51 @@ JSON-SCHEMA:
         confirmed: bool,
     ) -> tuple[str, str | None, bool]:
         """Direktes Routing an Modul oder Custom-Agent anhand force_module."""
+        # Special-case: orchestrator ist kein Modul im Registry-Sinne.
+        if force_module.strip().lower() == "orchestrator":
+            # Deterministic fallback for explicit script-tool execution requests:
+            # avoids brittle LLM tool-selection for this critical path.
+            if get_settings().SCRIPT_TOOLS_ENABLED:
+                from core.auth import get_current_tenant_id
+                from agents.script_tools import execute_script_tool
+
+                tool_name = self._extract_script_tool_name(message)
+                if tool_name:
+                    tenant_id = get_current_tenant_id() or "default"
+                    result = await execute_script_tool(
+                        tenant_id=tenant_id,
+                        tool_name=tool_name,
+                        input_data=None,
+                        invoked_by="orchestrator",
+                    )
+                    if result.get("status") == "succeeded":
+                        return (
+                            (result.get("stdout") or "").strip()
+                            or _t(
+                                "Script-Tool erfolgreich ausgeführt (keine Ausgabe).",
+                                "Script tool executed successfully (no output).",
+                            ),
+                            "orchestrator",
+                            False,
+                        )
+                    err = result.get("stderr") or result.get("error") or "Unknown error"
+                    return (
+                        _t(
+                            f"Fehler beim Ausführen des Script-Tools '{tool_name}': {err}",
+                            f"Error executing script tool '{tool_name}': {err}",
+                        ),
+                        "orchestrator",
+                        False,
+                    )
+
+            response, did_compact = await self.invoke(
+                message=message,
+                chat_history=chat_history,
+                session_id=session_id,
+                confirmed=confirmed,
+            )
+            return response, "orchestrator", did_compact
+
         agent = self.registry.get_agent(force_module)
         if agent is None:
             try:
@@ -2085,6 +2108,32 @@ JSON-SCHEMA:
             ),
             log_prefix="Direktes Routing an Modul",
         )
+
+    @staticmethod
+    def _extract_script_tool_name(message: str) -> str | None:
+        text = str(message or "")
+
+        # 1) Prefer explicit run_script_tool syntax
+        m = re.search(r"\brun_script_tool\s+([a-z0-9_-]{3,})\b", text, re.IGNORECASE)
+        if m:
+            return m.group(1).lower()
+
+        # 2) `tool_name` in backticks
+        m = re.search(r"`([a-z0-9_-]{3,})`", text, re.IGNORECASE)
+        if m:
+            candidate = m.group(1).lower()
+            if "_" in candidate or "-" in candidate:
+                return candidate
+
+        # 3) natural language mention: "script-tool <name>"
+        m = re.search(
+            r"\b(?:script-?tool|tool)\s+([a-z0-9_-]{3,})\b", text, re.IGNORECASE
+        )
+        if m:
+            candidate = m.group(1).lower()
+            if "_" in candidate or "-" in candidate:
+                return candidate
+        return None
 
     async def _route_tier2_module(
         self,
@@ -2209,9 +2258,7 @@ JSON-SCHEMA:
         # ── Deterministic Task Pre-structuring ──────────────────────────────
         # Build TaskSketch for structured routing guidance and observability
         task_sketch = self.build_task_sketch(message, session_id)
-        candidate_modules = [
-            m.module for m in task_sketch.scope.candidate_modules_ranked
-        ]
+        candidate_modules = [m.module for m in task_sketch.scope.candidate_modules_ranked]
         allow_all_modules = (
             task_sketch.uncertainty.ambiguous
             and task_sketch.constraints.execution_mode == "planner_decides"
@@ -2221,9 +2268,7 @@ JSON-SCHEMA:
         preferred_target: str | None = None
 
         cfg = await self._load_routing_config(session_id)
-        cfg = await self._proactive_routing_adjust(
-            session_id, message, chat_history, cfg
-        )
+        cfg = await self._proactive_routing_adjust(session_id, message, chat_history, cfg)
 
         # ── Direktes Modul-Routing (force_module) ────────────────────────────
         if force_module:
@@ -2238,32 +2283,22 @@ JSON-SCHEMA:
         # ── Explizite Agent-Erstellung: deterministischer Create-Fast-Path ──
         # Verhindert "nur Anleitung", wenn der User klar "Agent erstellen" verlangt.
         if self._wants_agent_creation(message):
-            logger.info(
-                "Explizite Agent-Erstellungs-Intention erkannt → Auto-Create-Fast-Path."
-            )
-            response, did_compact = await self._auto_create_custom_agent(
-                message, session_id
-            )
+            logger.info("Explizite Agent-Erstellungs-Intention erkannt → Auto-Create-Fast-Path.")
+            response, did_compact = await self._auto_create_custom_agent(message, session_id)
             return response, "orchestrator", did_compact
 
         # ── Explizite Workflow-Erstellung: deterministischer Create-Fast-Path ─
         # Verhindert "nur Anleitung", wenn der User klar "Workflow erstellen" verlangt.
         if self._wants_workflow_creation(message):
-            logger.info(
-                "Explizite Workflow-Erstellungs-Intention erkannt → Auto-Create-Fast-Path."
-            )
-            response, did_compact = await self._auto_create_workflow(
-                message, session_id
-            )
+            logger.info("Explizite Workflow-Erstellungs-Intention erkannt → Auto-Create-Fast-Path.")
+            response, did_compact = await self._auto_create_workflow(message, session_id)
             return response, "orchestrator", did_compact
 
         # ── Deterministischer WebSearch → DataViz Fast-Path ─────────────────
         msg_lower = message.lower()
         web_terms = ("websuche", "web search", "searxng")
         viz_terms = ("diagramm", "diagram", "chart", "dataviz", "plot")
-        if any(t in msg_lower for t in web_terms) and any(
-            t in msg_lower for t in viz_terms
-        ):
+        if any(t in msg_lower for t in web_terms) and any(t in msg_lower for t in viz_terms):
             logger.info("Fast-Path: web_search → dataviz Pipeline erkannt.")
             steps = [
                 {
@@ -2285,8 +2320,7 @@ JSON-SCHEMA:
         # ── TaskSketch Routing Hints ─────────────────────────────────────────
         if task_sketch.routing_hints.should_avoid_direct_answer:
             if (
-                task_sketch.routing_hints.preferred_worker_type
-                in ("planner", "workflow")
+                task_sketch.routing_hints.preferred_worker_type in ("planner", "workflow")
                 and len(candidate_modules) > 1
             ):
                 preferred_tier = 4

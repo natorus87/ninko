@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import contextvars
 import hashlib
 import hmac
 import json
@@ -22,12 +23,27 @@ from fastapi import WebSocket
 
 from core.config import get_settings
 
-
 ROLE_ADMIN = "admin"
 ROLE_WRITE = "write"
 ROLE_READ = "read"
 _REQUEST_AUTH_CACHE_ATTR = "_ninko_auth_ctx"
 _REQUEST_AUTH_CACHE_FILLED_ATTR = "_ninko_auth_ctx_resolved"
+
+_current_tenant_ctx: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "current_tenant_id", default=None
+)
+
+
+def set_current_tenant_id(tenant_id: str | None) -> contextvars.Token:
+    return _current_tenant_ctx.set(tenant_id)
+
+
+def get_current_tenant_id() -> str | None:
+    return _current_tenant_ctx.get()
+
+
+def reset_current_tenant_id(token: contextvars.Token) -> None:
+    _current_tenant_ctx.reset(token)
 
 
 def _b64url_encode(data: bytes) -> str:
@@ -151,7 +167,9 @@ def verify_admin_credentials(username: str, password: str) -> bool:
     expected_pass = cfg.ADMIN_PASSWORD or ""
     if not expected_pass:
         return False
-    return hmac.compare_digest(username, expected_user) and hmac.compare_digest(password, expected_pass)
+    return hmac.compare_digest(username, expected_user) and hmac.compare_digest(
+        password, expected_pass
+    )
 
 
 def _extract_key_from_request(request: Request) -> str:
@@ -236,6 +254,7 @@ async def _is_token_blacklisted(token: str) -> bool:
     """
     try:
         from core.redis_client import get_redis
+
         redis = get_redis()
         result = await redis.connection.get(_session_blacklist_key(token))
         return result is not None
@@ -376,7 +395,9 @@ def module_access_allows(
 
     module_permissions = auth_ctx.get("module_permissions")
     if not isinstance(module_permissions, dict):
-        return role_allows(ROLE_WRITE if method.upper() in {"POST", "PUT", "PATCH", "DELETE"} else ROLE_READ, role)
+        return role_allows(
+            ROLE_WRITE if method.upper() in {"POST", "PUT", "PATCH", "DELETE"} else ROLE_READ, role
+        )
 
     module_key = (module_id or "").strip().lower().replace("-", "_")
     wildcard = module_permissions.get("*")

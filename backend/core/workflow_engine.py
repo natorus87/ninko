@@ -494,7 +494,11 @@ class WorkflowEngine:
             if not script_id:
                 raise ValueError("script.script_id fehlt oder ist leer")
 
-            scripts_raw = await self.redis.connection.get(f"ninko:scripting:scripts:{tenant_id}")
+            scripts_key = _tenant_key("ninko:scripting:scripts", tenant_id)
+            scripts_raw = await self.redis.connection.get(scripts_key)
+            if not scripts_raw and ((tenant_id or "default").strip().lower().replace(" ", "_") or "default") == "default":
+                # Backward compatibility: ältere Daten lagen im globalen Key.
+                scripts_raw = await self.redis.connection.get("ninko:scripting:scripts")
             scripts = json.loads(scripts_raw) if scripts_raw else []
             script = next((s for s in scripts if s.get("id") == script_id), None)
 
