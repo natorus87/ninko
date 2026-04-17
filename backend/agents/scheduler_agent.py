@@ -20,6 +20,20 @@ from core.redis_client import get_redis
 # Lock to prevent concurrent R-M-W races on the shared tasks list
 _tasks_lock = asyncio.Lock()
 
+# Modul-globale Instanz – wird von main.py beim Start gesetzt
+_global_scheduler: "SchedulerAgent | None" = None
+
+
+def set_scheduler_agent(agent: "SchedulerAgent") -> None:
+    """Setzt die globale Scheduler-Instanz (wird in main.py aufgerufen)."""
+    global _global_scheduler
+    _global_scheduler = agent
+
+
+def get_scheduler_agent() -> "SchedulerAgent | None":
+    """Gibt die globale Scheduler-Instanz zurück."""
+    return _global_scheduler
+
 if TYPE_CHECKING:
     from agents.orchestrator import OrchestratorAgent
     from core.module_registry import ModuleRegistry
