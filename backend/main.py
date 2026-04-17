@@ -77,11 +77,14 @@ from core.auth import (
     ROLE_ADMIN,
     ROLE_READ,
     ROLE_WRITE,
+    auth_tenant_id,
     module_access_allows,
+    reset_current_tenant_id,
     resolve_request_auth,
     resolve_request_auth_async,
     resolve_request_role,
     role_allows,
+    set_current_tenant_id,
 )
 from core.rate_limit import InMemoryRateLimiter
 from core.rbac import RBAC_REDIS_KEY, RbacStore
@@ -393,6 +396,8 @@ async def lifespan(app: FastAPI) -> object:
     )
     app.state.scheduler = scheduler
     app.state.scheduler_task = scheduler_task
+    from agents.scheduler_agent import set_scheduler_agent
+    set_scheduler_agent(scheduler)
 
     # ── Safeguard paused-agent cleanup (Background) ───
     safeguard = app.state.safeguard
@@ -706,90 +711,96 @@ async def _is_active_user_api_token(username: str, raw_token: str) -> bool:
 @app.middleware("http")
 async def api_security_middleware(request: Request, call_next) -> object:
     path = request.url.path
+    tenant_token = None
 
-    # Frontend-Auth-Guard (wenn Auth aktiviert):
-    # / und /index.html sowie alle HTML-Routen hinter Login schützen.
-    if settings.API_AUTH_ENABLED and not path.startswith("/api/"):
-        public_non_api = (
-            path == "/health"
-            or path == "/login"
-            or path.startswith("/static/")
-            or path == "/favicon.ico"
-        )
-        if not public_non_api and resolve_request_role(request) is None:
-            return RedirectResponse(url="/login", status_code=302)
+    try:
+        # Frontend-Auth-Guard (wenn Auth aktiviert):
+        # / und /index.html sowie alle HTML-Routen hinter Login schützen.
+        if settings.API_AUTH_ENABLED and not path.startswith("/api/"):
+            public_non_api = (
+                path == "/health"
+                or path == "/login"
+                or path.startswith("/static/")
+                or path == "/favicon.ico"
+            )
+            if not public_non_api and resolve_request_role(request) is None:
+                return RedirectResponse(url="/login", status_code=302)
 
-    # API-only security/rate limiting
-    if path.startswith("/api/"):
-        client_ip = request.client.host if request.client else "unknown"
+        # API-only security/rate limiting
+        if path.startswith("/api/"):
+            client_ip = request.client.host if request.client else "unknown"
 
-        auth_ctx = await resolve_request_auth_async(request)
-        if auth_ctx and str(auth_ctx.get("auth_source", "")) == "api_token":
-            raw_token = _extract_api_key_from_request(request)
-            username = str(auth_ctx.get("username", "")).strip()
-            if not await _is_active_user_api_token(username, raw_token):
-                return JSONResponse(
-                    status_code=401,
-                    content={"detail": "Missing or invalid API key."},
-                )
-        if auth_ctx and bool(auth_ctx.get("password_change_required", False)):
-            allowed_while_reset = {
-                "/api/auth/me",
-                "/api/auth/change-password",
-                "/api/auth/logout",
-            }
-            if path not in allowed_while_reset:
-                return JSONResponse(
-                    status_code=403,
-                    content={
-                        "detail": "Password change required before accessing this endpoint."
-                    },
-                )
+            auth_ctx = await resolve_request_auth_async(request)
+            tenant_token = set_current_tenant_id(auth_tenant_id(auth_ctx))
+            if auth_ctx and str(auth_ctx.get("auth_source", "")) == "api_token":
+                raw_token = _extract_api_key_from_request(request)
+                username = str(auth_ctx.get("username", "")).strip()
+                if not await _is_active_user_api_token(username, raw_token):
+                    return JSONResponse(
+                        status_code=401,
+                        content={"detail": "Missing or invalid API key."},
+                    )
+            if auth_ctx and bool(auth_ctx.get("password_change_required", False)):
+                allowed_while_reset = {
+                    "/api/auth/me",
+                    "/api/auth/change-password",
+                    "/api/auth/logout",
+                }
+                if path not in allowed_while_reset:
+                    return JSONResponse(
+                        status_code=403,
+                        content={
+                            "detail": "Password change required before accessing this endpoint."
+                        },
+                    )
 
-        # Module frontend files are exempt — they are static assets loaded in bulk
-        # on every page load (2 requests × N modules can exceed burst limit).
-        _is_module_frontend = (
-            re.match(r"^/api/modules/[^/]+/frontend/", path) is not None
-        )
+            # Module frontend files are exempt — they are static assets loaded in bulk
+            # on every page load (2 requests × N modules can exceed burst limit).
+            _is_module_frontend = (
+                re.match(r"^/api/modules/[^/]+/frontend/", path) is not None
+            )
 
-        if _rate_limiter is not None and not _is_module_frontend:
-            allowed, retry_after = await _rate_limiter.allow(client_ip)
-            if not allowed:
-                return JSONResponse(
-                    status_code=429,
-                    content={"detail": "Rate limit exceeded. Please retry later."},
-                    headers={"Retry-After": str(retry_after)},
-                )
+            if _rate_limiter is not None and not _is_module_frontend:
+                allowed, retry_after = await _rate_limiter.allow(client_ip)
+                if not allowed:
+                    return JSONResponse(
+                        status_code=429,
+                        content={"detail": "Rate limit exceeded. Please retry later."},
+                        headers={"Retry-After": str(retry_after)},
+                    )
 
-        required_role = _required_role_for_request(path, request.method)
-        if required_role is not None:
-            actual_role = auth_ctx.get("role") if auth_ctx else None
-            if actual_role is None:
-                return JSONResponse(
-                    status_code=401,
-                    content={"detail": "Missing or invalid API key."},
-                )
-            if not role_allows(required_role, actual_role):
-                return JSONResponse(
-                    status_code=403,
-                    content={"detail": "Insufficient role for this operation."},
-                )
+            required_role = _required_role_for_request(path, request.method)
+            if required_role is not None:
+                actual_role = auth_ctx.get("role") if auth_ctx else None
+                if actual_role is None:
+                    return JSONResponse(
+                        status_code=401,
+                        content={"detail": "Missing or invalid API key."},
+                    )
+                if not role_allows(required_role, actual_role):
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": "Insufficient role for this operation."},
+                    )
 
-        # Module-level ACL (module routes only, no effect on core API routes)
-        module_id = _extract_module_id_from_path(path)
-        if module_id and settings.API_AUTH_ENABLED:
-            if auth_ctx is None:
-                return JSONResponse(
-                    status_code=401,
-                    content={"detail": "Missing or invalid API key."},
-                )
-            if not module_access_allows(auth_ctx, module_id, request.method):
-                return JSONResponse(
-                    status_code=403,
-                    content={"detail": f"Access denied for module '{module_id}'."},
-                )
+            # Module-level ACL (module routes only, no effect on core API routes)
+            module_id = _extract_module_id_from_path(path)
+            if module_id and settings.API_AUTH_ENABLED:
+                if auth_ctx is None:
+                    return JSONResponse(
+                        status_code=401,
+                        content={"detail": "Missing or invalid API key."},
+                    )
+                if not module_access_allows(auth_ctx, module_id, request.method):
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": f"Access denied for module '{module_id}'."},
+                    )
 
-    return await call_next(request)
+        return await call_next(request)
+    finally:
+        if tenant_token is not None:
+            reset_current_tenant_id(tenant_token)
 
 
 # ── Cache Prevention Middleware ───────────────────────
