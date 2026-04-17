@@ -38,7 +38,11 @@ class LLMProviderMiddleware(BaseMiddleware):
                         "LLM-Agent cleanup fehlgeschlagen (ignoriert): %s", exc
                     )
 
+            from core.tool_error_handling import wrap_tools_with_sanitizer
+
             ctx.llm = self._get_llm()
+            # Sanitizer-Patching nach LLM-Rebuild auffrischen (idempotent durch Guard)
+            wrap_tools_with_sanitizer(ctx.active_tools or [])
             ctx.agent = self._create_react_agent(
                 model=ctx.llm, tools=ctx.active_tools or []
             )
