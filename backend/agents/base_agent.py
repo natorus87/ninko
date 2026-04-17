@@ -31,7 +31,7 @@ from core.memory import get_memory
 from core.context_manager import get_context_manager
 from core import status_bus
 from core.events import ToolEvent, emit_tool_event
-from core.tool_error_handling import format_tool_error
+from core.tool_error_handling import format_tool_error, sanitize_tool_output
 from core.tool_registry import get_tool_status_label
 
 from agents.middleware import (
@@ -551,6 +551,9 @@ class BaseAgent:
         self._memory = get_memory()
         self._context_mgr = get_context_manager()
         self._last_compaction_summary: str | None = None
+
+        # Outbound Secret Sanitization auf alle Tools anwenden
+        wrap_tools_with_sanitizer(self.tools)
 
         # LangGraph ReAct Agent erstellen
         self._agent = create_react_agent(
