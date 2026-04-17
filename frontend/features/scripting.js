@@ -38,7 +38,10 @@
                     <div class="script-card" data-script-id="${this._escapeHtml(s.id)}">
                         <div class="script-card-header">
                             <span class="script-card-name">${this._escapeHtml(s.name)}</span>
-                            <span class="run-status-badge run-${this._escapeHtml(s.last_run_status || 'idle')}">${this._escapeHtml(s.last_run_status || 'idle')}</span>
+                            <div style="display:flex;gap:0.5rem;align-items:center;">
+                                ${s.tool_enabled ? '<span class="tool-badge">Tool aktiv</span>' : ''}
+                                <span class="run-status-badge run-${this._escapeHtml(s.last_run_status || 'idle')}">${this._escapeHtml(s.last_run_status || 'idle')}</span>
+                            </div>
                         </div>
                         <p class="script-card-desc">${this._escapeHtml(s.description || '')}</p>
                         <div class="script-card-meta">
@@ -77,7 +80,13 @@
                     document.getElementById('script-description').value = s.description || '';
                     document.getElementById('script-timeout').value = s.timeout || 30;
                     document.getElementById('script-tags').value = (s.tags || []).join(', ');
-                    
+
+                    document.getElementById('script-tool-enabled').checked = s.tool_enabled || false;
+                    document.getElementById('script-tool-name').value = s.tool_name || '';
+                    document.getElementById('script-tool-description').value = s.tool_description || '';
+                    document.getElementById('script-tool-schema').value = s.tool_input_schema ? JSON.stringify(s.tool_input_schema, null, 2) : '';
+                    this.toggleToolFields();
+
                     const codeRes = await fetch(`/api/scripting/scripts/${scriptId}/code`);
                     const codeData = await codeRes.json();
                     document.getElementById('script-code').value = codeData.code || '';
@@ -94,6 +103,11 @@
                 document.getElementById('script-tags').value = '';
                 document.getElementById('script-code').value = '#!/usr/bin/env python3\n# Dein Python-Code hier\nprint("Hello, World!")';
                 document.getElementById('script-execution-history').innerHTML = '<p class="text-muted">Noch keine Ausführungen.</p>';
+                document.getElementById('script-tool-enabled').checked = false;
+                document.getElementById('script-tool-name').value = '';
+                document.getElementById('script-tool-description').value = '';
+                document.getElementById('script-tool-schema').value = '';
+                this.toggleToolFields();
             }
         },
 
@@ -103,6 +117,15 @@
             this.loadScripts();
         },
 
+        toggleToolFields() {
+            const enabled = document.getElementById('script-tool-enabled').checked;
+            const fields = document.getElementById('script-tool-fields');
+            fields.style.display = enabled ? 'block' : 'none';
+            if (enabled) {
+                document.getElementById('script-tool-name').focus();
+            }
+        },
+
         async saveScript() {
             const scriptId = document.getElementById('script-edit-id').value;
             const name = document.getElementById('script-name').value.trim();
@@ -110,7 +133,11 @@
             const timeout = parseInt(document.getElementById('script-timeout').value) || 30;
             const tagsStr = document.getElementById('script-tags').value.trim();
             const code = document.getElementById('script-code').value;
-            
+            const toolEnabled = document.getElementById('script-tool-enabled').checked;
+            const toolName = document.getElementById('script-tool-name').value.trim();
+            const toolDescription = document.getElementById('script-tool-description').value.trim();
+            const toolSchemaStr = document.getElementById('script-tool-schema').value.trim();
+
             if (!name) {
                 showNotification('Name ist ein Pflichtfeld', 'error');
                 return;
@@ -119,7 +146,11 @@
                 showNotification('Code ist ein Pflichtfeld', 'error');
                 return;
             }
-            
+            if (toolEnabled && !toolName) {
+                showNotification('Tool-Name ist erforderlich wenn "Als Tool verfügbar" aktiviert ist', 'error');
+                return;
+            }
+
             const tags = tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(Boolean) : [];
             const body = {
                 name,
@@ -127,12 +158,28 @@
                 code,
                 timeout,
                 tags,
-                language: 'python'
+                language: 'python',
+                tool_enabled: toolEnabled
             };
-            
+
+            if (toolEnabled) {
+                body.tool_name = toolName;
+                body.tool_description = toolDescription || null;
+                if (toolSchemaStr) {
+                    try {
+                        body.tool_input_schema = JSON.parse(toolSchemaStr);
+                    } catch (e) {
+                        showNotification('Input-Schema ist kein gültiges JSON', 'error');
+                        return;
+                    }
+                } else {
+                    body.tool_input_schema = null;
+                }
+            }
+
             const saveBtn = document.getElementById('script-save-btn');
             if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Speichern…'; }
-            
+
             try {
                 const url = scriptId ? `/api/scripting/scripts/${scriptId}` : '/api/scripting/scripts';
                 const method = scriptId ? 'PUT' : 'POST';
@@ -141,7 +188,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body)
                 });
-                
+
                 if (res.ok) {
                     const result = await res.json();
                     showNotification(`Script "${name}" gespeichert`, 'success');

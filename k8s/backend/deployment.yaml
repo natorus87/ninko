@@ -83,6 +83,8 @@ spec:
               value: "true"
             - name: NINKO_MODULE_DATAVIZ
               value: "true"
+            - name: SCRIPT_TOOLS_ENABLED
+              value: "true"
 
             # ─── Modul-Secrets (Fallback wenn kein UI-Connection konfiguriert) ───
             # - name: IONOS_API_KEY

@@ -384,6 +384,28 @@
                                     <label class="form-label" for="script-tags">Tags (kommasepariert)</label>
                                     <input id="script-tags" type="text" class="form-input" placeholder="automation, daily">
                                 </div>
+                                <div class="form-row">
+                                    <label class="form-checkbox-label">
+                                        <input type="checkbox" id="script-tool-enabled" onchange="Ninko.toggleToolFields()">
+                                        <span>Als Tool verfügbar (für KI-Nutzung)</span>
+                                    </label>
+                                </div>
+                                <div id="script-tool-fields" class="form-row" style="display:none;padding-left:1.5rem;border-left:2px solid var(--accent-blue);">
+                                    <div style="display:flex;flex-direction:column;gap:0.75rem;">
+                                        <div>
+                                            <label class="form-label" for="script-tool-name">Tool-Name (eindeutig, slug-Format)</label>
+                                            <input id="script-tool-name" type="text" class="form-input" placeholder="mein-automation-tool" pattern="[a-z0-9_-]+" title="Nur Kleinbuchstaben, Zahlen, Unterstriche und Bindestriche">
+                                        </div>
+                                        <div>
+                                            <label class="form-label" for="script-tool-description">Tool-Beschreibung (für KI)</label>
+                                            <input id="script-tool-description" type="text" class="form-input" placeholder="Führt eine tägliche Datenbank-Sicherung durch">
+                                        </div>
+                                        <div>
+                                            <label class="form-label" for="script-tool-schema">Input-Schema (JSON, optional)</label>
+                                            <textarea id="script-tool-schema" class="form-input form-textarea" style="font-family:monospace;min-height:80px;" placeholder='{"type": "object", "properties": {"backup_path": {"type": "string"}}}'></textarea>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                             <div class="setting-group" style="flex:1;display:flex;flex-direction:column;min-height:0;">
                                 <h4>Code (Python)</h4>

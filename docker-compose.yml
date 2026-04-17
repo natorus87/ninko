@@ -65,6 +65,7 @@ services:
       NINKO_MODULE_WEB_SEARCH: "true"
       NINKO_MODULE_CODELAB: "true"
       NINKO_MODULE_IMAGE_GEN: "false"
+      SCRIPT_TOOLS_ENABLED: "true"
       PIHOLE_URL: "${PIHOLE_URL:-http://192.168.1.10}"
       SEARXNG_URL: "http://searxng:8080"
       # Monitoring

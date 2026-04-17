@@ -22,9 +22,7 @@ class CoreSettings(BaseSettings):
     )
 
     # ── LLM Backend ────────────────────────────────────
-    LLM_BACKEND: Literal["ollama", "lmstudio", "openai_compatible", "litellm"] = (
-        "lmstudio"
-    )
+    LLM_BACKEND: Literal["ollama", "lmstudio", "openai_compatible", "litellm"] = "lmstudio"
     # LM Studio / OpenAI-kompatibler Provider (Standard)
     LMSTUDIO_BASE_URL: str = "http://192.168.1.100:1234/v1"
     LMSTUDIO_MODEL: str = "local-model"
@@ -167,6 +165,8 @@ class CoreSettings(BaseSettings):
         "Extract all readable text from this image. "
         "Return plain text only, preserving line breaks where possible."
     )
+
+    SCRIPT_TOOLS_ENABLED: bool = True
 
     @model_validator(mode="after")
     def _validate_secrets(self) -> "CoreSettings":
