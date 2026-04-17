@@ -22,7 +22,7 @@ import uuid
 from datetime import datetime, timezone
 
 import chromadb
-from chromadb.config import Settings as ChromaSettings
+from chromadb import Settings as ChromaSettings
 
 from core.config import get_settings
 from core.llm_factory import get_embeddings
