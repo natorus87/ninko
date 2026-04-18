@@ -445,6 +445,24 @@ async def lifespan(app: FastAPI) -> object:
         except ModuleNotFoundError:
             logger.info("Telegram-Bot nicht verfügbar (Modul nicht installiert)")
 
+    # ── Message Hub (optional – catalog module) ───────
+    message_hub = None
+    try:
+        from modules.message_hub.hub import init_message_hub as _init_mh
+
+        message_hub = _init_mh(app)
+        app.state.message_hub = message_hub
+        await message_hub.start()
+    except ModuleNotFoundError:
+        try:
+            from plugins.message_hub.hub import init_message_hub as _init_mh
+
+            message_hub = _init_mh(app)
+            app.state.message_hub = message_hub
+            await message_hub.start()
+        except ModuleNotFoundError:
+            logger.info("Message Hub nicht verfügbar (Modul nicht installiert)")
+
     # ── Frontend Static Files ────────────────────────
     # MUST mount AFTER module routes, otherwise the catch-all
     # StaticFiles("/") will shadow /api/k8s/* etc.
@@ -501,6 +519,10 @@ async def lifespan(app: FastAPI) -> object:
     # Telegram Bot stoppen (falls geladen)
     if telegram_bot is not None:
         await telegram_bot.stop()
+
+    # Message Hub stoppen (falls geladen)
+    if message_hub is not None:
+        await message_hub.stop()
 
     await monitor.stop()
     monitor_task.cancel()
