@@ -1,0 +1,128 @@
+<!-- Message Hub Dashboard Tab -->
+<div id="message-hub-tab-content" class="module-tab-content">
+
+  <div style="margin-bottom: 1.5rem;">
+    <h2 style="font-size: 1.3rem; font-weight: 600; margin: 0 0 0.25rem; display: flex; align-items: center; gap: 0.5rem;">
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-blue);">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        <line x1="9" y1="10" x2="15" y2="10"/><line x1="12" y1="7" x2="12" y2="13"/>
+      </svg>
+      Message Hub
+    </h2>
+    <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">
+      Bidirektionales Routing für Email, Discord und Telegram → Ninko Sessions
+    </p>
+  </div>
+
+  <!-- Worker Status Cards -->
+  <div class="k8s-cluster-status" id="mh-worker-cards">
+    <div class="status-card">
+      <span class="status-icon" id="mh-email-icon">—</span>
+      <span class="status-value" id="mh-email-status">—</span>
+      <span class="status-label">Email (IMAP)</span>
+    </div>
+    <div class="status-card">
+      <span class="status-icon" id="mh-discord-icon">—</span>
+      <span class="status-value" id="mh-discord-status">—</span>
+      <span class="status-label">Discord</span>
+    </div>
+    <div class="status-card">
+      <span class="status-icon" id="mh-telegram-icon">—</span>
+      <span class="status-value" id="mh-telegram-status">—</span>
+      <span class="status-label">Telegram</span>
+    </div>
+    <div class="status-card">
+      <span class="status-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 20H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v5"/><circle cx="18" cy="18" r="3"/><path d="M21 21l-1.5-1.5"/></svg></span>
+      <span class="status-value" id="mh-route-count">—</span>
+      <span class="status-label">Aktive Routen</span>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="k8s-controls" style="margin-top: 1rem;">
+    <button class="btn btn-outline btn-sm" onclick="MessageHubTab.restartWorkers()">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:0.4rem;"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      Worker neu starten
+    </button>
+    <button class="btn btn-outline btn-sm" onclick="MessageHubTab.loadStatus()" style="margin-left:auto;">
+      Aktualisieren
+    </button>
+  </div>
+
+  <!-- Routing Table -->
+  <div class="k8s-section" style="margin-top: 1.5rem;">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+      <h3 class="section-title" style="margin: 0;">Routing-Tabelle</h3>
+      <button class="btn btn-primary btn-sm" onclick="MessageHubTab.showAddRoute()">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:0.4rem;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Route hinzufügen
+      </button>
+    </div>
+
+    <!-- Add Route Form (hidden by default) -->
+    <div id="mh-add-form" style="display:none; background: var(--bg-secondary); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; border: 1px solid var(--border-color);">
+      <h4 style="margin: 0 0 0.75rem; font-size: 0.9rem;">Neue Route</h4>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+        <div>
+          <label style="font-size: 0.8rem; color: var(--text-muted); display:block; margin-bottom:0.25rem;">Channel-Typ</label>
+          <select id="mh-new-type" style="width:100%; padding:0.4rem 0.65rem; border-radius:4px; border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-color); font-size:0.875rem;">
+            <option value="telegram">Telegram</option>
+            <option value="discord">Discord</option>
+            <option value="email">Email</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size: 0.8rem; color: var(--text-muted); display:block; margin-bottom:0.25rem;">Channel-ID</label>
+          <input id="mh-new-channel-id" type="text" placeholder="Chat-ID / Channel-ID / E-Mail" style="width:100%; padding:0.4rem 0.65rem; border-radius:4px; border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-color); font-size:0.875rem; box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size: 0.8rem; color: var(--text-muted); display:block; margin-bottom:0.25rem;">Session-ID</label>
+          <input id="mh-new-session-id" type="text" placeholder="z.B. hub-discord-alerts" style="width:100%; padding:0.4rem 0.65rem; border-radius:4px; border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-color); font-size:0.875rem; box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size: 0.8rem; color: var(--text-muted); display:block; margin-bottom:0.25rem;">Permission Cap</label>
+          <select id="mh-new-cap" style="width:100%; padding:0.4rem 0.65rem; border-radius:4px; border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-color); font-size:0.875rem;">
+            <option value="READONLY">READONLY (nur lesen)</option>
+            <option value="COMMUNICATE">COMMUNICATE</option>
+            <option value="WRITE_DATA" selected>WRITE_DATA (Standard)</option>
+            <option value="WRITE_SYSTEM">WRITE_SYSTEM</option>
+            <option value="ADMIN">ADMIN (voll)</option>
+          </select>
+        </div>
+        <div style="grid-column: 1 / -1;">
+          <label style="font-size: 0.8rem; color: var(--text-muted); display:block; margin-bottom:0.25rem;">Label (optional)</label>
+          <input id="mh-new-label" type="text" placeholder="z.B. IT-Team Discord #alerts" style="width:100%; padding:0.4rem 0.65rem; border-radius:4px; border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-color); font-size:0.875rem; box-sizing:border-box;">
+        </div>
+      </div>
+      <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem; justify-content: flex-end;">
+        <button class="btn btn-outline btn-sm" onclick="MessageHubTab.hideAddRoute()">Abbrechen</button>
+        <button class="btn btn-primary btn-sm" onclick="MessageHubTab.saveRoute()">Speichern</button>
+      </div>
+    </div>
+
+    <!-- Routes Table -->
+    <div id="mh-routes-table">
+      <div style="text-align:center; color: var(--text-muted); padding: 2rem; font-size:0.875rem;">Lade Routen…</div>
+    </div>
+  </div>
+
+  <!-- Info Box -->
+  <div class="k8s-section" style="background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%); border-left: 4px solid var(--accent-blue);">
+    <h3 class="section-title" style="color: var(--accent-blue);">Wie funktioniert das?</h3>
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 0.75rem;">
+      <div style="text-align:center; padding:0.75rem; background:var(--bg-card); border-radius:8px;">
+        <div style="width:28px;height:28px;background:var(--accent-blue);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 0.5rem;font-weight:600;font-size:0.85rem;">1</div>
+        <p style="margin:0;font-size:0.8rem;color:var(--text-muted);">Nachricht kommt auf einem Channel (Telegram, Discord, Email) an</p>
+      </div>
+      <div style="text-align:center; padding:0.75rem; background:var(--bg-card); border-radius:8px;">
+        <div style="width:28px;height:28px;background:var(--accent-blue);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 0.5rem;font-weight:600;font-size:0.85rem;">2</div>
+        <p style="margin:0;font-size:0.8rem;color:var(--text-muted);">Routing-Tabelle mappt Channel-ID → Ninko Session + Permission Cap</p>
+      </div>
+      <div style="text-align:center; padding:0.75rem; background:var(--bg-card); border-radius:8px;">
+        <div style="width:28px;height:28px;background:var(--accent-blue);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 0.5rem;font-weight:600;font-size:0.85rem;">3</div>
+        <p style="margin:0;font-size:0.8rem;color:var(--text-muted);">Antwort wird automatisch zurück an den Original-Channel gesendet</p>
+      </div>
+    </div>
+  </div>
+
+</div>
