@@ -84,7 +84,9 @@ class WorkflowEngine:
         workflow_id = workflow["id"]
         workflow_name = workflow.get("name", "")
         workflow_version = int(workflow.get("version", 1) or 1)
-        tenant_id = (workflow.get("tenant_id") or _tenant_from_scoped_workflow_id(workflow_id)).strip()
+        tenant_id = (
+            workflow.get("tenant_id") or _tenant_from_scoped_workflow_id(workflow_id)
+        ).strip()
         workflow_session_id = f"{tenant_id}:{run_id}"
 
         # Run-Index für schnelle Lookup
@@ -496,7 +498,11 @@ class WorkflowEngine:
 
             scripts_key = _tenant_key("ninko:scripting:scripts", tenant_id)
             scripts_raw = await self.redis.connection.get(scripts_key)
-            if not scripts_raw and ((tenant_id or "default").strip().lower().replace(" ", "_") or "default") == "default":
+            if (
+                not scripts_raw
+                and ((tenant_id or "default").strip().lower().replace(" ", "_") or "default")
+                == "default"
+            ):
                 # Backward compatibility: ältere Daten lagen im globalen Key.
                 scripts_raw = await self.redis.connection.get("ninko:scripting:scripts")
             scripts = json.loads(scripts_raw) if scripts_raw else []
@@ -556,7 +562,65 @@ class WorkflowEngine:
             except Exception as exc:
                 raise RuntimeError(f"Script execution failed: {exc}") from exc
 
+        if node_type == "debate":
+            return await self._execute_debate_node(config, variables, tenant_id)
+
         return f"Unbekannter Node-Typ: {node_type}", None
+
+    async def _execute_debate_node(
+        self,
+        config: dict,
+        variables: dict,
+        tenant_id: str,
+    ) -> tuple[str, str | None]:
+        debate_topic = self._interpolate(config.get("topic", "Debate"), variables)
+        debate_mode = config.get("mode", "auto_consensus")
+        max_rounds = min(max(1, int(config.get("max_rounds", 3))), 10)
+
+        participant_configs_raw = config.get("participants", [])
+        if not participant_configs_raw:
+            raise ValueError("Debate node requires at least one participant")
+
+        participant_configs = []
+        for p in participant_configs_raw:
+            participant_configs.append(
+                {
+                    "agent_id": p.get("agent_id", "orchestrator"),
+                    "role": p.get("role", "observer"),
+                    "name": p.get("name", p.get("agent_id", "Agent")),
+                    "system_prompt_addon": p.get("system_prompt_addon", ""),
+                }
+            )
+
+        from core.debate_service import DebateService
+        from core.llm_factory import llm_factory
+
+        debate_service = DebateService(self.redis, self.orchestrator, llm_factory)
+
+        debate = await debate_service.create_debate(
+            topic=debate_topic,
+            mode=debate_mode,
+            participant_configs=participant_configs,
+            max_rounds=max_rounds,
+            tenant_id=tenant_id,
+        )
+
+        final_debate = await debate_service.run_full_debate(debate.debate_id, tenant_id)
+
+        result_summary = (
+            f"Debate completed: {final_debate.status}\n"
+            f"Rounds: {final_debate.current_round}/{final_debate.max_rounds}\n"
+            f"Decision: {final_debate.final_decision[:200]}..."
+            if len(final_debate.final_decision) > 200
+            else f"Decision: {final_debate.final_decision}"
+        )
+
+        variables["debate_status"] = final_debate.status
+        variables["debate_rounds"] = final_debate.current_round
+        variables["debate_decision"] = final_debate.final_decision
+        variables["previous_output"] = final_debate.final_decision
+
+        return result_summary, None
 
     def _evaluate_condition(self, expr: str, previous: str, variables: dict) -> bool:
         """Wertet eine Condition-Expression aus. Gibt True/False zurück."""
@@ -705,7 +769,10 @@ class WorkflowEngine:
                 if target_step and target_step.get("status") == "pending":
                     target_step["status"] = "skipped"
                 continue
-            if target_id in step_map and step_map[target_id].get("status") in {"pending", "skipped"}:
+            if target_id in step_map and step_map[target_id].get("status") in {
+                "pending",
+                "skipped",
+            }:
                 step_map[target_id]["status"] = "pending"
                 targets.append(target_id)
         return targets
@@ -814,7 +881,11 @@ class WorkflowEngine:
                     target_step["error"] = None
 
                     try:
-                        target_output, target_label, target_attempts = await self._execute_with_retries(
+                        (
+                            target_output,
+                            target_label,
+                            target_attempts,
+                        ) = await self._execute_with_retries(
                             node_type=target_type,
                             config=target_config,
                             variables=variables,
@@ -876,9 +947,7 @@ class WorkflowEngine:
                     )
 
             final_status = (
-                "failed"
-                if any(item.get("status") == "failed" for item in steps)
-                else "succeeded"
+                "failed" if any(item.get("status") == "failed" for item in steps) else "succeeded"
             )
             await self._update_run(tenant_id, workflow_id, run_id, final_status, steps, variables)
             logger.info(
