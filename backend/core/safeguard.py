@@ -1779,7 +1779,9 @@ class SafeguardMiddleware:
                 profile_id=profile.id,
                 path_used=f"tier_{tier.value.lower()}",
             )
-            if req_conf:
+            # Audit: immer loggen wenn Bestätigung nötig ODER COMMUNICATE-Tier
+            # (externe Nachrichten müssen immer nachverfolgbar sein, auch ohne req_conf)
+            if req_conf or tier == ToolTier.COMMUNICATE:
                 await self._audit_log(
                     action="tool_call",
                     category=category,
@@ -1787,7 +1789,7 @@ class SafeguardMiddleware:
                     session_id=session_id,
                     agent_id=agent_id,
                     tool_name=tool_name,
-                    outcome="pending",
+                    outcome="pending" if req_conf else "allowed",
                     rationale=result.rationale,
                     profile_id=profile.id,
                 )
