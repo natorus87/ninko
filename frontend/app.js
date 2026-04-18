@@ -810,6 +810,7 @@ const Ninko = {
             'opnsense': typeof OPNsenseTab !== 'undefined' ? OPNsenseTab : null,
             'checkmk': typeof CheckmkTab !== 'undefined' ? CheckmkTab : null,
             'dataviz': typeof DataVizTab !== 'undefined' ? DataVizTab : null,
+            'message_hub': typeof MessageHubTab !== 'undefined' ? MessageHubTab : null,
         };
         // Fallback: dynamisch registrierte Plugin-Tabs (via Ninko._pluginTabs)
         return map[tabId] || this._pluginTabs[tabId] || null;
