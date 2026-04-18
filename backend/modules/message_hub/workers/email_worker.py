@@ -93,9 +93,11 @@ class EmailWorker(ChannelWorker):
         """
         ctx = await self._load_imap_config()
         if not ctx:
+            self.configured = False
             logger.info("Email-Worker: Keine IMAP-Verbindung konfiguriert — warte 60s")
             await asyncio.sleep(60)
             return
+        self.configured = True
 
         mail: imaplib.IMAP4_SSL | None = None
         try:

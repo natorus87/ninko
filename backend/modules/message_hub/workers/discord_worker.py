@@ -48,9 +48,11 @@ class DiscordWorker(ChannelWorker):
         """Polling-Loop: Prüft alle aktiven Discord-Channels auf neue Nachrichten."""
         bot_token = await self._get_bot_token()
         if not bot_token:
+            self.configured = False
             logger.info("Discord-Worker: Kein Bot-Token konfiguriert — warte 60s")
             await asyncio.sleep(60)
             return
+        self.configured = True
 
         headers = {
             "Authorization": f"Bot {bot_token}",

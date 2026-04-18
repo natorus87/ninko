@@ -78,6 +78,8 @@ class WorkerStatus(BaseModel):
 
     channel_type: str
     running: bool
+    configured: bool = True          # Hat dieser Channel eine gültige Verbindung?
+    managed_externally: bool = False  # Wird von einem anderen Modul verwaltet (z.B. Telegram-Bot)?
     restart_count: int
     last_error: str | None
     next_retry_in: float | None

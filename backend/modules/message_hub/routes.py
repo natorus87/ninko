@@ -85,7 +85,7 @@ async def update_route_api(route_id: str, body: RouteUpdate) -> dict:
     return entry.model_dump()
 
 
-@router.delete("/routes/{route_id}", status_code=204)
+@router.delete("/routes/{route_id}", status_code=204, response_model=None)
 async def delete_route_api(route_id: str) -> None:
     """Löscht einen Routing-Eintrag."""
     from .db import delete_route

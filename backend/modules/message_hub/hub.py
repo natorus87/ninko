@@ -42,6 +42,7 @@ class MessageHub:
     def __init__(self, app: "FastAPI") -> None:
         self.app = app
         self._workers: list = []
+        self._telegram_external = False  # True wenn Telegram-Modul den Bot verwaltet
 
     async def start(self) -> None:
         """Startet alle konfigurierten Channel-Worker."""
@@ -93,6 +94,7 @@ class MessageHub:
                     "Message Hub: Telegram-Worker konnte nicht gestartet werden: %s", exc
                 )
         else:
+            self._telegram_external = True
             logger.info(
                 "Message Hub: Telegram-Modul aktiv — Telegram-Worker wird nicht doppelt gestartet"
             )
@@ -118,6 +120,19 @@ class MessageHub:
     def get_status(self) -> HubStatus:
         """Gibt den aktuellen Status aller Worker zurück."""
         worker_statuses = [WorkerStatus(**w.status()) for w in self._workers]
+
+        # Telegram: wenn vom Telegram-Modul verwaltet → synthetischen Eintrag hinzufügen
+        if self._telegram_external:
+            worker_statuses.append(WorkerStatus(
+                channel_type="telegram",
+                running=True,
+                configured=True,
+                managed_externally=True,
+                restart_count=0,
+                last_error=None,
+                next_retry_in=None,
+            ))
+
         return HubStatus(
             workers=worker_statuses,
             route_count=0,   # wird async befüllt in routes.py

@@ -39,6 +39,7 @@ class ChannelWorker(ABC):
     def __init__(self, app: "FastAPI") -> None:
         self.app = app
         self.running = False
+        self.configured = True  # Subklassen setzen auf False wenn keine Verbindung konfiguriert
         self._task: asyncio.Task | None = None
         self._restart_count = 0
         self._last_error: str | None = None
@@ -131,6 +132,8 @@ class ChannelWorker(ABC):
             "running": self.running and (
                 self._task is not None and not self._task.done()
             ),
+            "configured": self.configured,
+            "managed_externally": False,
             "restart_count": self._restart_count,
             "last_error": self._last_error,
             "next_retry_in": next_retry_in,

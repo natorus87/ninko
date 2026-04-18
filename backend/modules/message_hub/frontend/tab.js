@@ -41,18 +41,33 @@ const MessageHubTab = {
         continue;
       }
 
-      if (w.running) {
+      if (w.managed_externally) {
+        // Vom dedizierten Modul verwaltet (z.B. Telegram-Bot-Modul)
+        icon.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#4caf50" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12l2.5 2.5L16 9"/></svg>';
+        statusEl.textContent = 'Aktiv (Modul)';
+        statusEl.style.color = 'var(--accent-green, #4caf50)';
+        statusEl.title = 'Wird vom dedizierten Modul verwaltet';
+      } else if (!w.configured) {
+        // Läuft, aber keine Verbindung konfiguriert
+        icon.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#9e9e9e" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+        statusEl.textContent = 'Nicht konfiguriert';
+        statusEl.style.color = '#9e9e9e';
+        statusEl.title = 'Keine Verbindung konfiguriert';
+      } else if (w.running) {
         icon.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#4caf50" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12l2.5 2.5L16 9"/></svg>';
         statusEl.textContent = 'Aktiv';
         statusEl.style.color = 'var(--accent-green, #4caf50)';
+        statusEl.title = '';
       } else if (w.next_retry_in !== null) {
         icon.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#ff9800" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
         statusEl.textContent = `Retry in ${Math.round(w.next_retry_in)}s`;
         statusEl.style.color = '#ff9800';
+        statusEl.title = w.last_error || '';
       } else {
         icon.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#f44336" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
         statusEl.textContent = 'Gestoppt';
         statusEl.style.color = '#f44336';
+        statusEl.title = w.last_error || '';
       }
     }
   },
