@@ -223,5 +223,4 @@ const MessageHubTab = {
   },
 };
 
-// Plugin-Registrierung (Katalog-Modul)
-if (typeof Ninko !== 'undefined') Ninko._pluginTabs['message_hub'] = MessageHubTab;
+// Core-Modul: Registrierung erfolgt in app.js:getTabObject()
