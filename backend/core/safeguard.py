@@ -1796,7 +1796,16 @@ class SafeguardMiddleware:
             return result
 
         # Unbekanntes Tool → LLM-Fallback
-        args_preview = str(tool_args)[:300] if tool_args else ""
+        # Sensitive Keys werden maskiert bevor tool_args an den Classifier gesendet wird
+        _SENSITIVE_KEYS = frozenset({"password", "token", "secret", "key", "api_key", "auth", "credential"})
+        if tool_args:
+            sanitized = {
+                k: "***" if any(s in k.lower() for s in _SENSITIVE_KEYS) else v
+                for k, v in tool_args.items()
+            }
+            args_preview = str(sanitized)[:300]
+        else:
+            args_preview = ""
         text = f"{tool_name}: {args_preview}" if args_preview else tool_name
         return await self.check(text, agent_id=agent_id, session_id=session_id)
 
