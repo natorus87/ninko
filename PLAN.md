@@ -95,21 +95,6 @@ Die folgenden Punkte sind nicht Teil der aktuellen Stabilisierungsphase, sondern
 
 Analyse von [github.com/Peuqui/AIfred-Intelligence](https://github.com/Peuqui/AIfred-Intelligence) — verwertbare Konzepte für Ninko:
 
-#### Priorität: Dringend
-
-**Sandboxed Code Execution** *(✅ Abgeschlossen 2026-04-17)*
-`bwrap` + `RLIMIT_*` + Timeout-Enforcement in `codelab/tools.py` implementiert. Script-Modul nutzt `execute_code` als Unterbau → beide abgedeckt.
-- ✅ RAM/CPU-Limits via `RLIMIT_AS`, `RLIMIT_CPU`, `RLIMIT_FSIZE`, `RLIMIT_NPROC`, `RLIMIT_CORE`
-- ✅ `bwrap` Filesystem-Namespace-Isolation (kein Zugriff auf Host-FS außer System-Bins)
-- ✅ Graceful Fallback wenn `bwrap` nicht verfügbar (Container ohne user_namespaces)
-
-#### Priorität: Mittelfristig
-
-**Multi-Agent-Debatte System** *(Aufwand: Mittel | Mehrwert: Hoch)*
-Mehrere Agents debattieren strukturiert mit Rollen (Hauptagent, Kritiker, Richter) und Voting-Mechanismus. Modi: Auto-Consensus, Tribunal, Symposion. Für Ninko besonders wertvoll bei Incident-Analyse und Change-Risk-Assessment.
-- Baut auf bestehendem Agent-Pool + Workflow-Engine auf
-- Perspektiven-aware History: jeder Agent sieht eigene Msgs als `assistant`, fremde als `user [NAME]:`
-
 **5-Level Tool Permission Tiers** *(Aufwand: Mittel | Mehrwert: Hoch)*
 Ergänzung zum LLM-Classifier: Jedes Tool deklariert statisch einen Tier (READONLY / COMMUNICATE / WRITE_DATA / WRITE_SYSTEM / ADMIN). Deterministisch, kein 8s-Timeout. Hybrid: statische Tiers + LLM-Classifier als Override für Grenzfälle.
 - Ninko hat `_TOOL_READONLY` — das Konzept auf 5 Stufen erweitern
