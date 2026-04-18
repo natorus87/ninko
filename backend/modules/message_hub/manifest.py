@@ -37,7 +37,7 @@ module_manifest = ModuleManifest(
     ),
     version="1.0.0",
     author="Ninko",
-    enabled_by_default=False,
+    enabled_by_default=True,
     env_prefix="MESSAGE_HUB_",
     required_secrets=[],
     optional_secrets=[],
