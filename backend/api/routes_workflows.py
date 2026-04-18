@@ -21,6 +21,8 @@ from schemas.workflows import (
     WorkflowListResponse,
     WorkflowRun,
     WorkflowRunListResponse,
+    DebateCreateRequest,
+    DebateVoteRequest,
 )
 
 logger = logging.getLogger("ninko.api.workflows")
@@ -182,6 +184,30 @@ async def instantiate_workflow_template(
 
     logger.info("Workflow aus Template erstellt: %s (%s)", workflow_def.name, scoped_id)
     return {"id": public_id, "status": "created", "template_id": template_id}
+
+
+@router.get("/debates")
+async def list_debates(request: Request) -> dict:
+    redis = get_redis()
+    tenant_id = auth_tenant_id(resolve_request_auth(request))
+    from core.debate_service import DebateService
+    from core.llm_factory import llm_factory
+    debate_service = DebateService(redis, request.app.state.orchestrator, llm_factory)
+    debates = await debate_service.list_debates(tenant_id)
+    return {"debates": debates, "total": len(debates)}
+
+
+@router.get("/debates/{debate_id}")
+async def get_debate(debate_id: str, request: Request) -> dict:
+    redis = get_redis()
+    tenant_id = auth_tenant_id(resolve_request_auth(request))
+    from core.debate_service import DebateService
+    from core.llm_factory import llm_factory
+    debate_service = DebateService(redis, request.app.state.orchestrator, llm_factory)
+    result = await debate_service.get_debate_result(debate_id, tenant_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Debate not found")
+    return result
 
 
 @router.get("/{workflow_id}")
@@ -471,10 +497,83 @@ async def retry_workflow_step(run_id: str, step_index: int, request: Request) ->
         orchestrator = request.app.state.orchestrator
         engine = WorkflowEngine(redis, orchestrator)
         _track_workflow_task(
-            asyncio.create_task(engine.execute_step(wf, run_id, step_index, run.get("variables", {})))
+            asyncio.create_task(
+                engine.execute_step(wf, run_id, step_index, run.get("variables", {}))
+            )
         )
     except Exception as exc:
         logger.warning("Step-Retry konnte nicht gestartet werden: %s", exc)
         raise HTTPException(status_code=500, detail=f"Retry konnte nicht gestartet werden: {exc}")
 
     return {"run_id": run_id, "step_index": step_index, "status": "retrying"}
+
+
+@router.post("/debates", status_code=201)
+async def create_debate(body: DebateCreateRequest, request: Request) -> dict:
+    redis = get_redis()
+    tenant_id = auth_tenant_id(resolve_request_auth(request))
+    from core.debate_service import DebateService
+    from core.llm_factory import llm_factory
+    debate_service = DebateService(redis, request.app.state.orchestrator, llm_factory)
+    debate = await debate_service.create_debate(
+        topic=body.topic,
+        mode=body.mode,
+        participant_configs=[p.model_dump() for p in body.participants],
+        max_rounds=body.max_rounds,
+        consensus_threshold=body.consensus_threshold,
+        tenant_id=tenant_id,
+    )
+    return {
+        "debate_id": debate.debate_id,
+        "topic": debate.topic,
+        "mode": debate.mode,
+        "status": debate.status,
+        "max_rounds": debate.max_rounds,
+        "current_round": debate.current_round,
+        "participants": [
+            {"agent_id": p.agent_id, "role": p.role, "name": p.name} for p in debate.participants
+        ],
+    }
+
+
+@router.post("/debates/{debate_id}/run")
+async def run_debate(debate_id: str, request: Request) -> dict:
+    redis = get_redis()
+    tenant_id = auth_tenant_id(resolve_request_auth(request))
+    from core.debate_service import DebateService
+    from core.llm_factory import llm_factory
+    debate_service = DebateService(redis, request.app.state.orchestrator, llm_factory)
+    await debate_service.run_full_debate(debate_id, tenant_id)
+    return await debate_service.get_debate_result(debate_id, tenant_id) or {"error": "Debate not found"}
+
+
+@router.post("/debates/{debate_id}/round")
+async def run_debate_round(debate_id: str, request: Request) -> dict:
+    redis = get_redis()
+    tenant_id = auth_tenant_id(resolve_request_auth(request))
+    from core.debate_service import DebateService
+    from core.llm_factory import llm_factory
+    debate_service = DebateService(redis, request.app.state.orchestrator, llm_factory)
+    round_result = await debate_service.run_debate_round(debate_id, tenant_id)
+    return {
+        "debate_id": debate_id,
+        "round_number": round_result.round_number,
+        "contributions": round_result.contributions,
+        "consensus_reached": round_result.consensus_reached,
+    }
+
+
+@router.post("/debates/{debate_id}/vote")
+async def vote_in_debate(debate_id: str, body: DebateVoteRequest, request: Request) -> dict:
+    redis = get_redis()
+    tenant_id = auth_tenant_id(resolve_request_auth(request))
+    from core.debate_service import DebateService
+    from core.llm_factory import llm_factory
+    debate_service = DebateService(redis, request.app.state.orchestrator, llm_factory)
+    success = await debate_service.vote(
+        debate_id=debate_id,
+        voter_agent_id=body.voter_agent_id,
+        target_agent_id=body.target_agent_id,
+        tenant_id=tenant_id,
+    )
+    return {"success": success}
