@@ -1064,6 +1064,9 @@ class SafeguardMiddleware:
     AUDIT_LOG_KEY = "ninko:safeguard_audit"
     # Maximum audit log entries kept in Redis (FIFO cap)
     MAX_AUDIT_ENTRIES = 5000
+    # Maximum characters stored for message text and rationale in audit entries
+    AUDIT_TEXT_MAX_CHARS = 500
+    AUDIT_RATIONALE_MAX_CHARS = 300
 
     def __init__(
         self,
@@ -1129,12 +1132,12 @@ class SafeguardMiddleware:
             "timestamp": time.time(),
             "action": action,
             "category": category.value,
-            "text": text[:500],
+            "text": text[:self.AUDIT_TEXT_MAX_CHARS],
             "session_id": session_id or "",
             "agent_id": agent_id or "",
             "tool_name": tool_name or "",
             "outcome": outcome,
-            "rationale": rationale[:300],
+            "rationale": rationale[:self.AUDIT_RATIONALE_MAX_CHARS],
             "profile_id": profile_id or "",
         }
         try:
