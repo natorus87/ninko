@@ -1005,6 +1005,16 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
     registry.register_many(jira_tools)
 
 
+    # ── Message Hub ──────────────────────────────────────────────────────────
+    message_hub_tools = [
+        ToolMetadata("list_message_routes", "message_hub", readonly=True),
+        ToolMetadata("get_message_hub_status", "message_hub", readonly=True),
+        ToolMetadata("create_message_route", "message_hub", tier=ToolTier.WRITE_DATA),
+        ToolMetadata("delete_message_route", "message_hub", destructive=True, tier=ToolTier.ADMIN),
+    ]
+    registry.register_many(message_hub_tools)
+
+
 def _discover_module_tools(registry: ToolRegistry) -> None:
     """
     Discover @tool functions from modules_catalog/*/tools.py.
