@@ -1125,7 +1125,6 @@ class SafeguardMiddleware:
         profile_id: str = "",
     ) -> None:
         """Write a structured audit entry to Redis (FIFO-capped list)."""
-        import time
         from core.redis_client import get_redis
 
         entry = {
