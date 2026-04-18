@@ -95,10 +95,6 @@ Die folgenden Punkte sind nicht Teil der aktuellen Stabilisierungsphase, sondern
 
 Analyse von [github.com/Peuqui/AIfred-Intelligence](https://github.com/Peuqui/AIfred-Intelligence) — verwertbare Konzepte für Ninko:
 
-**5-Level Tool Permission Tiers** *(Aufwand: Mittel | Mehrwert: Hoch)*
-Ergänzung zum LLM-Classifier: Jedes Tool deklariert statisch einen Tier (READONLY / COMMUNICATE / WRITE_DATA / WRITE_SYSTEM / ADMIN). Deterministisch, kein 8s-Timeout. Hybrid: statische Tiers + LLM-Classifier als Override für Grenzfälle.
-- Ninko hat `_TOOL_READONLY` — das Konzept auf 5 Stufen erweitern
-- Besonders relevant wenn externe Channels (Email, Discord) hinzukommen
 
 **Chat als HTML exportieren** *(Aufwand: Klein | Mehrwert: Mittel)*
 Standalone HTML mit inlinen Fonts, offline lesbar. Nützlich für Incident-Reports, Audit-Trails, Weitergabe an Nicht-Nutzer.
@@ -122,3 +118,5 @@ Email (IMAP IDLE), Discord Bot, Telegram als Background-Worker. SQLite-Routing-T
 ## Archiv
 
 Die vollständige Historie der Stabilisierungsphase mit allen technischen Details, Verifikationen und abgeschlossenen Punkten befindet sich im Git-History.
+
+Offen bleibt (bewusste Entscheidung): Das Plugin-basierte Registry-Manipulation-Risiko — das ist ein architekturelles Problem (wer darf Plugins installieren?), das ausserhalb des Scopes dieser Änderungen liegt und eine eigene Policy-Entscheidung erfordert.
