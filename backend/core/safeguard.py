@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING
 
 from openai import AsyncOpenAI
 
-from core.tool_registry import get_tool_registry
+from core.tool_registry import ToolTier, get_tool_registry
 
 if TYPE_CHECKING:
     from core.agent_config_store import AgentConfigStore
@@ -900,12 +900,29 @@ _SAFE_PATTERNS: tuple[str, ...] = (
 )
 
 
-# ─── Tool-level: always-safe tools (skip LLM classifier) ─────────────────────
+# ─── Tool-level: deterministischer Tier-Lookup (kein LLM-Timeout) ────────────
 #
-# Derived from ToolRegistry — single source of truth in core/tool_registry.py.
-# To add new read-only tools: register them there with readonly=True.
+# Single source of truth: core/tool_registry.py (ToolTier Enum).
+# Legacy frozenset bleibt für Backward-Compat (externe Nutzer von readonly_names()).
 
 _TOOL_READONLY: frozenset[str] = get_tool_registry().readonly_names()
+
+# Tier → ActionCategory + requires_confirmation Mapping (deterministisch)
+_TIER_TO_CATEGORY: dict[ToolTier, ActionCategory] = {
+    ToolTier.READONLY: ActionCategory.SAFE,
+    ToolTier.COMMUNICATE: ActionCategory.STATE_CHANGING,
+    ToolTier.WRITE_DATA: ActionCategory.STATE_CHANGING,
+    ToolTier.WRITE_SYSTEM: ActionCategory.STATE_CHANGING,
+    ToolTier.ADMIN: ActionCategory.DESTRUCTIVE,
+}
+
+
+def _get_tool_tier(tool_name: str) -> ToolTier | None:
+    """
+    Gibt den ToolTier eines registrierten Tools zurück.
+    Returns None wenn nicht in der Registry (→ LLM-Fallback).
+    """
+    return get_tool_registry().tier_of(tool_name)
 
 
 # High-confidence CLI/SQL patterns that are unambiguously destructive/state-changing.
@@ -1730,26 +1747,53 @@ class SafeguardMiddleware:
                 profile_id=profile.id,
             )
 
-        # Known safe tools — no LLM call needed
-        if tool_name in _TOOL_READONLY:
-            return SafeguardResult(
-                requires_confirmation=False,
-                category=ActionCategory.SAFE,
-                rationale=f"Read-only / benign tool '{tool_name}' — safe to execute.",
-                profile_id=profile.id,
-            )
-
-        # For call_module_agent: the "message" arg describes the action
+        # ── Deterministischer Tier-Check (kein LLM, kein Timeout) ────────────
+        # call_module_agent und execute_cli_command sind Durchreicher — der
+        # eigentliche Inhalt bestimmt die Kategorie, nicht der Tool-Name.
         if tool_name == "call_module_agent":
             text = tool_args.get("message", tool_name)
             return await self.check(text, agent_id=agent_id, session_id=session_id)
 
-        # For execute_cli_command: the command itself
         if tool_name == "execute_cli_command":
             text = tool_args.get("command", tool_name)
             return await self.check(text, agent_id=agent_id, session_id=session_id)
 
-        # Generic fallback: tool_name + short args preview
+        tier = _get_tool_tier(tool_name)
+
+        if tier is not None:
+            # Bekanntes Tool → deterministisch, kein LLM
+            category = _TIER_TO_CATEGORY[tier]
+            req_conf = category.value in profile.confirm_categories
+
+            rationale_map: dict[ToolTier, str] = {
+                ToolTier.READONLY: f"Read-only tool '{tool_name}' — safe to execute.",
+                ToolTier.COMMUNICATE: f"COMMUNICATE tier '{tool_name}' — sendet Nachricht nach außen.",
+                ToolTier.WRITE_DATA: f"WRITE_DATA tier '{tool_name}' — erstellt/ändert Daten.",
+                ToolTier.WRITE_SYSTEM: f"WRITE_SYSTEM tier '{tool_name}' — ändert Systemzustand.",
+                ToolTier.ADMIN: f"ADMIN tier '{tool_name}' — destruktive / irreversible Aktion.",
+            }
+            result = SafeguardResult(
+                requires_confirmation=req_conf,
+                category=category,
+                rationale=rationale_map[tier],
+                profile_id=profile.id,
+                path_used=f"tier_{tier.value.lower()}",
+            )
+            if req_conf:
+                await self._audit_log(
+                    action="tool_call",
+                    category=category,
+                    text=tool_name,
+                    session_id=session_id,
+                    agent_id=agent_id,
+                    tool_name=tool_name,
+                    outcome="pending",
+                    rationale=result.rationale,
+                    profile_id=profile.id,
+                )
+            return result
+
+        # Unbekanntes Tool → LLM-Fallback
         args_preview = str(tool_args)[:300] if tool_args else ""
         text = f"{tool_name}: {args_preview}" if args_preview else tool_name
         return await self.check(text, agent_id=agent_id, session_id=session_id)
