@@ -31,7 +31,7 @@ from core.memory import get_memory
 from core.context_manager import get_context_manager
 from core import status_bus
 from core.events import ToolEvent, emit_tool_event
-from core.tool_error_handling import format_tool_error, sanitize_tool_output
+from core.tool_error_handling import format_tool_error, sanitize_tool_output, wrap_tools_with_sanitizer
 from core.tool_registry import get_tool_status_label
 
 from agents.middleware import (
