@@ -739,6 +739,11 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
         ToolMetadata("get_cname_records", "pihole", readonly=True),
         ToolMetadata("get_dhcp_leases", "pihole", readonly=True),
         ToolMetadata("get_system_messages", "pihole", readonly=True),
+        ToolMetadata("toggle_blocking", "pihole", tier=ToolTier.WRITE_SYSTEM),
+        ToolMetadata("update_gravity", "pihole", tier=ToolTier.WRITE_SYSTEM),
+        ToolMetadata("flush_dns_cache", "pihole", tier=ToolTier.WRITE_SYSTEM),
+        ToolMetadata("add_domain_to_list", "pihole", tier=ToolTier.WRITE_DATA),
+        ToolMetadata("remove_domain_from_list", "pihole", tier=ToolTier.WRITE_DATA),
     ]
     registry.register_many(pihole_tools)
 
@@ -788,6 +793,21 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
         ToolMetadata("fetch_emails", "email", readonly=True),
     ]
     registry.register_many(email_tools)
+
+    # ── Messaging (externe Kanäle) ──────────────────────────────────────────
+    # Explizit als COMMUNICATE registriert damit tier_of() O(1) zurückgibt
+    # (sonst: _discover_module_tools Fallback oder None → LLM-Fallback)
+    messaging_tools = [
+        ToolMetadata("send_telegram_message", "telegram", tier=ToolTier.COMMUNICATE),
+        ToolMetadata("send_slack_message", "slack", tier=ToolTier.COMMUNICATE),
+        ToolMetadata("send_slack_dm", "slack", tier=ToolTier.COMMUNICATE),
+        ToolMetadata("upload_slack_file", "slack", tier=ToolTier.COMMUNICATE),
+        ToolMetadata("create_slack_channel", "slack", tier=ToolTier.COMMUNICATE),
+        ToolMetadata("invite_user_to_channel", "slack", tier=ToolTier.COMMUNICATE),
+        ToolMetadata("send_discord_message", "discord", tier=ToolTier.COMMUNICATE),
+        ToolMetadata("create_discord_channel", "discord", tier=ToolTier.COMMUNICATE),
+    ]
+    registry.register_many(messaging_tools)
 
     # ── GLPI ─────────────────────────────────────────────────────────────────
     glpi_tools = [
@@ -927,6 +947,16 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
         ToolMetadata("get_synology_network_info", "synology", readonly=True),
         ToolMetadata("get_synology_users", "synology", readonly=True),
         ToolMetadata("get_synology_groups", "synology", readonly=True),
+        ToolMetadata("install_synology_update", "synology", tier=ToolTier.WRITE_SYSTEM),
+        ToolMetadata("install_synology_package", "synology", tier=ToolTier.WRITE_SYSTEM),
+        ToolMetadata("uninstall_synology_package", "synology", tier=ToolTier.ADMIN),
+        ToolMetadata("restart_synology_service", "synology", tier=ToolTier.WRITE_SYSTEM),
+        ToolMetadata("delete_synology_user", "synology", destructive=True, tier=ToolTier.ADMIN),
+        ToolMetadata("create_synology_user", "synology", tier=ToolTier.WRITE_DATA),
+        ToolMetadata("change_synology_user_password", "synology", tier=ToolTier.WRITE_SYSTEM),
+        ToolMetadata("create_synology_group", "synology", tier=ToolTier.WRITE_DATA),
+        ToolMetadata("shutdown_synologyNAS", "synology", destructive=True, tier=ToolTier.ADMIN),
+        ToolMetadata("reboot_synologyNAS", "synology", tier=ToolTier.WRITE_SYSTEM),
     ]
     registry.register_many(synology_tools)
 
