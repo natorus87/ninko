@@ -1326,6 +1326,115 @@ const Ninko = {
         showNotification(t('chat.contextClearedNotif'), 'info');
     },
 
+    // --- Chat HTML Export ---
+    exportChatAsHtml() {
+        if (this._chatMessages.length === 0) {
+            showNotification(t('chat.exportEmpty'), 'info');
+            return;
+        }
+
+        const sessionLabel = document.getElementById('chat-session-label');
+        const chatTitle = (sessionLabel && sessionLabel.textContent.trim()) || 'Ninko Chat';
+        const exportDate = new Date().toLocaleString('de-DE', {
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit',
+        });
+
+        const messagesHtml = this._chatMessages.map(msg => {
+            const roleLabel = msg.role === 'user' ? t('chat.exportRoleUser') : t('chat.exportRoleAi');
+            const roleClass = msg.role === 'user' ? 'user' : 'ai';
+            let rendered = this.formatText(msg.text);
+            // Zweiter Sanitize-Pass für den Export-Kontext — DOMPurify muss verfügbar sein
+            // da das exportierte Dokument als standalone file:// geöffnet wird (kein CORS-Schutz)
+            if (typeof DOMPurify !== 'undefined') {
+                rendered = DOMPurify.sanitize(rendered, {
+                    ADD_ATTR: ['target', 'rel'],
+                    FORBID_TAGS: ['script', 'style', 'iframe', 'form', 'input'],
+                    ALLOWED_URI_REGEXP: /^(https?|mailto):/i,
+                });
+            } else {
+                // DOMPurify nicht geladen — nur escaped Plain-Text ausgeben (kein Markdown-Rendering)
+                rendered = `<pre style="white-space:pre-wrap">${this._escapeHtml(msg.text)}</pre>`;
+            }
+            return `<div class="message ${roleClass}"><div class="role-label">${this._escapeHtml(roleLabel)}</div><div class="bubble">${rendered}</div></div>`;
+        }).join('\n');
+
+        const html = `<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${this._escapeHtml(chatTitle)} — Ninko Export</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: #0f1117;
+    color: #e2e8f0;
+    margin: 0;
+    padding: 2rem 1rem;
+    line-height: 1.6;
+  }
+  .export-container { max-width: 780px; margin: 0 auto; }
+  header { border-bottom: 1px solid #2d3748; padding-bottom: 1rem; margin-bottom: 2rem; }
+  header h1 { margin: 0 0 0.25rem; font-size: 1.3rem; color: #f8fafc; }
+  header .meta { font-size: 0.8rem; color: #718096; }
+  .message { display: flex; flex-direction: column; margin-bottom: 1.5rem; }
+  .message.user { align-items: flex-end; }
+  .message.ai { align-items: flex-start; }
+  .role-label { font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: #718096; margin-bottom: 0.3rem; }
+  .bubble {
+    max-width: 80%;
+    padding: 0.75rem 1rem;
+    border-radius: 12px;
+    font-size: 0.92rem;
+    word-break: break-word;
+  }
+  .message.user .bubble { background: #2563eb; color: #fff; border-radius: 12px 12px 2px 12px; }
+  .message.ai .bubble { background: #1e2535; color: #e2e8f0; border-radius: 2px 12px 12px 12px;
+    border: 1px solid #2d3748; }
+  .bubble pre { background: #0d1117; border: 1px solid #2d3748; border-radius: 6px;
+    padding: 0.75rem; overflow-x: auto; font-size: 0.85rem; }
+  .bubble code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    background: #0d1117; padding: 0.1em 0.35em; border-radius: 4px; font-size: 0.85em; }
+  .bubble pre code { background: none; padding: 0; }
+  .bubble a { color: #60a5fa; }
+  .bubble table { border-collapse: collapse; width: 100%; margin: 0.5rem 0; }
+  .bubble th, .bubble td { border: 1px solid #2d3748; padding: 0.4rem 0.7rem; font-size: 0.88rem; }
+  .bubble th { background: #1a2030; }
+  footer { text-align: center; color: #4a5568; font-size: 0.75rem;
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #2d3748; }
+</style>
+</head>
+<body>
+<div class="export-container">
+  <header>
+    <h1>${this._escapeHtml(chatTitle)}</h1>
+    <div class="meta">Ninko — Exportiert am ${this._escapeHtml(exportDate)}</div>
+  </header>
+  <main>
+${messagesHtml}
+  </main>
+  <footer>Erstellt mit Ninko · ${this._escapeHtml(exportDate)}</footer>
+</div>
+</body>
+</html>`;
+
+        const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const safeTitle = chatTitle.replace(/[^a-zA-Z0-9\u00C0-\u024F _-]/g, '').trim().replace(/\s+/g, '_') || 'ninko_chat';
+        const ts = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '-');
+        a.href = url;
+        a.download = `${safeTitle}_${ts}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 100);
+        showNotification(t('chat.exportDone'), 'success');
+    },
+
     // --- Theme Toggle ---
     _setThemeToggleIcon(isLight) {
         const btn = document.getElementById('theme-toggle');
@@ -2517,6 +2626,7 @@ const Ninko = {
                 ? DOMPurify.sanitize(html, {
                     ADD_ATTR: ['target', 'rel'],
                     FORBID_TAGS: ['script', 'style', 'iframe', 'form', 'input'],
+                    ALLOWED_URI_REGEXP: /^(https?|mailto):/i,
                 })
                 : html;
             // Links immer in neuem Tab öffnen
