@@ -8,6 +8,28 @@ from typing import Literal, Optional, Any
 from pydantic import BaseModel, Field
 import uuid
 
+DebateMode = Literal["auto_consensus", "tribunal", "symposion"]
+DebateRole = Literal["primary", "critic", "judge", "observer"]
+
+
+class DebateParticipantConfig(BaseModel):
+    agent_id: str = Field(..., min_length=1, max_length=128)
+    role: DebateRole = "observer"
+    name: str = Field(default="", max_length=64)
+
+
+class DebateCreateRequest(BaseModel):
+    topic: str = Field(..., min_length=1, max_length=500)
+    mode: DebateMode = "auto_consensus"
+    participants: list[DebateParticipantConfig] = Field(..., min_length=2, max_length=8)
+    max_rounds: int = Field(default=5, ge=1, le=10)
+    consensus_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
+
+
+class DebateVoteRequest(BaseModel):
+    voter_agent_id: str = Field(..., min_length=1, max_length=128)
+    target_agent_id: str = Field(..., min_length=1, max_length=128)
+
 
 # ── Workflow Node ────────────────────────────────────
 
@@ -22,7 +44,16 @@ class WorkflowNode(BaseModel):
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
     type: Literal[
-        "trigger", "agent", "condition", "loop", "variable", "parallel", "subflow", "script", "end"
+        "trigger",
+        "agent",
+        "condition",
+        "loop",
+        "variable",
+        "parallel",
+        "subflow",
+        "script",
+        "debate",
+        "end",
     ] = "agent"
     label: str = ""
     config: dict = Field(default_factory=dict)
@@ -117,6 +148,7 @@ class WorkflowRun(BaseModel):
     variables: dict = Field(default_factory=dict)
     error: Optional[str] = None
     triggered_by: str = "manual"
+    parent_run_id: Optional[str] = None
 
 
 class WorkflowListResponse(BaseModel):
