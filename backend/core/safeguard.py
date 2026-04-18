@@ -53,18 +53,35 @@ _SAFEGUARD_EXCEPTIONS_TIMEOUT = (asyncio.TimeoutError,)
 
 _SAFEGUARD_EXCEPTIONS_IMPORT = (ImportError,)
 
-# Legacy tuple for backward compatibility - deprecated, use specific tuples above
-_SAFEGUARD_EXCEPTIONS = (
-    ImportError,
-    AttributeError,
-    TypeError,
-    ValueError,
-    KeyError,
-    RuntimeError,
-    OSError,
-    asyncio.TimeoutError,
-    json.JSONDecodeError,
+# Kombiniertes Tupel für alle except-Blöcke die General + Timeout abfangen
+_SAFEGUARD_EXCEPTIONS_COMMON = (
+    *_SAFEGUARD_EXCEPTIONS_GENERAL,
+    *_SAFEGUARD_EXCEPTIONS_TIMEOUT,
 )
+
+# Sensitive tool-arg keys die vor dem LLM-Classifier maskiert werden
+# Modul-Level-Konstante (nicht per Aufruf neu erzeugen)
+# "key" und "auth" bewusst als vollständige Suffixe/_-Präfixe um false positives zu reduzieren
+_TOOL_SENSITIVE_KEYS: frozenset[str] = frozenset({
+    "password", "passwd", "token", "secret",
+    "_key", "apikey", "api_key",
+    "auth_", "oauth", "credential", "private",
+})
+
+
+def _mask_sensitive_args(obj: object, _depth: int = 0) -> object:
+    """Rekursiv sensitive Keys in tool_args-Dicts maskieren (max. 5 Ebenen tief)."""
+    if _depth > 5:
+        return obj
+    if isinstance(obj, dict):
+        return {
+            k: "***" if any(s in k.lower() for s in _TOOL_SENSITIVE_KEYS)
+            else _mask_sensitive_args(v, _depth + 1)
+            for k, v in obj.items()
+        }
+    if isinstance(obj, list):
+        return [_mask_sensitive_args(item, _depth + 1) for item in obj]
+    return obj
 
 
 # ─── Compiled regex constants ─────────────────────────────────────────────────
@@ -397,7 +414,7 @@ _BUILTIN_PROFILES: dict[str, SafeguardProfile] = {
         check_tool_calls=True,
         confirm_categories=["DESTRUCTIVE", "STATE_CHANGING", "PROMPT_INJECTION"],
         detect_prompt_injection=False,
-        fail_open=True,
+        fail_open=False,  # fail-safe: Classifier-Ausfall blockiert Aktionen statt sie zu erlauben
         auto_mode=True,
         auto_mode_policy="",
     ),
@@ -1145,7 +1162,7 @@ class SafeguardMiddleware:
             pipe.lpush(self.AUDIT_LOG_KEY, json.dumps(entry))
             pipe.ltrim(self.AUDIT_LOG_KEY, 0, self.MAX_AUDIT_ENTRIES - 1)
             await pipe.execute()
-        except (*_SAFEGUARD_EXCEPTIONS_GENERAL, *_SAFEGUARD_EXCEPTIONS_TIMEOUT) as exc:
+        except _SAFEGUARD_EXCEPTIONS_COMMON as exc:
             logger.warning("[Safeguard/Audit] Failed to write audit entry: %s", exc)
 
     # ── Latency recording ───────────────────────────────────────────────────────
@@ -1166,7 +1183,7 @@ class SafeguardMiddleware:
             pipe.lpush(self.LATENCY_KEY, entry)
             pipe.ltrim(self.LATENCY_KEY, 0, self.MAX_LATENCY_ENTRIES - 1)
             await pipe.execute()
-        except (*_SAFEGUARD_EXCEPTIONS_GENERAL, *_SAFEGUARD_EXCEPTIONS_TIMEOUT) as exc:
+        except _SAFEGUARD_EXCEPTIONS_COMMON as exc:
             logger.debug("[Safeguard] Failed to record latency: %s", exc)
 
     async def get_metrics(self) -> dict:
@@ -1245,7 +1262,7 @@ class SafeguardMiddleware:
                 self.model = model
                 self._llm_generation = current
                 logger.info("[Safeguard] Client re-initialized (model: %s).", model)
-            except (*_SAFEGUARD_EXCEPTIONS_GENERAL, *_SAFEGUARD_EXCEPTIONS_TIMEOUT) as exc:
+            except _SAFEGUARD_EXCEPTIONS_COMMON as exc:
                 logger.error("[Safeguard] Client re-init failed: %s", exc)
 
     # ── Paused-agent cleanup ──────────────────────────────────────────────────
@@ -1692,7 +1709,7 @@ class SafeguardMiddleware:
             await self._record_latency(latency, "llm")
             return result
 
-        except (*_SAFEGUARD_EXCEPTIONS_GENERAL, *_SAFEGUARD_EXCEPTIONS_TIMEOUT) as exc:
+        except _SAFEGUARD_EXCEPTIONS_COMMON as exc:
             latency = (time.monotonic() - t0) * 1000
             logger.warning(
                 "[Safeguard] Classifier call failed: %s — fail-%s.",
@@ -1798,14 +1815,9 @@ class SafeguardMiddleware:
             return result
 
         # Unbekanntes Tool → LLM-Fallback
-        # Sensitive Keys werden maskiert bevor tool_args an den Classifier gesendet wird
-        _SENSITIVE_KEYS = frozenset({"password", "token", "secret", "key", "api_key", "auth", "credential"})
+        # Sensitive Keys werden rekursiv maskiert bevor tool_args an den Classifier gesendet wird
         if tool_args:
-            sanitized = {
-                k: "***" if any(s in k.lower() for s in _SENSITIVE_KEYS) else v
-                for k, v in tool_args.items()
-            }
-            args_preview = str(sanitized)[:300]
+            args_preview = str(_mask_sensitive_args(tool_args))[:300]
         else:
             args_preview = ""
         text = f"{tool_name}: {args_preview}" if args_preview else tool_name
@@ -1864,7 +1876,7 @@ class SafeguardMiddleware:
                 reason,
             )
             return allowed, reason
-        except (*_SAFEGUARD_EXCEPTIONS_GENERAL, *_SAFEGUARD_EXCEPTIONS_TIMEOUT) as exc:
+        except _SAFEGUARD_EXCEPTIONS_COMMON as exc:
             fallback_allow = profile.fail_open
             logger.warning(
                 "[Safeguard/Auto] Decision call failed: %s — fail-%s.",
