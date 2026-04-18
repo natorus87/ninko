@@ -634,27 +634,31 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
 
     # ── Core Module ────────────────────────────────────────────────────────
     core_tools = [
+        # READONLY — reine Leseoperationen
         ToolMetadata("recall_memory", "core", readonly=True),
-        ToolMetadata("remember_fact", "core", readonly=True),
-        ToolMetadata("forget_fact", "core", readonly=True),
-        ToolMetadata("confirm_forget", "core", readonly=True),
         ToolMetadata("check_alert_state", "core", readonly=True),
-        ToolMetadata("create_custom_agent", "core", readonly=True),
-        ToolMetadata("update_custom_agent", "core", readonly=True),
-        ToolMetadata("install_skill", "core", readonly=True),
-        ToolMetadata("create_dag_workflow", "core", readonly=True),
-        ToolMetadata("create_linear_workflow", "core", readonly=True),
-        ToolMetadata("execute_workflow", "core", readonly=True),
-        ToolMetadata("run_pipeline", "core", readonly=True),
-        ToolMetadata("run_parallel_pipeline", "core", readonly=True),
         ToolMetadata("get_task", "core", readonly=True),
         ToolMetadata("list_tasks", "core", readonly=True),
         ToolMetadata("task_output", "core", readonly=True),
-        ToolMetadata("generate_image", "core", readonly=True),
         ToolMetadata("get_routing_info", "core", readonly=True),
         ToolMetadata("list_scheduled_tasks", "core", readonly=True),
-        ToolMetadata("create_scheduled_task", "core", readonly=True),
-        ToolMetadata("delete_scheduled_task", "core", readonly=True),
+        # WRITE_DATA — schreibt Daten (Memory, Agenten, Skills, Workflows)
+        ToolMetadata("remember_fact", "core", tier=ToolTier.WRITE_DATA),
+        ToolMetadata("forget_fact", "core", tier=ToolTier.WRITE_DATA),
+        ToolMetadata("confirm_forget", "core", tier=ToolTier.WRITE_DATA),
+        ToolMetadata("create_custom_agent", "core", tier=ToolTier.WRITE_DATA),
+        ToolMetadata("update_custom_agent", "core", tier=ToolTier.WRITE_DATA),
+        ToolMetadata("install_skill", "core", tier=ToolTier.WRITE_DATA),
+        ToolMetadata("create_dag_workflow", "core", tier=ToolTier.WRITE_DATA),
+        ToolMetadata("create_linear_workflow", "core", tier=ToolTier.WRITE_DATA),
+        ToolMetadata("create_scheduled_task", "core", tier=ToolTier.WRITE_DATA),
+        ToolMetadata("generate_image", "core", tier=ToolTier.WRITE_DATA),
+        # WRITE_SYSTEM — führt Aktionen aus / verändert Systemzustand
+        ToolMetadata("execute_workflow", "core", tier=ToolTier.WRITE_SYSTEM),
+        ToolMetadata("run_pipeline", "core", tier=ToolTier.WRITE_SYSTEM),
+        ToolMetadata("run_parallel_pipeline", "core", tier=ToolTier.WRITE_SYSTEM),
+        # ADMIN — destruktiv
+        ToolMetadata("delete_scheduled_task", "core", destructive=True, tier=ToolTier.ADMIN),
     ]
     registry.register_many(core_tools)
 
