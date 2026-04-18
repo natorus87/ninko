@@ -19,8 +19,33 @@ import ast
 import os
 import shutil
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Optional
+
+
+class ToolTier(str, Enum):
+    """
+    5-Level Permission Tier für deterministischen Safeguard-Check.
+
+    Tier-Bedeutung:
+      READONLY     — kein Nebeneffekt, nur lesen/suchen
+      COMMUNICATE  — sendet Nachrichten nach außen (Email, Slack, Discord, Telegram)
+      WRITE_DATA   — erstellt/ändert Daten (Tickets, Wiki, DNS-Einträge, Memory)
+      WRITE_SYSTEM — ändert Infrastruktur (restart, scale, enable/disable)
+      ADMIN        — destruktiv / irreversibel (delete, wipe, shutdown, purge)
+
+    Vorteile gegenüber bool-Flags:
+      - Deterministisch: O(1) Lookup, kein 8s LLM-Timeout
+      - Granular: COMMUNICATE ist eine eigene Kategorie (wichtig für externe Channels)
+      - Erweiterbar: externe Bot-Requests können auf WRITE_DATA gecapped werden
+    """
+
+    READONLY = "READONLY"
+    COMMUNICATE = "COMMUNICATE"
+    WRITE_DATA = "WRITE_DATA"
+    WRITE_SYSTEM = "WRITE_SYSTEM"
+    ADMIN = "ADMIN"
 
 
 @dataclass(slots=True, frozen=True)
@@ -31,6 +56,7 @@ class ToolMetadata:
     module: str  # z.B. "kubernetes", "proxmox", "core"
     readonly: bool = False
     destructive: bool = False
+    tier: ToolTier | None = None  # Wenn None, wird aus readonly/destructive inferiert
     required_bins: tuple[str, ...] = ()  # binaries die shutil.which() finden muss
     required_envs: tuple[str, ...] = ()  # env vars die gesetzt sein müssen
 
@@ -539,6 +565,40 @@ class ToolRegistry:
         """
         return frozenset(name for name, meta in self._tools.items() if meta.readonly)
 
+    def tier_of(self, name: str) -> ToolTier | None:
+        """
+        Gibt den effektiven Tier eines Tools zurück.
+
+        Returns None wenn das Tool nicht registriert ist (→ LLM-Fallback).
+        Bevorzugt explizites meta.tier, leitet sonst aus readonly/destructive ab.
+        """
+        meta = self.get(name)
+        if meta is None:
+            return None
+        return _infer_tier(meta.name, meta.readonly, meta.destructive, meta.tier)
+
+    def names_at_or_below(self, max_tier: ToolTier) -> frozenset[str]:
+        """
+        Alle Tool-Namen deren Tier ≤ max_tier ist (inkl. max_tier selbst).
+
+        Tier-Reihenfolge (aufsteigend): READONLY < COMMUNICATE < WRITE_DATA < WRITE_SYSTEM < ADMIN
+        Nützlich für externe Bot-Requests, die auf bestimmtem Tier gecapped werden.
+        """
+        order = [
+            ToolTier.READONLY,
+            ToolTier.COMMUNICATE,
+            ToolTier.WRITE_DATA,
+            ToolTier.WRITE_SYSTEM,
+            ToolTier.ADMIN,
+        ]
+        allowed = set(order[: order.index(max_tier) + 1])
+        return frozenset(
+            name
+            for name, meta in self._tools.items()
+            if _infer_tier(meta.name, meta.readonly, meta.destructive, meta.tier)
+            in allowed
+        )
+
     def by_module(self, module: str) -> list[ToolMetadata]:
         """Alle Tools eines bestimmten Moduls."""
         return [meta for meta in self._tools.values() if meta.module == module]
@@ -720,6 +780,8 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
     # ── Email ───────────────────────────────────────────────────────────────
     email_tools = [
         ToolMetadata("read_emails", "email", readonly=True),
+        ToolMetadata("send_email", "email", tier=ToolTier.COMMUNICATE),
+        ToolMetadata("fetch_emails", "email", readonly=True),
     ]
     registry.register_many(email_tools)
 
@@ -948,16 +1010,31 @@ def _discover_module_tools(registry: ToolRegistry) -> None:
                     )
                     override = {}
 
+                readonly = bool(override.get("readonly", _infer_readonly(tool_name)))
+                destructive = bool(
+                    override.get("destructive", _infer_destructive(tool_name))
+                )
+                # Expliziter tier-Override aus TOOL_REGISTRY_OVERRIDES
+                tier_raw = override.get("tier")
+                explicit_tier: ToolTier | None = None
+                if tier_raw is not None:
+                    try:
+                        explicit_tier = ToolTier(str(tier_raw).upper())
+                    except ValueError:
+                        logger.warning(
+                            "ToolRegistry: ungültiger tier-Wert '%s' für %s.%s — ignoriert.",
+                            tier_raw,
+                            module_id,
+                            tool_name,
+                        )
+
                 registry.register(
                     ToolMetadata(
                         name=tool_name,
                         module=str(override.get("module", module_id) or module_id),
-                        readonly=bool(
-                            override.get("readonly", _infer_readonly(tool_name))
-                        ),
-                        destructive=bool(
-                            override.get("destructive", _infer_destructive(tool_name))
-                        ),
+                        readonly=readonly,
+                        destructive=destructive,
+                        tier=_infer_tier(tool_name, readonly, destructive, explicit_tier),
                         required_bins=_tuple_of_str(
                             override.get(
                                 "required_bins", defaults.get("required_bins", ())
@@ -1021,6 +1098,132 @@ def _tuple_of_str(value: object) -> tuple[str, ...]:
     if isinstance(value, (list, tuple)):
         return tuple(str(item) for item in value)
     return ()
+
+
+def _infer_tier(
+    name: str,
+    readonly: bool,
+    destructive: bool,
+    explicit: ToolTier | None = None,
+) -> ToolTier:
+    """
+    Leitet den effektiven ToolTier ab.
+
+    Priorität:
+      1. Expliziter tier-Parameter → direkt verwenden
+      2. readonly=True → READONLY
+      3. destructive=True → ADMIN
+      4. Name-Prefix-Heuristik → COMMUNICATE / WRITE_DATA / WRITE_SYSTEM
+      5. Fallback → WRITE_SYSTEM (konservativ)
+    """
+    if explicit is not None:
+        return explicit
+    if readonly:
+        return ToolTier.READONLY
+
+    # Name-Prefix-Heuristik hat Vorrang vor dem `destructive`-Bool,
+    # da _infer_destructive() konservativ ist (restart_, stop_ etc. enthalten).
+    # COMMUNICATE: externe Nachrichten senden
+    _communicate_prefixes = ("send_", "post_", "notify_")
+    _communicate_names = {
+        "upload_slack_file",
+        "create_slack_channel",
+        "invite_user_to_channel",
+        "create_discord_channel",
+    }
+    if name.startswith(_communicate_prefixes) or name in _communicate_names:
+        return ToolTier.COMMUNICATE
+
+    # WRITE_DATA: Daten erstellen/ändern (reversibel)
+    _write_data_prefixes = (
+        "create_",
+        "update_",
+        "log_",
+        "add_",
+        "transition_",
+        "merge_",
+        "accept_",
+        "invite_",
+        "upload_",
+        "install_",
+    )
+    _write_data_names = {
+        "close_ticket",
+        "remember_fact",
+        "forget_fact",
+        "confirm_forget",
+        "generate_image",
+        "create_custom_agent",
+        "update_custom_agent",
+        "install_skill",
+        "create_linear_workflow",
+        "create_dag_workflow",
+        "execute_workflow",
+        "run_pipeline",
+        "run_parallel_pipeline",
+        "create_scheduled_task",
+    }
+    if name.startswith(_write_data_prefixes) or name in _write_data_names:
+        return ToolTier.WRITE_DATA
+
+    # ADMIN: destruktiv / irreversibel
+    _admin_prefixes = (
+        "delete_",
+        "remove_",
+        "wipe_",
+        "retire_",
+        "destroy_",
+        "shutdown_",
+        "purge_",
+        "drop_",
+        "flush_",
+    )
+    _admin_names = {
+        "delete_scheduled_task",
+        "kick_ubiquiti_client",
+        "server_power_off",
+    }
+    if name.startswith(_admin_prefixes) or name in _admin_names:
+        return ToolTier.ADMIN
+
+    # WRITE_SYSTEM: Infrastruktur-Änderungen
+    _write_system_prefixes = (
+        "enable_",
+        "disable_",
+        "toggle_",
+        "scale_",
+        "restart_",
+        "reboot_",
+        "start_",
+        "stop_",
+        "apply_",
+        "trigger_",
+        "sync_",
+        "execute_",
+        "run_",
+        "rotate_",
+        "power_",
+        "reset_",
+        "cancel_",
+        "rollout_",
+        "change_",
+        "set_",
+    )
+    _write_system_names = {
+        "toggle_blocking",
+        "update_gravity",
+        "call_ha_service",
+        "call_module_agent",
+        "execute_cli_command",
+    }
+    if name.startswith(_write_system_prefixes) or name in _write_system_names:
+        return ToolTier.WRITE_SYSTEM
+
+    # Jetzt destructive-Bool als Fallback (nach Name-Prüfung)
+    if destructive:
+        return ToolTier.ADMIN
+
+    return ToolTier.WRITE_SYSTEM  # konservativer Fallback
 
 
 def _infer_readonly(tool_name: str) -> bool:
