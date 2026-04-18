@@ -236,7 +236,9 @@ class RbacStore:
         else:
             user = users[uname]
             user["tenant_id"] = _normalize_tenant_id(str(user.get("tenant_id", "default")))
-            if force_password:
+            # force_password nur anwenden wenn der User sein Passwort noch NICHT geändert hat.
+            # Verhindert, dass ein Pod-Neustart ein bereits geändertes Passwort überschreibt.
+            if force_password and user.get("must_change_password", True):
                 user["password_hash"] = hash_password(password)
                 user["must_change_password"] = bool(must_change_password)
             role_ids = set(user.get("roles") or [])
