@@ -1143,7 +1143,7 @@ class SafeguardMiddleware:
             pipe.lpush(self.AUDIT_LOG_KEY, json.dumps(entry))
             pipe.ltrim(self.AUDIT_LOG_KEY, 0, self.MAX_AUDIT_ENTRIES - 1)
             await pipe.execute()
-        except _SAFEGUARD_EXCEPTIONS as exc:
+        except (*_SAFEGUARD_EXCEPTIONS_GENERAL, *_SAFEGUARD_EXCEPTIONS_TIMEOUT) as exc:
             logger.warning("[Safeguard/Audit] Failed to write audit entry: %s", exc)
 
     # ── Latency recording ───────────────────────────────────────────────────────
@@ -1164,7 +1164,7 @@ class SafeguardMiddleware:
             pipe.lpush(self.LATENCY_KEY, entry)
             pipe.ltrim(self.LATENCY_KEY, 0, self.MAX_LATENCY_ENTRIES - 1)
             await pipe.execute()
-        except _SAFEGUARD_EXCEPTIONS as exc:
+        except (*_SAFEGUARD_EXCEPTIONS_GENERAL, *_SAFEGUARD_EXCEPTIONS_TIMEOUT) as exc:
             logger.debug("[Safeguard] Failed to record latency: %s", exc)
 
     async def get_metrics(self) -> dict:
@@ -1243,7 +1243,7 @@ class SafeguardMiddleware:
                 self.model = model
                 self._llm_generation = current
                 logger.info("[Safeguard] Client re-initialized (model: %s).", model)
-            except _SAFEGUARD_EXCEPTIONS as exc:
+            except (*_SAFEGUARD_EXCEPTIONS_GENERAL, *_SAFEGUARD_EXCEPTIONS_TIMEOUT) as exc:
                 logger.error("[Safeguard] Client re-init failed: %s", exc)
 
     # ── Paused-agent cleanup ──────────────────────────────────────────────────
@@ -1690,7 +1690,7 @@ class SafeguardMiddleware:
             await self._record_latency(latency, "llm")
             return result
 
-        except _SAFEGUARD_EXCEPTIONS as exc:
+        except (*_SAFEGUARD_EXCEPTIONS_GENERAL, *_SAFEGUARD_EXCEPTIONS_TIMEOUT) as exc:
             latency = (time.monotonic() - t0) * 1000
             logger.warning(
                 "[Safeguard] Classifier call failed: %s — fail-%s.",
@@ -1862,7 +1862,7 @@ class SafeguardMiddleware:
                 reason,
             )
             return allowed, reason
-        except _SAFEGUARD_EXCEPTIONS as exc:
+        except (*_SAFEGUARD_EXCEPTIONS_GENERAL, *_SAFEGUARD_EXCEPTIONS_TIMEOUT) as exc:
             fallback_allow = profile.fail_open
             logger.warning(
                 "[Safeguard/Auto] Decision call failed: %s — fail-%s.",
