@@ -446,22 +446,12 @@ async def lifespan(app: FastAPI) -> object:
             logger.info("Telegram-Bot nicht verfügbar (Modul nicht installiert)")
 
     # ── Message Hub (optional – catalog module) ───────
-    message_hub = None
-    try:
-        from modules.message_hub.hub import init_message_hub as _init_mh
+    # ── Message Hub (Core-Modul) ───────────────────────
+    from modules.message_hub.hub import init_message_hub as _init_mh
 
-        message_hub = _init_mh(app)
-        app.state.message_hub = message_hub
-        await message_hub.start()
-    except ModuleNotFoundError:
-        try:
-            from plugins.message_hub.hub import init_message_hub as _init_mh
-
-            message_hub = _init_mh(app)
-            app.state.message_hub = message_hub
-            await message_hub.start()
-        except ModuleNotFoundError:
-            logger.info("Message Hub nicht verfügbar (Modul nicht installiert)")
+    message_hub = _init_mh(app)
+    app.state.message_hub = message_hub
+    await message_hub.start()
 
     # ── Frontend Static Files ────────────────────────
     # MUST mount AFTER module routes, otherwise the catch-all
