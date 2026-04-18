@@ -48,6 +48,11 @@
   "chat.moduleUsed": "モジュール: {0}",
   "chat.agentError": "エラーが発生しました: {0}。再試行してください。",
   "chat.noResponse": "応答が生成されませんでした。",
+  "chat.exportTitle": "HTMLとしてエクスポート",
+  "chat.exportEmpty": "エクスポートするチャットコンテンツがありません。",
+  "chat.exportDone": "チャットをHTMLとしてエクスポートしました。",
+  "chat.exportRoleUser": "あなた",
+  "chat.exportRoleAi": "Ninko",
   "quick.createAgent": "エージェントを作成",
   "quick.rememberFact": "ファクトを記憶",
   "quick.webSearch": "ウェブ検索",
@@ -746,5 +751,9 @@
       "loadError": "読み込みエラー。",
       "error": "エラー: "
     }
-  }
+  },
+  "module.message_hub.title": "Message Hub",
+  "module.message_hub.desc": "メール、Discord、Telegramの双方向ルーティング",
+  "module.message_hub.noRoutes": "ルーティングエントリが設定されていません",
+  "module.message_hub.workerActive": "ワーカー稼働中"
 }

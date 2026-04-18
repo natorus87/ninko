@@ -48,6 +48,11 @@
   "chat.moduleUsed": "Módulo: {0}",
   "chat.agentError": "Ocorreu um erro: {0}. Tente novamente.",
   "chat.noResponse": "Nenhuma resposta gerada.",
+  "chat.exportTitle": "Exportar como HTML",
+  "chat.exportEmpty": "Nenhum conteúdo de chat para exportar.",
+  "chat.exportDone": "Chat exportado como HTML.",
+  "chat.exportRoleUser": "Você",
+  "chat.exportRoleAi": "Ninko",
   "quick.createAgent": "Criar agente",
   "quick.rememberFact": "Memorizar facto",
   "quick.webSearch": "Pesquisa web",
@@ -746,5 +751,9 @@
       "loadError": "Erro ao carregar.",
       "error": "Erro: "
     }
-  }
+  },
+  "module.message_hub.title": "Message Hub",
+  "module.message_hub.desc": "Roteamento bidirecional para Email, Discord e Telegram",
+  "module.message_hub.noRoutes": "Nenhuma entrada de roteamento configurada",
+  "module.message_hub.workerActive": "Worker ativo"
 }

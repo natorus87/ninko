@@ -48,6 +48,11 @@
   "chat.moduleUsed": "Modulo: {0}",
   "chat.agentError": "Si è verificato un errore: {0}. Riprova.",
   "chat.noResponse": "Nessuna risposta generata.",
+  "chat.exportTitle": "Esporta come HTML",
+  "chat.exportEmpty": "Nessun contenuto chat da esportare.",
+  "chat.exportDone": "Chat esportata come HTML.",
+  "chat.exportRoleUser": "Tu",
+  "chat.exportRoleAi": "Ninko",
   "quick.createAgent": "Crea agente",
   "quick.rememberFact": "Memorizza fatto",
   "quick.webSearch": "Ricerca web",
@@ -746,5 +751,9 @@
       "loadError": "Errore nel caricamento.",
       "error": "Errore: "
     }
-  }
+  },
+  "module.message_hub.title": "Message Hub",
+  "module.message_hub.desc": "Routing bidirezionale per Email, Discord e Telegram",
+  "module.message_hub.noRoutes": "Nessuna voce di routing configurata",
+  "module.message_hub.workerActive": "Worker attivo"
 }

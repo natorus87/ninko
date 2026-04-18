@@ -48,6 +48,11 @@
   "chat.moduleUsed": "模块：{0}",
   "chat.agentError": "发生错误：{0}。请重试。",
   "chat.noResponse": "未生成响应。",
+  "chat.exportTitle": "导出为HTML",
+  "chat.exportEmpty": "没有可导出的聊天内容。",
+  "chat.exportDone": "聊天已导出为HTML。",
+  "chat.exportRoleUser": "你",
+  "chat.exportRoleAi": "Ninko",
   "quick.createAgent": "创建代理",
   "quick.rememberFact": "记住事实",
   "quick.webSearch": "网络搜索",
@@ -746,5 +751,9 @@
       "loadError": "加载错误。",
       "error": "错误: "
     }
-  }
+  },
+  "module.message_hub.title": "Message Hub",
+  "module.message_hub.desc": "邮件、Discord和Telegram的双向路由",
+  "module.message_hub.noRoutes": "未配置路由条目",
+  "module.message_hub.workerActive": "工作进程活跃"
 }

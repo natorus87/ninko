@@ -48,6 +48,11 @@
   "chat.moduleUsed": "Module: {0}",
   "chat.agentError": "Er is een fout opgetreden: {0}. Probeer opnieuw.",
   "chat.noResponse": "Geen antwoord gegenereerd.",
+  "chat.exportTitle": "Exporteren als HTML",
+  "chat.exportEmpty": "Geen chatinhoud om te exporteren.",
+  "chat.exportDone": "Chat geëxporteerd als HTML.",
+  "chat.exportRoleUser": "Jij",
+  "chat.exportRoleAi": "Ninko",
   "quick.createAgent": "Agent aanmaken",
   "quick.rememberFact": "Feit onthouden",
   "quick.webSearch": "Web zoeken",
@@ -746,5 +751,9 @@
       "loadError": "Fout bij laden.",
       "error": "Fout: "
     }
-  }
+  },
+  "module.message_hub.title": "Message Hub",
+  "module.message_hub.desc": "Bidirectionele routering voor Email, Discord en Telegram",
+  "module.message_hub.noRoutes": "Geen routeringsitems geconfigureerd",
+  "module.message_hub.workerActive": "Worker actief"
 }
