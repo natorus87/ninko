@@ -1,16 +1,6 @@
-/**
- * Knowledge Graph Visualization Tab
- * 
- * Zeigt den Knowledge Graph als interaktives Netzwerk-Diagramm.
- * Nutzt Cytoscape.js für Graph-Rendering.
- * 
- * @module KnowledgeGraphTab
- */
+// Knowledge Graph Tab — Vanilla JS (kein ES-Module-Syntax)
 
 (function initKnowledgeGraphTab() {
-  const TAB_ID = 'knowledge_graph';
-
-  // Warte bis Ninko-API verfügbar
   if (typeof window.Ninko === 'undefined') {
     setTimeout(initKnowledgeGraphTab, 100);
     return;
@@ -19,248 +9,228 @@
   const KnowledgeGraphTab = {
     cy: null,
     selectedNode: null,
+    _cytoscapeLoading: false,
+
+    // ── Typ-Farben (sync mit routes_knowledge_graph.py) ─────────────────────
+    TYPE_COLORS: {
+      module:        '#3498db',
+      service:       '#2ecc71',
+      host:          '#e74c3c',
+      configuration: '#f39c12',
+      incident:      '#9b59b6',
+      user:          '#1abc9c',
+      tag:           '#95a5a6',
+      runbook:       '#e67e22',
+      workflow:      '#34495e',
+      agent:         '#16a085',
+    },
+
+    _escapeHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    },
+
+    _injectStyles() {
+      if (document.getElementById('kg-tab-styles')) return;
+      const s = document.createElement('style');
+      s.id = 'kg-tab-styles';
+      s.textContent = `
+        @keyframes kg-spin { to { transform: rotate(360deg); } }
+        #kg-loading svg { animation: kg-spin 1s linear infinite; }
+        #kg-node-details .kg-detail-row {
+          display: flex; justify-content: space-between; align-items: flex-start;
+          padding: 0.35rem 0; border-bottom: 1px solid var(--border-color);
+          font-size: 0.82rem; gap: 0.5rem;
+        }
+        #kg-node-details .kg-detail-row:last-child { border-bottom: none; }
+        #kg-node-details .kg-detail-key { color: var(--text-muted); font-size: 0.78rem; flex-shrink: 0; }
+        #kg-node-details .kg-detail-val { text-align: right; word-break: break-all; font-family: monospace; font-size: 0.78rem; }
+        #kg-node-details .kg-type-badge {
+          display: inline-block; font-size: 0.7rem; padding: 0.15rem 0.45rem;
+          border-radius: 3px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .kg-related-item {
+          padding: 0.45rem 0.6rem; background: var(--bg-card); border-radius: 4px;
+          margin-bottom: 0.4rem; font-size: 0.82rem; cursor: pointer;
+          border: 1px solid var(--border-color); transition: background 0.15s;
+        }
+        .kg-related-item:hover { background: var(--bg-tertiary, var(--bg-card)); }
+      `;
+      document.head.appendChild(s);
+    },
 
     async init() {
       this.container = document.getElementById('tab-knowledge_graph');
       if (!this.container) return;
 
-      this.renderLayout();
+      this._injectStyles();
+      this._setupEventListeners();
+      await this._loadStats();
       await this.loadGraph();
-      this.setupEventListeners();
     },
 
-    renderLayout() {
-      this.container.innerHTML = `
-        <div class="kg-layout">
-          <div class="kg-sidebar">
-            <h3>${this._t('Knowledge Graph', 'Knowledge Graph')}</h3>
-            
-            <div class="kg-section">
-              <label>${this._t('Filter', 'Filter')}</label>
-              <select id="kg-filter-type">
-                <option value="">${this._t('Alle Typen', 'All Types')}</option>
-                <option value="module">Module</option>
-                <option value="service">Services</option>
-                <option value="host">Hosts</option>
-                <option value="incident">Incidents</option>
-                <option value="configuration">Configurations</option>
-              </select>
-            </div>
+    // ── Stats ────────────────────────────────────────────────────────────────
 
-            <div class="kg-section">
-              <button id="kg-btn-reload" class="btn btn-primary">
-                ${this._t('Neu laden', 'Reload')}
-              </button>
-              <button id="kg-btn-stats" class="btn btn-secondary">
-                ${this._t('Statistiken', 'Statistics')}
-              </button>
-            </div>
-
-            <div class="kg-section" id="kg-node-details">
-              <h4>${this._t('Details', 'Details')}</h4>
-              <p class="kg-placeholder">${this._t('Klicke auf einen Node...', 'Click a node...')}</p>
-            </div>
-
-            <div class="kg-section" id="kg-related">
-              <h4>${this._t('Verwandte', 'Related')}</h4>
-              <div id="kg-related-list"></div>
-            </div>
-          </div>
-
-          <div class="kg-main">
-            <div id="kg-cy-container"></div>
-            <div class="kg-legend">
-              <span class="kg-legend-item"><span class="kg-dot" style="background:#3498db"></span> Module</span>
-              <span class="kg-legend-item"><span class="kg-dot" style="background:#2ecc71"></span> Service</span>
-              <span class="kg-legend-item"><span class="kg-dot" style="background:#e74c3c"></span> Host</span>
-              <span class="kg-legend-item"><span class="kg-dot" style="background:#9b59b6"></span> Incident</span>
-              <span class="kg-legend-item"><span class="kg-dot" style="background:#f39c12"></span> Config</span>
-            </div>
-          </div>
-        </div>
-
-        <style>
-          .kg-layout {
-            display: flex;
-            height: 100%;
-            gap: 1rem;
-          }
-          .kg-sidebar {
-            width: 300px;
-            min-width: 300px;
-            background: var(--surface-1);
-            border-radius: var(--radius-lg);
-            padding: 1rem;
-            overflow-y: auto;
-          }
-          .kg-sidebar h3 {
-            margin: 0 0 1rem 0;
-            font-size: 1.1rem;
-          }
-          .kg-section {
-            margin-bottom: 1.5rem;
-            padding-bottom: 1rem;
-            border-bottom: 1px solid var(--surface-2);
-          }
-          .kg-section:last-child {
-            border-bottom: none;
-          }
-          .kg-section label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-size: 0.9rem;
-            color: var(--text-secondary);
-          }
-          .kg-section select,
-          .kg-section button {
-            width: 100%;
-            margin-bottom: 0.5rem;
-          }
-          .kg-main {
-            flex: 1;
-            position: relative;
-            background: var(--surface-1);
-            border-radius: var(--radius-lg);
-            overflow: hidden;
-          }
-          #kg-cy-container {
-            width: 100%;
-            height: 100%;
-          }
-          .kg-legend {
-            position: absolute;
-            bottom: 1rem;
-            left: 1rem;
-            background: var(--surface-0);
-            padding: 0.5rem 1rem;
-            border-radius: var(--radius-md);
-            display: flex;
-            gap: 1rem;
-            font-size: 0.8rem;
-          }
-          .kg-legend-item {
-            display: flex;
-            align-items: center;
-            gap: 0.3rem;
-          }
-          .kg-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-          }
-          .kg-placeholder {
-            color: var(--text-secondary);
-            font-style: italic;
-          }
-          #kg-node-details h4 {
-            margin: 0 0 0.5rem 0;
-          }
-          #kg-node-details .kg-detail-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 0.3rem 0;
-            border-bottom: 1px solid var(--surface-2);
-            font-size: 0.9rem;
-          }
-          #kg-related-list .kg-related-item {
-            padding: 0.5rem;
-            background: var(--surface-2);
-            border-radius: var(--radius-sm);
-            margin-bottom: 0.5rem;
-            font-size: 0.9rem;
-            cursor: pointer;
-          }
-          #kg-related-list .kg-related-item:hover {
-            background: var(--surface-3);
-          }
-        </style>
-      `;
-    },
-
-    async loadGraph() {
+    async _loadStats() {
       try {
-        const filterType = document.getElementById('kg-filter-type')?.value || '';
-        const response = await fetch(
-          `/api/knowledge-graph/visualization?${filterType ? `entity_type=${filterType}&` : ''}limit=300`,
-          { credentials: 'include' }
-        );
-        const result = await response.json();
-
-        if (!result.success) {
-          this.showError(result.error || 'Failed to load graph');
-          return;
-        }
-
-        this.renderGraph(result.data.elements);
+        const resp = await fetch('/api/knowledge-graph/stats', { credentials: 'include' });
+        const result = await resp.json();
+        if (!result.success) return;
+        this._renderStats(result.data);
       } catch (err) {
-        this.showError(err.message);
+        console.error('KG: Stats laden fehlgeschlagen', err);
       }
     },
 
-    renderGraph(elements) {
+    _renderStats(stats) {
+      const set = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val;
+      };
+      set('kg-stat-nodes', stats.nodes ?? '—');
+      set('kg-stat-edges', stats.edges ?? '—');
+      set('kg-stat-density', stats.density != null ? stats.density.toFixed(4) : '—');
+
+      const components = stats.components ?? (stats.is_connected ? 1 : null);
+      const connEl = document.getElementById('kg-stat-connected');
+      if (connEl) {
+        if (stats.nodes === 0) {
+          connEl.textContent = '—';
+          connEl.style.color = '';
+        } else if (stats.is_connected) {
+          connEl.textContent = '1';
+          connEl.style.color = 'var(--accent-green, #4caf50)';
+        } else {
+          connEl.textContent = components != null ? String(components) : '—';
+          connEl.style.color = 'var(--accent-yellow, #f39c12)';
+        }
+      }
+
+      // Label anpassen
+      const labelEl = connEl?.closest('.status-card')?.querySelector('.status-label');
+      if (labelEl) {
+        labelEl.textContent = stats.is_connected ? 'Komponente' : 'Komponenten';
+      }
+    },
+
+    // ── Graph laden & rendern ────────────────────────────────────────────────
+
+    async loadGraph() {
+      this._setLoading(true);
+      try {
+        const filterType = document.getElementById('kg-filter-type')?.value || '';
+        const url = `/api/knowledge-graph/visualization?limit=300${filterType ? `&entity_type=${filterType}` : ''}`;
+        const resp = await fetch(url, { credentials: 'include' });
+        const result = await resp.json();
+
+        if (!result.success) {
+          this._showError(result.error || 'Graph konnte nicht geladen werden');
+          return;
+        }
+
+        this._renderGraph(result.data.elements);
+
+        // Inline-Stats aus Visualization-Response (schneller als extra Request)
+        if (result.data.stats) {
+          const set = (id, val) => {
+            const el = document.getElementById(id);
+            if (el && el.textContent === '—') el.textContent = val;
+          };
+          set('kg-stat-nodes', result.data.stats.nodes);
+          set('kg-stat-edges', result.data.stats.edges);
+        }
+      } catch (err) {
+        this._showError(err.message);
+      } finally {
+        this._setLoading(false);
+      }
+    },
+
+    _renderGraph(elements) {
       const container = document.getElementById('kg-cy-container');
       if (!container) return;
 
-      // Cytoscape laden (falls nicht vorhanden, lazy-load)
       if (typeof cytoscape === 'undefined') {
-        this.loadCytoscape(() => this.renderGraph(elements));
+        if (this._cytoscapeLoading) return;
+        this._loadCytoscape(() => this._renderGraph(elements));
         return;
       }
 
       if (this.cy) {
         this.cy.destroy();
+        this.cy = null;
       }
 
       this.cy = cytoscape({
-        container: container,
-        elements: elements,
+        container,
+        elements,
         style: [
           {
             selector: 'node',
             style: {
               'background-color': 'data(color)',
               'label': 'data(label)',
-              'width': 40,
-              'height': 40,
-              'font-size': '12px',
+              'width': 36,
+              'height': 36,
+              'font-size': '11px',
               'text-valign': 'bottom',
               'text-halign': 'center',
-              'text-margin-y': 8,
-              'color': 'var(--text-primary)',
-              'text-background-color': 'var(--surface-0)',
-              'text-background-opacity': 0.8,
-              'text-background-padding': 3,
+              'text-margin-y': 6,
+              'color': 'var(--text-color, #eee)',
+              'text-background-color': 'var(--bg-body, #1a1a1a)',
+              'text-background-opacity': 0.85,
+              'text-background-padding': '3px',
               'text-background-shape': 'roundrectangle',
-            }
+              'border-width': 0,
+            },
           },
           {
             selector: 'edge',
             style: {
-              'width': 2,
-              'line-color': 'var(--text-secondary)',
-              'target-arrow-color': 'var(--text-secondary)',
+              'width': 1.5,
+              'line-color': 'var(--border-color, #444)',
+              'target-arrow-color': 'var(--border-color, #444)',
               'target-arrow-shape': 'triangle',
               'curve-style': 'bezier',
               'label': 'data(label)',
-              'font-size': '10px',
-              'color': 'var(--text-secondary)',
-              'text-background-color': 'var(--surface-0)',
-              'text-background-opacity': 0.8,
-            }
+              'font-size': '9px',
+              'color': 'var(--text-muted, #888)',
+              'text-background-color': 'var(--bg-body, #1a1a1a)',
+              'text-background-opacity': 0.75,
+              'text-background-padding': '2px',
+            },
           },
           {
             selector: ':selected',
             style: {
               'border-width': 3,
-              'border-color': '#fff',
+              'border-color': 'var(--accent-blue, #3498db)',
               'border-opacity': 1,
-            }
-          }
+            },
+          },
+          {
+            selector: '.dimmed',
+            style: {
+              'opacity': 0.25,
+            },
+          },
+          {
+            selector: '.highlighted',
+            style: {
+              'border-width': 2,
+              'border-color': '#fff',
+              'opacity': 1,
+            },
+          },
         ],
         layout: {
           name: 'cose',
-          padding: 20,
-          nodeRepulsion: 400000,
+          padding: 30,
+          nodeRepulsion: 450000,
           edgeElasticity: 100,
           nestingFactor: 5,
           gravity: 80,
@@ -268,154 +238,204 @@
           initialTemp: 200,
           coolingFactor: 0.95,
           minTemp: 1.0,
-        }
+          animate: false,
+        },
       });
 
-      this.cy.on('tap', 'node', (evt) => {
-        this.onNodeSelect(evt.target);
-      });
-
+      this.cy.on('tap', 'node', (evt) => this._onNodeSelect(evt.target));
       this.cy.on('tap', (evt) => {
-        if (evt.target === this.cy) {
-          this.onBackgroundTap();
-        }
+        if (evt.target === this.cy) this._onBackgroundTap();
       });
     },
 
-    loadCytoscape(callback) {
+    _loadCytoscape(callback) {
+      this._cytoscapeLoading = true;
       const script = document.createElement('script');
       script.src = 'https://unpkg.com/cytoscape@3.26.0/dist/cytoscape.min.js';
-      script.onload = callback;
+      script.onload = () => {
+        this._cytoscapeLoading = false;
+        callback();
+      };
+      script.onerror = () => { this._cytoscapeLoading = false; };
       document.head.appendChild(script);
     },
 
-    async onNodeSelect(node) {
+    // ── Node Selection ───────────────────────────────────────────────────────
+
+    async _onNodeSelect(node) {
       this.selectedNode = node;
       const data = node.data();
 
-      const detailsHtml = `
-        <h4>${this._t('Details', 'Details')}</h4>
-        <div class="kg-detail-row">
-          <span>ID:</span><code>${data.id}</code>
-        </div>
-        <div class="kg-detail-row">
-          <span>${this._t('Name', 'Name')}:</span><span>${data.label}</span>
-        </div>
-        <div class="kg-detail-row">
-          <span>${this._t('Typ', 'Type')}:</span><span>${data.type}</span>
-        </div>
-        ${Object.entries(data.properties || {}).map(([k, v]) => `
-          <div class="kg-detail-row">
-            <span>${k}:</span><span>${v}</span>
-          </div>
-        `).join('')}
-      `;
+      // Highlight Nachbarn
+      if (this.cy) {
+        this.cy.elements().addClass('dimmed');
+        node.addClass('highlighted');
+        node.connectedEdges().removeClass('dimmed').addClass('highlighted');
+        node.neighborhood('node').removeClass('dimmed').addClass('highlighted');
+      }
 
-      document.getElementById('kg-node-details').innerHTML = detailsHtml;
+      // Detail-Panel befüllen
+      const typeColor = this.TYPE_COLORS[data.type] || '#7f8c8d';
+      const props = Object.entries(data.properties || {});
 
-      // Lade verwandte Entitäten
+      const e = this._escapeHtml.bind(this);
+      const rows = [
+        ['ID', `<code style="font-size:0.75rem;">${e(data.id)}</code>`],
+        ['Name', e(data.label)],
+        ['Typ', `<span class="kg-type-badge" style="background:${typeColor}22;color:${typeColor};">${e(data.type)}</span>`],
+        ...props.map(([k, v]) => [e(k), e(v)]),
+      ].map(([key, val]) => `
+        <div class="kg-detail-row">
+          <span class="kg-detail-key">${key}</span>
+          <span class="kg-detail-val">${val}</span>
+        </div>
+      `).join('');
+
+      const detailEl = document.getElementById('kg-node-details');
+      if (detailEl) detailEl.innerHTML = rows;
+
+      // Verwandte laden
+      await this._loadRelated(data.id);
+    },
+
+    async _loadRelated(entityId) {
+      const listEl = document.getElementById('kg-related-list');
+      if (!listEl) return;
+
+      listEl.innerHTML = '<p style="font-size:0.82rem;color:var(--text-muted);">Lade…</p>';
+
       try {
-        const response = await fetch(
-          `/api/knowledge-graph/entities/${encodeURIComponent(data.id)}/suggestions`,
+        const resp = await fetch(
+          `/api/knowledge-graph/entities/${encodeURIComponent(entityId)}/suggestions`,
           { credentials: 'include' }
         );
-        const result = await response.json();
+        const result = await resp.json();
 
-        const relatedList = document.getElementById('kg-related-list');
         if (result.success && result.data.suggestions.length > 0) {
-          relatedList.innerHTML = result.data.suggestions.map(s => `
-            <div class="kg-related-item" data-id="${s.entity.id}">
-              <strong>${s.entity.name}</strong>
-              <small>(${s.reason})</small>
+          const e = this._escapeHtml.bind(this);
+          listEl.innerHTML = result.data.suggestions.map(s => `
+            <div class="kg-related-item" data-id="${e(s.entity.id)}">
+              <strong style="font-size:0.82rem;">${e(s.entity.name)}</strong>
+              <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.15rem;">${e(s.reason)}</div>
             </div>
           `).join('');
 
-          // Click-Handler für verwandte Items
-          relatedList.querySelectorAll('.kg-related-item').forEach(item => {
+          listEl.querySelectorAll('.kg-related-item').forEach(item => {
             item.addEventListener('click', () => {
-              const id = item.dataset.id;
-              const targetNode = this.cy.getElementById(id);
-              if (targetNode.length > 0) {
-                this.cy.fit(targetNode, 100);
+              const targetNode = this.cy?.getElementById(item.dataset.id);
+              if (targetNode?.length > 0) {
+                this.cy.fit(targetNode, 80);
                 targetNode.select();
-                this.onNodeSelect(targetNode);
+                this._onNodeSelect(targetNode);
               }
             });
           });
         } else {
-          relatedList.innerHTML = `<p class="kg-placeholder">${this._t('Keine verwandten Entitäten', 'No related entities')}</p>`;
+          listEl.innerHTML = '<p style="font-size:0.82rem;color:var(--text-muted);font-style:italic;">Keine verwandten Entitäten</p>';
         }
       } catch (err) {
-        console.error('Failed to load related:', err);
+        listEl.innerHTML = '<p style="font-size:0.82rem;color:var(--accent-red,#e74c3c);">Fehler beim Laden</p>';
       }
     },
 
-    onBackgroundTap() {
+    _onBackgroundTap() {
       this.selectedNode = null;
-      document.getElementById('kg-node-details').innerHTML = `
-        <h4>${this._t('Details', 'Details')}</h4>
-        <p class="kg-placeholder">${this._t('Klicke auf einen Node...', 'Click a node...')}</p>
-      `;
-      document.getElementById('kg-related-list').innerHTML = '';
+
+      if (this.cy) {
+        this.cy.elements().removeClass('dimmed highlighted');
+      }
+
+      const detailEl = document.getElementById('kg-node-details');
+      if (detailEl) detailEl.innerHTML = '<p style="font-size:0.85rem;color:var(--text-muted);font-style:italic;">Klicke auf einen Node…</p>';
+
+      const listEl = document.getElementById('kg-related-list');
+      if (listEl) listEl.innerHTML = '<p style="font-size:0.85rem;color:var(--text-muted);font-style:italic;">—</p>';
     },
 
-    async showStats() {
-      try {
-        const response = await fetch('/api/knowledge-graph/stats', {
-          credentials: 'include'
-        });
-        const result = await response.json();
+    // ── Centralität ──────────────────────────────────────────────────────────
 
-        if (result.success) {
-          const stats = result.data;
-          alert(this._t(
-            `Knowledge Graph Statistiken:\n\n` +
-            `Nodes: ${stats.nodes}\n` +
-            `Edges: ${stats.edges}\n` +
-            `Density: ${stats.density.toFixed(4)}\n` +
-            `Connected: ${stats.is_connected ? 'Ja' : 'Nein'}`,
-            `Knowledge Graph Statistics:\n\n` +
-            `Nodes: ${stats.nodes}\n` +
-            `Edges: ${stats.edges}\n` +
-            `Density: ${stats.density.toFixed(4)}\n` +
-            `Connected: ${stats.is_connected ? 'Yes' : 'No'}`
-          ));
+    async showCentrality() {
+      const panel = document.getElementById('kg-centrality-panel');
+      if (!panel) return;
+
+      panel.style.display = 'block';
+      const listEl = document.getElementById('kg-centrality-list');
+      if (listEl) listEl.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Lade…</p>';
+
+      try {
+        const resp = await fetch('/api/knowledge-graph/centrality?top_k=10', { credentials: 'include' });
+        const result = await resp.json();
+
+        if (result.success && result.data.rankings.length > 0) {
+          const maxScore = result.data.rankings[0]?.score || 1;
+          const e = this._escapeHtml.bind(this);
+          listEl.innerHTML = result.data.rankings.map((r, i) => {
+            const bar = Math.round((r.score / maxScore) * 100);
+            const nodeColor = this.TYPE_COLORS[r.type] || '#7f8c8d';
+            return `
+              <div style="background:var(--bg-card);border:1px solid var(--border-color);border-radius:6px;padding:0.6rem 0.75rem;">
+                <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.35rem;">
+                  <span style="font-size:0.7rem;font-weight:700;color:var(--text-muted);min-width:18px;">#${i + 1}</span>
+                  <span style="flex:1;font-size:0.82rem;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${e(r.name)}">${e(r.name)}</span>
+                  <span style="font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:3px;background:${nodeColor}22;color:${nodeColor};font-weight:600;">${e(r.type)}</span>
+                </div>
+                <div style="height:4px;background:var(--bg-secondary);border-radius:2px;overflow:hidden;">
+                  <div style="height:100%;width:${bar}%;background:${nodeColor};border-radius:2px;"></div>
+                </div>
+                <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.2rem;">Score: ${r.score.toFixed(6)}</div>
+              </div>
+            `;
+          }).join('');
+        } else {
+          listEl.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Keine Daten verfügbar</p>';
         }
       } catch (err) {
-        this.showError(err.message);
+        listEl.innerHTML = `<p style="color:var(--accent-red,#e74c3c);font-size:0.85rem;">Fehler: ${this._escapeHtml(err.message)}</p>`;
       }
     },
 
-    setupEventListeners() {
-      const reloadBtn = document.getElementById('kg-btn-reload');
-      if (reloadBtn) {
-        reloadBtn.addEventListener('click', () => this.loadGraph());
-      }
+    // ── Hilfsmethoden ────────────────────────────────────────────────────────
 
-      const statsBtn = document.getElementById('kg-btn-stats');
-      if (statsBtn) {
-        statsBtn.addEventListener('click', () => this.showStats());
-      }
+    _setupEventListeners() {
+      document.getElementById('kg-btn-reload')?.addEventListener('click', () => {
+        this._loadStats();
+        this.loadGraph();
+      });
 
-      const filterSelect = document.getElementById('kg-filter-type');
-      if (filterSelect) {
-        filterSelect.addEventListener('change', () => this.loadGraph());
-      }
+      document.getElementById('kg-btn-fit')?.addEventListener('click', () => {
+        this.cy?.fit(undefined, 30);
+      });
+
+      document.getElementById('kg-btn-centrality')?.addEventListener('click', () => {
+        this.showCentrality();
+      });
+
+      document.getElementById('kg-btn-close-centrality')?.addEventListener('click', () => {
+        const panel = document.getElementById('kg-centrality-panel');
+        if (panel) panel.style.display = 'none';
+      });
+
+      document.getElementById('kg-filter-type')?.addEventListener('change', () => {
+        this.loadGraph();
+      });
     },
 
-    showError(msg) {
+    _setLoading(visible) {
+      const el = document.getElementById('kg-loading');
+      if (!el) return;
+      el.style.display = visible ? 'flex' : 'none';
+    },
+
+    _showError(msg) {
       const container = document.getElementById('kg-cy-container');
       if (container) {
-        container.innerHTML = `<div class="error">${msg}</div>`;
+        container.innerHTML = `
+          <div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:0.5rem;color:var(--accent-red,#e74c3c);">
+            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span style="font-size:0.875rem;">${this._escapeHtml(msg)}</span>
+          </div>
+        `;
       }
-    },
-
-    _t(de, en) {
-      // Versuche I18n zu nutzen, fallback auf Deutsch
-      if (typeof I18n !== 'undefined' && I18n.t) {
-        return I18n.t(`knowledge_graph.${de}`) || de;
-      }
-      return de;
     },
 
     destroy() {
@@ -423,14 +443,13 @@
         this.cy.destroy();
         this.cy = null;
       }
-    }
+    },
   };
 
-  // Registriere Tab
+  // Registrierung
   window.Ninko._pluginTabs = window.Ninko._pluginTabs || {};
-  window.Ninko._pluginTabs[TAB_ID] = KnowledgeGraphTab;
+  window.Ninko._pluginTabs['knowledge_graph'] = KnowledgeGraphTab;
 
-  // Wenn Tab bereits aktiv, initialisiere sofort
   if (document.querySelector('.tab-btn.active[data-tab="knowledge_graph"]')) {
     KnowledgeGraphTab.init();
   }
