@@ -11,14 +11,14 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.1.0-blue.svg" alt="Version"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.3.0-blue.svg" alt="Version"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-stable-brightgreen.svg" alt="Status"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.12-blue.svg" alt="Python"></a>
   <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.115-green.svg" alt="FastAPI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
 </p>
 
-> **v1.1.0 — Stable Release:** Ninko is production-ready and actively deployed. The core API and module interfaces are stable. Feedback and contributions welcome.
+> **v1.3.0 — Current Release:** Ninko is production-ready and actively deployed. The core API and module interfaces are stable. Feedback and contributions welcome.
 
 ---
 
@@ -27,8 +27,8 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 - **Chat Interface** – Control your entire IT infrastructure in natural language
 - **Module Marketplace** – Install any module from GitHub with one click, no rebuild required; supports multiple repos (official + community)
 - **Module Updates** – Check for updates directly from the UI; one-click update button when new versions available
-- **3 core modules** always available: `web_search`, `image_gen`, `codelab`
-- **33 catalog modules** installable on demand: Kubernetes, Proxmox, Checkmk, Pi-hole, Home Assistant, GitHub, GitLab, Cisco, MikroTik, Netgear, Ubiquiti, and more
+- **9 core modules** always available: `web_search`, `image_gen`, `codelab`, `dataviz`, `knowledge_graph`, `message_hub`, `scripting`
+- **40 catalog modules** installable on demand: Kubernetes, Proxmox, Checkmk, Pi-hole, Home Assistant, GitHub, GitLab, Cisco, MikroTik, Netgear, Ubiquiti, and more
 - **4-tier orchestrator routing** – Direct / Module Agent / Dynamic Agent / Pipeline
 - **Long-term memory** – ChromaDB-backed semantic memory across all sessions
 - **Local LLMs** – Ollama, LM Studio, or any OpenAI-compatible API (no cloud required)
@@ -42,6 +42,8 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 - **SafeGuard** – Profile-based safety layer that intercepts dangerous actions before they execute — configurable per-chat, per-agent, or globally
 - **Multilingual** – 10 languages, automatically selected based on the user's language
 - **Plugin system** – ZIP-installable modules without restart
+- **5-Level Permission Tiers** – Deterministic tool-call classification (CRITICAL/DATA_MODIFYING/INFRASTRUCTURE_MODIFYING/COMMUNICATE/READONLY)
+- **MCP Support** – Model Context Protocol server for external tool integration
 
 ---
 
@@ -202,6 +204,10 @@ Telegram and Teams bots use a pending-message flow: Ninko stores the message for
 | `web_search` | SearXNG-based web search (Bing, Mojeek, Qwant) |
 | `image_gen` | AI image generation |
 | `codelab` | Code execution and debugging |
+| `dataviz` | Data visualization and chart generation |
+| `knowledge_graph` | Knowledge graph visualization with Cytoscape |
+| `message_hub` | Unified messaging platform for multi-channel notifications |
+| `scripting` | Script execution and automation tools |
 
 ### Catalog modules (installable via the Marketplace)
 
@@ -240,6 +246,11 @@ Telegram and Teams bots use a pending-message flow: Ninko stores the message for
 | `ubiquiti` | Ubiquiti UniFi device management |
 | `github` | GitHub Actions, PRs, Issues, Repositories, Variables & Secrets management |
 | `gitlab` | GitLab Pipelines, MRs, Issues, CI/CD variables and repository management |
+| `discord` | Discord bot integration with slash commands |
+| `lenovo_xclarity` | Lenovo XClarity server management |
+| `mcp_server` | Model Context Protocol server for external tool integration |
+| `netbox` | NetBox IPAM and DCIM infrastructure management |
+| `zabbix` | Zabbix monitoring system integration |
 
 Catalog modules are installed at runtime via **Settings → Marketplace** — no image rebuild required. The official module source is `https://github.com/natorus87/ninko` (pre-configured); additional community repos can be added in the same settings panel.
 
