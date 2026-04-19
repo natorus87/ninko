@@ -586,22 +586,25 @@ class KnowledgeGraph:
             nodes = self._graph.number_of_nodes()
             edges = self._graph.number_of_edges()
             is_connected = False
-            if nodes > 0 and edges > 0:
+            components = 0
+            if nodes > 0:
                 try:
-                    is_connected = nx.is_weakly_connected(self._graph)
+                    components = nx.number_weakly_connected_components(self._graph)
+                    is_connected = components == 1
                 except nx.NetworkXPointlessConcept:
                     is_connected = False
+            node_types: dict[str, int] = {}
+            for _, data in self._graph.nodes(data=True):
+                t = data.get("type")
+                if t:
+                    node_types[t] = node_types.get(t, 0) + 1
             return {
                 "nodes": nodes,
                 "edges": edges,
                 "density": nx.density(self._graph) if nodes > 1 else 0.0,
                 "is_connected": is_connected,
-                "node_types": {
-                    t: len(await self.find_by_type(t))
-                    for t in set(
-                        data.get("type") for _, data in self._graph.nodes(data=True)
-                    )
-                },
+                "components": components,
+                "node_types": node_types,
             }
 
     async def export_graph(self) -> dict:
