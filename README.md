@@ -127,17 +127,19 @@ On first start, configure your LLM backend under **Settings → LLM Provider** (
 └──────────────────────┬───────────────────────────────┘
                        │
 ┌──────────────────────▼───────────────────────────────┐
-│               Orchestrator Agent                     │
+│         Orchestrator Agent + SafeGuard               │
 │  Tier 1: Direct │ Tier 2: Module │ Tier 3: Dynamic  │
 │                    Tier 4: Pipeline                  │
 └──────────────────────┬───────────────────────────────┘
                        │
 ┌──────────────────────▼───────────────────────────────┐
-│                 Module Registry                      │
-│        Auto-Discovery · backend/modules/             │
+│       Module Registry (Auto-Discovery)               │
+│  Core: web_search, image_gen, codelab, dataviz,      │
+│        knowledge_graph, message_hub, scripting       │
+│  Catalog: 40+ modules via Marketplace                │
 └──────┬──────────┬──────────┬──────────┬─────────────┘
        │          │          │          │
-    Kubernetes  Proxmox     GLPI      + 17 more modules
+    Kubernetes  Proxmox     GLPI     + 37 more
        │          │          │
 ┌──────▼──────────▼──────────▼──────────────────────┐
 │  LLM-Factory  │  ChromaDB  │  Redis  │  Vault/SQLite │
@@ -267,9 +269,16 @@ All settings can be managed through the web UI under **Settings**. Module connec
 | `LLM_BACKEND` | `ollama` | LLM provider: `ollama`, `lmstudio`, `openai_compatible` |
 | `OLLAMA_BASE_URL` | `http://ollama:11434` | Ollama endpoint |
 | `VAULT_FALLBACK` | `sqlite` | Secrets backend: `sqlite` or Vault |
-| `SQLITE_SECRETS_KEY` | — | Encryption key (required) |
-| `LANGUAGE` | `de` | Default response language |
+| `SQLITE_SECRETS_KEY` | — | **Required**: Encryption key for secrets (generate: `python3 -c "import secrets; print(secrets.token_hex(32))"`) |
+| `API_AUTH_ENABLED` | `true` | Enable authentication system |
+| `SESSION_SECRET` | — | **Required**: Secret for session cookies (generate secure random) |
+| `BOOTSTRAP_ADMIN_PASSWORD` | `admin` | Initial admin password (change immediately!) |
+| `CHROMA_HOST` | `chromadb` | ChromaDB host for semantic memory |
+| `REDIS_URL` | `redis://redis:6379/0` | Redis connection URL |
+| `LANGUAGE` | `de` | Default response language (de, en, fr, es, it, nl, pl, pt, ja, zh) |
 | `MAX_OUTPUT_TOKENS` | `16384` | Maximum response length in tokens |
+| `MAX_CONTEXT_TOKENS` | `4096` | Maximum context window size |
+| `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR) |
 
 Full template: [.env.example](.env.example)
 
