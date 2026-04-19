@@ -9,11 +9,29 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.3.1] – 2026-04-19
+
+### Documentation
+
+- **README.md Overhaul**: Complete update for v1.3.0+ with accurate module counts, version badges, and architecture diagram
+- **Environment Variables**: Expanded table with 13 essential vars including security-critical `SESSION_SECRET`, `BOOTSTRAP_ADMIN_PASSWORD` 
+- **5-Level Permission Tiers**: Corrected tier names (READONLY → COMMUNICATE → WRITE_DATA → WRITE_SYSTEM → ADMIN)
+- **Module Registry**: Updated core modules (7) and catalog modules (40) counts
+
+### Fixed
+
+- **GitHub Releases**: Cleaned up 23 pre-stable releases, keeping only v1.x releases
+- **Docker Hub**: Created proper v1.3.0 tag for production deployments
+
+---
+
+## [Unreleased]
+
 ### Security
 
 - **CWE-326: Vault SQLite Encryption Migration (BREAKING)** – Vault Secrets werden jetzt mit PBKDF2 (210k Iterationen) statt direktem SHA256 verschlüsselt. Ältere Secrets müssen neu gesetzt werden.
-  - **Migration Script**: `scripts/migrate-vault-secrets.py` automatisiert die Migration
-  - **Fallback**: Nicht lesbare Secrets werden als `None` zurückgegeben (App startet weiterhin)
+  - **Migration Script**: \`scripts/migrate-vault-secrets.py\` automatisiert die Migration
+  - **Fallback**: Nicht lesbare Secrets werden als \`None\` zurückgegeben (App startet weiterhin)
   - **Betroffene Secrets**: Telegram Bot Token, Fritzbox Password (müssen neu konfiguriert werden)
 
 ### Added
@@ -22,14 +40,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed (from TODO.md archival)
 
-- **Synology Agent duplicate class definition** (2026-04-07): Removed duplicate `SynologyAgent` class definition at lines 94-124 and 169-184. Full 22-tool list now available.
-- **image_gen __init__.py bereinigt** (2026-04-07): Added `__all__` and `from __future__ import annotations`.
-- **slack tools.py unused import** (2026-04-07): Removed `from multipart import MultipartParam` (unused, code uses `aiohttp.FormData`).
+- **Synology Agent duplicate class definition** (2026-04-07): Removed duplicate \`SynologyAgent\` class definition at lines 94-124 and 169-184. Full 22-tool list now available.
+- **image_gen __init__.py bereinigt** (2026-04-07): Added \`__all__\` and \`from __future__ import annotations\`.
+- **slack tools.py unused import** (2026-04-07): Removed \`from multipart import MultipartParam\` (unused, code uses \`aiohttp.FormData\`).
 - **Code Review aller 45 Module** (2026-04-07): 41 OK, 1 critical (Synology) fixed.
 
 ### Changed (Breaking)
 
-- **OpenProject Module v1.0.3**: Breaking Change in Safeguard-Verhalten. Die Module-Tools nutzen jetzt `confirmed=True` für destruktive Operationen (Work Packages erstellen/aktualisieren, Time Entries loggen). Dies ist eine Sicherheitsverbesserung, da Safeguard-Profile (`strict`, `moderate`) jetzt korrekt greifen. Clients mit `disabled` oder `user_only` Profilen müssen keine Bestätigung mehr geben – andere Profile sehen Bestätigungsdialoge.
+- **OpenProject Module v1.0.3**: Breaking Change in Safeguard-Verhalten. Die Module-Tools nutzen jetzt \`confirmed=True\` für destruktive Operationen (Work Packages erstellen/aktualisieren, Time Entries loggen). Dies ist eine Sicherheitsverbesserung, da Safeguard-Profile (\`strict\`, \`moderate\`) jetzt korrekt greifen. Clients mit \`disabled\` oder \`user_only\` Profilen müssen keine Bestätigung mehr geben – andere Profile sehen Bestätigungsdialoge.
 
 ## [1.2.0] – 2026-04-08
 
