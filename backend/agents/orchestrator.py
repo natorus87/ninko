@@ -1993,6 +1993,25 @@ JSON-SCHEMA:
 
                 tool_name = self._extract_script_tool_name(message)
                 if tool_name:
+                    # Gate execution behind explicit user confirmation to prevent
+                    # bypassing the normal safeguard/interrupt flow.
+                    if not confirmed:
+                        return (
+                            _t(
+                                de=f"Soll das Script-Tool '{tool_name}' ausgeführt werden? Bitte bestätige die Ausführung.",
+                                en=f"Execute script tool '{tool_name}'? Please confirm to proceed.",
+                                fr=f"Exécuter le script tool '{tool_name}' ? Veuillez confirmer.",
+                                es=f"¿Ejecutar el script tool '{tool_name}'? Por favor confirma.",
+                                it=f"Eseguire il script tool '{tool_name}'? Conferma per procedere.",
+                                nl=f"Script-tool '{tool_name}' uitvoeren? Bevestig om door te gaan.",
+                                pl=f"Uruchomić script tool '{tool_name}'? Potwierdź, aby kontynuować.",
+                                pt=f"Executar script tool '{tool_name}'? Confirme para continuar.",
+                                ja=f"スクリプトツール '{tool_name}' を実行しますか？確認してください。",
+                                zh=f"执行脚本工具 '{tool_name}'？请确认以继续。",
+                            ),
+                            "orchestrator",
+                            False,
+                        )
                     tenant_id = get_current_tenant_id() or "default"
                     result = await execute_script_tool(
                         tenant_id=tenant_id,
@@ -2111,28 +2130,16 @@ JSON-SCHEMA:
 
     @staticmethod
     def _extract_script_tool_name(message: str) -> str | None:
-        text = str(message or "")
+        """Extrahiert den Tool-Namen nur bei expliziter run_script_tool-Syntax.
 
-        # 1) Prefer explicit run_script_tool syntax
+        Absichtlich eng gehalten: generische Backtick- oder „tool <name>"-Muster
+        würden normalen erklärenden Text fälschlicherweise als Ausführungsbefehl
+        interpretieren und unbeabsichtigte Ausführung triggern.
+        """
+        text = str(message or "")
         m = re.search(r"\brun_script_tool\s+([a-z0-9_-]{3,})\b", text, re.IGNORECASE)
         if m:
             return m.group(1).lower()
-
-        # 2) `tool_name` in backticks
-        m = re.search(r"`([a-z0-9_-]{3,})`", text, re.IGNORECASE)
-        if m:
-            candidate = m.group(1).lower()
-            if "_" in candidate or "-" in candidate:
-                return candidate
-
-        # 3) natural language mention: "script-tool <name>"
-        m = re.search(
-            r"\b(?:script-?tool|tool)\s+([a-z0-9_-]{3,})\b", text, re.IGNORECASE
-        )
-        if m:
-            candidate = m.group(1).lower()
-            if "_" in candidate or "-" in candidate:
-                return candidate
         return None
 
     async def _route_tier2_module(
