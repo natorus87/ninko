@@ -42,7 +42,7 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 - **SafeGuard** – Profile-based safety layer that intercepts dangerous actions before they execute — configurable per-chat, per-agent, or globally
 - **Multilingual** – 10 languages, automatically selected based on the user's language
 - **Plugin system** – ZIP-installable modules without restart
-- **5-Level Permission Tiers** – Deterministic tool-call classification (CRITICAL/DATA_MODIFYING/INFRASTRUCTURE_MODIFYING/COMMUNICATE/READONLY)
+- **5-Level Permission Tiers** – Deterministic tool classification: READONLY → COMMUNICATE → WRITE_DATA → WRITE_SYSTEM → ADMIN
 - **MCP Support** – Model Context Protocol server for external tool integration
 
 ---
@@ -130,6 +130,12 @@ On first start, configure your LLM backend under **Settings → LLM Provider** (
 │         Orchestrator Agent + SafeGuard               │
 │  Tier 1: Direct │ Tier 2: Module │ Tier 3: Dynamic  │
 │                    Tier 4: Pipeline                  │
+└──────────────────────┬───────────────────────────────┘
+                       │
+┌──────────────────────▼───────────────────────────────┐
+│  5-Level Permission System (Tool Classification)     │
+│  READONLY → COMMUNICATE → WRITE_DATA → WRITE_SYSTEM │
+│  → ADMIN (deterministic Safeguard)                   │
 └──────────────────────┬───────────────────────────────┘
                        │
 ┌──────────────────────▼───────────────────────────────┐
