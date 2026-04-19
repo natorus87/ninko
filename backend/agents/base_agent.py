@@ -772,7 +772,10 @@ class BaseAgent:
         # Pre-Processing Pipeline
         pre_result = await self._middleware.run_pre(ctx)
         if pre_result and pre_result.short_circuit:
-            return ctx.early_return_response, did_compact
+            # Prefer MiddlewareResult.response if explicitly set; fall back to
+            # ctx.early_return_response for middleware that writes there directly.
+            short_circuit_response = pre_result.response or ctx.early_return_response
+            return short_circuit_response, did_compact
 
         # LLM Call
         await self._middleware.run_post(ctx)
