@@ -7,11 +7,12 @@ import httpx
 import logging
 from typing import List, Dict, Any
 from langchain.tools import tool
+from langchain_core.runnables import RunnableConfig
 
 logger = logging.getLogger("ninko.modules.web_search")
 
 @tool
-async def perform_web_search(query: str, connection_id: str = "") -> List[Dict[str, Any]]:
+async def perform_web_search(query: str, connection_id: str = "", config: RunnableConfig = None) -> List[Dict[str, Any]]:
     """
     Führt eine Websuche über SearXNG aus.
     Verwende diese Funktion, wenn der Benutzer nach aktuellen Informationen im Internet sucht.
