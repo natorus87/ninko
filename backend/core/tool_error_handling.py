@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 import re
 import unicodedata
+import inspect
 from typing import Any
 
 logger = logging.getLogger("ninko.tool_error_middleware")
@@ -326,13 +327,27 @@ def wrap_tools_with_sanitizer(tools: list[Any]) -> list[Any]:
         original_arun = tool._arun
 
         def _make_sanitized_run(orig: Any) -> Any:
+            sig = inspect.signature(orig)
+            has_config = "config" in sig.parameters
+
             def _sanitized_run(*args: Any, **kwargs: Any) -> Any:
+                # LangChain compatibility: newer tool implementations may require
+                # keyword-only `config` in _run/_arun. Ensure it is present.
+                if has_config and "config" not in kwargs:
+                    kwargs["config"] = None
                 result = orig(*args, **kwargs)
                 return sanitize_tool_output(str(result)) if result is not None else ""
             return _sanitized_run
 
         def _make_sanitized_arun(orig: Any) -> Any:
+            sig = inspect.signature(orig)
+            has_config = "config" in sig.parameters
+
             async def _sanitized_arun(*args: Any, **kwargs: Any) -> Any:
+                # LangChain compatibility: newer tool implementations may require
+                # keyword-only `config` in _run/_arun. Ensure it is present.
+                if has_config and "config" not in kwargs:
+                    kwargs["config"] = None
                 result = await orig(*args, **kwargs)
                 return sanitize_tool_output(str(result)) if result is not None else ""
             return _sanitized_arun

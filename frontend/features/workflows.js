@@ -25,6 +25,11 @@
         _wfCurrentWorkflowId: null,
         _wfRunNodes: [],
         _wfRunEdges: [],
+        _wfZoom: 1,
+        _wfHistory: [],
+        _wfHistoryIndex: -1,
+        _wfHistoryMax: 50,
+        _wfEditorBindingsReady: false,
 
         async loadWorkflows() {
             const container = document.getElementById('workflows-list');
@@ -71,6 +76,10 @@
             this._wfNodes = [];
             this._wfEdges = [];
             this._wfSelectedNode = null;
+            this._wfConnecting = null;
+            this._wfZoom = 1;
+            this._wfHistory = [];
+            this._wfHistoryIndex = -1;
             document.getElementById('workflows-overview').classList.add('hidden');
             document.getElementById('workflow-run-dashboard').classList.add('hidden');
             document.getElementById('workflow-editor').classList.remove('hidden');
@@ -89,7 +98,10 @@
                 document.getElementById('wf-name-input').value = '';
                 document.getElementById('wf-desc-input').value = '';
             }
+            this._wfEnsureEditorBindings();
+            this._wfApplyZoom();
             this._wfRenderCanvas();
+            this._wfPushHistory();
 
             setTimeout(() => {
                 const container = document.getElementById('wf-canvas-container');
@@ -105,6 +117,7 @@
                     container.scrollLeft = 1500 - container.clientWidth / 2;
                     container.scrollTop  = 1500 - container.clientHeight / 2;
                 }
+                this._wfUpdateMiniMap();
             }, 10);
         },
 
@@ -112,6 +125,204 @@
             document.getElementById('workflow-editor').classList.add('hidden');
             document.getElementById('workflows-overview').classList.remove('hidden');
             this.loadWorkflows();
+        },
+
+        _wfSnapshot() {
+            return {
+                nodes: JSON.parse(JSON.stringify(this._wfNodes || [])),
+                edges: JSON.parse(JSON.stringify(this._wfEdges || [])),
+            };
+        },
+
+        _wfPushHistory() {
+            const snap = this._wfSnapshot();
+            const prev = this._wfHistory[this._wfHistoryIndex];
+            if (prev && JSON.stringify(prev) === JSON.stringify(snap)) return;
+            if (this._wfHistoryIndex < this._wfHistory.length - 1) {
+                this._wfHistory = this._wfHistory.slice(0, this._wfHistoryIndex + 1);
+            }
+            this._wfHistory.push(snap);
+            if (this._wfHistory.length > this._wfHistoryMax) this._wfHistory.shift();
+            this._wfHistoryIndex = this._wfHistory.length - 1;
+        },
+
+        _wfApplySnapshot(snap) {
+            if (!snap) return;
+            this._wfNodes = JSON.parse(JSON.stringify(snap.nodes || []));
+            this._wfEdges = JSON.parse(JSON.stringify(snap.edges || []));
+            this._wfSelectedNode = null;
+            document.getElementById('wf-node-inspector')?.classList.add('hidden');
+            this._wfRenderCanvas();
+        },
+
+        wfUndo() {
+            if (this._wfHistoryIndex <= 0) return;
+            this._wfHistoryIndex -= 1;
+            this._wfApplySnapshot(this._wfHistory[this._wfHistoryIndex]);
+        },
+
+        wfRedo() {
+            if (this._wfHistoryIndex >= this._wfHistory.length - 1) return;
+            this._wfHistoryIndex += 1;
+            this._wfApplySnapshot(this._wfHistory[this._wfHistoryIndex]);
+        },
+
+        _wfUpdateZoomLabel() {
+            const el = document.getElementById('wf-zoom-level');
+            if (!el) return;
+            el.textContent = `${Math.round(this._wfZoom * 100)}%`;
+        },
+
+        _wfApplyZoom() {
+            const canvas = document.getElementById('wf-canvas');
+            const svg = document.getElementById('wf-edges-svg');
+            if (canvas) canvas.style.transform = `scale(${this._wfZoom})`;
+            if (svg) svg.style.transform = `scale(${this._wfZoom})`;
+            this._wfUpdateZoomLabel();
+            this._wfUpdateMiniMap();
+        },
+
+        _wfSetZoom(nextZoom, anchorX = null, anchorY = null) {
+            const container = document.getElementById('wf-canvas-container');
+            if (!container) return;
+            const oldZoom = this._wfZoom;
+            const clamped = Math.max(0.35, Math.min(2.5, nextZoom));
+            if (Math.abs(clamped - oldZoom) < 0.0001) return;
+
+            const viewportX = anchorX != null ? anchorX : container.clientWidth / 2;
+            const viewportY = anchorY != null ? anchorY : container.clientHeight / 2;
+            const worldX = (container.scrollLeft + viewportX) / oldZoom;
+            const worldY = (container.scrollTop + viewportY) / oldZoom;
+
+            this._wfZoom = clamped;
+            this._wfApplyZoom();
+
+            container.scrollLeft = worldX * clamped - viewportX;
+            container.scrollTop = worldY * clamped - viewportY;
+            this._wfUpdateMiniMap();
+        },
+
+        wfZoomIn() { this._wfSetZoom(this._wfZoom * 1.12); },
+        wfZoomOut() { this._wfSetZoom(this._wfZoom / 1.12); },
+
+        wfFitToScreen() {
+            const container = document.getElementById('wf-canvas-container');
+            if (!container || !this._wfNodes.length) return;
+            const minX = Math.min(...this._wfNodes.map((n) => n.position.x));
+            const minY = Math.min(...this._wfNodes.map((n) => n.position.y));
+            const maxX = Math.max(...this._wfNodes.map((n) => n.position.x + 160));
+            const maxY = Math.max(...this._wfNodes.map((n) => n.position.y + 80));
+            const width = Math.max(120, maxX - minX);
+            const height = Math.max(80, maxY - minY);
+            const targetZoom = Math.min(
+                (container.clientWidth * 0.9) / width,
+                (container.clientHeight * 0.9) / height
+            );
+            this._wfSetZoom(targetZoom);
+            container.scrollLeft = Math.max(0, (minX + width / 2) * this._wfZoom - container.clientWidth / 2);
+            container.scrollTop = Math.max(0, (minY + height / 2) * this._wfZoom - container.clientHeight / 2);
+            this._wfUpdateMiniMap();
+        },
+
+        _wfUpdateMiniMap() {
+            const minimap = document.getElementById('wf-minimap');
+            const content = document.getElementById('wf-minimap-content');
+            const viewport = document.getElementById('wf-minimap-viewport');
+            const container = document.getElementById('wf-canvas-container');
+            if (!minimap || !content || !viewport || !container) return;
+
+            const mapW = minimap.clientWidth;
+            const mapH = minimap.clientHeight;
+            const worldW = 3000 * this._wfZoom;
+            const worldH = 3000 * this._wfZoom;
+            const scaleX = mapW / worldW;
+            const scaleY = mapH / worldH;
+
+            content.innerHTML = (this._wfNodes || []).map((n) => {
+                const x = n.position.x * this._wfZoom * scaleX;
+                const y = n.position.y * this._wfZoom * scaleY;
+                return `<span class="wf-minimap-node" style="left:${x}px;top:${y}px"></span>`;
+            }).join('');
+
+            viewport.style.left = `${container.scrollLeft * scaleX}px`;
+            viewport.style.top = `${container.scrollTop * scaleY}px`;
+            viewport.style.width = `${container.clientWidth * scaleX}px`;
+            viewport.style.height = `${container.clientHeight * scaleY}px`;
+        },
+
+        _wfEnsureEditorBindings() {
+            if (this._wfEditorBindingsReady) return;
+            this._wfEditorBindingsReady = true;
+
+            const container = document.getElementById('wf-canvas-container');
+            const minimap = document.getElementById('wf-minimap');
+            if (container) {
+                container.addEventListener('scroll', () => this._wfUpdateMiniMap());
+                container.addEventListener('wheel', (e) => {
+                    if (!(e.ctrlKey || e.metaKey)) return;
+                    e.preventDefault();
+                    const rect = container.getBoundingClientRect();
+                    const anchorX = e.clientX - rect.left;
+                    const anchorY = e.clientY - rect.top;
+                    const factor = e.deltaY < 0 ? 1.08 : 1 / 1.08;
+                    this._wfSetZoom(this._wfZoom * factor, anchorX, anchorY);
+                }, { passive: false });
+
+                let panStart = null;
+                container.addEventListener('mousedown', (e) => {
+                    const canPan = e.button === 1 || (e.button === 0 && e.shiftKey);
+                    if (!canPan) return;
+                    panStart = { x: e.clientX, y: e.clientY, left: container.scrollLeft, top: container.scrollTop };
+                    container.style.cursor = 'grabbing';
+                    e.preventDefault();
+                });
+                document.addEventListener('mousemove', (e) => {
+                    if (!panStart) return;
+                    container.scrollLeft = panStart.left - (e.clientX - panStart.x);
+                    container.scrollTop = panStart.top - (e.clientY - panStart.y);
+                });
+                document.addEventListener('mouseup', () => {
+                    if (!panStart) return;
+                    panStart = null;
+                    container.style.cursor = '';
+                });
+            }
+
+            minimap?.addEventListener('click', (e) => {
+                const rect = minimap.getBoundingClientRect();
+                const relX = e.clientX - rect.left;
+                const relY = e.clientY - rect.top;
+                const container = document.getElementById('wf-canvas-container');
+                if (!container) return;
+                const worldW = 3000 * this._wfZoom;
+                const worldH = 3000 * this._wfZoom;
+                const worldX = (relX / rect.width) * worldW;
+                const worldY = (relY / rect.height) * worldH;
+                container.scrollLeft = Math.max(0, worldX - container.clientWidth / 2);
+                container.scrollTop = Math.max(0, worldY - container.clientHeight / 2);
+                this._wfUpdateMiniMap();
+            });
+
+            document.addEventListener('keydown', (e) => {
+                const editorVisible = !document.getElementById('workflow-editor')?.classList.contains('hidden');
+                if (!editorVisible) return;
+                const target = e.target;
+                const tag = (target?.tagName || '').toLowerCase();
+                const inInput = target?.isContentEditable || tag === 'input' || tag === 'textarea' || tag === 'select';
+                const mod = e.ctrlKey || e.metaKey;
+                if (!mod || inInput) return;
+                const key = e.key.toLowerCase();
+                if (key === 'z' && !e.shiftKey) {
+                    e.preventDefault();
+                    this.wfUndo();
+                } else if (key === 'z' && e.shiftKey) {
+                    e.preventDefault();
+                    this.wfRedo();
+                } else if (key === 'y') {
+                    e.preventDefault();
+                    this.wfRedo();
+                }
+            });
         },
 
         _wfNodeIcon(type) {
@@ -147,8 +358,8 @@
             const defs = this._wfNodeDefaults(type);
             const id = Date.now().toString(36);
             const container = document.getElementById('wf-canvas-container');
-            const cx = container ? container.scrollLeft + Math.floor(container.clientWidth / 2) - 75 : 1450;
-            const cy = container ? container.scrollTop  + Math.floor(container.clientHeight / 2) - 40 : 1450;
+            const cx = container ? (container.scrollLeft / this._wfZoom) + Math.floor(container.clientWidth / this._wfZoom / 2) - 75 : 1450;
+            const cy = container ? (container.scrollTop / this._wfZoom) + Math.floor(container.clientHeight / this._wfZoom / 2) - 40 : 1450;
             const idx = this._wfNodes.length;
             const node = {
                 id,
@@ -159,6 +370,7 @@
             };
             this._wfNodes.push(node);
             this._wfRenderCanvas();
+            this._wfPushHistory();
         },
 
         _wfRenderCanvas() {
@@ -204,24 +416,30 @@
                     }
                 }
             };
+            this._wfUpdateMiniMap();
         },
 
         _wfMakeDraggable(el, node) {
             let startX, startY, origX, origY;
             el.addEventListener('mousedown', (e) => {
                 if (e.target.classList.contains('wf-port-out')) return;
+                if (e.button !== 0) return;
                 startX = e.clientX; startY = e.clientY;
                 origX = node.position.x; origY = node.position.y;
                 const onMove = (e) => {
-                    node.position.x = origX + (e.clientX - startX);
-                    node.position.y = origY + (e.clientY - startY);
+                    const dx = (e.clientX - startX) / this._wfZoom;
+                    const dy = (e.clientY - startY) / this._wfZoom;
+                    node.position.x = origX + dx;
+                    node.position.y = origY + dy;
                     el.style.left = `${node.position.x}px`;
                     el.style.top = `${node.position.y}px`;
                     this._wfUpdateSvgEdges();
+                    this._wfUpdateMiniMap();
                 };
                 const onUp = () => {
                     document.removeEventListener('mousemove', onMove);
                     document.removeEventListener('mouseup', onUp);
+                    this._wfPushHistory();
                 };
                 document.addEventListener('mousemove', onMove);
                 document.addEventListener('mouseup', onUp);
@@ -237,6 +455,7 @@
                     if (!exists) {
                         this._wfEdges.push({ id: Date.now().toString(36), source_id: this._wfConnecting, target_id: sourceId, label: '' });
                         this._wfUpdateSvgEdges();
+                        this._wfPushHistory();
                         showNotification('Verbindung erstellt', 'info');
                     } else {
                         showNotification('Verbindung bereits vorhanden', 'info');
@@ -301,6 +520,7 @@
                     if (await this.confirm('Verbindung löschen?')) {
                         this._wfEdges = this._wfEdges.filter(ed => ed.id !== edge.id);
                         this._wfUpdateSvgEdges();
+                        this._wfPushHistory();
                         if (this._wfSelectedNode) this._wfShowInspector(this._wfSelectedNode);
                     }
                 });
@@ -324,6 +544,7 @@
                 const exists = this._wfEdges.some(e => e.source_id === this._wfConnecting && e.target_id === nodeId);
                 if (!exists) {
                     this._wfEdges.push({ id: Date.now().toString(36), source_id: this._wfConnecting, target_id: nodeId, label: '' });
+                    this._wfPushHistory();
                 }
                 document.querySelector('.wf-node-connecting')?.classList.remove('wf-node-connecting');
                 this._wfConnecting = null;
@@ -507,6 +728,7 @@
             if (node) {
                 node[field] = value;
                 this._wfRenderCanvas();
+                this._wfPushHistory();
                 if (field === 'label' && this._wfSelectedNode === nodeId) {
                     const titleEl = document.getElementById('wf-inspector-title');
                     if (titleEl) titleEl.innerHTML = `${this._wfNodeIcon(node.type)} ${this._escapeHtml(value)}`;
@@ -516,12 +738,21 @@
 
         _wfUpdateNodeConfig(nodeId, key, value) {
             const node = this._wfNodes.find(n => n.id === nodeId);
-            if (node) node.config[key] = value;
+            if (node) {
+                if (node.type === 'parallel' && key === 'prompts') {
+                    try { node.config[key] = JSON.parse(value); }
+                    catch { node.config[key] = value; }
+                } else {
+                    node.config[key] = value;
+                }
+                this._wfPushHistory();
+            }
         },
 
         _wfDeleteEdge(edgeId) {
             this._wfEdges = this._wfEdges.filter(e => e.id !== edgeId);
             this._wfUpdateSvgEdges();
+            this._wfPushHistory();
             if (this._wfSelectedNode) this._wfShowInspector(this._wfSelectedNode);
         },
 
@@ -540,6 +771,7 @@
             this._wfSelectedNode = null;
             document.getElementById('wf-node-inspector')?.classList.add('hidden');
             this._wfRenderCanvas();
+            this._wfPushHistory();
         },
 
         async saveWorkflow() {

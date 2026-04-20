@@ -108,6 +108,23 @@ Quick health checks for critical API endpoints:
 pytest tests/test_api_smoke.py -v
 ```
 
+For remote/K8s targets you can override base URL and auth:
+
+```bash
+NINKO_BASE_URL=http://127.0.0.1:18000 \
+NINKO_TEST_USERNAME=admin \
+NINKO_TEST_PASSWORD=... \
+pytest tests/test_api_smoke.py -v
+```
+
+Alternative (token-based):
+
+```bash
+NINKO_BASE_URL=http://127.0.0.1:18000 \
+NINKO_API_KEY=... \
+pytest tests/test_api_smoke.py -v
+```
+
 This tests:
 - `/health` - API availability
 - `/api/agents/` - Agent management
