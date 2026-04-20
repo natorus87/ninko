@@ -4,6 +4,8 @@ WordPress Module — FastAPI Router for Dashboard API.
 
 from __future__ import annotations
 
+import ast
+import json
 import logging
 
 from fastapi import APIRouter
@@ -24,55 +26,77 @@ logger = logging.getLogger("ninko.modules.wordpress.routes")
 router = APIRouter()
 
 
+def _normalize_tool_output(value: object) -> object:
+    if isinstance(value, str):
+        text = value.strip()
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            try:
+                return ast.literal_eval(text)
+            except (SyntaxError, ValueError):
+                return value
+    return value
+
+
 @router.get("/info")
 async def site_info(connection_id: str = "") -> object:
     """WordPress instance information."""
-    return await get_site_info.ainvoke({"connection_id": connection_id})
+    result = await get_site_info.ainvoke({"connection_id": connection_id})
+    return _normalize_tool_output(result)
 
 
 @router.get("/plugins")
 async def plugins(status: str = "all", connection_id: str = "") -> object:
     """List installed plugins."""
-    return await list_plugins.ainvoke({"status": status, "connection_id": connection_id})
+    result = await list_plugins.ainvoke({"status": status, "connection_id": connection_id})
+    return _normalize_tool_output(result)
 
 
 @router.get("/pages")
 async def pages(status: str = "any", per_page: int = 20, connection_id: str = "") -> object:
     """List WordPress pages."""
-    return await list_pages.ainvoke({"status": status, "per_page": per_page, "connection_id": connection_id})
+    result = await list_pages.ainvoke({"status": status, "per_page": per_page, "connection_id": connection_id})
+    return _normalize_tool_output(result)
 
 
 @router.get("/pages/{page_id}")
 async def page_detail(page_id: int, connection_id: str = "") -> object:
     """Fetch single page."""
-    return await get_page.ainvoke({"page_id": page_id, "connection_id": connection_id})
+    result = await get_page.ainvoke({"page_id": page_id, "connection_id": connection_id})
+    return _normalize_tool_output(result)
 
 
 @router.get("/posts")
 async def posts(status: str = "any", per_page: int = 20, connection_id: str = "") -> object:
     """List posts."""
-    return await list_posts.ainvoke({"status": status, "per_page": per_page, "connection_id": connection_id})
+    result = await list_posts.ainvoke({"status": status, "per_page": per_page, "connection_id": connection_id})
+    return _normalize_tool_output(result)
 
 
 @router.get("/posts/{post_id}")
 async def post_detail(post_id: int, connection_id: str = "") -> object:
     """Fetch single post."""
-    return await get_post.ainvoke({"post_id": post_id, "connection_id": connection_id})
+    result = await get_post.ainvoke({"post_id": post_id, "connection_id": connection_id})
+    return _normalize_tool_output(result)
 
 
 @router.get("/users")
 async def users(connection_id: str = "") -> object:
     """List users."""
-    return await list_users.ainvoke({"connection_id": connection_id})
+    result = await list_users.ainvoke({"connection_id": connection_id})
+    return _normalize_tool_output(result)
 
 
 @router.get("/settings")
 async def settings(connection_id: str = "") -> object:
     """Fetch site settings."""
-    return await get_site_settings.ainvoke({"connection_id": connection_id})
+    result = await get_site_settings.ainvoke({"connection_id": connection_id})
+    return _normalize_tool_output(result)
 
 
 @router.get("/media")
 async def media(per_page: int = 20, connection_id: str = "") -> object:
     """List media."""
-    return await list_media.ainvoke({"per_page": per_page, "connection_id": connection_id})
+    result = await list_media.ainvoke({"per_page": per_page, "connection_id": connection_id})
+    return _normalize_tool_output(result)

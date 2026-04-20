@@ -4,6 +4,8 @@ Proxmox module — FastAPI Router for dashboard API.
 
 from __future__ import annotations
 
+import ast
+import json
 import logging
 
 from fastapi import APIRouter
@@ -24,36 +26,56 @@ logger = logging.getLogger("ninko.modules.proxmox.routes")
 router = APIRouter()
 
 
+def _normalize_tool_output(value: object) -> object:
+    if isinstance(value, str):
+        text = value.strip()
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            try:
+                return ast.literal_eval(text)
+            except (SyntaxError, ValueError):
+                return value
+    return value
+
+
 @router.get("/nodes")
 async def nodes(connection_id: str = "") -> object:
     """All Proxmox nodes."""
-    return await get_nodes.ainvoke({"connection_id": connection_id})
+    result = await get_nodes.ainvoke({"connection_id": connection_id})
+    return _normalize_tool_output(result)
 
 
 @router.get("/nodes/{node}")
 async def node_status(node: str, connection_id: str = "") -> object:
     """Status of a single node."""
-    return await get_node_status.ainvoke({"node": node, "connection_id": connection_id})
+    result = await get_node_status.ainvoke(
+        {"node": node, "connection_id": connection_id}
+    )
+    return _normalize_tool_output(result)
 
 
 @router.get("/vms")
 async def all_vms(connection_id: str = "") -> object:
     """All VMs across all nodes."""
-    return await list_all_vms.ainvoke({"connection_id": connection_id})
+    result = await list_all_vms.ainvoke({"connection_id": connection_id})
+    return _normalize_tool_output(result)
 
 
 @router.get("/vms/{node}")
 async def vms_on_node(node: str, connection_id: str = "") -> object:
     """VMs on a specific node."""
-    return await list_vms.ainvoke({"node": node, "connection_id": connection_id})
+    result = await list_vms.ainvoke({"node": node, "connection_id": connection_id})
+    return _normalize_tool_output(result)
 
 
 @router.get("/vm/{node}/{vmid}")
 async def vm_status(node: str, vmid: int, connection_id: str = "") -> object:
     """Status of a single VM."""
-    return await get_vm_status.ainvoke(
+    result = await get_vm_status.ainvoke(
         {"node": node, "vmid": vmid, "connection_id": connection_id}
     )
+    return _normalize_tool_output(result)
 
 
 @router.post("/vm/{node}/{vmid}/start")

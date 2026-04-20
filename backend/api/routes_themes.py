@@ -121,7 +121,13 @@ async def get_active_theme() -> dict:
     all_themes = get_all_themes()
     theme = all_themes.get(theme_id)
     if theme is None:
-        raise HTTPException(status_code=404, detail="Aktives Theme nicht gefunden.")
+        fallback_id = "default"
+        fallback = all_themes.get(fallback_id)
+        if fallback is None and all_themes:
+            fallback_id, fallback = next(iter(all_themes.items()))
+        if fallback is None:
+            return {"theme_id": "default", "theme": {}}
+        return {"theme_id": fallback_id, "theme": fallback.model_dump()}
     return {"theme_id": theme_id, "theme": theme.model_dump()}
 
 

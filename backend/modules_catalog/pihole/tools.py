@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+import asyncio
 from typing import Optional
 
 import httpx
@@ -14,6 +15,7 @@ logger = logging.getLogger("ninko.modules.pihole.tools")
 
 # ── Session Cache ──────────────────────────────────
 _session_cache: dict[str, dict] = {}  # url -> {"sid": str, "expires": float}
+_auth_locks: dict[str, asyncio.Lock] = {}
 SESSION_TTL = 300  # 5 minutes
 
 
@@ -87,81 +89,75 @@ async def _authenticate(base_url: str, password: str) -> str:
     Caches the token for SESSION_TTL seconds.
     Handles 429 (api_seats_exceeded) via session cleanup.
     """
-    import asyncio
-
     cache_key = base_url
-    cached = _session_cache.get(cache_key)
-    if cached and cached["expires"] > time.time():
-        return cached["sid"]
+    lock = _auth_locks.setdefault(cache_key, asyncio.Lock())
 
-    async with httpx.AsyncClient(timeout=10) as client:
-        for attempt in range(3):
-            resp = await client.post(
-                f"{base_url}/api/auth",
-                json={"password": password},
-            )
+    async with lock:
+        cached = _session_cache.get(cache_key)
+        if cached and cached["expires"] > time.time():
+            return cached["sid"]
 
-            if resp.status_code == 429:
-                body = resp.json() if resp.text else {}
-                hint = body.get("error", {}).get("key", "")
-                logger.warning(
-                    "Pi-hole auth 429: %s (attempt %d/3)",
-                    hint, attempt + 1,
+        async with httpx.AsyncClient(timeout=10) as client:
+            for attempt in range(3):
+                resp = await client.post(
+                    f"{base_url}/api/auth",
+                    json={"password": password},
                 )
 
-                # api_seats_exceeded → delete old session and retry
-                if hint == "api_seats_exceeded" and cached:
-                    try:
-                        await client.delete(
-                            f"{base_url}/api/auth",
-                            headers={"sid": cached['sid']},
-                        )
-                        _session_cache.pop(cache_key, None)
-                        cached = None
-                    except (RuntimeError, ValueError, TypeError, KeyError, OSError):
-                        pass
+                if resp.status_code == 429:
+                    body = resp.json() if resp.text else {}
+                    hint = body.get("error", {}).get("key", "")
+                    logger.warning(
+                        "Pi-hole auth 429: %s (attempt %d/3)",
+                        hint, attempt + 1,
+                    )
 
-                await asyncio.sleep(2 * (attempt + 1))
-                continue
+                    # If we still have any cached SID (even with TTL expired), try to reuse it.
+                    stale = _session_cache.get(cache_key)
+                    if hint == "api_seats_exceeded" and stale and stale.get("sid"):
+                        return stale["sid"]
 
-            if resp.status_code == 401:
-                raise ValueError(_t(
-                    de="Pi-hole Auth fehlgeschlagen: falsches Passwort",
-                    en="Pi-hole auth failed: wrong password",
-                    fr="Échec de l'authentification Pi-hole: mot de passe incorrect",
-                    es="Autenticación de Pi-hole fallida: contraseña incorrecta",
-                    it="Autenticazione Pi-hole non riuscita: password errata",
-                    nl="Pi-hole-authenticatie mislukt: wachtwoord onjuist",
-                    pl="Uwierzytelnianie Pi-hole nie powiodło się: nieprawidłowe hasło",
-                    pt="Autenticação Pi-hole falhou: senha incorreta",
-                    ja="Pi-hole認証に失敗しました：パスワードが正しくありません",
-                    zh="Pi-hole认证失败：密码错误",
-                ))
+                    await asyncio.sleep(2 * (attempt + 1))
+                    continue
 
-            resp.raise_for_status()
-            data = resp.json()
+                if resp.status_code == 401:
+                    raise ValueError(_t(
+                        de="Pi-hole Auth fehlgeschlagen: falsches Passwort",
+                        en="Pi-hole auth failed: wrong password",
+                        fr="Échec de l'authentification Pi-hole: mot de passe incorrect",
+                        es="Autenticación de Pi-hole fallida: contraseña incorrecta",
+                        it="Autenticazione Pi-hole non riuscita: password errata",
+                        nl="Pi-hole-authenticatie mislukt: wachtwoord onjuist",
+                        pl="Uwierzytelnianie Pi-hole nie powiodło się: nieprawidłowe hasło",
+                        pt="Autenticação Pi-hole falhou: senha incorreta",
+                        ja="Pi-hole認証に失敗しました：パスワードが正しくありません",
+                        zh="Pi-hole认证失败：密码错误",
+                    ))
 
-            sid = data.get("session", {}).get("sid", "")
-            if not sid:
-                raise ValueError(_t(
-                    de="Pi-hole Auth fehlgeschlagen: kein SID erhalten",
-                    en="Pi-hole auth failed: no SID received",
-                    fr="Échec de l'authentification Pi-hole: aucun SID reçu",
-                    es="Autenticación de Pi-hole fallida: no se recibió SID",
-                    it="Autenticazione Pi-hole non riuscita: nessun SID ricevuto",
-                    nl="Pi-hole-authenticatie mislukt: geen SID ontvangen",
-                    pl="Uwierzytelnianie Pi-hole nie powiodło się: nie otrzymano SID",
-                    pt="Autenticação Pi-hole falhou: nenhum SID recebido",
-                    ja="Pi-hole認証に失敗しました：SIDを受信しませんでした",
-                    zh="Pi-hole认证失败：未收到SID",
-                ))
+                resp.raise_for_status()
+                data = resp.json()
 
-            _session_cache[cache_key] = {
-                "sid": sid,
-                "expires": time.time() + SESSION_TTL,
-            }
-            logger.info("Pi-hole session created for %s", base_url)
-            return sid
+                sid = data.get("session", {}).get("sid", "")
+                if not sid:
+                    raise ValueError(_t(
+                        de="Pi-hole Auth fehlgeschlagen: kein SID erhalten",
+                        en="Pi-hole auth failed: no SID received",
+                        fr="Échec de l'authentification Pi-hole: aucun SID reçu",
+                        es="Autenticación de Pi-hole fallida: no se recibió SID",
+                        it="Autenticazione Pi-hole non riuscita: nessun SID ricevuto",
+                        nl="Pi-hole-authenticatie mislukt: geen SID ontvangen",
+                        pl="Uwierzytelnianie Pi-hole nie powiodło się: nie otrzymano SID",
+                        pt="Autenticação Pi-hole falhou: nenhum SID recebido",
+                        ja="Pi-hole認証に失敗しました：SIDを受信しませんでした",
+                        zh="Pi-hole认证失败：未收到SID",
+                    ))
+
+                _session_cache[cache_key] = {
+                    "sid": sid,
+                    "expires": time.time() + SESSION_TTL,
+                }
+                logger.info("Pi-hole session created for %s", base_url)
+                return sid
 
     raise ValueError(_t(
         de="Pi-hole Auth fehlgeschlagen: zu viele Versuche (429)",

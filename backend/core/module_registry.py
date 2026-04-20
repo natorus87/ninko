@@ -399,6 +399,14 @@ class ModuleRegistry:
                     results[name] = await mod.manifest.health_check()
                 except _REGISTRY_EXCEPTIONS as exc:
                     results[name] = {"status": "error", "detail": str(exc)}
+                except Exception as exc:
+                    logger.exception(
+                        "Uncaught health check exception in module '%s': %s", name, exc
+                    )
+                    results[name] = {
+                        "status": "error",
+                        "detail": f"Uncaught health check error: {exc}",
+                    }
             else:
                 results[name] = {
                     "status": "ok",

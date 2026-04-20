@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ast
+import json
 import logging
 from typing import Any
 
@@ -29,6 +31,19 @@ class ApiResponse(BaseModel):
     detail: str = ""
 
 
+def _normalize_tool_output(value: object) -> object:
+    if isinstance(value, str):
+        text = value.strip()
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            try:
+                return ast.literal_eval(text)
+            except (SyntaxError, ValueError):
+                return value
+    return value
+
+
 @router.get("/status", response_model=ApiResponse)
 async def get_status(connection_id: str = "") -> ApiResponse:
     """REST endpoint for the UI frontend — system status."""
@@ -36,6 +51,7 @@ async def get_status(connection_id: str = "") -> ApiResponse:
         result = await get_opnsense_system_status.ainvoke(
             {"connection_id": connection_id}
         )
+        result = _normalize_tool_output(result)
         if isinstance(result, dict) and result.get("error"):
             logger.warning("OPNsense status returned error: %s", result.get("error"))
             return ApiResponse(status="error", detail=result.get("error"))
@@ -58,6 +74,7 @@ async def get_interfaces(connection_id: str = "") -> ApiResponse:
     """REST endpoint for interfaces."""
     try:
         result = await get_opnsense_interfaces.ainvoke({"connection_id": connection_id})
+        result = _normalize_tool_output(result)
         if isinstance(result, dict) and result.get("error"):
             logger.warning(
                 "OPNsense interfaces returned error: %s", result.get("error")
@@ -82,6 +99,7 @@ async def get_services(connection_id: str = "") -> ApiResponse:
     """REST endpoint for services."""
     try:
         result = await get_opnsense_services.ainvoke({"connection_id": connection_id})
+        result = _normalize_tool_output(result)
         if isinstance(result, dict) and result.get("error"):
             logger.warning("OPNsense services returned error: %s", result.get("error"))
             return ApiResponse(status="error", detail=result.get("error"))

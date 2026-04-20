@@ -61,6 +61,8 @@ class MonitorAgent:
                 await self.run_cycle()
             except _MONITOR_EXCEPTIONS as exc:
                 logger.error("Monitor-Cycle Fehler: %s", exc, exc_info=True)
+            except Exception as exc:
+                logger.exception("Monitor-Cycle unerwarteter Fehler: %s", exc)
 
             await asyncio.sleep(self._settings.MONITOR_INTERVAL_SECONDS)
 

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import ast
 
 from core.module_registry import ModuleManifest
 
@@ -21,6 +23,23 @@ async def check_pihole_health() -> dict:
             return {"status": "ok", "detail": "No Pi-hole configured (inactive)"}
 
         result = await get_pihole_summary.ainvoke({"connection_id": conn.id})
+        if isinstance(result, str):
+            try:
+                result = json.loads(result)
+            except json.JSONDecodeError:
+                try:
+                    parsed = ast.literal_eval(result)
+                    result = parsed
+                except (ValueError, SyntaxError):
+                    return {
+                        "status": "error",
+                        "detail": "Unexpected Pi-hole summary response: non-JSON string",
+                    }
+        if not isinstance(result, dict):
+            return {
+                "status": "error",
+                "detail": f"Unexpected Pi-hole summary response type: {type(result).__name__}",
+            }
         status = result.get("status", "unknown")
         blocked = result.get("domains_blocked", 0)
         return {
@@ -29,6 +48,8 @@ async def check_pihole_health() -> dict:
         }
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": f"Pi-hole unreachable: {exc}"}
+    except Exception as exc:
+        return {"status": "error", "detail": f"Pi-hole health check failed: {exc}"}
 
 
 module_manifest = ModuleManifest(

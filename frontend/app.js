@@ -73,6 +73,10 @@ const Ninko = {
     ws: null,
     sessionId: null,
     modules: [],
+    _moduleNavItems: [],
+    _moduleFavorites: [],
+    _moduleRecent: [],
+    _moduleFilterQuery: '',
     activeTab: 'chat',
     moduleScripts: {},
     chatHistory: [],
@@ -216,6 +220,11 @@ const Ninko = {
             this._bindCtxIndicatorAction();
             this.initSidebarAccountMenu();
             this.initMobileMenu();
+            this.initChatToolbarMore();
+            if (window.NinkoCommandPalette?.create) {
+                this._commandPalette = window.NinkoCommandPalette.create(this);
+                this._commandPalette.init();
+            }
         } catch (err) {
             console.error('Ninko init failed:', err);
             this._showInitError(err);
@@ -348,7 +357,7 @@ const Ninko = {
 
     /**
      * Initialize mobile hamburger menu and sidebar toggle.
-     * Handles sidebar open/close on screens <= 480px.
+     * Handles sidebar open/close on screens <= 768px.
      */
     initMobileMenu() {
         const hamburgerBtn = document.getElementById('hamburger-btn');
@@ -374,7 +383,7 @@ const Ninko = {
         const navTabs = sidebar.querySelectorAll('.nav-tab');
         navTabs.forEach((tab) => {
             tab.addEventListener('click', () => {
-                if (window.innerWidth <= 480) {
+                if (window.innerWidth <= 768) {
                     sidebar.classList.remove('mobile-open');
                     overlay.classList.remove('mobile-open');
                 }
@@ -383,7 +392,7 @@ const Ninko = {
 
         // Close sidebar when clicking outside of it on mobile
         document.addEventListener('click', (e) => {
-            if (window.innerWidth <= 480 &&
+            if (window.innerWidth <= 768 &&
                 !sidebar.contains(e.target) &&
                 !hamburgerBtn.contains(e.target)) {
                 sidebar.classList.remove('mobile-open');
@@ -398,6 +407,44 @@ const Ninko = {
                 overlay.classList.remove('mobile-open');
             }
         });
+    },
+
+    _updateMobileNav() {
+        const active = this.activeTab || 'chat';
+        document.querySelectorAll('#mobile-nav .mobile-nav-item').forEach((btn) => {
+            btn.classList.toggle('active', btn.dataset.mobileTab === active);
+        });
+    },
+
+    _updateBreadcrumb() {
+        const root = document.getElementById('app-breadcrumb');
+        if (!root) return;
+        const parts = ['Dashboard'];
+        const tab = this.activeTab || 'chat';
+
+        if (tab === 'chat') {
+            parts.push('Chat');
+        } else if (tab === 'automatisierung') {
+            parts.push('Automatisierung');
+            const auto = document.querySelector('#subnav-automatisierung .settings-tab.active span')?.textContent?.trim();
+            if (auto) parts.push(auto);
+        } else if (tab === 'modules') {
+            parts.push('Modules');
+            const mod = document.querySelector('#subnav-modules .module-nav-btn.active span')?.textContent?.trim();
+            if (mod) parts.push(mod);
+        } else if (tab === 'settings') {
+            parts.push('Settings');
+            const set = document.querySelector('#subnav-settings .settings-tab.active span')?.textContent?.trim()
+                || document.querySelector('#subnav-settings .settings-tab.active')?.textContent?.trim();
+            if (set) parts.push(set.replace(/\s+/g, ' '));
+        } else {
+            parts.push(tab.charAt(0).toUpperCase() + tab.slice(1));
+        }
+
+        root.innerHTML = parts.map((label, idx) => {
+            const cls = idx === parts.length - 1 ? 'crumb current' : 'crumb';
+            return `<span class="${cls}">${this._escapeHtml(label)}</span>`;
+        }).join('<span class="crumb-sep">/</span>');
     },
 
     openSettingsFromMenu() {
@@ -475,61 +522,220 @@ const Ninko = {
             if (!res.ok) throw new Error(res.statusText);
             this.modules = await res.json();
 
-            const modulesSidebar = document.getElementById('subnav-modules');
             const mainContent = document.getElementById('main-content');
+            this._moduleNavItems = [];
+            const modulesWithoutDashboardFiles = new Set(['image_gen', 'scripting']);
 
             for (const mod of this.modules) {
                 if (!mod.enabled) continue;
 
                 const tab = mod.dashboard_tab || {};
                 const tabId = tab.id || mod.name;
-
-                // Nav Button in modules sidebar
-                const btn = document.createElement('button');
-                btn.className = 'settings-tab';
-                btn.dataset.moduleTab = tabId;
-                btn.innerHTML = `${tab.icon || '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>'}<span>${tab.label || mod.display_name}</span>`;
-                btn.addEventListener('click', () => {
-                    this.switchModuleTab(tabId);
+                this._moduleNavItems.push({
+                    moduleName: mod.name,
+                    tabId,
+                    label: tab.label || mod.display_name || mod.name,
+                    icon: tab.icon || '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>',
+                    category: this._moduleCategoryFor(mod.name),
                 });
-                modulesSidebar.appendChild(btn);
 
                 // Tab Panel
                 const panel = document.createElement('div');
                 panel.id = `tab-${tabId}`;
                 panel.className = 'tab-panel';
 
-                try {
-                    const htmlRes = await fetch(`/api/modules/${mod.name}/frontend/tab.html`);
-                    if (htmlRes.ok) {
-                        const html = await htmlRes.text();
-                        panel.innerHTML = (typeof DOMPurify !== 'undefined')
-                            ? DOMPurify.sanitize(html, { ADD_ATTR: ['target', 'rel'], FORBID_TAGS: ['script', 'style', 'iframe', 'form', 'input'] })
-                            : html;
-                    } else {
-                        panel.innerHTML = `<div class="module-tab-content"><p class="empty-state">${t('module.noDashboard', mod.display_name)}</p></div>`;
+                const skipFrontendFetch = modulesWithoutDashboardFiles.has(mod.name);
+                let hasFrontend = false;
+                if (skipFrontendFetch) {
+                    panel.innerHTML = `<div class="module-tab-content"><p class="empty-state">${t('module.noDashboard', mod.display_name)}</p></div>`;
+                } else {
+                    try {
+                        const htmlRes = await fetch(`/api/modules/${mod.name}/frontend/tab.html`);
+                        if (htmlRes.ok) {
+                            const html = await htmlRes.text();
+                            panel.innerHTML = (typeof DOMPurify !== 'undefined')
+                                ? DOMPurify.sanitize(html, { ADD_ATTR: ['target', 'rel'], FORBID_TAGS: ['script', 'style', 'iframe', 'form', 'input'] })
+                                : html;
+                            hasFrontend = true;
+                        } else {
+                            panel.innerHTML = `<div class="module-tab-content"><p class="empty-state">${t('module.noDashboard', mod.display_name)}</p></div>`;
+                        }
+                    } catch {
+                        panel.innerHTML = `<div class="module-tab-content"><p class="empty-state">${t('module.dashboardError')}</p></div>`;
                     }
-                } catch {
-                    panel.innerHTML = `<div class="module-tab-content"><p class="empty-state">${t('module.dashboardError')}</p></div>`;
                 }
 
                 mainContent.appendChild(panel);
 
                 // Load JS
-                try {
-                    const script = document.createElement('script');
-                    script.src = `/api/modules/${mod.name}/frontend/tab.js?v=${Date.now()}`;
-                    script.type = 'module';
-                    script.async = true;
-                    document.body.appendChild(script);
-                } catch {
-                    // JS optional
+                if (hasFrontend) {
+                    try {
+                        const script = document.createElement('script');
+                        script.src = `/api/modules/${mod.name}/frontend/tab.js?v=${Date.now()}`;
+                        script.type = 'module';
+                        script.async = true;
+                        document.body.appendChild(script);
+                    } catch {
+                        // JS optional
+                    }
                 }
             }
+            this._loadModuleNavPrefs();
+            this._renderModuleSidebar();
             this._buildModulePicker();
         } catch (err) {
             console.error('Module konnten nicht geladen werden:', err);
         }
+    },
+
+    _moduleCategoryFor(moduleName) {
+        const name = String(moduleName || '').toLowerCase();
+        const inSet = (items) => items.includes(name);
+
+        if (inSet(['kubernetes', 'proxmox', 'docker', 'linux_server', 'hpe_ilo', 'lenovo_xclarity'])) return 'infrastructure';
+        if (inSet(['pihole', 'opnsense', 'fritzbox', 'ubiquiti', 'mikrotik', 'cisco', 'netgear'])) return 'network';
+        if (inSet(['checkmk', 'zabbix', 'dataviz'])) return 'monitoring';
+        if (inSet(['glpi', 'jira', 'confluence', 'nextcloud', 'openproject', 'redmine'])) return 'productivity';
+        if (inSet(['telegram', 'slack', 'discord', 'teams', 'email', 'message_hub'])) return 'communication';
+        if (inSet(['github', 'gitlab', 'ionos', 'wordpress', 'netbox'])) return 'cloud';
+        if (inSet(['homeassistant', 'tasmota', 'synology'])) return 'iot';
+        return 'other';
+    },
+
+    _moduleCategoryLabel(category) {
+        const labels = {
+            infrastructure: '🏗️ Infrastructure',
+            network: '🌐 Network',
+            monitoring: '📊 Monitoring',
+            productivity: '📋 Productivity',
+            communication: '💬 Communication',
+            cloud: '☁️ Cloud & Hosting',
+            iot: '🏠 IoT & Smart Home',
+            other: '📦 Other',
+        };
+        return labels[category] || labels.other;
+    },
+
+    _loadModuleNavPrefs() {
+        try {
+            const favRaw = localStorage.getItem('ninko_module_favorites');
+            const recentRaw = localStorage.getItem('ninko_module_recent');
+            const favParsed = JSON.parse(favRaw || '[]');
+            const recentParsed = JSON.parse(recentRaw || '[]');
+            const fav = Array.isArray(favParsed) ? favParsed : [];
+            const recent = Array.isArray(recentParsed) ? recentParsed : [];
+            const validIds = new Set(this._moduleNavItems.map((i) => i.tabId));
+            this._moduleFavorites = fav.filter((id) => validIds.has(id));
+            this._moduleRecent = recent.filter((id) => validIds.has(id)).slice(0, 5);
+        } catch {
+            this._moduleFavorites = [];
+            this._moduleRecent = [];
+        }
+    },
+
+    _saveModuleNavPrefs() {
+        try {
+            localStorage.setItem('ninko_module_favorites', JSON.stringify(this._moduleFavorites));
+            localStorage.setItem('ninko_module_recent', JSON.stringify(this._moduleRecent.slice(0, 5)));
+        } catch {
+            // ignore localStorage errors
+        }
+    },
+
+    filterModuleSidebar(query) {
+        this._moduleFilterQuery = String(query || '');
+        this._renderModuleSidebar();
+    },
+
+    _toggleFavoriteModule(tabId) {
+        const idx = this._moduleFavorites.indexOf(tabId);
+        if (idx >= 0) this._moduleFavorites.splice(idx, 1);
+        else this._moduleFavorites.push(tabId);
+        this._saveModuleNavPrefs();
+        this._renderModuleSidebar();
+    },
+
+    _recordRecentModule(tabId) {
+        this._moduleRecent = [tabId, ...this._moduleRecent.filter((id) => id !== tabId)].slice(0, 5);
+        this._saveModuleNavPrefs();
+    },
+
+    _renderModuleSidebar() {
+        const list = document.getElementById('module-subnav-list');
+        if (!list) return;
+
+        const query = (this._moduleFilterQuery || '').trim().toLowerCase();
+        const byId = new Map(this._moduleNavItems.map((it) => [it.tabId, it]));
+        const matches = (item) => {
+            if (!query) return true;
+            const haystack = `${item.label} ${item.moduleName} ${item.category}`.toLowerCase();
+            return haystack.includes(query);
+        };
+
+        const filtered = this._moduleNavItems.filter(matches);
+        const filteredIds = new Set(filtered.map((i) => i.tabId));
+        const favorites = this._moduleFavorites.map((id) => byId.get(id)).filter((i) => i && filteredIds.has(i.tabId));
+        const recent = this._moduleRecent.map((id) => byId.get(id)).filter((i) => i && filteredIds.has(i.tabId));
+
+        const groups = new Map();
+        filtered.forEach((item) => {
+            if (!groups.has(item.category)) groups.set(item.category, []);
+            groups.get(item.category).push(item);
+        });
+
+        const order = ['infrastructure', 'network', 'monitoring', 'productivity', 'communication', 'cloud', 'iot', 'other'];
+
+        const renderRow = (item) => {
+            const isFavorite = this._moduleFavorites.includes(item.tabId);
+            const active = this._activeModuleTab === item.tabId ? ' active' : '';
+            return `
+                <div class="module-nav-row">
+                    <button class="settings-tab settings-tab-sub module-nav-btn${active}" data-module-tab="${this._escapeHtml(item.tabId)}">
+                        ${item.icon}<span>${this._escapeHtml(item.label)}</span>
+                    </button>
+                    <button class="module-fav-btn${isFavorite ? ' is-favorite' : ''}" data-fav-tab="${this._escapeHtml(item.tabId)}" title="Favorit">
+                        ★
+                    </button>
+                </div>
+            `;
+        };
+
+        const parts = [];
+        if (favorites.length) {
+            parts.push('<div class="module-nav-group-label">⭐ Favorites</div>');
+            parts.push(...favorites.map(renderRow));
+        }
+        if (recent.length) {
+            parts.push('<div class="module-nav-group-label">🕐 Recently Used</div>');
+            parts.push(...recent.map(renderRow));
+        }
+        order.forEach((category) => {
+            const items = groups.get(category) || [];
+            if (!items.length) return;
+            parts.push(`<div class="module-nav-group-label">${this._moduleCategoryLabel(category)}</div>`);
+            parts.push(...items.map(renderRow));
+        });
+
+        if (!parts.length) {
+            parts.push('<div class="module-subnav-empty">Keine Module gefunden.</div>');
+        }
+
+        list.innerHTML = parts.join('');
+
+        list.querySelectorAll('.module-nav-btn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const id = btn.dataset.moduleTab;
+                if (id) this.switchModuleTab(id);
+            });
+        });
+
+        list.querySelectorAll('.module-fav-btn').forEach((btn) => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const id = btn.dataset.favTab;
+                if (id) this._toggleFavoriteModule(id);
+            });
+        });
     },
 
     _customAgentsCache: [],
@@ -595,6 +801,30 @@ const Ninko = {
             };
             setTimeout(() => document.addEventListener('click', close), 0);
         }
+    },
+
+    initChatToolbarMore() {
+        if (this._chatToolbarMoreInitialized) return;
+        this._chatToolbarMoreInitialized = true;
+        document.addEventListener('click', (e) => {
+            const wrap = document.getElementById('chat-toolbar-more');
+            if (!wrap || !wrap.contains(e.target)) this.closeChatToolbarMore();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') this.closeChatToolbarMore();
+        });
+    },
+
+    toggleChatToolbarMore(event) {
+        event?.stopPropagation();
+        const menu = document.getElementById('chat-toolbar-more-menu');
+        if (!menu) return;
+        menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+    },
+
+    closeChatToolbarMore() {
+        const menu = document.getElementById('chat-toolbar-more-menu');
+        if (menu) menu.style.display = 'none';
     },
 
     setForcedModule(name, customLabel) {
@@ -717,6 +947,8 @@ const Ninko = {
             tabObj.init();
             tabObj._initialized = true;
         }
+        this._updateMobileNav();
+        this._updateBreadcrumb();
     },
 
     // --- Automatisierung Sub-Tab Switching ---
@@ -753,6 +985,7 @@ const Ninko = {
         if (tabId === 'tasks') this.loadScheduledTasks();
         if (tabId === 'agents') this.loadAgents();
         if (tabId === 'workflows') this.loadWorkflows();
+        this._updateBreadcrumb();
     },
 
     // --- Module Sub-Tab Switching ---
@@ -767,8 +1000,8 @@ const Ninko = {
         }
 
         // Update sidebar active state
-        document.querySelectorAll('#subnav-modules .settings-tab').forEach(t => t.classList.remove('active'));
-        document.querySelector(`#subnav-modules .settings-tab[data-module-tab="${tabId}"]`)?.classList.add('active');
+        document.querySelectorAll('#subnav-modules .module-nav-btn').forEach(t => t.classList.remove('active'));
+        document.querySelector(`#subnav-modules .module-nav-btn[data-module-tab="${tabId}"]`)?.classList.add('active');
 
         // Move panel into modules-content and activate
         const modContent = document.getElementById('modules-content');
@@ -779,12 +1012,62 @@ const Ninko = {
         }
 
         this._activeModuleTab = tabId;
+        this._recordRecentModule(tabId);
+        this._renderModuleSidebar();
 
-        // Init module tab if it has an init function
-        const tabObj = this.getTabObject(tabId);
-        if (tabObj && typeof tabObj.init === 'function' && !tabObj._initialized) {
-            tabObj.init();
-            tabObj._initialized = true;
+        // Legacy compatibility: some module tabs read #connection-selector.
+        // Ensure it is populated before module init runs.
+        this._syncLegacyConnectionSelector(tabId).finally(() => {
+            const tabObj = this.getTabObject(tabId);
+            if (tabObj && typeof tabObj.init === 'function' && !tabObj._initialized) {
+                tabObj.init();
+                tabObj._initialized = true;
+            }
+        });
+        this._updateBreadcrumb();
+    },
+
+    _normalizeConnectionModuleName(tabId) {
+        if (tabId === 'k8s') return 'kubernetes';
+        return tabId;
+    },
+
+    async _syncLegacyConnectionSelector(tabId) {
+        const wrap = document.getElementById('legacy-connection-bar');
+        const select = document.getElementById('connection-selector');
+        if (!select) return;
+
+        const moduleName = this._normalizeConnectionModuleName(tabId);
+        try {
+            const res = await fetch(`/api/connections/${moduleName}?_t=${Date.now()}`, { cache: 'no-store' });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            const connections = data.connections || [];
+
+            if (!connections.length) {
+                select.innerHTML = '<option value="">Keine Verbindung</option>';
+                select.value = '';
+                select.disabled = true;
+                wrap?.classList.remove('hidden');
+                return;
+            }
+
+            select.innerHTML = connections
+                .map((c) => `<option value="${this._escapeHtml(c.id)}">${this._escapeHtml(c.name)} (${this._escapeHtml(c.environment || '')})</option>`)
+                .join('');
+            const defaultConn = connections.find((c) => c.is_default) || connections[0];
+            select.value = defaultConn?.id || '';
+            select.disabled = false;
+            wrap?.classList.remove('hidden');
+
+            // Notify tabs that subscribe to connection selector changes.
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+        } catch (e) {
+            console.warn(`Legacy connection selector sync failed for ${moduleName}:`, e);
+            select.innerHTML = '<option value="">Verbindung nicht ladbar</option>';
+            select.value = '';
+            select.disabled = true;
+            wrap?.classList.remove('hidden');
         }
     },
 
@@ -1254,51 +1537,116 @@ const Ninko = {
         this.renderHistory();
     },
 
-    getWelcomeHtml() {
-        const b = this._branding || {};
-        const mode = b.welcome_mode || 'image';
-        const title = this._escapeHtml(b.welcome_title || b.brand_name || 'Ninko');
-        const fallbackText = t('chat.welcome.desc');
-        const text = this._escapeHtml((b.welcome_text || '').trim() || fallbackText);
+    _dashboardGreeting() {
+        const hour = new Date().getHours();
+        if (hour < 11) return 'Guten Morgen';
+        if (hour < 18) return 'Guten Tag';
+        return 'Guten Abend';
+    },
 
-        const quickActions = b.show_quick_actions === false ? '' : `
-            <div class="quick-actions">
-                <button class="quick-action" onclick="Ninko.sendQuick(this.dataset.msg)" data-msg="${t('quick.createAgentMsg')}">${t('quick.createAgent')}</button>
-                <button class="quick-action" onclick="Ninko.sendQuick(this.dataset.msg)" data-msg="${t('quick.rememberFactMsg')}">${t('quick.rememberFact')}</button>
-                <button class="quick-action" onclick="Ninko.sendQuick(this.dataset.msg)" data-msg="${t('quick.webSearchMsg')}">${t('quick.webSearch')}</button>
-                <button class="quick-action" onclick="Ninko.sendQuick(this.dataset.msg)" data-msg="${t('quick.showAgentsMsg')}">${t('quick.showAgents')}</button>
+    _relativeTime(ts) {
+        const date = new Date(ts);
+        if (Number.isNaN(date.getTime())) return 'gerade eben';
+        const seconds = Math.max(1, Math.floor((Date.now() - date.getTime()) / 1000));
+        if (seconds < 60) return 'gerade eben';
+        const minutes = Math.floor(seconds / 60);
+        if (minutes < 60) return `vor ${minutes} Min`;
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) return `vor ${hours} Std`;
+        const days = Math.floor(hours / 24);
+        return `vor ${days} Tag${days === 1 ? '' : 'en'}`;
+    },
+
+    _getDashboardHomeHtml() {
+        const b = this._branding || {};
+        const title = this._escapeHtml(b.welcome_title || b.brand_name || 'Ninko');
+        const desc = this._escapeHtml((b.welcome_text || '').trim() || t('chat.welcome.desc'));
+        const greeting = this._dashboardGreeting();
+
+        const byId = new Map((this._moduleNavItems || []).map((item) => [item.tabId, item]));
+        const favorites = (this._moduleFavorites || [])
+            .map((id) => byId.get(id))
+            .filter(Boolean)
+            .slice(0, 6);
+        const recentModules = (this._moduleRecent || [])
+            .map((id) => byId.get(id))
+            .filter(Boolean)
+            .slice(0, 5);
+        const recentActivity = (this.chatHistory || []).slice(0, 4);
+
+        const healthItems = [
+            { label: 'Backend API', state: navigator.onLine ? 'online' : 'offline' },
+            { label: 'WebSocket', state: this.ws && this.ws.readyState === 1 ? 'online' : 'offline' },
+            { label: 'Module aktiv', state: (this.modules || []).some((m) => m.enabled) ? 'online' : 'warning' },
+        ];
+
+        return `
+            <div class="welcome-message dashboard-home">
+                <div class="dh-hero">
+                    <h2>${this._escapeHtml(greeting)}, ${title}</h2>
+                    <p>${desc}</p>
+                </div>
+
+                <div class="dh-quick-actions">
+                    <button class="quick-action" onclick="Ninko.newChat()">💬 New Chat</button>
+                    <button class="quick-action" onclick="Ninko.switchTab('automatisierung');Ninko.switchAutoTab('workflows')">⚡ Workflows</button>
+                    <button class="quick-action" onclick="Ninko.switchTab('settings')">⚙️ Settings</button>
+                    <button class="quick-action" onclick="Ninko.switchTab('modules')">📦 Modules</button>
+                </div>
+
+                <div class="dh-grid">
+                    <div class="dh-card">
+                        <div class="dh-card-title">⭐ Favorites</div>
+                        <div class="dh-card-body">
+                            ${favorites.length ? favorites.map((item) => `
+                                <button class="dh-link-btn" onclick="Ninko.switchTab('modules');Ninko.switchModuleTab('${this._escapeHtml(item.tabId)}')">
+                                    ${item.icon} <span>${this._escapeHtml(item.label)}</span>
+                                </button>
+                            `).join('') : '<p class="dh-empty">Noch keine Favoriten markiert.</p>'}
+                        </div>
+                    </div>
+
+                    <div class="dh-card">
+                        <div class="dh-card-title">🕐 Recently Used</div>
+                        <div class="dh-card-body">
+                            ${recentModules.length ? recentModules.map((item) => `
+                                <button class="dh-link-btn" onclick="Ninko.switchTab('modules');Ninko.switchModuleTab('${this._escapeHtml(item.tabId)}')">
+                                    ${item.icon} <span>${this._escapeHtml(item.label)}</span>
+                                </button>
+                            `).join('') : '<p class="dh-empty">Noch keine zuletzt verwendeten Module.</p>'}
+                        </div>
+                    </div>
+
+                    <div class="dh-card">
+                        <div class="dh-card-title">📈 Recent Activity</div>
+                        <div class="dh-card-body">
+                            ${recentActivity.length ? recentActivity.map((item) => `
+                                <div class="dh-activity-item">
+                                    <span class="dh-activity-text">${this._escapeHtml(item.title || 'Chat')}</span>
+                                    <span class="dh-activity-time">${this._relativeTime(item.updatedAt || item.createdAt)}</span>
+                                </div>
+                            `).join('') : '<p class="dh-empty">Noch keine Aktivitäten.</p>'}
+                        </div>
+                    </div>
+
+                    <div class="dh-card">
+                        <div class="dh-card-title">🏥 System Health</div>
+                        <div class="dh-card-body">
+                            ${healthItems.map((item) => `
+                                <div class="dh-health-item">
+                                    <span class="dh-health-dot ${item.state}"></span>
+                                    <span>${this._escapeHtml(item.label)}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
             </div>
         `;
+    },
 
-        if (mode === 'off') {
-            return `<div class="welcome-message">
-                <h2>${title}</h2>
-                <p>${text}</p>
-                ${quickActions}
-            </div>`;
-        }
-
-        if (mode === 'text') {
-            return `<div class="welcome-message">
-                <h2>${title}</h2>
-                <p>${text}</p>
-                ${quickActions}
-            </div>`;
-        }
-
-        const imageUrl = this._escapeHtml(b.welcome_image_url || '/static/images/logo_dashboard_new.png?v=3');
-        const eyes = b.welcome_show_eyes === false
-            ? ''
-            : '<div class="eye eye-left"></div><div class="eye eye-right"></div>';
-        return `<div class="welcome-message">
-            <div class="logo-wrapper">
-                <img src="${imageUrl}" alt="${title}" class="welcome-illustration" />
-                ${eyes}
-            </div>
-            <h2>${title}</h2>
-            <p>${text}</p>
-            ${quickActions}
-        </div>`;
+    getWelcomeHtml() {
+        return this._getDashboardHomeHtml();
     },
 
     renderWelcomeState() {
@@ -1440,9 +1788,10 @@ ${messagesHtml}
     _setThemeToggleIcon(isLight) {
         const btn = document.getElementById('theme-toggle');
         if (!btn) return;
-        btn.innerHTML = isLight
-            ? '<svg id="theme-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>'
-            : '<svg id="theme-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
+        const icon = isLight
+            ? '<svg id="theme-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>'
+            : '<svg id="theme-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
+        btn.innerHTML = `${icon}<span>${t('chat.toggleTheme') || 'Theme wechseln'}</span>`;
     },
 
     restoreTheme() {
@@ -1508,6 +1857,7 @@ ${messagesHtml}
         localStorage.setItem('ninko_theme', isLight ? 'light' : 'dark');
         this._setThemeToggleIcon(isLight);
         this.applyActiveThemeTokens();
+        this.closeChatToolbarMore();
     },
 
     sendQuick(textOrKey) {
@@ -3095,26 +3445,32 @@ ${messagesHtml}
         // Stop log polling when leaving logs sub-panel
         this.stopLogPolling();
 
+        const tabButtons = Array.from(document.querySelectorAll('#subnav-settings .settings-tab[data-settings-tab]'));
+        const validTabs = new Set(tabButtons.map((btn) => btn.dataset.settingsTab).filter(Boolean));
+        const fallbackTab = tabButtons[0]?.dataset.settingsTab || 'llm';
+        const targetTab = validTabs.has(tabId) ? tabId : fallbackTab;
+
         document.querySelectorAll('#subnav-settings .settings-tab').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
 
-        document.querySelector(`#subnav-settings .settings-tab[data-settings-tab="${tabId}"]`)?.classList.add('active');
-        document.getElementById(`settings-panel-${tabId}`)?.classList.add('active');
+        document.querySelector(`#subnav-settings .settings-tab[data-settings-tab="${targetTab}"]`)?.classList.add('active');
+        document.getElementById(`settings-panel-${targetTab}`)?.classList.add('active');
 
         // Load content when switching tabs
-        if (tabId === 'llm') { this.loadLlmSettings(); this.loadLlmProviders(); this.loadEmbedModel(); }
-        if (tabId === 'modules') { this.loadModulesSettings(); this.loadMarketplaceConfig(); }
-        if (tabId === 'skills') { this.loadSettingsSkillsList(); }
-        if (tabId === 'system') this.loadBrandingForm();
-        if (tabId === 'themes') this.loadThemesSettings();
-        if (tabId === 'k8s') this.loadK8sClusters();
-        if (tabId === 'language') this.renderLanguageTab();
-        if (tabId === 'tts') { this.loadSttSettings(); this.loadTtsSettings(); this.loadTtsVoices(); }
-        if (tabId === 'imagegen') { this.loadImageGenProvider(); this.loadOcrSettings(); }
-        if (tabId === 'access') this.loadRbacSettings();
-        if (tabId === 'safeguard') this.renderSafeguardSettingsPanel();
-        if (tabId === 'logs') this.startLogPolling();
-        if (tabId === 'alerts') this.loadAlerts();
+        if (targetTab === 'llm') { this.loadLlmSettings(); this.loadLlmProviders(); this.loadEmbedModel(); }
+        if (targetTab === 'modules') { this.loadModulesSettings(); this.loadMarketplaceConfig(); }
+        if (targetTab === 'skills') { this.loadSettingsSkillsList(); }
+        if (targetTab === 'system') this.loadBrandingForm();
+        if (targetTab === 'themes') this.loadThemesSettings();
+        if (targetTab === 'k8s') this.loadK8sClusters();
+        if (targetTab === 'language') this.renderLanguageTab();
+        if (targetTab === 'tts') { this.loadSttSettings(); this.loadTtsSettings(); this.loadTtsVoices(); }
+        if (targetTab === 'imagegen') { this.loadImageGenProvider(); this.loadOcrSettings(); }
+        if (targetTab === 'access') this.loadRbacSettings();
+        if (targetTab === 'safeguard') this.renderSafeguardSettingsPanel();
+        if (targetTab === 'logs') this.startLogPolling();
+        if (targetTab === 'alerts') this.loadAlerts();
+        this._updateBreadcrumb();
     },
 
     // --- Language ---
@@ -3177,10 +3533,8 @@ ${messagesHtml}
     },
 
     async loadSettingsContent() {
-        // Load default tab (LLM)
-        await this.loadLlmSettings();
-        this.loadLlmProviders();
-        this.loadEmbedModel();
+        const activeTab = document.querySelector('#subnav-settings .settings-tab.active[data-settings-tab]')?.dataset.settingsTab || 'llm';
+        this.switchSettingsTab(activeTab);
     },
 
     // --- Themes ---

@@ -124,9 +124,25 @@ async def get_module_frontend(
         if not file_path.is_relative_to(plugins_dir):
             return HTMLResponse(content="Zugriff verweigert.", status_code=403)
         if not file_path.is_file():
+            if filename == "tab.html":
+                return HTMLResponse(
+                    content=(
+                        '<div class="module-tab-content">'
+                        '<p class="empty-state">Für dieses Modul ist kein Dashboard verfügbar.</p>'
+                        "</div>"
+                    ),
+                    media_type="text/html",
+                    status_code=200,
+                )
             return HTMLResponse(
-                content="Datei nicht gefunden.",
-                status_code=404,
+                content=(
+                    '// No frontend script for this module.\n'
+                    'if (typeof Ninko !== "undefined" && Ninko._pluginTabs) {'
+                    f' Ninko._pluginTabs["{module_name}"] = Ninko._pluginTabs["{module_name}"] || {{}};'
+                    "}\n"
+                ),
+                media_type="application/javascript",
+                status_code=200,
             )
 
     content = file_path.read_text(encoding="utf-8")

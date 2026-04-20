@@ -149,15 +149,24 @@ class EmailWorker(ChannelWorker):
             password = ""
 
             if auth_type == "basic":
-                secret_key = conn.vault_keys.get("EMAIL_SECRET")
+                secret_key = (
+                    conn.vault_keys.get("EMAIL_SECRET")
+                    or conn.vault_keys.get("EMAIL_PASSWORD")
+                    or conn.vault_keys.get("password")
+                )
                 if secret_key:
                     password = await vault.get_secret(secret_key)
             # MSAL/OAuth2 wird hier nicht unterstützt (kein Token-Refresh im Background-Worker)
 
+            username = (
+                cfg.get("username", "")
+                or cfg.get("email_address", "")
+            )
+
             return {
                 "imap_server": cfg.get("imap_server", ""),
                 "imap_port": int(cfg.get("imap_port", 993)),
-                "username": cfg.get("username", ""),
+                "username": username,
                 "password": password,
                 "mailbox": cfg.get("mailbox", "INBOX"),
                 "auth_type": auth_type,

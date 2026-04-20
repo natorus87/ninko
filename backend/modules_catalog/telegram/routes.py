@@ -11,9 +11,11 @@ router = APIRouter()
 
 
 @router.get("/status")
-async def get_bot_status() -> dict[str, Any]:
+async def get_bot_status(request: Request) -> dict[str, Any]:
     """Check the status of the Telegram long-polling bot."""
     bot = get_telegram_bot()
+    if not bot:
+        bot = getattr(request.app.state, "telegram_bot", None)
     if not bot:
         return {"running": False, "error": "Bot instance not initialized."}
 
@@ -50,6 +52,8 @@ async def start_bot(request: Request) -> dict[str, Any]:
     """Start polling manually."""
     bot = get_telegram_bot()
     if not bot:
+        bot = getattr(request.app.state, "telegram_bot", None)
+    if not bot:
         raise HTTPException(status_code=500, detail="Telegram bot not ready")
 
     if bot.running:
@@ -60,9 +64,11 @@ async def start_bot(request: Request) -> dict[str, Any]:
 
 
 @router.post("/stop")
-async def stop_bot() -> dict[str, Any]:
+async def stop_bot(request: Request) -> dict[str, Any]:
     """Stop polling manually."""
     bot = get_telegram_bot()
+    if not bot:
+        bot = getattr(request.app.state, "telegram_bot", None)
     if not bot:
         raise HTTPException(status_code=500, detail="Telegram bot not ready")
 
@@ -199,9 +205,11 @@ async def set_voice_reply_config(body: VoiceReplyConfig) -> dict:
 
 
 @router.post("/send")
-async def send_message(body: SendMessageRequest) -> dict[str, Any]:
+async def send_message(body: SendMessageRequest, request: Request) -> dict[str, Any]:
     """Send a message directly via the bot (for the dashboard)."""
     bot = get_telegram_bot()
+    if not bot:
+        bot = getattr(request.app.state, "telegram_bot", None)
     if not bot:
         raise HTTPException(status_code=500, detail="Telegram bot not ready")
 

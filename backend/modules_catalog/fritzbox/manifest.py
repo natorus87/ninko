@@ -44,6 +44,9 @@ async def check_fritzbox_health(connection_id: str = "") -> dict:
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         logger.error("FritzBox health check failed: %s", exc)
         return {"status": "error", "detail": str(exc)}
+    except Exception as exc:
+        logger.error("FritzBox health check failed: %s", exc)
+        return {"status": "error", "detail": str(exc)}
 
 
 module_manifest = ModuleManifest(

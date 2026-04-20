@@ -114,57 +114,68 @@
                             </button>
                         </div>
                         <div id="subnav-modules" class="subnav-section" style="display:none">
-                            <!-- Populated dynamically by loadModules() -->
+                            <div class="module-subnav-search-wrap">
+                                <input id="module-subnav-filter" class="module-subnav-filter" type="text" placeholder="Module filtern…"
+                                    oninput="Ninko.filterModuleSidebar(this.value)">
+                            </div>
+                            <div id="module-subnav-list" class="module-subnav-list">
+                                <!-- Populated dynamically by loadModules() -->
+                            </div>
                         </div>
                         <div id="subnav-settings" class="subnav-section" style="display:none">
-                            <button class="settings-tab active" data-settings-tab="llm" onclick="Ninko.switchSettingsTab('llm')">
+                            <div class="settings-category-label">🧠 Intelligence</div>
+                            <button class="settings-tab settings-tab-sub active" data-settings-tab="llm" onclick="Ninko.switchSettingsTab('llm')">
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
                                 LLM Provider
                             </button>
-                            <button class="settings-tab" data-settings-tab="modules" onclick="Ninko.switchSettingsTab('modules')">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
-                                Module
-                            </button>
-                            <button class="settings-tab" data-settings-tab="skills" onclick="Ninko.switchSettingsTab('skills')">
+                            <button class="settings-tab settings-tab-sub" data-settings-tab="skills" onclick="Ninko.switchSettingsTab('skills')">
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
                                 Skills
                             </button>
-                            <button class="settings-tab" data-settings-tab="system" onclick="Ninko.switchSettingsTab('system')">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
-                                <span data-i18n="settings.system">System</span>
-                            </button>
-                            <button class="settings-tab" data-settings-tab="themes" onclick="Ninko.switchSettingsTab('themes')">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3L4 7.5v9L12 21l8-4.5v-9z"></path><path d="M12 12l8-4.5"></path><path d="M12 12L4 7.5"></path><path d="M12 12v9"></path></svg>
-                                Themes
-                            </button>
-                            <button class="settings-tab" data-settings-tab="language" onclick="Ninko.switchSettingsTab('language')">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
-                                <span data-i18n="settings.language">Sprache</span>
-                            </button>
-                            <button class="settings-tab" data-settings-tab="tts" onclick="Ninko.switchSettingsTab('tts')">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-                                <span data-i18n="settings.tts">Sprachausgabe</span>
-                            </button>
-                            <button class="settings-tab" data-settings-tab="imagegen" onclick="Ninko.switchSettingsTab('imagegen')">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-                                Bildgenerierung
-                            </button>
-                            <button class="settings-tab" data-settings-tab="access" onclick="Ninko.switchSettingsTab('access')">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><path d="M20 8v6"></path><path d="M23 11h-6"></path></svg>
-                                Benutzer & Rollen
-                            </button>
-                            <button class="settings-tab" data-settings-tab="safeguard" onclick="Ninko.switchSettingsTab('safeguard')">
+                            <button class="settings-tab settings-tab-sub" data-settings-tab="safeguard" onclick="Ninko.switchSettingsTab('safeguard')">
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
                                 <span data-i18n="safeguard.settingsTab">SafeGuard</span>
                             </button>
-                            <button class="settings-tab" data-settings-tab="alerts" onclick="Ninko.switchSettingsTab('alerts')">
+
+                            <div class="settings-category-label">🎨 Appearance</div>
+                            <button class="settings-tab settings-tab-sub" data-settings-tab="themes" onclick="Ninko.switchSettingsTab('themes')">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3L4 7.5v9L12 21l8-4.5v-9z"></path><path d="M12 12l8-4.5"></path><path d="M12 12L4 7.5"></path><path d="M12 12v9"></path></svg>
+                                Themes
+                            </button>
+                            <button class="settings-tab settings-tab-sub" data-settings-tab="language" onclick="Ninko.switchSettingsTab('language')">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                                <span data-i18n="settings.language">Sprache</span>
+                            </button>
+                            <button class="settings-tab settings-tab-sub" data-settings-tab="tts" onclick="Ninko.switchSettingsTab('tts')">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                                <span data-i18n="settings.tts">Sprachausgabe</span>
+                            </button>
+                            <button class="settings-tab settings-tab-sub" data-settings-tab="imagegen" onclick="Ninko.switchSettingsTab('imagegen')">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                                Bildgenerierung
+                            </button>
+
+                            <div class="settings-category-label">⚙️ System</div>
+                            <button class="settings-tab settings-tab-sub" data-settings-tab="modules" onclick="Ninko.switchSettingsTab('modules')">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                                Module
+                            </button>
+                            <button class="settings-tab settings-tab-sub" data-settings-tab="access" onclick="Ninko.switchSettingsTab('access')">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><path d="M20 8v6"></path><path d="M23 11h-6"></path></svg>
+                                Benutzer & Rollen
+                            </button>
+                            <button class="settings-tab settings-tab-sub" data-settings-tab="alerts" onclick="Ninko.switchSettingsTab('alerts')">
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
                                 <span data-i18n="nav.alerts">Alerts</span>
                                 <span id="alerts-badge" class="subnav-badge" style="display:none">0</span>
                             </button>
-                            <button class="settings-tab" data-settings-tab="logs" onclick="Ninko.switchSettingsTab('logs')">
+                            <button class="settings-tab settings-tab-sub" data-settings-tab="logs" onclick="Ninko.switchSettingsTab('logs')">
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                                 <span data-i18n="nav.logs">Logs</span>
+                            </button>
+                            <button class="settings-tab settings-tab-sub" data-settings-tab="system" onclick="Ninko.switchSettingsTab('system')">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                                <span data-i18n="settings.system">System</span>
                             </button>
                         </div>
                     </div>
@@ -226,6 +237,12 @@
 
         <!-- Main Content -->
         <main id="main-content" class="main-content" role="main">
+            <nav id="app-breadcrumb" class="app-breadcrumb" aria-label="Breadcrumb">
+                <span class="crumb">Dashboard</span>
+                <span class="crumb-sep">/</span>
+                <span class="crumb current">Chat</span>
+            </nav>
+
             <!-- Chat Tab (default) -->
             <div id="tab-chat" class="tab-panel active">
                 <div class="chat-layout">
@@ -267,15 +284,31 @@
                                         </path>
                                     </svg>
                                 </button>
-                                <button class="btn-icon btn-icon-sm" id="theme-toggle" type="button" onclick="Ninko.toggleTheme()"
-                                    aria-label="Theme wechseln"
-                                    data-i18n-title="chat.toggleTheme" title="Theme wechseln">
-                                    <svg id="theme-icon" viewBox="0 0 24 24" width="16" height="16" fill="none"
-                                        stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                        stroke-linejoin="round">
-                                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-                                    </svg>
-                                </button>
+                                <div class="chat-toolbar-more" id="chat-toolbar-more">
+                                    <button class="btn-icon btn-icon-sm" type="button"
+                                        onclick="Ninko.toggleChatToolbarMore(event)"
+                                        aria-label="Weitere Aktionen" title="Weitere Aktionen">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
+                                            stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                            stroke-linejoin="round">
+                                            <circle cx="12" cy="5" r="1.6"></circle>
+                                            <circle cx="12" cy="12" r="1.6"></circle>
+                                            <circle cx="12" cy="19" r="1.6"></circle>
+                                        </svg>
+                                    </button>
+                                    <div class="chat-toolbar-more-menu" id="chat-toolbar-more-menu" style="display:none;">
+                                        <button class="chat-toolbar-more-item" id="theme-toggle" type="button" onclick="Ninko.toggleTheme()"
+                                            aria-label="Theme wechseln"
+                                            data-i18n-title="chat.toggleTheme" title="Theme wechseln">
+                                            <svg id="theme-icon" viewBox="0 0 24 24" width="15" height="15" fill="none"
+                                                stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                                stroke-linejoin="round">
+                                                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                                            </svg>
+                                            <span>Theme wechseln</span>
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -445,6 +478,10 @@ print('Hello, World!')"></textarea>
 
             <!-- Modules Tab -->
             <div id="tab-modules" class="tab-panel">
+                <div id="legacy-connection-bar" class="legacy-connection-bar hidden">
+                    <label class="form-label" for="connection-selector">Verbindung</label>
+                    <select id="connection-selector" class="form-select form-select-sm"></select>
+                </div>
                 <div id="modules-content" class="auto-content"></div>
             </div>
 
@@ -829,9 +866,23 @@ print('Hello, World!')"></textarea>
                     </div>
                     <div class="wf-editor-body">
                         <div id="wf-canvas-container" class="wf-canvas-container">
+                            <div class="wf-zoom-controls">
+                                <button class="btn btn-icon btn-sm" onclick="Ninko.wfZoomOut()" title="Zoom Out">−</button>
+                                <span id="wf-zoom-level" class="wf-zoom-level">100%</span>
+                                <button class="btn btn-icon btn-sm" onclick="Ninko.wfZoomIn()" title="Zoom In">+</button>
+                                <button class="btn btn-outline btn-sm" onclick="Ninko.wfFitToScreen()" title="Fit to Screen">Fit</button>
+                                <button class="btn btn-outline btn-sm" onclick="Ninko.wfUndo()" title="Undo (Ctrl/Cmd+Z)">Undo</button>
+                                <button class="btn btn-outline btn-sm" onclick="Ninko.wfRedo()" title="Redo (Ctrl/Cmd+Shift+Z)">Redo</button>
+                            </div>
+
                             <svg id="wf-edges-svg" class="wf-edges-svg"></svg>
                             <div id="wf-canvas" class="wf-canvas">
                                 <div class="wf-canvas-hint">Node-Typ aus der Palette oben wählen → Nodes per Drag verschieben<br>Port-Punkt (●) anklicken → Ziel-Node anklicken zum Verbinden</div>
+                            </div>
+
+                            <div id="wf-minimap" class="wf-minimap" title="Mini-Map (Klick zum Navigieren)">
+                                <div id="wf-minimap-content" class="wf-minimap-content"></div>
+                                <div id="wf-minimap-viewport" class="wf-minimap-viewport"></div>
                             </div>
                         </div>
                     </div>
@@ -1878,6 +1929,21 @@ print('Hello, World!')"></textarea>
             <!-- Dynamic module tabs are injected here -->
         </main>
 
+        <nav class="mobile-nav" id="mobile-nav" aria-label="Mobile Navigation">
+            <button class="mobile-nav-item active" data-mobile-tab="chat" onclick="Ninko.switchTab('chat')">
+                <span>Chat</span>
+            </button>
+            <button class="mobile-nav-item" data-mobile-tab="automatisierung" onclick="Ninko.switchTab('automatisierung')">
+                <span>Auto</span>
+            </button>
+            <button class="mobile-nav-item" data-mobile-tab="modules" onclick="Ninko.switchTab('modules')">
+                <span>Module</span>
+            </button>
+            <button class="mobile-nav-item" data-mobile-tab="settings" onclick="Ninko.switchTab('settings')">
+                <span>Settings</span>
+            </button>
+        </nav>
+
         <!-- Notifications Toast -->
         <div id="notifications" class="notifications-container"></div>
 
@@ -1923,11 +1989,26 @@ print('Hello, World!')"></textarea>
         </div>
     </div>
 
+    <!-- Command Palette -->
+    <div id="command-palette" class="cmd-palette" aria-hidden="true">
+        <div class="cmd-palette-overlay"></div>
+        <div class="cmd-palette-modal" role="dialog" aria-modal="true" aria-label="Command Palette">
+            <input type="text" id="cmd-search" class="cmd-search" placeholder="Befehl suchen…" autocomplete="off">
+            <div class="cmd-results" id="cmd-results"></div>
+            <div class="cmd-footer">
+                <span>↑↓ Navigieren</span>
+                <span>↵ Ausführen</span>
+                <span>ESC Schließen</span>
+            </div>
+        </div>
+    </div>
+
     <script src="/static/vendor/purify.min.js"></script>
     <script src="/static/vendor/marked.min.js"></script>
     <script src="/static/core/registry.js?v=1"></script>
     <script src="/static/core/api.js?v=1"></script>
-    <script src="/static/app.js?v=65"></script>
+    <script src="/static/app.js?v=67"></script>
+    <script src="/static/features/command_palette.js?v=1"></script>
     <script src="/static/features/agents.js?v=1"></script>
     <script src="/static/features/workflows.js?v=1"></script>
     <script src="/static/features/scripting.js?v=1"></script>
