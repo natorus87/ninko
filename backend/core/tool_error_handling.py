@@ -225,7 +225,7 @@ async def safe_tool_invoke(
         # Exception-Message durch Sanitizer führen, verhindert Secret-Leakage im Log
         sanitized_exc = sanitize_tool_output(str(exc))
         logger.warning("Tool '%s' error: %s", tool_name, sanitized_exc)
-        return format_tool_error(tool_name, exc)
+        return sanitize_tool_output(format_tool_error(tool_name, exc))
 
 
 class ToolErrorHandler:
@@ -251,7 +251,7 @@ class ToolErrorHandler:
         Returns:
             Error dict with content and status for ToolMessage.
         """
-        error_content = format_tool_error(tool_name, exception)
+        error_content = sanitize_tool_output(format_tool_error(tool_name, exception))
         logger.debug("Tool error handled: %s - %s", tool_name, error_content)
 
         return {

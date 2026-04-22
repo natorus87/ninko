@@ -95,7 +95,7 @@ const Ninko = {
         brand_name: 'Ninko',
         page_title: 'Ninko',
         logo_url: '/static/images/logo_icon.png',
-        welcome_mode: 'image',
+        welcome_mode: 'text',
         welcome_title: 'Ninko',
         welcome_text: '',
         welcome_image_url: '/static/images/logo_dashboard_new.png?v=3',
@@ -220,7 +220,7 @@ const Ninko = {
             this._bindCtxIndicatorAction();
             this.initSidebarAccountMenu();
             this.initMobileMenu();
-            this.initChatToolbarMore();
+            this.initChatPlusMenu();
             if (window.NinkoCommandPalette?.create) {
                 this._commandPalette = window.NinkoCommandPalette.create(this);
                 this._commandPalette.init();
@@ -554,7 +554,11 @@ const Ninko = {
                         if (htmlRes.ok) {
                             const html = await htmlRes.text();
                             panel.innerHTML = (typeof DOMPurify !== 'undefined')
-                                ? DOMPurify.sanitize(html, { ADD_ATTR: ['target', 'rel'], FORBID_TAGS: ['script', 'style', 'iframe', 'form', 'input'] })
+                                ? DOMPurify.sanitize(html, {
+                                    ADD_ATTR: ['target', 'rel', 'onclick', 'style'],
+                                    ADD_TAGS: ['style'],
+                                    FORBID_TAGS: ['script', 'iframe'],
+                                })
                                 : html;
                             hasFrontend = true;
                         } else {
@@ -572,7 +576,7 @@ const Ninko = {
                     try {
                         const script = document.createElement('script');
                         script.src = `/api/modules/${mod.name}/frontend/tab.js?v=${Date.now()}`;
-                        script.type = 'module';
+                        script.type = 'text/javascript';
                         script.async = true;
                         document.body.appendChild(script);
                     } catch {
@@ -801,30 +805,6 @@ const Ninko = {
             };
             setTimeout(() => document.addEventListener('click', close), 0);
         }
-    },
-
-    initChatToolbarMore() {
-        if (this._chatToolbarMoreInitialized) return;
-        this._chatToolbarMoreInitialized = true;
-        document.addEventListener('click', (e) => {
-            const wrap = document.getElementById('chat-toolbar-more');
-            if (!wrap || !wrap.contains(e.target)) this.closeChatToolbarMore();
-        });
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') this.closeChatToolbarMore();
-        });
-    },
-
-    toggleChatToolbarMore(event) {
-        event?.stopPropagation();
-        const menu = document.getElementById('chat-toolbar-more-menu');
-        if (!menu) return;
-        menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
-    },
-
-    closeChatToolbarMore() {
-        const menu = document.getElementById('chat-toolbar-more-menu');
-        if (menu) menu.style.display = 'none';
     },
 
     setForcedModule(name, customLabel) {
@@ -1105,8 +1085,10 @@ const Ninko = {
         const input = document.getElementById('chat-input');
         if (btnSend) {
             btnSend.classList.toggle('is-stop', busy);
-            btnSend.querySelector('.icon-send').style.display = busy ? 'none' : '';
-            btnSend.querySelector('.icon-stop').style.display = busy ? '' : 'none';
+            const iconSend = btnSend.querySelector('.icon-send');
+            const iconStop = btnSend.querySelector('.icon-stop');
+            if (iconSend) iconSend.style.display = busy ? 'none' : '';
+            if (iconStop) iconStop.style.display = busy ? '' : 'none';
             btnSend.title = busy ? 'Antwort abbrechen' : 'Senden';
         }
         if (input) input.disabled = busy;
@@ -1132,6 +1114,35 @@ const Ninko = {
             this._abortController.abort();
             this._abortController = null;
         }
+    },
+
+    initChatPlusMenu() {
+        if (this._chatPlusMenuInitialized) return;
+        this._chatPlusMenuInitialized = true;
+        document.addEventListener('click', (e) => {
+            const wrap = document.getElementById('chat-plus-menu');
+            if (!wrap || !wrap.contains(e.target)) this.closeChatPlusMenu();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') this.closeChatPlusMenu();
+        });
+    },
+
+    toggleChatPlusMenu(event) {
+        event?.stopPropagation();
+        const wrap = document.getElementById('chat-plus-menu');
+        const menu = document.getElementById('chat-plus-dropdown');
+        if (!wrap || !menu) return;
+        const isOpen = menu.style.display !== 'none';
+        menu.style.display = isOpen ? 'none' : 'block';
+        wrap.classList.toggle('open', !isOpen);
+    },
+
+    closeChatPlusMenu() {
+        const wrap = document.getElementById('chat-plus-menu');
+        const menu = document.getElementById('chat-plus-dropdown');
+        if (menu) menu.style.display = 'none';
+        if (wrap) wrap.classList.remove('open');
     },
 
     // --- Spracheingabe ---
@@ -1467,7 +1478,8 @@ const Ninko = {
 
         list.innerHTML = this.chatHistory.map(h => {
             const historyId = this._escapeHtml(h.id);
-            const historyTitle = this._escapeHtml(h.title);
+            const plainTitle = this._stripHistoryDecorations(h.title || '');
+            const historyTitle = this._escapeHtml(plainTitle);
             const historyTitleAttr = this._escapeAttr(h.title);
             return `
             <div class="history-item ${h.id === this.currentHistoryId ? 'active' : ''}"
@@ -1480,6 +1492,12 @@ const Ninko = {
             </div>
         `;
         }).join('');
+    },
+
+    _stripHistoryDecorations(title) {
+        return String(title || '')
+            .replace(/^[\p{Extended_Pictographic}\p{Emoji_Presentation}\p{So}\p{Sk}\uFE0F\u200D\s]+/u, '')
+            .trim();
     },
 
     loadHistoryEntry(id) {
@@ -1498,6 +1516,7 @@ const Ninko = {
         for (const msg of entry.messages) {
             this.addChatMessage(msg.role, msg.text);
         }
+        this._updateChatInputState('reply');
 
         // Update state
         this.currentHistoryId = id;
@@ -1539,106 +1558,47 @@ const Ninko = {
 
     _dashboardGreeting() {
         const hour = new Date().getHours();
-        if (hour < 11) return 'Guten Morgen';
-        if (hour < 18) return 'Guten Tag';
-        return 'Guten Abend';
+        if (hour < 11) return 'morning';
+        if (hour < 18) return 'day';
+        return 'evening';
     },
 
-    _relativeTime(ts) {
-        const date = new Date(ts);
-        if (Number.isNaN(date.getTime())) return 'gerade eben';
-        const seconds = Math.max(1, Math.floor((Date.now() - date.getTime()) / 1000));
-        if (seconds < 60) return 'gerade eben';
-        const minutes = Math.floor(seconds / 60);
-        if (minutes < 60) return `vor ${minutes} Min`;
-        const hours = Math.floor(minutes / 60);
-        if (hours < 24) return `vor ${hours} Std`;
-        const days = Math.floor(hours / 24);
-        return `vor ${days} Tag${days === 1 ? '' : 'en'}`;
+    _getWelcomeMessageVariant(period) {
+        const variants = [];
+        for (let i = 0; i < 8; i += 1) {
+            const key = `chat.welcome.message.${period}.${i}`;
+            const translated = t(key);
+            if (translated === key) break;
+            variants.push(translated);
+        }
+        if (!variants.length) return t('chat.input.ask');
+
+        const now = new Date();
+        const start = new Date(now.getFullYear(), 0, 0);
+        const dayOfYear = Math.floor((now - start) / 86400000);
+        const langSeed = Array.from(I18n._lang || 'de').reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+        return variants[(dayOfYear + langSeed) % variants.length];
+    },
+
+    _updateChatInputState(mode = 'ask') {
+        const input = document.getElementById('chat-input');
+        if (!input) return;
+        const key = mode === 'reply' ? 'chat.input.reply' : 'chat.input.ask';
+        input.dataset.i18nPlaceholder = key;
+        input.placeholder = t(key);
     },
 
     _getDashboardHomeHtml() {
         const b = this._branding || {};
-        const title = this._escapeHtml(b.welcome_title || b.brand_name || 'Ninko');
-        const desc = this._escapeHtml((b.welcome_text || '').trim() || t('chat.welcome.desc'));
-        const greeting = this._dashboardGreeting();
-
-        const byId = new Map((this._moduleNavItems || []).map((item) => [item.tabId, item]));
-        const favorites = (this._moduleFavorites || [])
-            .map((id) => byId.get(id))
-            .filter(Boolean)
-            .slice(0, 6);
-        const recentModules = (this._moduleRecent || [])
-            .map((id) => byId.get(id))
-            .filter(Boolean)
-            .slice(0, 5);
-        const recentActivity = (this.chatHistory || []).slice(0, 4);
-
-        const healthItems = [
-            { label: 'Backend API', state: navigator.onLine ? 'online' : 'offline' },
-            { label: 'WebSocket', state: this.ws && this.ws.readyState === 1 ? 'online' : 'offline' },
-            { label: 'Module aktiv', state: (this.modules || []).some((m) => m.enabled) ? 'online' : 'warning' },
-        ];
+        const minimal = (b.welcome_mode || 'text') === 'off';
+        const headline = this._escapeHtml(this._getWelcomeMessageVariant(this._dashboardGreeting()));
 
         return `
             <div class="welcome-message dashboard-home">
-                <div class="dh-hero">
-                    <h2>${this._escapeHtml(greeting)}, ${title}</h2>
-                    <p>${desc}</p>
-                </div>
-
-                <div class="dh-quick-actions">
-                    <button class="quick-action" onclick="Ninko.newChat()">💬 New Chat</button>
-                    <button class="quick-action" onclick="Ninko.switchTab('automatisierung');Ninko.switchAutoTab('workflows')">⚡ Workflows</button>
-                    <button class="quick-action" onclick="Ninko.switchTab('settings')">⚙️ Settings</button>
-                    <button class="quick-action" onclick="Ninko.switchTab('modules')">📦 Modules</button>
-                </div>
-
-                <div class="dh-grid">
-                    <div class="dh-card">
-                        <div class="dh-card-title">⭐ Favorites</div>
-                        <div class="dh-card-body">
-                            ${favorites.length ? favorites.map((item) => `
-                                <button class="dh-link-btn" onclick="Ninko.switchTab('modules');Ninko.switchModuleTab('${this._escapeHtml(item.tabId)}')">
-                                    ${item.icon} <span>${this._escapeHtml(item.label)}</span>
-                                </button>
-                            `).join('') : '<p class="dh-empty">Noch keine Favoriten markiert.</p>'}
-                        </div>
-                    </div>
-
-                    <div class="dh-card">
-                        <div class="dh-card-title">🕐 Recently Used</div>
-                        <div class="dh-card-body">
-                            ${recentModules.length ? recentModules.map((item) => `
-                                <button class="dh-link-btn" onclick="Ninko.switchTab('modules');Ninko.switchModuleTab('${this._escapeHtml(item.tabId)}')">
-                                    ${item.icon} <span>${this._escapeHtml(item.label)}</span>
-                                </button>
-                            `).join('') : '<p class="dh-empty">Noch keine zuletzt verwendeten Module.</p>'}
-                        </div>
-                    </div>
-
-                    <div class="dh-card">
-                        <div class="dh-card-title">📈 Recent Activity</div>
-                        <div class="dh-card-body">
-                            ${recentActivity.length ? recentActivity.map((item) => `
-                                <div class="dh-activity-item">
-                                    <span class="dh-activity-text">${this._escapeHtml(item.title || 'Chat')}</span>
-                                    <span class="dh-activity-time">${this._relativeTime(item.updatedAt || item.createdAt)}</span>
-                                </div>
-                            `).join('') : '<p class="dh-empty">Noch keine Aktivitäten.</p>'}
-                        </div>
-                    </div>
-
-                    <div class="dh-card">
-                        <div class="dh-card-title">🏥 System Health</div>
-                        <div class="dh-card-body">
-                            ${healthItems.map((item) => `
-                                <div class="dh-health-item">
-                                    <span class="dh-health-dot ${item.state}"></span>
-                                    <span>${this._escapeHtml(item.label)}</span>
-                                </div>
-                            `).join('')}
-                        </div>
+                <div class="dh-intro ${minimal ? 'dh-intro-minimal' : ''}">
+                    <div class="dh-headline">
+                        <img class="dh-headline-icon" src="/static/images/logo_icon.png" alt="Ninko">
+                        <h2>${headline}</h2>
                     </div>
                 </div>
             </div>
@@ -1654,6 +1614,7 @@ const Ninko = {
         if (!container) return;
         container.innerHTML = this.getWelcomeHtml();
         this._setChatState('centered');
+        this._updateChatInputState('ask');
     },
 
     // --- Context Clear ---
@@ -1669,6 +1630,7 @@ const Ninko = {
         const container = document.getElementById('chat-messages');
         container.innerHTML = '<div class="history-empty" style="padding:2rem;text-align:center;color:var(--text-muted);">Kontext gelöscht. Stelle eine neue Frage.</div>';
         this._setChatState('active');
+        this._updateChatInputState('ask');
 
         const label2 = document.getElementById('chat-session-label');
         if (label2) label2.textContent = t('chat.newChat');
@@ -1845,6 +1807,7 @@ ${messagesHtml}
             if (!res.ok) throw new Error(data.detail || 'Theme konnte nicht aktiviert werden.');
             await this.loadActiveTheme();
             this.applyActiveThemeTokens();
+            if (document.querySelector('.welcome-message')) this.renderWelcomeState();
             if (!silent) showNotification(`Theme "${themeId}" aktiv`, 'success');
             this._renderThemeCards();
         } catch (e) {
@@ -1857,13 +1820,14 @@ ${messagesHtml}
         localStorage.setItem('ninko_theme', isLight ? 'light' : 'dark');
         this._setThemeToggleIcon(isLight);
         this.applyActiveThemeTokens();
-        this.closeChatToolbarMore();
+        if (document.querySelector('.welcome-message')) this.renderWelcomeState();
     },
 
     sendQuick(textOrKey) {
         if (!textOrKey || textOrKey === 'undefined') return;
         const input = document.getElementById('chat-input');
         input.value = textOrKey;
+        this._updateChatInputState('reply');
         this.sendMessage();
     },
 
@@ -1876,6 +1840,7 @@ ${messagesHtml}
             welcome.remove();
             this._setChatState('active');
         }
+        this._updateChatInputState('reply');
 
         // Track in memory
         const msgId = 'msg-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
@@ -1917,11 +1882,14 @@ ${messagesHtml}
             </div>
         `;
 
-        // Steps aus dem letzten Typing-Cycle vor dem Text einbetten
-        if (role === 'ai' && this._savedSteps && this._savedSteps.children.length > 0) {
-            const bubble = div.querySelector('.chat-bubble');
-            this._savedSteps.classList.add('typing-steps-preserved');
-            bubble.insertBefore(this._savedSteps, bubble.querySelector('.chat-bubble-text'));
+        // Denkschritte-Wrapper aus dem letzten Typing-Cycle vor dem Text einbetten
+        if (role === 'ai' && this._savedSteps) {
+            const hasSteps = this._savedSteps.querySelector('.typing-step');
+            if (hasSteps) {
+                const bubble = div.querySelector('.chat-bubble');
+                this._savedSteps.classList.add('typing-steps-preserved');
+                bubble.insertBefore(this._savedSteps, bubble.querySelector('.chat-bubble-text'));
+            }
             this._savedSteps = null;
         }
 
@@ -2633,8 +2601,10 @@ ${messagesHtml}
                 <div class="typing-live">
                     <span class="typing-live-label" id="typing-live-label" data-active-text=""></span>
                 </div>
-                <div class="typing-steps-header">Zwischenschritte</div>
-                <div class="typing-steps" id="typing-steps"></div>
+                <details class="denkschritte-wrapper denkschritte-running">
+                    <summary class="denkschritte-summary"><span class="denkschritte-label">Denke nach…</span></summary>
+                    <div class="typing-steps" id="typing-steps"></div>
+                </details>
             </div>
         `;
         container.appendChild(div);
@@ -2643,27 +2613,28 @@ ${messagesHtml}
 
     hideTyping() {
         const indicator = document.getElementById('typing-indicator');
-        const stepsEl = indicator ? indicator.querySelector('.typing-steps') : null;
+        const wrapper = indicator ? indicator.querySelector('.denkschritte-wrapper') : null;
+        const stepsEl = wrapper ? wrapper.querySelector('.typing-steps') : null;
 
-        // Steps retten bevor Indicator entfernt wird
+        // Ganzen Wrapper (inkl. "Denkschritte"-Header) retten bevor Indicator entfernt wird
         if (stepsEl && stepsEl.children.length > 0) {
-            const saved = stepsEl.cloneNode(true);
+            const saved = wrapper.cloneNode(true);
 
             // ⚠️ KRITISCH: ID-Attribute aus dem Klon entfernen,
             // sonst findet document.getElementById('typing-steps') den Klon
             // statt des nächsten Typing-Indicators → neue Steps landen in alter Bubble
-            saved.removeAttribute('id');
             saved.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
+
+            // Header: "Denke nach…" → "Denkschritte", Animation stoppen
+            saved.classList.remove('denkschritte-running');
+            const label = saved.querySelector('.denkschritte-label');
+            if (label) label.textContent = 'Denkschritte';
 
             // Laufende Steps auf "done" setzen (Antwort ist da)
             saved.querySelectorAll('.typing-step-running').forEach(el => {
                 el.classList.remove('typing-step-running');
                 el.classList.add('typing-step-done');
             });
-            // Einblend-Animation entfernen (bereits abgespielt)
-            saved.querySelectorAll('.typing-step-enter').forEach(el =>
-                el.classList.remove('typing-step-enter')
-            );
             this._savedSteps = saved;
         } else {
             this._savedSteps = null;
@@ -2775,7 +2746,7 @@ ${messagesHtml}
         const hasBody = !!(argsBlock || previewBlock || isThinking);
 
         const step = document.createElement('details');
-        step.className = 'typing-step typing-step-enter';
+        step.className = 'typing-step';
         if (meta.state) step.classList.add(`typing-step-${meta.state}`);
         if (!hasBody) step.classList.add('typing-step-noexpand');
         if (meta.runId) step.dataset.runId = meta.runId;
@@ -2805,18 +2776,9 @@ ${messagesHtml}
 
     updateTypingStatus(text) {
         if (!document.getElementById('typing-steps')) return;
-        if (!this._thinkingStep) {
-            // Erster Status-Event → Thinking-Step anlegen
+        // Kein separater Thinking-Step — Header zeigt "Denke nach…" solange running
+        if (!this._thinkingStepStart) {
             this._thinkingStepStart = Date.now();
-            this._thinkingStep = this._appendStep(text, { state: 'running', isThinking: true });
-        } else {
-            // Folgender Status → Label aktualisieren
-            const label = this._thinkingStep.querySelector('.typing-step-label');
-            if (label) {
-                const hint = label.querySelector('.step-hint');
-                label.textContent = text;
-                if (hint) label.appendChild(hint);
-            }
         }
         const container = document.getElementById('chat-messages');
         if (container) container.scrollTop = container.scrollHeight;
@@ -3081,15 +3043,6 @@ ${messagesHtml}
             desc.setAttribute('content', `${b.brand_name || 'Ninko'} – IT-Operations-AI-Agent Dashboard`);
         }
 
-        const logoImg = document.querySelector('.logo-icon img');
-        if (logoImg) {
-            logoImg.src = b.logo_url || '/static/images/logo_icon.png';
-            logoImg.alt = b.brand_name || 'Ninko';
-        }
-        document.querySelectorAll('.logo-text').forEach(el => {
-            el.textContent = b.brand_name || 'Ninko';
-        });
-
         const chatTitle = document.querySelector('.welcome-message h2');
         if (chatTitle) {
             this.renderWelcomeState();
@@ -3102,11 +3055,9 @@ ${messagesHtml}
         const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
         setVal('branding-brand-name', b.brand_name || '');
         setVal('branding-page-title', b.page_title || '');
-        setVal('branding-logo-url', b.logo_url || '');
-        setVal('branding-welcome-mode', b.welcome_mode || 'image');
+        setVal('branding-welcome-mode', b.welcome_mode === 'off' ? 'off' : 'text');
         setVal('branding-welcome-title', b.welcome_title || '');
         setVal('branding-welcome-text', b.welcome_text || '');
-        setVal('branding-welcome-image-url', b.welcome_image_url || '');
         setVal('branding-login-title', b.login_title || 'Ninko Login');
         setVal('branding-login-subtitle', b.login_subtitle || 'Please sign in with your admin account.');
         setVal('branding-login-help-url', b.login_help_url || 'https://github.com/natorus87/ninko/blob/main/DOCS.md');
@@ -3115,40 +3066,15 @@ ${messagesHtml}
         setVal('branding-login-background-style', b.login_background_style || 'aurora');
         setVal('branding-login-card-style', b.login_card_style || 'glass');
         setVal('branding-login-gen-prompt', 'Futuristic AI guardian head, glowing cyan eyes, dark navy background, clean composition, high detail');
-        const logoInput = document.getElementById('branding-logo-url');
-        const welcomeInput = document.getElementById('branding-welcome-image-url');
         const loginInput = document.getElementById('branding-login-image-url');
-        if (logoInput && !logoInput.dataset.boundPreview) {
-            logoInput.addEventListener('input', () => this.refreshBrandingPreviews());
-            logoInput.dataset.boundPreview = '1';
-        }
-        if (welcomeInput && !welcomeInput.dataset.boundPreview) {
-            welcomeInput.addEventListener('input', () => this.refreshBrandingPreviews());
-            welcomeInput.dataset.boundPreview = '1';
-        }
         if (loginInput && !loginInput.dataset.boundPreview) {
             loginInput.addEventListener('input', () => this.refreshBrandingPreviews());
             loginInput.dataset.boundPreview = '1';
         }
-        const eyes = document.getElementById('branding-welcome-eyes');
-        if (eyes) eyes.checked = b.welcome_show_eyes !== false;
         const loginEyes = document.getElementById('branding-login-show-eyes');
         if (loginEyes) loginEyes.checked = b.login_show_eyes !== false;
-        const quick = document.getElementById('branding-quick-actions');
-        if (quick) quick.checked = b.show_quick_actions !== false;
         this._bindBrandingLivePreviewInputs();
-        this.onBrandingModeChange();
         this.onLoginHeadModeChange();
-        this.refreshBrandingPreviews();
-        this.renderLoginLivePreview();
-    },
-
-    onBrandingModeChange() {
-        const mode = document.getElementById('branding-welcome-mode')?.value || 'image';
-        const imgRow = document.getElementById('branding-welcome-image-row');
-        const eyeRow = document.getElementById('branding-welcome-eyes-row');
-        if (imgRow) imgRow.style.display = mode === 'image' ? '' : 'none';
-        if (eyeRow) eyeRow.style.display = mode === 'image' ? '' : 'none';
         this.refreshBrandingPreviews();
         this.renderLoginLivePreview();
     },
@@ -3164,14 +3090,8 @@ ${messagesHtml}
     },
 
     refreshBrandingPreviews() {
-        const logoUrl = document.getElementById('branding-logo-url')?.value?.trim() || '/static/images/logo_icon.png';
-        const welcomeUrl = document.getElementById('branding-welcome-image-url')?.value?.trim() || '/static/images/logo_dashboard_new.png?v=3';
         const loginUrl = document.getElementById('branding-login-image-url')?.value?.trim() || '/static/images/logo_dashboard_new.png?v=3';
-        const logoPreview = document.getElementById('branding-logo-preview');
-        const welcomePreview = document.getElementById('branding-welcome-preview');
         const loginPreview = document.getElementById('branding-login-preview');
-        if (logoPreview) logoPreview.src = logoUrl;
-        if (welcomePreview) welcomePreview.src = welcomeUrl;
         if (loginPreview) loginPreview.src = loginUrl;
         this.renderLoginLivePreview();
     },
@@ -3276,13 +3196,13 @@ ${messagesHtml}
             const payload = {
                 brand_name: document.getElementById('branding-brand-name')?.value.trim() || 'Ninko',
                 page_title: document.getElementById('branding-page-title')?.value.trim() || 'Ninko',
-                logo_url: document.getElementById('branding-logo-url')?.value.trim() || '/static/images/logo_icon.png',
-                welcome_mode: document.getElementById('branding-welcome-mode')?.value || 'image',
+                logo_url: this._branding?.logo_url || '/static/images/logo_icon.png',
+                welcome_mode: document.getElementById('branding-welcome-mode')?.value || 'text',
                 welcome_title: document.getElementById('branding-welcome-title')?.value.trim() || 'Ninko',
                 welcome_text: document.getElementById('branding-welcome-text')?.value || '',
-                welcome_image_url: document.getElementById('branding-welcome-image-url')?.value.trim() || '/static/images/logo_dashboard_new.png?v=3',
-                welcome_show_eyes: !!document.getElementById('branding-welcome-eyes')?.checked,
-                show_quick_actions: !!document.getElementById('branding-quick-actions')?.checked,
+                welcome_image_url: this._branding?.welcome_image_url || '/static/images/logo_dashboard_new.png?v=3',
+                welcome_show_eyes: this._branding?.welcome_show_eyes !== false,
+                show_quick_actions: false,
                 login_title: document.getElementById('branding-login-title')?.value.trim() || 'Ninko Login',
                 login_subtitle: document.getElementById('branding-login-subtitle')?.value.trim() || 'Please sign in with your admin account.',
                 login_help_url: document.getElementById('branding-login-help-url')?.value.trim() || 'https://github.com/natorus87/ninko/blob/main/DOCS.md',
@@ -3478,6 +3398,8 @@ ${messagesHtml}
         // UI sofort aktualisieren
         await I18n.load(lang);
         localStorage.setItem('ninko_lang', lang);
+        if (document.querySelector('.welcome-message')) this.renderWelcomeState();
+        else this._updateChatInputState(this._chatMessages.length ? 'reply' : 'ask');
 
         // Aktiven Zustand der Sprach-Buttons aktualisieren
         document.querySelectorAll('.lang-btn').forEach(btn => {
@@ -5788,14 +5710,14 @@ ${messagesHtml}
 
     // --- Resizing ---
     initResizers() {
-        // Migrate sidebar width: boost by 20% for unified sidebar with history
-        if (!localStorage.getItem('ninko_sidebar_migrated')) {
+        // Migrate sidebar width when defaults change
+        if (!localStorage.getItem('ninko_sidebar_migrated_v2')) {
             const savedWidth = localStorage.getItem('ninko_sidebar_width');
             if (savedWidth) {
                 const boosted = Math.min(Math.round(parseInt(savedWidth) * 1.2), 500);
                 localStorage.setItem('ninko_sidebar_width', boosted);
             }
-            localStorage.setItem('ninko_sidebar_migrated', '1');
+            localStorage.setItem('ninko_sidebar_migrated_v2', '1');
         }
 
         this.setupResizer('sidebar-resizer', 'sidebar', 'ninko_sidebar_width');

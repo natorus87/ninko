@@ -116,7 +116,7 @@
       "name": "opnsense",
       "display_name": "OPNsense",
       "description": "Management und Monitoring einer OPNsense Firewall via REST API.",
-      "version": "1.0.0",
+      "version": "1.2.0",
       "author": "Ninko"
     },
     {

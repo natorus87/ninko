@@ -896,6 +896,11 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
         ToolMetadata("get_opnsense_services", "opnsense", readonly=True),
         ToolMetadata("get_opnsense_dhcp_leases", "opnsense", readonly=True),
         ToolMetadata("get_opnsense_logs", "opnsense", readonly=True),
+        ToolMetadata("get_opnsense_dhcp_settings", "opnsense", readonly=True),
+        ToolMetadata("get_opnsense_virtual_ips", "opnsense", readonly=True),
+        ToolMetadata("get_opnsense_firmware_info", "opnsense", readonly=True),
+        ToolMetadata("get_opnsense_firmware_status", "opnsense", readonly=True),
+        ToolMetadata("get_opnsense_changelog", "opnsense", readonly=True),
     ]
     registry.register_many(opnsense_tools)
 

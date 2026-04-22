@@ -1,6 +1,7 @@
 const DataVizTab = {
     charts: [],
     currentFormat: 'png',
+    _retryStatuses: new Set([405, 408, 429, 502, 503, 504]),
 
     async init() {
         this.setupEventListeners();
@@ -36,6 +37,44 @@ const DataVizTab = {
         });
     },
 
+    async _fetchWithRetry(url, options = {}, retries = 2) {
+        let lastError = null;
+        for (let attempt = 0; attempt <= retries; attempt++) {
+            try {
+                const response = await fetch(url, options);
+                if (response.ok || !this._retryStatuses.has(response.status) || attempt === retries) {
+                    return response;
+                }
+                // Kurzer Backoff für Rollout-/Warmup-Phasen im Backend
+                await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
+            } catch (error) {
+                lastError = error;
+                if (attempt === retries) throw error;
+                await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
+            }
+        }
+        throw lastError || new Error('Request failed');
+    },
+
+    async _buildHttpError(response) {
+        const status = response?.status || 0;
+        let detail = '';
+        try {
+            const text = await response.text();
+            if (text) {
+                try {
+                    const parsed = JSON.parse(text);
+                    detail = parsed.detail || parsed.error || '';
+                } catch (_) {
+                    detail = text.slice(0, 200);
+                }
+            }
+        } catch (_) {
+            // ignore read errors
+        }
+        return detail ? `HTTP ${status}: ${detail}` : `HTTP ${status}`;
+    },
+
     async generateChart() {
         const type = document.getElementById('chart-type').value;
         const title = document.getElementById('chart-title').value;
@@ -56,7 +95,7 @@ const DataVizTab = {
             outputDiv.innerHTML = '<div class="empty-state"><p>Generiere Diagramm...</p></div>';
 
             if (format === 'html') {
-                const response = await fetch('/api/dataviz/chart/interactive', {
+                const response = await this._fetchWithRetry('/api/dataviz/chart/interactive', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -68,11 +107,14 @@ const DataVizTab = {
                         format: 'html'
                     })
                 });
+                if (!response.ok) {
+                    throw new Error(await this._buildHttpError(response));
+                }
                 const html = await response.text();
                 // XSS-Schutz: Interaktive Charts in isoliertem iframe anzeigen
                 outputDiv.innerHTML = `<iframe srcdoc="${html.replace(/"/g, '&quot;')}" style="width:100%; height:400px; border:none; border-radius:4px;"></iframe>`;
             } else {
-                const response = await fetch('/api/dataviz/chart', {
+                const response = await this._fetchWithRetry('/api/dataviz/chart', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -84,22 +126,25 @@ const DataVizTab = {
                         format
                     })
                 });
+                if (!response.ok) {
+                    throw new Error(await this._buildHttpError(response));
+                }
                 const result = await response.json();
 
                 if (result.success) {
                     if (format === 'png') {
-                        outputDiv.innerHTML = `<img src="${result.data}" alt="${title}" style="max-width:100%; border-radius: 4px;">`;
+                        outputDiv.innerHTML = `<img src="${result.data}" alt="${this.escapeHtml(title)}" style="max-width:100%; border-radius: 4px;">`;
                     } else if (format === 'svg') {
                         outputDiv.innerHTML = `<div style="background: white; padding: 1rem; border-radius: 4px;">${result.data}</div>`;
                     }
                     this.saveToHistory(title || 'Chart', type, result.data, format);
                     this.refreshStats();
                 } else {
-                    outputDiv.innerHTML = `<div class="empty-state" style="color: var(--color-red);"><p>Fehler: ${result.error}</p></div>`;
+                    outputDiv.innerHTML = `<div class="empty-state" style="color: var(--color-red);"><p>Fehler: ${this.escapeHtml(result.error)}</p></div>`;
                 }
             }
         } catch (e) {
-            outputDiv.innerHTML = `<div class="empty-state" style="color: var(--color-red);"><p>Fehler: ${e.message}</p></div>`;
+            outputDiv.innerHTML = `<div class="empty-state" style="color: var(--color-red);"><p>Fehler: ${this.escapeHtml(e.message)}</p></div>`;
         }
     },
 
@@ -117,7 +162,7 @@ const DataVizTab = {
         try {
             outputDiv.innerHTML = '<div class="empty-state"><p>Rendere Diagramm...</p></div>';
 
-            const response = await fetch('/api/dataviz/mermaid', {
+            const response = await this._fetchWithRetry('/api/dataviz/mermaid', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -129,7 +174,7 @@ const DataVizTab = {
             });
 
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
+                throw new Error(await this._buildHttpError(response));
             }
 
             const html = await response.text();
@@ -143,7 +188,7 @@ const DataVizTab = {
             this.saveToHistory(title || 'Mermaid Diagramm', 'mermaid', code, 'svg');
             this.refreshStats();
         } catch (e) {
-            outputDiv.innerHTML = `<div class="empty-state" style="color: var(--color-red);"><p>Fehler: ${e.message}</p></div>`;
+            outputDiv.innerHTML = `<div class="empty-state" style="color: var(--color-red);"><p>Fehler: ${this.escapeHtml(e.message)}</p></div>`;
         }
     },
 

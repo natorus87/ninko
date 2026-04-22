@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -16,6 +17,35 @@ from core.vault import get_vault
 from agents.base_agent import _t
 
 logger = logging.getLogger("ninko.modules.opnsense.tools")
+
+# ---------------------------------------------------------------------------
+# Input validation — SSRF / Path-Traversal prevention
+# ---------------------------------------------------------------------------
+_RE_UUID = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
+_RE_SERVICE_NAME = re.compile(r'^[a-zA-Z0-9_\-]{1,64}$')
+_RE_INTERFACE = re.compile(r'^[a-zA-Z0-9_\-]{1,32}$')
+_RE_VERSION = re.compile(r'^\d+(\.\d+){0,3}$')
+
+
+def _validate_uuid(value: str, param: str = "uuid") -> str:
+    """Raises ValueError if value is not a valid UUID."""
+    if not _RE_UUID.match(value.strip()):
+        raise ValueError(f"Invalid {param}: must be a UUID (got: {value!r})")
+    return value.strip()
+
+
+def _validate_service_name(value: str) -> str:
+    """Raises ValueError if value is not a safe service name."""
+    if not _RE_SERVICE_NAME.match(value.strip()):
+        raise ValueError(f"Invalid service_name: must match [a-zA-Z0-9_-]{{1,64}} (got: {value!r})")
+    return value.strip()
+
+
+def _validate_interface(value: str) -> str:
+    """Raises ValueError if value is not a safe interface identifier."""
+    if not _RE_INTERFACE.match(value.strip()):
+        raise ValueError(f"Invalid interface: must match [a-zA-Z0-9_-]{{1,32}} (got: {value!r})")
+    return value.strip()
 
 
 async def _get_opnsense_auth(connection_id: str = "") -> tuple:
@@ -41,7 +71,7 @@ async def _get_opnsense_auth(connection_id: str = "") -> tuple:
         api_key_vk = conn.vault_keys.get("api_key")
         if api_key_vk:
             api_key = await vault.get_secret(api_key_vk) or api_key
-        secret_vk = conn.vault_keys.get("OPNSENSE_API_SECRET")
+        secret_vk = conn.vault_keys.get("api_secret")
         if secret_vk:
             api_secret = await vault.get_secret(secret_vk) or api_secret
 
@@ -259,12 +289,12 @@ async def get_opnsense_firewall_rules(
 @tool
 async def get_opnsense_nat_rules(connection_id: str = "") -> List[Dict]:
     """
-    Retrieves NAT rules (port forwarding, outbound NAT).
-    Use this tool to list NAT rules.
+    Retrieves NAT rules (port forwarding rules from the NAT table).
+    Use this tool to list NAT/port-forwarding rules.
     """
     try:
         result = await _opnsense_request(
-            "/api/firewall/filter/searchRule?type=nat", connection_id
+            "/api/firewall/nat/forward/searchRule", connection_id
         )
         rules = result.get("rows", [])
 
@@ -419,6 +449,7 @@ async def delete_opnsense_firewall_rule(rule_uuid: str, connection_id: str = "")
     Deletes a firewall rule by UUID. Use this tool to remove a firewall rule. Requires confirmation.
     """
     try:
+        rule_uuid = _validate_uuid(rule_uuid, "rule_uuid")
         result = await _opnsense_request(
             f"/api/firewall/filter/deleteRule/{rule_uuid}", connection_id, method="POST"
         )
@@ -492,7 +523,7 @@ async def create_opnsense_nat_rule(
             }
         }
         result = await _opnsense_request(
-            "/api/firewall/filter/addRule",
+            "/api/firewall/nat/forward/addRule",
             connection_id,
             method="POST",
             json_data=payload,
@@ -544,8 +575,9 @@ async def delete_opnsense_nat_rule(rule_uuid: str, connection_id: str = "") -> s
     Deletes a NAT rule by UUID. Use this tool to remove a NAT rule. Requires confirmation.
     """
     try:
+        rule_uuid = _validate_uuid(rule_uuid, "rule_uuid")
         result = await _opnsense_request(
-            f"/api/firewall/filter/deleteRule/{rule_uuid}", connection_id, method="POST"
+            f"/api/firewall/nat/forward/delRule/{rule_uuid}", connection_id, method="POST"
         )
         if result.get("status") == "ok":
             return _t(
@@ -595,6 +627,7 @@ async def restart_opnsense_service(service_name: str, connection_id: str = "") -
     Use this tool to restart a service on OPNsense.
     """
     try:
+        service_name = _validate_service_name(service_name)
         result = await _opnsense_request(
             f"/api/core/service/restart/{service_name}", connection_id, method="POST"
         )
@@ -711,7 +744,7 @@ async def set_opnsense_interface(
             payload["subnet"] = str(subnet_mask)
 
         result = await _opnsense_request(
-            "/api/interfaces/v Interfaces/set",
+            "/api/interfaces/settings/set",
             connection_id,
             method="POST",
             json_data=payload,
@@ -1008,6 +1041,7 @@ async def delete_opnsense_virtual_ip(
     Use this tool to remove a virtual IP address.
     """
     try:
+        vip_uuid = _validate_uuid(vip_uuid, "vip_uuid")
         result = await _opnsense_request(
             f"/api/firewall/virtual_ip/del/{vip_uuid}",
             connection_id,
@@ -1054,4 +1088,191 @@ async def delete_opnsense_virtual_ip(
             pt=f"Erro: {e}",
             ja=f"エラー: {e}",
             zh=f"错误: {e}",
+        )
+
+
+@tool
+async def get_opnsense_firmware_info(connection_id: str = "") -> Dict:
+    """
+    Retrieves detailed firmware information from OPNsense (version, product, platform).
+    Use this tool to get the current firmware version and product details.
+    """
+    try:
+        result = await _opnsense_request("/api/core/firmware/info", connection_id)
+
+        return {
+            "product_name": result.get("product_name", ""),
+            "product_version": result.get("product_version", ""),
+            "product_id": result.get("product_id", ""),
+            "product_arch": result.get("product_arch", ""),
+            "product_tier": result.get("product_tier", ""),
+            "product_series": result.get("product_series", ""),
+            "product_nickname": result.get("product_nickname", ""),
+            "product_copyright": result.get("product_copyright", ""),
+            "product_copyright_url": result.get("product_copyright_url", ""),
+        }
+
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
+        logger.error("Failed to retrieve OPNsense firmware info: %s", e)
+        return {"error": str(e)}
+
+
+@tool
+async def get_opnsense_firmware_status(connection_id: str = "") -> Dict:
+    """
+    Checks for available firmware updates on OPNsense.
+    Use this tool to see if updates are available and get upgrade information.
+
+    Returns:
+        - status: "update" if updates available, "ok" if up to date, "error" on failure
+        - version: current installed version
+        - latest: latest available version (if updates available)
+        - message: human-readable status message
+        - upgrade_packages: list of packages that can be upgraded
+        - new_packages: list of new packages available
+        - reinstall_packages: list of packages that can be reinstalled
+    """
+    try:
+        result = await _opnsense_request("/api/core/firmware/status", connection_id)
+
+        status = result.get("status", "")
+        product_version = result.get("product_version", "")
+
+        if status == "update":
+            # Updates are available
+            upgrade_packages = result.get("upgrade_packages", [])
+            new_packages = result.get("new_packages", [])
+            reinstall_packages = result.get("reinstall_packages", [])
+
+            # Get the target version from upgrade_packages if available
+            target_version = ""
+            if upgrade_packages:
+                for pkg in upgrade_packages:
+                    if pkg.get("name") == "opnsense":
+                        target_version = pkg.get("new_version", "")
+                        break
+
+            total_packages = len(upgrade_packages) + len(new_packages) + len(reinstall_packages)
+
+            return {
+                "status": "update",
+                "version": product_version,
+                "latest": target_version,
+                "message": _t(
+                    de=f"Update verfügbar: {product_version} → {target_version if target_version else 'neue Version'} ({total_packages} Pakete)",
+                    en=f"Update available: {product_version} → {target_version if target_version else 'new version'} ({total_packages} packages)",
+                    fr=f"Mise à jour disponible: {product_version} → {target_version if target_version else 'nouvelle version'} ({total_packages} paquets)",
+                    es=f"Actualización disponible: {product_version} → {target_version if target_version else 'nueva versión'} ({total_packages} paquetes)",
+                    it=f"Aggiornamento disponibile: {product_version} → {target_version if target_version else 'nuova versione'} ({total_packages} pacchetti)",
+                    nl=f"Update beschikbaar: {product_version} → {target_version if target_version else 'nieuwe versie'} ({total_packages} pakketten)",
+                    pl=f"Dostępna aktualizacja: {product_version} → {target_version if target_version else 'nowa wersja'} ({total_packages} pakietów)",
+                    pt=f"Atualização disponível: {product_version} → {target_version if target_version else 'nova versão'} ({total_packages} pacotes)",
+                    ja=f"アップデートが利用可能: {product_version} → {target_version if target_version else '新しいバージョン'} ({total_packages} パッケージ)",
+                    zh=f"有可用更新: {product_version} → {target_version if target_version else '新版本'} ({total_packages} 软件包)",
+                ),
+                "upgrade_packages": [
+                    {"name": pkg.get("name"), "old": pkg.get("old_version"), "new": pkg.get("new_version")}
+                    for pkg in upgrade_packages[:20]  # Limit to first 20
+                ],
+                "new_packages_count": len(new_packages),
+                "reinstall_packages_count": len(reinstall_packages),
+                "total_packages": total_packages,
+                "update_notice": _t(
+                    de="HINWEIS: System-Updates erfordern manuelle Durchführung via OPNsense Web UI (System → Firmware) oder SSH (pkg upgrade).",
+                    en="NOTE: System updates require manual execution via OPNsense Web UI (System → Firmware) or SSH (pkg upgrade).",
+                    fr="NOTE: Les mises à jour système nécessitent une exécution manuelle via l'interface Web OPNsense (Système → Firmware) ou SSH (pkg upgrade).",
+                    es="NOTA: Las actualizaciones del sistema requieren ejecución manual via Web UI de OPNsense (Sistema → Firmware) o SSH (pkg upgrade).",
+                    it="NOTA: Gli aggiornamenti di sistema richiedono l'esecuzione manuale tramite l'interfaccia Web OPNsense (Sistema → Firmware) o SSH (pkg upgrade).",
+                    nl="NOOT: Systeemupdates vereisen handmatige uitvoering via OPNsense Web UI (Systeem → Firmware) of SSH (pkg upgrade).",
+                    pl="UWAGA: Aktualizacje systemu wymagają ręcznego wykonania przez interfejs Web OPNsense (System → Firmware) lub SSH (pkg upgrade).",
+                    pt="NOTA: Atualizações do sistema requerem execução manual via Web UI do OPNsense (Sistema → Firmware) ou SSH (pkg upgrade).",
+                    ja="注意: システムアップデートは、OPNsense Web UI (システム → ファームウェア) または SSH (pkg upgrade) 経由で手動実行が必要です。",
+                    zh="注意: 系统更新需要通过OPNsense Web UI (系统 → 固件) 或 SSH (pkg upgrade) 手动执行。",
+                ),
+            }
+        elif status == "ok":
+            # System is up to date
+            return {
+                "status": "ok",
+                "version": product_version,
+                "message": _t(
+                    de=f"System ist auf dem neuesten Stand ({product_version})",
+                    en=f"System is up to date ({product_version})",
+                    fr=f"Système à jour ({product_version})",
+                    es=f"Sistema actualizado ({product_version})",
+                    it=f"Sistema aggiornato ({product_version})",
+                    nl=f"Systeem is up-to-date ({product_version})",
+                    pl=f"System jest aktualny ({product_version})",
+                    pt=f"Sistema está atualizado ({product_version})",
+                    ja=f"システムは最新です ({product_version})",
+                    zh=f"系统已是最新 ({product_version})",
+                ),
+            }
+        else:
+            # Unknown status
+            return {
+                "status": status or "unknown",
+                "version": product_version,
+                "message": result.get("message", "Unknown status"),
+            }
+
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
+        logger.error("Failed to retrieve OPNsense firmware status: %s", e)
+        return {"error": str(e)}
+
+
+@tool
+async def get_opnsense_changelog(version: str = "", connection_id: str = "") -> str:
+    """
+    Retrieves the changelog for a specific OPNsense version.
+    Use this tool to see what changes are included in an update.
+
+    Args:
+        version: Version to get changelog for (e.g., "24.7"). If empty, gets changelog for latest available.
+    """
+    try:
+        endpoint = "/api/core/firmware/changelog"
+        if version:
+            endpoint = f"/api/core/firmware/changelog/{version}"
+
+        result = await _opnsense_request(endpoint, connection_id)
+
+        # The changelog might be in different formats depending on OPNsense version
+        changelog_text = result.get("changelog", "")
+        if not changelog_text and "message" in result:
+            changelog_text = result.get("message", "")
+
+        # Truncate if too long
+        if changelog_text and len(changelog_text) > 3000:
+            changelog_text = changelog_text[:3000] + "\n\n[... Changelog truncated ...]"
+
+        if not changelog_text:
+            return _t(
+                de=f"Kein Changelog verfügbar für Version {version if version else 'aktuell'}",
+                en=f"No changelog available for version {version if version else 'current'}",
+                fr=f"Aucun changelog disponible pour la version {version if version else 'actuelle'}",
+                es=f"No hay changelog disponible para la versión {version if version else 'actual'}",
+                it=f"Nessun changelog disponibile per la versione {version if version else 'corrente'}",
+                nl=f"Geen changelog beschikbaar voor versie {version if version else 'huidige'}",
+                pl=f"Brak changelog dla wersji {version if version else 'bieżącej'}",
+                pt=f"Nenhum changelog disponível para a versão {version if version else 'atual'}",
+                ja=f"バージョン {version if version else '現在'} の変更履歴はありません",
+                zh=f"版本 {version if version else '当前'} 没有可用的变更日志",
+            )
+
+        return changelog_text
+
+    except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:
+        logger.error("Failed to retrieve OPNsense changelog: %s", e)
+        return _t(
+            de=f"Fehler beim Abrufen des Changelogs: {e}",
+            en=f"Error retrieving changelog: {e}",
+            fr=f"Erreur lors de la récupération du changelog: {e}",
+            es=f"Error al obtener el changelog: {e}",
+            it=f"Errore nel recupero del changelog: {e}",
+            nl=f"Fout bij ophalen changelog: {e}",
+            pl=f"Błąd podczas pobierania changelog: {e}",
+            pt=f"Erro ao recuperar changelog: {e}",
+            ja=f"変更履歴の取得エラー: {e}",
+            zh=f"获取变更日志错误: {e}",
         )

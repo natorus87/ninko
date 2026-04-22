@@ -11,7 +11,7 @@
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css?v=62">
     <script>if(localStorage.getItem('ninko_theme')==='light')document.documentElement.classList.add('light-mode-pre');</script>
 </head>
@@ -33,19 +33,6 @@
             <div class="sidebar-panels" id="sidebar-panels">
                 <!-- Primary Sidebar Panel -->
                 <div class="sidebar-panel sidebar-panel-primary" id="sidebar-panel-primary">
-                    <div class="sidebar-header">
-                        <div class="logo">
-                            <span class="logo-icon">
-                                <img src="/static/images/logo_icon.png" alt="Ninko"
-                                    style="width: 32px; height: 32px; object-fit: contain; border-radius: 6px;" />
-                            </span>
-                            <span class="logo-text">Ninko</span>
-                        </div>
-                        <div style="display:flex;align-items:center;gap:.45rem;">
-                            <span class="status-dot" id="status-dot"></span>
-                        </div>
-                    </div>
-
                     <!-- Top Nav -->
                     <ul class="nav-tabs" id="nav-tabs-top">
                         <li class="nav-tab active" data-tab="chat" onclick="Ninko.newChat()">
@@ -92,6 +79,9 @@
 
                     <!-- Chat History Section (integrated into sidebar) -->
                     <div class="sidebar-history-section" id="sidebar-history-section">
+                        <div class="sidebar-history-header">
+                            <span class="sidebar-section-label" data-i18n="sidebar.recent">Zuletzt</span>
+                        </div>
                         <div class="history-list" id="history-list">
                             <!-- Filled dynamically -->
                         </div>
@@ -197,6 +187,16 @@
                                 </svg>
                                 <span>Sprache</span>
                             </button>
+                            <button class="sidebar-account-menu-item" id="theme-toggle" type="button" onclick="Ninko.toggleTheme()"
+                                aria-label="Theme wechseln"
+                                data-i18n-title="chat.toggleTheme" title="Theme wechseln">
+                                <svg id="theme-icon" viewBox="0 0 24 24" width="15" height="15" fill="none"
+                                    stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round">
+                                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                                </svg>
+                                <span>Theme wechseln</span>
+                            </button>
                             <a class="sidebar-account-menu-item" href="https://github.com/natorus87/ninko/blob/main/DOCS.md" target="_blank" rel="noopener noreferrer" onclick="Ninko.closeSidebarUserMenu()">
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <circle cx="12" cy="12" r="10"></circle>
@@ -237,101 +237,19 @@
 
         <!-- Main Content -->
         <main id="main-content" class="main-content" role="main">
-            <nav id="app-breadcrumb" class="app-breadcrumb" aria-label="Breadcrumb">
-                <span class="crumb">Dashboard</span>
-                <span class="crumb-sep">/</span>
-                <span class="crumb current">Chat</span>
-            </nav>
-
             <!-- Chat Tab (default) -->
             <div id="tab-chat" class="tab-panel active">
                 <div class="chat-layout">
                     <!-- Chat Main Area -->
                     <div class="chat-main">
-                        <!-- Chat Toolbar -->
-                        <div class="chat-toolbar">
-                            <div class="chat-toolbar-left">
-                                <span class="chat-toolbar-title" id="chat-session-label" data-i18n="chat.newChat">Neuer Chat</span>
-                                <div class="module-picker" id="module-picker">
-                                    <button class="module-picker-btn" id="module-picker-btn"
-                                        onclick="Ninko.toggleModulePicker(event)"
-                                        data-i18n-title="chat.modulePickerTitle" title="Modul vorauswählen">
-                                        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
-                                        <span id="module-picker-label" data-i18n="chat.moduleAuto">Auto</span>
-                                        <svg class="module-picker-chevron" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-                                    </button>
-                                    <div class="module-picker-dropdown" id="module-picker-dropdown" style="display:none"></div>
-                                </div>
-                            </div>
-                            <div class="chat-toolbar-actions">
-                                <button class="btn-icon btn-icon-sm" type="button" onclick="Ninko.exportChatAsHtml()"
-                                    data-i18n-title="chat.exportTitle" title="Als HTML exportieren">
-                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                                        <polyline points="7 10 12 15 17 10"/>
-                                        <line x1="12" y1="15" x2="12" y2="3"/>
-                                    </svg>
-                                </button>
-                                <button class="btn-icon btn-icon-sm" type="button" onclick="Ninko.clearContext()"
-                                    aria-label="Chat-Kontext löschen"
-                                    data-i18n-title="chat.clearContext" title="Chat-Kontext löschen">
-                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <polyline points="3 6 5 6 21 6"></polyline>
-                                        <path
-                                            d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
-                                        </path>
-                                    </svg>
-                                </button>
-                                <div class="chat-toolbar-more" id="chat-toolbar-more">
-                                    <button class="btn-icon btn-icon-sm" type="button"
-                                        onclick="Ninko.toggleChatToolbarMore(event)"
-                                        aria-label="Weitere Aktionen" title="Weitere Aktionen">
-                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
-                                            stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                            stroke-linejoin="round">
-                                            <circle cx="12" cy="5" r="1.6"></circle>
-                                            <circle cx="12" cy="12" r="1.6"></circle>
-                                            <circle cx="12" cy="19" r="1.6"></circle>
-                                        </svg>
-                                    </button>
-                                    <div class="chat-toolbar-more-menu" id="chat-toolbar-more-menu" style="display:none;">
-                                        <button class="chat-toolbar-more-item" id="theme-toggle" type="button" onclick="Ninko.toggleTheme()"
-                                            aria-label="Theme wechseln"
-                                            data-i18n-title="chat.toggleTheme" title="Theme wechseln">
-                                            <svg id="theme-icon" viewBox="0 0 24 24" width="15" height="15" fill="none"
-                                                stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                                stroke-linejoin="round">
-                                                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-                                            </svg>
-                                            <span>Theme wechseln</span>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
                         <div class="chat-container">
                             <div class="chat-messages" id="chat-messages">
-                                <div class="welcome-message">
-                                    <div class="logo-wrapper">
-                                        <img src="/static/images/logo_dashboard_new.png?v=3" alt="Ninko Core"
-                                            class="welcome-illustration" />
-                                        <div class="eye eye-left"></div>
-                                        <div class="eye eye-right"></div>
-                                    </div>
-                                    <h2>Ninko</h2>
-                                    <p data-i18n="chat.welcome.desc">Your AI agent platform for IT automation. Create agents, automate workflows and control your entire infrastructure through natural language.</p>
-                                    <div class="quick-actions">
-                                        <button class="quick-action" data-i18n="quick.createAgent"
-                                            onclick="Ninko.sendQuick(t('quick.createAgentMsg'))">Agent erstellen</button>
-                                        <button class="quick-action" data-i18n="quick.rememberFact"
-                                            onclick="Ninko.sendQuick(t('quick.rememberFactMsg'))">Fakt merken</button>
-                                        <button class="quick-action" data-i18n="quick.webSearch"
-                                            onclick="Ninko.sendQuick(t('quick.webSearchMsg'))">Web-Suche</button>
-                                        <button class="quick-action" data-i18n="quick.showAgents"
-                                            onclick="Ninko.sendQuick(t('quick.showAgentsMsg'))">Aktive Agenten</button>
+                                <div class="welcome-message dashboard-home">
+                                    <div class="dh-intro">
+                                        <div class="dh-headline">
+                                            <img class="dh-headline-icon" src="/static/images/logo_icon.png" alt="Ninko">
+                                            <h2 data-i18n="chat.welcome.message.day.0">Zeit für einen Nerd-Move?</h2>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -339,41 +257,83 @@
                                 <div class="chat-input-wrapper">
                                     <!-- Zeile 1: Textarea -->
                                     <div class="chat-input-top">
-                                        <textarea id="chat-input" class="chat-input" data-i18n-placeholder="chat.placeholder"
-                                            placeholder="Frage stellen…" rows="2"
+                                        <textarea id="chat-input" class="chat-input" data-i18n-placeholder="chat.input.ask"
+                                            placeholder="Wie kann ich dir helfen?" rows="2"
                                             onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();Ninko.sendMessage()}"></textarea>
                                     </div>
                                     <!-- Zeile 2: Toolbar -->
                                     <div class="chat-input-toolbar">
-                                        <!-- Links: SafeGuard + Context-Ring -->
+                                        <!-- Links: + Menü -->
                                         <div class="chat-toolbar-left">
-                                            <button class="btn-safeguard safeguard-on" id="btn-safeguard" type="button" onclick="Ninko.toggleSafeguardPicker(event)" aria-label="SafeGuard" title="SafeGuard">
-                                                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                                            </button>
-                                            <div class="ctx-indicator" id="ctx-indicator" title="">
-                                                <svg class="ctx-ring" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
-                                                    <circle cx="10" cy="10" r="7.5" fill="none" stroke-width="2.5" class="ctx-track"/>
-                                                    <circle cx="10" cy="10" r="7.5" fill="none" stroke-width="2.5"
-                                                        stroke-linecap="round" transform="rotate(-90 10 10)"
-                                                        class="ctx-arc" id="ctx-arc"
-                                                        stroke-dasharray="47.12" stroke-dashoffset="47.12"/>
-                                                </svg>
-                                                <span class="ctx-pct" id="ctx-pct">—</span>
+                                            <div class="chat-plus-menu" id="chat-plus-menu">
+                                                <button class="chat-plus-trigger" id="chat-plus-trigger" type="button"
+                                                    onclick="Ninko.toggleChatPlusMenu(event)"
+                                                    aria-label="Weitere Optionen" title="Weitere Optionen">
+                                                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
+                                                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                                                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                                                    </svg>
+                                                </button>
+                                                <div class="chat-plus-dropdown" id="chat-plus-dropdown" style="display:none;">
+                                                    <div class="chat-plus-group">
+                                                        <div class="chat-plus-row chat-plus-row-popover">
+                                                            <span class="chat-plus-label">SafeGuard</span>
+                                                            <button class="btn-safeguard safeguard-on" id="btn-safeguard" type="button" onclick="Ninko.toggleSafeguardPicker(event)" aria-label="SafeGuard" title="SafeGuard">
+                                                                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                                                            </button>
+                                                            <div id="safeguard-picker" class="safeguard-picker" style="display:none;"></div>
+                                                        </div>
+                                                        <div class="chat-plus-row">
+                                                            <span class="chat-plus-label">Kontext</span>
+                                                            <div class="ctx-indicator" id="ctx-indicator" title="">
+                                                                <svg class="ctx-ring" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
+                                                                    <circle cx="10" cy="10" r="7.5" fill="none" stroke-width="2.5" class="ctx-track"/>
+                                                                    <circle cx="10" cy="10" r="7.5" fill="none" stroke-width="2.5"
+                                                                        stroke-linecap="round" transform="rotate(-90 10 10)"
+                                                                        class="ctx-arc" id="ctx-arc"
+                                                                        stroke-dasharray="47.12" stroke-dashoffset="47.12"/>
+                                                                </svg>
+                                                                <span class="ctx-pct" id="ctx-pct">—</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="chat-plus-divider"></div>
+                                                    <div class="chat-plus-group">
+                                                        <div class="chat-plus-row chat-plus-row-stack">
+                                                            <span class="chat-plus-label">Modellwahl</span>
+                                                            <div class="module-picker module-picker-inline" id="module-picker">
+                                                                <button class="module-picker-btn" id="module-picker-btn"
+                                                                    onclick="Ninko.toggleModulePicker(event)"
+                                                                    data-i18n-title="chat.modulePickerTitle" title="Modul vorauswählen">
+                                                                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+                                                                    <span id="module-picker-label" data-i18n="chat.moduleAuto">Auto</span>
+                                                                    <svg class="module-picker-chevron" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                                                                </button>
+                                                                <div class="module-picker-dropdown" id="module-picker-dropdown" style="display:none"></div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="chat-plus-divider"></div>
+                                                    <button class="chat-plus-action" type="button" onclick="Ninko.exportChatAsHtml(); Ninko.closeChatPlusMenu();"
+                                                        data-i18n-title="chat.exportTitle" title="Als HTML exportieren">
+                                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                                                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                                            <polyline points="7 10 12 15 17 10"/>
+                                                            <line x1="12" y1="15" x2="12" y2="3"/>
+                                                        </svg>
+                                                        <span>Exportieren</span>
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
-                                        <!-- Rechts: Mic + Send -->
+                                        <!-- Rechts: Mic -->
                                         <div class="chat-toolbar-right">
                                             <button class="btn-mic-inline" id="btn-mic" type="button" onclick="Ninko.toggleRecording()" aria-label="Spracheingabe starten" title="Spracheingabe">
                                                 <span class="mic-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></span>
                                             </button>
-                                            <button class="btn-send-inline" id="btn-send" type="button" onclick="Ninko.handleSendOrStop()" aria-label="Nachricht senden" title="Senden">
-                                                <svg class="icon-send" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                                                <svg class="icon-stop" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="display:none"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
-                                            </button>
                                         </div>
                                     </div>
-                                    <!-- SafeGuard Profile Picker Popover -->
-                                    <div id="safeguard-picker" class="safeguard-picker" style="display:none;"></div>
                                 </div>
                             </div>
                         </div>
@@ -1194,7 +1154,7 @@ print('Hello, World!')"></textarea>
                         <div class="settings-panel" id="settings-panel-system">
                             <div class="setting-group">
                                 <h4>Branding</h4>
-                                <p class="setting-desc">Passe Name, Logo und New-Chat-Welcome-Bereich vollständig an.</p>
+                                <p class="setting-desc">Passe Browser-Titel, Begrüßungstext und Login-Auftritt an. Das Markenbild wird nur noch im Login verwendet.</p>
                                 <div class="form-row">
                                     <label class="form-label" for="branding-brand-name">Dashboard-Name</label>
                                     <input id="branding-brand-name" type="text" class="form-input" placeholder="Ninko">
@@ -1204,54 +1164,19 @@ print('Hello, World!')"></textarea>
                                     <input id="branding-page-title" type="text" class="form-input" placeholder="Ninko">
                                 </div>
                                 <div class="form-row">
-                                    <label class="form-label" for="branding-logo-url">Logo-URL (Sidebar)</label>
-                                    <input id="branding-logo-url" type="text" class="form-input" placeholder="/static/images/logo_icon.png">
-                                    <div class="text-muted" style="font-size:0.8rem; margin-top:0.35rem;">Logo Vorschau</div>
-                                    <img id="branding-logo-preview" src="/static/images/logo_icon.png" alt="Logo Vorschau" style="margin-top:0.4rem; max-height:52px; max-width:220px; object-fit:contain; border:1px solid var(--border-color); border-radius:8px; padding:6px; background:var(--bg-body);">
-                                    <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
-                                        <input id="branding-logo-file" type="file" class="form-input" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" style="max-width:320px;">
-                                        <button class="btn btn-outline btn-sm" onclick="Ninko.uploadBrandingAsset('logo')">Logo hochladen</button>
-                                        <button class="btn btn-outline btn-sm" onclick="Ninko.deleteBrandingAsset('logo')">Logo löschen</button>
-                                    </div>
-                                </div>
-                                <div class="form-row">
-                                    <label class="form-label" for="branding-welcome-mode">New-Chat-Welcome-Modus</label>
-                                    <select id="branding-welcome-mode" class="form-select" onchange="Ninko.onBrandingModeChange()">
-                                        <option value="image">Bild</option>
-                                        <option value="text">Nur Text</option>
-                                        <option value="off">Aus (minimal)</option>
+                                    <label class="form-label" for="branding-welcome-mode">New-Chat-Welcome-Stil</label>
+                                    <select id="branding-welcome-mode" class="form-select">
+                                        <option value="text">Text</option>
+                                        <option value="off">Minimal</option>
                                     </select>
                                 </div>
                                 <div class="form-row">
-                                    <label class="form-label" for="branding-welcome-title">Welcome Titel</label>
+                                    <label class="form-label" for="branding-welcome-title">Begrüßungsname</label>
                                     <input id="branding-welcome-title" type="text" class="form-input" placeholder="Ninko">
                                 </div>
                                 <div class="form-row">
-                                    <label class="form-label" for="branding-welcome-text">Welcome Text</label>
+                                    <label class="form-label" for="branding-welcome-text">Begrüßungstext</label>
                                     <textarea id="branding-welcome-text" class="form-input" rows="3" placeholder="Willkommen..."></textarea>
-                                </div>
-                                <div class="form-row" id="branding-welcome-image-row">
-                                    <label class="form-label" for="branding-welcome-image-url">Welcome Bild-URL</label>
-                                    <input id="branding-welcome-image-url" type="text" class="form-input" placeholder="/static/images/logo_dashboard_new.png?v=3">
-                                    <div class="text-muted" style="font-size:0.8rem; margin-top:0.35rem;">Welcome Bild Vorschau</div>
-                                    <img id="branding-welcome-preview" src="/static/images/logo_dashboard_new.png?v=3" alt="Welcome Vorschau" style="margin-top:0.4rem; max-height:110px; max-width:280px; object-fit:contain; border:1px solid var(--border-color); border-radius:8px; padding:6px; background:var(--bg-body);">
-                                    <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
-                                        <input id="branding-welcome-file" type="file" class="form-input" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" style="max-width:320px;">
-                                        <button class="btn btn-outline btn-sm" onclick="Ninko.uploadBrandingAsset('welcome')">Welcome Bild hochladen</button>
-                                        <button class="btn btn-outline btn-sm" onclick="Ninko.deleteBrandingAsset('welcome')">Welcome Bild löschen</button>
-                                    </div>
-                                </div>
-                                <div class="form-row" id="branding-welcome-eyes-row">
-                                    <label class="form-label">
-                                        <input id="branding-welcome-eyes" type="checkbox" checked>
-                                        Leuchtende Augen aktivieren
-                                    </label>
-                                </div>
-                                <div class="form-row">
-                                    <label class="form-label">
-                                        <input id="branding-quick-actions" type="checkbox" checked>
-                                        Quick-Action Buttons im Welcome anzeigen
-                                    </label>
                                 </div>
                                 <div class="form-row" style="margin-top:0.35rem;">
                                     <label class="form-label" style="font-weight:700;">Login Screen</label>

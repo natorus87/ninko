@@ -69,7 +69,7 @@
                     card.querySelector('[data-action="logs"]')?.addEventListener('click', () => this.openRunHistory(id, name));
                     card.querySelector('[data-action="delete"]')?.addEventListener('click', () => this.deleteWorkflow(id, name));
                 });
-            } catch { container.innerHTML = '<p class="empty-state">Fehler beim Laden der Workflows.</p>'; }
+            } catch (err) { console.error('loadWorkflows failed:', err); container.innerHTML = '<p class="empty-state">Fehler beim Laden der Workflows.</p>'; }
         },
 
         async openWorkflowEditor(wfId) {
@@ -93,7 +93,7 @@
                     document.getElementById('wf-desc-input').value = wf.description || '';
                     this._wfNodes = wf.nodes || [];
                     this._wfEdges = wf.edges || [];
-                } catch { }
+                } catch (err) { console.error('Failed to load workflow for editor:', err); }
             } else {
                 document.getElementById('wf-name-input').value = '';
                 document.getElementById('wf-desc-input').value = '';
@@ -1126,7 +1126,7 @@
                     });
                 });
             } catch (err) {
-                list.innerHTML = `<p class="text-muted">Fehler beim Laden: ${err.message}</p>`;
+                list.innerHTML = `<p class="text-muted">Fehler beim Laden: ${this._escapeHtml(err.message)}</p>`;
             }
         },
 
