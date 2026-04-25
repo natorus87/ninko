@@ -424,14 +424,10 @@ const Ninko = {
 
         if (tab === 'chat') {
             parts.push('Chat');
-        } else if (tab === 'automatisierung') {
+        } else if (['automatisierung', 'scripting', 'modules'].includes(tab)) {
             parts.push('Automatisierung');
             const auto = document.querySelector('#subnav-automatisierung .settings-tab.active span')?.textContent?.trim();
             if (auto) parts.push(auto);
-        } else if (tab === 'modules') {
-            parts.push('Modules');
-            const mod = document.querySelector('#subnav-modules .module-nav-btn.active span')?.textContent?.trim();
-            if (mod) parts.push(mod);
         } else if (tab === 'settings') {
             parts.push('Settings');
             const set = document.querySelector('#subnav-settings .settings-tab.active span')?.textContent?.trim()
@@ -705,19 +701,29 @@ const Ninko = {
         };
 
         const parts = [];
+        const renderedIds = new Set();
+        const renderUniqueRows = (items) => items
+            .filter((item) => item && !renderedIds.has(item.tabId))
+            .map((item) => {
+                renderedIds.add(item.tabId);
+                return renderRow(item);
+            });
+
         if (favorites.length) {
             parts.push('<div class="module-nav-group-label">⭐ Favorites</div>');
-            parts.push(...favorites.map(renderRow));
+            parts.push(...renderUniqueRows(favorites));
         }
         if (recent.length) {
             parts.push('<div class="module-nav-group-label">🕐 Recently Used</div>');
-            parts.push(...recent.map(renderRow));
+            parts.push(...renderUniqueRows(recent));
         }
         order.forEach((category) => {
             const items = groups.get(category) || [];
             if (!items.length) return;
+            const uniqueItems = items.filter((item) => !renderedIds.has(item.tabId));
+            if (!uniqueItems.length) return;
             parts.push(`<div class="module-nav-group-label">${this._moduleCategoryLabel(category)}</div>`);
-            parts.push(...items.map(renderRow));
+            parts.push(...renderUniqueRows(uniqueItems));
         });
 
         if (!parts.length) {
@@ -846,6 +852,8 @@ const Ninko = {
     },
 
     _doSwitchTab(tabId) {
+        const automationTabs = ['automatisierung', 'scripting', 'modules'];
+
         // Deactivate all nav tabs and tab panels
         document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -860,7 +868,8 @@ const Ninko = {
         }
 
         // Activate new nav tab and panel
-        document.querySelector(`.nav-tab[data-tab="${tabId}"]`)?.classList.add('active');
+        const activeNavTabId = automationTabs.includes(tabId) ? 'automatisierung' : tabId;
+        document.querySelector(`.nav-tab[data-tab="${activeNavTabId}"]`)?.classList.add('active');
         const panel = document.getElementById(`tab-${tabId}`);
         if (panel) panel.classList.add('active');
 
@@ -874,13 +883,19 @@ const Ninko = {
 
         // Show/hide sidebar sub-navigation for automatisierung / modules / settings
         const subnavPanel = document.getElementById('sidebar-subnav');
-        const subnavSections = ['automatisierung', 'modules', 'settings'];
+        const subnavSections = ['automatisierung', 'settings'];
         if (subnavPanel) {
-            if (subnavSections.includes(tabId)) {
+            if (subnavSections.includes(tabId) || automationTabs.includes(tabId)) {
                 subnavPanel.style.display = '';
                 document.querySelectorAll('.subnav-section').forEach(s => s.style.display = 'none');
-                const activeSection = document.getElementById(`subnav-${tabId}`);
-                if (activeSection) activeSection.style.display = '';
+                if (tabId === 'modules') {
+                    document.getElementById('subnav-automatisierung')?.style.setProperty('display', '');
+                    document.getElementById('subnav-modules')?.style.setProperty('display', '');
+                } else {
+                    const activeSectionId = automationTabs.includes(tabId) ? 'subnav-automatisierung' : `subnav-${tabId}`;
+                    const activeSection = document.getElementById(activeSectionId);
+                    if (activeSection) activeSection.style.display = '';
+                }
             } else {
                 subnavPanel.style.display = 'none';
             }
@@ -905,6 +920,9 @@ const Ninko = {
         if (tabId === 'automatisierung') {
             // Show last active sub-tab, default to tasks
             this.switchAutoTab(this._activeAutoTab || 'tasks');
+        }
+        if (['scripting', 'modules'].includes(tabId)) {
+            this._setAutomationSubnavActive(tabId);
         }
         if (tabId === 'modules') {
             // Re-show active module panel, or select first module
@@ -948,8 +966,7 @@ const Ninko = {
         }
 
         // Update sidebar active state
-        document.querySelectorAll('#subnav-automatisierung .settings-tab').forEach(t => t.classList.remove('active'));
-        document.querySelector(`#subnav-automatisierung .settings-tab[data-auto-tab="${tabId}"]`)?.classList.add('active');
+        this._setAutomationSubnavActive(tabId);
 
         // Move panel into auto-content and activate
         const autoContent = document.getElementById('auto-content');
@@ -966,6 +983,14 @@ const Ninko = {
         if (tabId === 'agents') this.loadAgents();
         if (tabId === 'workflows') this.loadWorkflows();
         this._updateBreadcrumb();
+    },
+
+    _setAutomationSubnavActive(tabId) {
+        document.querySelectorAll('#subnav-automatisierung .settings-tab').forEach(t => t.classList.remove('active'));
+        document.querySelector(
+            `#subnav-automatisierung .settings-tab[data-auto-tab="${tabId}"], ` +
+            `#subnav-automatisierung .settings-tab[data-auto-link="${tabId}"]`
+        )?.classList.add('active');
     },
 
     // --- Module Sub-Tab Switching ---
