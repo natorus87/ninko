@@ -570,6 +570,21 @@ class BaseAgent:
         # Middleware-Registry für strukturierte Invoke-Pipeline
         self._middleware = self._build_middleware_registry()
 
+    def register_tool(self, tool: BaseTool) -> None:
+        """
+        Backward-compatible tool registration for marketplace plugins.
+
+        Some installable plugins instantiate the agent first and append tools
+        afterwards. Keep that working by sanitizing the tool and rebuilding the
+        internal LangGraph agent.
+        """
+        self.tools.append(tool)
+        wrap_tools_with_sanitizer([tool])
+        self._agent = create_react_agent(
+            model=self._llm,
+            tools=self.tools,
+        )
+
     def _build_middleware_registry(self) -> MiddlewareRegistry:
         registry = MiddlewareRegistry()
 

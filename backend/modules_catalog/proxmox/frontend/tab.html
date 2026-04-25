@@ -2,12 +2,12 @@
 <div id="proxmox-tab-content" class="module-tab-content">
 
     <!-- Connection Selector -->
-    <div class="proxmox-controls"
-        style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1.5rem;">
-        <select id="proxmox-connection-select" class="form-select"
-            style="min-width: 200px; padding: 0.5rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-body); color: var(--text-color);">
-            <option value="">Lade Verbindungen...</option>
-        </select>
+    <div class="proxmox-controls proxmox-toolbar">
+        <div class="proxmox-select-shell">
+            <select id="proxmox-connection-select" class="form-select proxmox-connection-select" aria-label="Proxmox-Verbindung auswählen">
+                <option value="">Lade Verbindungen...</option>
+            </select>
+        </div>
         <button class="btn btn-refresh" onclick="ProxmoxTab.refresh()">Aktualisieren</button>
     </div>
 
@@ -22,7 +22,7 @@
     <!-- VM List -->
     <div class="proxmox-section">
         <h3 class="section-title">Virtuelle Maschinen &amp; Container</h3>
-        <div class="table-container">
+        <div class="table-container proxmox-table-card">
             <table class="data-table" id="proxmox-vms-table">
                 <thead>
                     <tr>

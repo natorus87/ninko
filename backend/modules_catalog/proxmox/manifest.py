@@ -86,8 +86,9 @@ module_manifest = ModuleManifest(
     required_secrets=["PROXMOX_TOKEN_SECRET"],
     optional_secrets=["PROXMOX_PASSWORD"],
     routing_keywords=[
-        "vm", "virtuell", "proxmox", "node", "lxc", "container",
-        "pve", "snapshot", "hängt", "aufgehangen", "entwicklungsumgebung",
+        "vm", "virtuell", "proxmox", "promox", "proxmox status",
+        "proxmox node", "pve", "pve node", "lxc", "virtual machine",
+        "snapshot", "hängt", "aufgehangen", "entwicklungsumgebung",
     ],
     api_prefix="/api/proxmox",
     dashboard_tab={"id": "proxmox", "label": "Proxmox", "icon": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>'},

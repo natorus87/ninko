@@ -15,6 +15,7 @@ Enthält außerdem Outbound Secret Sanitization:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import unicodedata
@@ -115,6 +116,25 @@ _EXFIL_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 ]
 
 
+def _make_block_fn(label: str):
+    """Factory: returns a re.sub replacement function that blocks exfiltration URLs."""
+    def _block(m: re.Match[str]) -> str:
+        url = m.group(1)
+        logger.warning(
+            "Outbound-Sanitizer: %s-Exfiltration blockiert: %s…",
+            label,
+            url[:80],
+        )
+        return f"[{label} blockiert]"
+    return _block
+
+
+# Pre-built handler list — avoids re-allocating closures on every sanitize_tool_output() call.
+_EXFIL_HANDLERS: list[tuple[re.Pattern[str], Any]] = [
+    (pattern, _make_block_fn(label)) for pattern, label in _EXFIL_PATTERNS
+]
+
+
 def _replace_secret(m: re.Match[str]) -> str:
     """Ersetzt die captured Gruppe durch [REDACTED], behält Prefix."""
     full = m.group(0)
@@ -154,17 +174,8 @@ def sanitize_tool_output(text: str | None) -> str:
             text = new_text
 
     # Exfiltrations-Vektoren blockieren
-    for pattern, label in _EXFIL_PATTERNS:
-        def _block(m: re.Match[str], _label: str = label) -> str:
-            url = m.group(1)
-            logger.warning(
-                "Outbound-Sanitizer: %s-Exfiltration blockiert: %s…",
-                _label,
-                url[:80],
-            )
-            return f"[{_label} blockiert]"
-
-        text = pattern.sub(_block, text)
+    for pattern, _block_fn in _EXFIL_HANDLERS:
+        text = pattern.sub(_block_fn, text)
 
     if total_replacements > 0:
         logger.warning(
@@ -216,8 +227,6 @@ async def safe_tool_invoke(
         Result string or error message string.
     """
     try:
-        import asyncio
-
         if asyncio.iscoroutinefunction(tool_fn):
             return await tool_fn(tool_input)
         return tool_fn(tool_input)
@@ -278,8 +287,6 @@ class ToolErrorHandler:
             Dict with content (result or error) and status.
         """
         try:
-            import asyncio
-
             if asyncio.iscoroutinefunction(tool_fn):
                 result = await tool_fn(tool_args)
             else:

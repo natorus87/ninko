@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
 import os
 import re
@@ -46,6 +47,83 @@ def _validate_interface(value: str) -> str:
     if not _RE_INTERFACE.match(value.strip()):
         raise ValueError(f"Invalid interface: must match [a-zA-Z0-9_-]{{1,32}} (got: {value!r})")
     return value.strip()
+
+
+def _validate_port(value: str, param: str = "port") -> str:
+    """Raises ValueError if value is not a valid port number or service name."""
+    stripped = value.strip()
+    if stripped.isdigit():
+        port_num = int(stripped)
+        if not 1 <= port_num <= 65535:
+            raise ValueError(f"Invalid {param}: port must be 1–65535 (got: {port_num})")
+    elif not re.match(r'^[a-zA-Z0-9_\-]{1,32}$', stripped):
+        raise ValueError(f"Invalid {param}: must be a port number or service name (got: {value!r})")
+    return stripped
+
+
+def _validate_network_value(
+    value: str,
+    param: str,
+    *,
+    allow_any: bool = True,
+    allow_alias: bool = True,
+) -> str:
+    """Allow 'any', IP/CIDR values, or conservative alias names."""
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError(f"Invalid {param}: value must not be empty")
+    if allow_any and stripped.lower() == "any":
+        return "any"
+    try:
+        if "/" in stripped:
+            ipaddress.ip_network(stripped, strict=False)
+        else:
+            ipaddress.ip_address(stripped)
+        return stripped
+    except ValueError:
+        if allow_alias and re.match(r'^[a-zA-Z0-9_.-]{1,128}$', stripped):
+            return stripped
+        raise ValueError(
+            f"Invalid {param}: must be 'any', an IP/CIDR, or a safe alias name (got: {value!r})"
+        )
+
+
+def _validate_virtual_ip_mode(value: str) -> str:
+    """Restrict virtual IP mode to known OPNsense values."""
+    stripped = value.strip().lower()
+    allowed = {"carp", "ipalias", "proxyarp", "other"}
+    if stripped not in allowed:
+        raise ValueError(
+            f"Invalid mode {value!r}. Must be one of: {', '.join(sorted(allowed))}"
+        )
+    return stripped
+
+
+def _validate_virtual_ip_address(value: str) -> str:
+    """Virtual IPs must be concrete IP or CIDR values."""
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError("Invalid address: value must not be empty")
+    try:
+        if "/" in stripped:
+            ipaddress.ip_interface(stripped)
+        else:
+            ipaddress.ip_address(stripped)
+        return stripped
+    except ValueError as exc:
+        raise ValueError(
+            f"Invalid address: must be a valid IP address or CIDR (got: {value!r})"
+        ) from exc
+
+
+# Shared interface allowlist — used by set_opnsense_interface, set_opnsense_dhcp,
+# create_opnsense_virtual_ip to avoid DRY violations.
+_KNOWN_INTERFACES: frozenset[str] = frozenset(
+    {"lan", "wan", "opt1", "opt2", "opt3", "opt4", "opt5"}
+)
+
+_FIREWALL_ACTIONS: frozenset[str] = frozenset({"pass", "block", "reject"})
+_FIREWALL_PROTOCOLS: frozenset[str] = frozenset({"tcp", "udp", "icmp", "any", "tcp/udp"})
 
 
 async def _get_opnsense_auth(connection_id: str = "") -> tuple:
@@ -257,6 +335,8 @@ async def get_opnsense_firewall_rules(
     Use this tool to list active firewall rules.
     """
     try:
+        if interface:
+            interface = _validate_interface(interface)
         result = await _opnsense_request(
             "/api/firewall/filter/searchRule", connection_id
         )
@@ -383,13 +463,31 @@ async def create_opnsense_firewall_rule(
     """
     Creates a new firewall rule on OPNsense.
     Use this tool to add a firewall rule. Requires confirmation.
+
+    Args:
+        interface: Interface name (e.g. 'lan', 'wan', 'opt1')
+        action: Rule action — must be one of: pass, block, reject
+        protocol: Protocol — must be one of: tcp, udp, icmp, any, tcp/udp
+        source: Source address or network (e.g. 'any', '192.168.1.0/24')
+        destination: Destination address or network
+        description: Optional human-readable description
     """
     try:
+        interface = _validate_interface(interface)
+        action_clean = action.strip().lower()
+        if action_clean not in _FIREWALL_ACTIONS:
+            raise ValueError(f"Invalid action {action!r}. Must be one of: {', '.join(sorted(_FIREWALL_ACTIONS))}")
+        protocol_clean = protocol.strip().lower()
+        if protocol_clean not in _FIREWALL_PROTOCOLS:
+            raise ValueError(f"Invalid protocol {protocol!r}. Must be one of: {', '.join(sorted(_FIREWALL_PROTOCOLS))}")
+        source = _validate_network_value(source, "source")
+        destination = _validate_network_value(destination, "destination")
+
         payload = {
             "rule": {
                 "interface": interface,
-                "action": action,
-                "protocol": protocol,
+                "action": action_clean,
+                "protocol": protocol_clean,
                 "source": source,
                 "destination": destination,
                 "descr": description,
@@ -508,12 +606,30 @@ async def create_opnsense_nat_rule(
     """
     Creates a new NAT rule (port forwarding) on OPNsense.
     Use this tool to add a NAT rule. Requires confirmation.
+
+    Args:
+        interface: Interface name (e.g. 'wan', 'lan', 'opt1')
+        protocol: Protocol — must be one of: tcp, udp, icmp, any, tcp/udp
+        source: Source address or network (e.g. 'any', '192.168.1.0/24')
+        destination: Destination address/port (e.g. 'any', '80')
+        target: Internal target IP address for forwarding
+        target_port: Internal port number (1–65535) or service name
+        description: Optional human-readable description
     """
     try:
+        interface = _validate_interface(interface)
+        protocol_clean = protocol.strip().lower()
+        if protocol_clean not in _FIREWALL_PROTOCOLS:
+            raise ValueError(f"Invalid protocol {protocol!r}. Must be one of: {', '.join(sorted(_FIREWALL_PROTOCOLS))}")
+        source = _validate_network_value(source, "source")
+        destination = _validate_network_value(destination, "destination")
+        target = _validate_network_value(target, "target", allow_any=False)
+        target_port = _validate_port(target_port, "target_port")
+
         payload = {
             "rule": {
                 "interface": interface,
-                "protocol": protocol,
+                "protocol": protocol_clean,
                 "source": source,
                 "destination": destination,
                 "target": target,
@@ -723,16 +839,8 @@ async def set_opnsense_interface(
         connection_id: Optional connection ID
     """
     try:
-        interface_map = {
-            "lan": "lan",
-            "wan": "wan",
-            "opt1": "opt1",
-            "opt2": "opt2",
-            "opt3": "opt3",
-            "opt4": "opt4",
-            "opt5": "opt5",
-        }
-        iface_key = interface_map.get(interface.lower(), interface)
+        interface = _validate_interface(interface)
+        iface_key = interface.lower() if interface.lower() in _KNOWN_INTERFACES else interface
 
         payload = {
             "interface": iface_key,
@@ -803,6 +911,7 @@ async def get_opnsense_dhcp_settings(
     Use this tool to retrieve DHCP configuration (range, enable/disable).
     """
     try:
+        interface = _validate_interface(interface)
         result = await _opnsense_request(
             f"/api/dhcpv4/settings/{interface}",
             connection_id,
@@ -842,19 +951,13 @@ async def set_opnsense_dhcp(
     Use this tool to enable/disable DHCP and set the IP range.
     """
     try:
-        interface_map = {
-            "lan": "lan",
-            "wan": "wan",
-            "opt1": "opt1",
-            "opt2": "opt2",
-            "opt3": "opt3",
-            "opt4": "opt4",
-            "opt5": "opt5",
-        }
-        iface_key = interface_map.get(interface.lower(), interface)
+        interface = _validate_interface(interface)
+        iface_key = interface.lower() if interface.lower() in _KNOWN_INTERFACES else interface
 
-        range_from = range_start if range_start else "192.168.1.100"
-        range_to = range_end if range_end else "192.168.1.200"
+        if not range_start or not range_end:
+            raise ValueError("range_start and range_end are required — no default IP range is assumed.")
+        range_from = range_start
+        range_to = range_end
 
         payload = {
             iface_key: {
@@ -961,16 +1064,10 @@ async def create_opnsense_virtual_ip(
     Use this tool to add a virtual IP address for HA/load balancing.
     """
     try:
-        interface_map = {
-            "lan": "lan",
-            "wan": "wan",
-            "opt1": "opt1",
-            "opt2": "opt2",
-            "opt3": "opt3",
-            "opt4": "opt4",
-            "opt5": "opt5",
-        }
-        iface_key = interface_map.get(interface.lower(), interface)
+        mode = _validate_virtual_ip_mode(mode)
+        interface = _validate_interface(interface)
+        address = _validate_virtual_ip_address(address)
+        iface_key = interface.lower() if interface.lower() in _KNOWN_INTERFACES else interface
 
         payload = {
             "virtualip": {
@@ -1233,7 +1330,9 @@ async def get_opnsense_changelog(version: str = "", connection_id: str = "") -> 
     try:
         endpoint = "/api/core/firmware/changelog"
         if version:
-            endpoint = f"/api/core/firmware/changelog/{version}"
+            if not _RE_VERSION.match(version.strip()):
+                raise ValueError(f"Invalid version format {version!r}. Expected e.g. '24.7' or '24.7.1'.")
+            endpoint = f"/api/core/firmware/changelog/{version.strip()}"
 
         result = await _opnsense_request(endpoint, connection_id)
 

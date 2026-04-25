@@ -11,14 +11,14 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.3.0-blue.svg" alt="Version"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.3.2-blue.svg" alt="Version"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-stable-brightgreen.svg" alt="Status"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.12-blue.svg" alt="Python"></a>
   <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.115-green.svg" alt="FastAPI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
 </p>
 
-> **v1.3.0 — Current Release:** Ninko is production-ready and actively deployed. The core API and module interfaces are stable. Feedback and contributions welcome.
+> **v1.3.2 — Current Release:** Ninko is production-ready and actively deployed. The core API and module interfaces are stable. Feedback and contributions welcome.
 
 ---
 

@@ -138,10 +138,15 @@ class AgentExecutionMiddleware(BaseMiddleware):
             ctx.early_return = True
         except Exception as exc:
             exc_str = str(exc)
-            if "Model unloaded" in exc_str:
+            if (
+                "Model unloaded" in exc_str
+                or "No models loaded" in exc_str
+                or "no models loaded" in exc_str.lower()
+            ):
                 ctx.response = (
                     "Fehler: Das KI-Modell ist gerade nicht verfügbar (nicht geladen). "
-                    "Bitte prüfe LM Studio und lade das Modell neu."
+                    "Bitte prüfe den aktiven LLM-Provider und lade dort ein Modell "
+                    "oder wechsle auf einen funktionierenden Provider."
                 )
             else:
                 logger.warning(

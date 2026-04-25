@@ -18,6 +18,7 @@ from .schemas import (
 )
 from .tools import (
     add_knowledge,
+    delete_by_filter as delete_by_filter_tool,
     delete_knowledge_by_id,
     get_collection_stats,
     list_knowledge_collections,
@@ -152,27 +153,19 @@ async def delete_entry(point_id: str, collection: str = "", connection_id: str =
 async def delete_by_filter(req: DeleteEntryRequest, connection_id: str = "") -> object:
     """Delete multiple entries by payload filter (category or source)."""
     try:
-        from qdrant_client.models import Filter, FieldCondition, MatchValue
-        from .tools import _get_qdrant_client
-
         if not req.category and not req.source:
             return _error("At least 'category' or 'source' must be specified.", 400)
-
-        client, default_collection = await _get_qdrant_client(connection_id)
-        target = req.collection or default_collection
-
-        conditions = []
-        if req.category:
-            conditions.append(FieldCondition(key="category", match=MatchValue(value=req.category)))
         if req.source:
-            conditions.append(FieldCondition(key="source", match=MatchValue(value=req.source)))
+            return _error("Source-based bulk delete is not supported by the hardened tool path.", 400)
 
-        await client.delete(
-            collection_name=target,
-            points_selector=Filter(must=conditions),
-        )
-        return {"message": f"Entries with filter deleted from '{target}'."}
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+        msg = await delete_by_filter_tool.ainvoke({
+            "category": req.category or "",
+            "collection": req.collection,
+            "connection_id": connection_id,
+            "confirm": req.confirm,
+        })
+        return {"message": msg, "confirmed": req.confirm}
+    except Exception as e:
         return _error(str(e))
 
 

@@ -18,7 +18,7 @@ spec:
       serviceAccountName: ninko
       containers:
         - name: backend
-          image: natorus87/ninko-backend:latest
+          image: natorus87/ninko-backend:v1.3.2
           imagePullPolicy: Always
           ports:
             - containerPort: 8000

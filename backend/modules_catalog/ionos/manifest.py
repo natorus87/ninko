@@ -41,7 +41,7 @@ module_manifest = ModuleManifest(
     required_secrets=[],
     optional_secrets=["IONOS_API_KEY"],
     routing_keywords=[
-        "ionos", "dns", "zone", "domain", "record", "cname", "a record", "txt record", "ionos api"
+        "ionos", "ionos dns", "zone", "record", "txt record", "ionos api", "dns zone", "dns record"
     ],
     api_prefix="/api/ionos",
     dashboard_tab={"id": "ionos", "label": "IONOS", "icon": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path><path d="M2 12h20"></path></svg>'},

@@ -77,3 +77,4 @@ class DeleteEntryRequest(BaseModel):
     collection: str = ""
     category: Optional[str] = None
     source: Optional[str] = None
+    confirm: bool = False

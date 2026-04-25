@@ -534,7 +534,7 @@ async def lifespan(app: FastAPI) -> object:
 app = FastAPI(
     title="Ninko",
     description="Modularer IT-Operations-AI-Agent",
-    version="1.0.0",
+    version="1.3.2",
     lifespan=lifespan,
 )
 

@@ -95,7 +95,10 @@ const ProxmoxTab = {
             container.innerHTML = nodes.map(node => `
                 <div class="node-card ${node.status === 'online' ? 'node-online' : 'node-offline'}">
                     <div class="node-header">
-                        <span class="node-name">${node.node}</span>
+                        <div>
+                            <span class="node-name">${node.node}</span>
+                            <div class="node-meta">Proxmox Node</div>
+                        </div>
                         <span class="node-status-badge ${node.status}">${node.status}</span>
                     </div>
                     <div class="node-metrics">
@@ -144,13 +147,18 @@ const ProxmoxTab = {
 
                 return `<tr>
                     <td>${vm.vmid}</td>
-                    <td>${vm.name}</td>
+                    <td>
+                        <div class="vm-name-cell">
+                            <span class="vm-name">${vm.name}</span>
+                            <span class="vm-meta">${vm.type === 'lxc' ? 'Container' : 'Virtual Machine'}</span>
+                        </div>
+                    </td>
                     <td><span class="status-badge status-unknown">${typeBadge}</span></td>
-                    <td>${vm.node}</td>
+                    <td><span class="status-badge status-node">${vm.node}</span></td>
                     <td><span class="status-badge ${statusClass}">${vm.status}</span></td>
-                    <td>${vm.cpu_usage}%</td>
-                    <td>${memMB}/${memTotalMB} MB</td>
-                    <td class="action-buttons">
+                    <td><span class="metric-pill">${vm.cpu_usage}%</span></td>
+                    <td><span class="metric-pill">${memMB}/${memTotalMB} MB</span></td>
+                    <td class="action-buttons table-action-group">
                         ${vm.status !== 'running' ?
                         `<button class="btn btn-sm btn-success" onclick="ProxmoxTab.startVM('${vm.node}', ${vm.vmid})">Start</button>` :
                         `<button class="btn btn-sm btn-warning" onclick="ProxmoxTab.rebootVM('${vm.node}', ${vm.vmid})">Reboot</button>

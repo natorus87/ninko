@@ -9,6 +9,29 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.3.2] – 2026-04-25
+
+### Added
+
+- **Context-aware welcome messages** across all shipped frontend languages with generic, time-of-day, and weekday-specific variants for the restored dashboard experience.
+- **Qdrant knowledge management expansion** with bulk-add support, filter-based delete preview/confirm flow, and stronger route/schema coverage for destructive operations.
+- **OPNsense tool classification and input validation**: explicit write/admin tool tiers plus hardened validation for ports, networks, virtual IPs, and interface operations.
+
+### Changed
+
+- **Dashboard restored to the production snapshot users expected**: the blue/violet glass dashboard from the known-good image is now the active frontend baseline again, including the matching login and chat surfaces.
+- **Release image/tag alignment**: Kubernetes and Helm manifests now point to the versioned release image `natorus87/ninko-backend:v1.3.2` instead of ad-hoc tags.
+- **Routing keyword tuning** for Codelab, Scripting, Email, Fritzbox, IONOS, Kubernetes, Pi-hole, and Proxmox to reduce false-positive module routing.
+- **README and app metadata** updated to reflect the current release version.
+
+### Fixed
+
+- **Dashboard initialization regression**: fixed `this._dashboardGreeting is not a function`, which left the chat shell visible but prevented full dashboard initialization.
+- **Proxmox dashboard and agent behavior**: improved status-first agent instructions, clearer VM/node cards, accessible connection selection, and more robust module settings toggles.
+- **Marketplace/plugin runtime compatibility**: restored backward-compatible `register_tool()` handling for agents that append tools after instantiation.
+- **Provider error handling**: better fallback text when the active LLM provider has no model loaded, plus lower-overhead outbound sanitizer handling.
+- **HPE iLO and Qdrant agent wiring**: corrected agent initialization/tool registration issues and tightened destructive knowledge-delete safeguards.
+
 ## [1.3.1] – 2026-04-19
 
 ### Documentation
@@ -22,32 +45,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 - **GitHub Releases**: Cleaned up 23 pre-stable releases, keeping only v1.x releases
 - **Docker Hub**: Created proper v1.3.0 tag for production deployments
-
----
-
-## [Unreleased]
-
-### Security
-
-- **CWE-326: Vault SQLite Encryption Migration (BREAKING)** – Vault Secrets werden jetzt mit PBKDF2 (210k Iterationen) statt direktem SHA256 verschlüsselt. Ältere Secrets müssen neu gesetzt werden.
-  - **Migration Script**: \`scripts/migrate-vault-secrets.py\` automatisiert die Migration
-  - **Fallback**: Nicht lesbare Secrets werden als \`None\` zurückgegeben (App startet weiterhin)
-  - **Betroffene Secrets**: Telegram Bot Token, Fritzbox Password (müssen neu konfiguriert werden)
-
-### Added
-
-- **TODO.md Cleanup (2026-04-10)**: Consolidated from 1160 to ~280 lines. Removed chronological "Completed this session" blocks, deduplicated DeerFlow/AGENTEN-LOGIK issues, sorted by priority.
-
-### Fixed (from TODO.md archival)
-
-- **Synology Agent duplicate class definition** (2026-04-07): Removed duplicate \`SynologyAgent\` class definition at lines 94-124 and 169-184. Full 22-tool list now available.
-- **image_gen __init__.py bereinigt** (2026-04-07): Added \`__all__\` and \`from __future__ import annotations\`.
-- **slack tools.py unused import** (2026-04-07): Removed \`from multipart import MultipartParam\` (unused, code uses \`aiohttp.FormData\`).
-- **Code Review aller 45 Module** (2026-04-07): 41 OK, 1 critical (Synology) fixed.
-
-### Changed (Breaking)
-
-- **OpenProject Module v1.0.3**: Breaking Change in Safeguard-Verhalten. Die Module-Tools nutzen jetzt \`confirmed=True\` für destruktive Operationen (Work Packages erstellen/aktualisieren, Time Entries loggen). Dies ist eine Sicherheitsverbesserung, da Safeguard-Profile (\`strict\`, \`moderate\`) jetzt korrekt greifen. Clients mit \`disabled\` oder \`user_only\` Profilen müssen keine Bestätigung mehr geben – andere Profile sehen Bestätigungsdialoge.
 
 ## [1.2.0] – 2026-04-08
 

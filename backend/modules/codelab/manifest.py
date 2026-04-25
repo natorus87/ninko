@@ -23,8 +23,8 @@ module_manifest = ModuleManifest(
     required_secrets=[],
     optional_secrets=[],
     routing_keywords=[
-        "code", "skript", "script", "programmieren", "programm",
-        "python", "bash", "javascript", "ausführen", "kompilieren",
+        "code", "programmieren", "programm",
+        "bash", "javascript", "ausführen", "kompilieren",
         "code verbessern", "code optimieren", "refactoring", "refaktorieren",
         "code review", "code prüfen", "code erklären", "code analysieren",
         "text verbessern", "text optimieren", "text überarbeiten",

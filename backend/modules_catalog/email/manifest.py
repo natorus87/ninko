@@ -19,7 +19,7 @@ module_manifest = ModuleManifest(
     
     routing_keywords=[
         "email", "mail", "posteingang", "postfach", "smtp", "imap",
-        "ordner", "senden", "versenden", "mail", "inbox", "mails"
+        "ordner", "senden", "versenden", "inbox", "mails"
     ],
     
     api_prefix="/api/email",

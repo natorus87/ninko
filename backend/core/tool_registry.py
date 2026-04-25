@@ -888,6 +888,7 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
 
     # ── OPNsense ────────────────────────────────────────────────────────────
     opnsense_tools = [
+        # ── Read-only ──────────────────────────────────────────────────────────
         ToolMetadata("get_opnsense_system_status", "opnsense", readonly=True),
         ToolMetadata("get_opnsense_interfaces", "opnsense", readonly=True),
         ToolMetadata("get_opnsense_gateways", "opnsense", readonly=True),
@@ -901,6 +902,17 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
         ToolMetadata("get_opnsense_firmware_info", "opnsense", readonly=True),
         ToolMetadata("get_opnsense_firmware_status", "opnsense", readonly=True),
         ToolMetadata("get_opnsense_changelog", "opnsense", readonly=True),
+        # ── WRITE_SYSTEM: mutates firewall/network config ──────────────────────
+        ToolMetadata("create_opnsense_firewall_rule", "opnsense", tier=ToolTier.WRITE_SYSTEM),
+        ToolMetadata("create_opnsense_nat_rule", "opnsense", tier=ToolTier.WRITE_SYSTEM),
+        ToolMetadata("set_opnsense_interface", "opnsense", tier=ToolTier.WRITE_SYSTEM),
+        ToolMetadata("set_opnsense_dhcp", "opnsense", tier=ToolTier.WRITE_SYSTEM),
+        ToolMetadata("create_opnsense_virtual_ip", "opnsense", tier=ToolTier.WRITE_SYSTEM),
+        ToolMetadata("restart_opnsense_service", "opnsense", tier=ToolTier.WRITE_SYSTEM),
+        # ── ADMIN: destructive / irreversible ─────────────────────────────────
+        ToolMetadata("delete_opnsense_firewall_rule", "opnsense", destructive=True, tier=ToolTier.ADMIN),
+        ToolMetadata("delete_opnsense_nat_rule", "opnsense", destructive=True, tier=ToolTier.ADMIN),
+        ToolMetadata("delete_opnsense_virtual_ip", "opnsense", destructive=True, tier=ToolTier.ADMIN),
     ]
     registry.register_many(opnsense_tools)
 
@@ -918,6 +930,10 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
         ToolMetadata("search_knowledge", "qdrant", readonly=True),
         ToolMetadata("list_knowledge_collections", "qdrant", readonly=True),
         ToolMetadata("get_collection_stats", "qdrant", readonly=True),
+        ToolMetadata("add_knowledge", "qdrant", tier=ToolTier.WRITE_DATA),
+        ToolMetadata("add_knowledge_bulk", "qdrant", tier=ToolTier.WRITE_DATA),
+        ToolMetadata("delete_knowledge_by_id", "qdrant", destructive=True, tier=ToolTier.ADMIN),
+        ToolMetadata("delete_by_filter", "qdrant", destructive=True, tier=ToolTier.ADMIN),
     ]
     registry.register_many(qdrant_tools)
 

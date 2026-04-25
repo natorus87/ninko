@@ -37,7 +37,10 @@ When there is uncertainty, ask the user to confirm the action before proceeding.
 """
 
     def __init__(self) -> None:
-        super().__init__()
+        super().__init__(
+            name=self.name,
+            system_prompt=self.system_prompt,
+        )
 
 
 from .tools import (

@@ -7,19 +7,11 @@
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="/static/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-primary: #0b0f19;
-            --bg-secondary: #151c2c;
-            --bg-tertiary: #1a243d;
-            --text-primary: #ffffff;
-            --text-secondary: #aabbd1;
-            --border-color: #2a3447;
-            --primary-color: #3b8ee8;
-            --primary-color-rgb: 59, 142, 232;
-            --accent-blue: #5c9eeb;
-            --danger: #ff7676;
+            --danger: #e31a1a;
         }
 
         * { box-sizing: border-box; }
@@ -31,7 +23,7 @@
             place-items: center;
             font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             color: var(--text-primary);
-            background: radial-gradient(1200px 720px at 18% 8%, #19304a 0%, var(--bg-primary) 58%);
+            background: var(--bg-primary);
             transition: background 180ms ease;
             padding: 1rem;
             position: relative;
@@ -40,13 +32,13 @@
 
         body.bg-aurora {
             background:
-                radial-gradient(880px 560px at 14% 10%, color-mix(in srgb, var(--primary-color) 26%, transparent), transparent 66%),
-                radial-gradient(820px 480px at 90% 82%, rgba(60, 100, 190, 0.2), transparent 64%),
+                radial-gradient(800px 600px at 14% 10%, rgba(67, 24, 255, 0.18), transparent 70%),
+                radial-gradient(700px 500px at 88% 80%, rgba(0, 117, 255, 0.14), transparent 70%),
                 var(--bg-primary);
         }
 
         body.bg-gradient {
-            background: linear-gradient(135deg, color-mix(in srgb, var(--primary-color) 18%, var(--bg-primary) 82%) 0%, var(--bg-primary) 68%);
+            background: linear-gradient(135deg, rgba(67, 24, 255, 0.15) 0%, var(--bg-primary) 60%);
         }
 
         body.bg-minimal {
@@ -65,18 +57,18 @@
 
         body::before {
             background:
-                radial-gradient(40% 28% at 22% 18%, color-mix(in srgb, var(--accent-blue) 24%, transparent), transparent 80%),
-                radial-gradient(34% 24% at 82% 86%, color-mix(in srgb, var(--primary-color) 20%, transparent), transparent 80%);
-            filter: blur(22px);
+                radial-gradient(40% 28% at 22% 18%, rgba(67, 24, 255, 0.2), transparent 80%),
+                radial-gradient(34% 24% at 82% 86%, rgba(0, 117, 255, 0.16), transparent 80%);
+            filter: blur(28px);
             animation: drift 22s ease-in-out infinite alternate;
         }
 
         body::after {
             background-image:
-                linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-            background-size: 26px 26px;
-            opacity: 0.11;
+                linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+            background-size: 28px 28px;
+            opacity: 0.08;
             animation: drift-reverse 28s linear infinite;
         }
 
@@ -110,15 +102,16 @@
 
         .card {
             width: 100%;
-            background: linear-gradient(180deg, color-mix(in srgb, var(--bg-secondary) 92%, white 8%) 0%, var(--bg-secondary) 100%);
-            border: 1px solid var(--border-color);
-            border-radius: 16px;
+            background: linear-gradient(127.09deg, rgba(6, 11, 40, 0.94) 19.41%, rgba(10, 14, 35, 0.49) 76.65%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
             padding: 26px;
             box-shadow:
-                0 22px 62px rgba(0, 0, 0, 0.45),
+                0 22px 62px rgba(0, 0, 0, 0.6),
                 inset 0 1px 0 rgba(255, 255, 255, 0.06),
-                0 0 0 1px rgba(var(--primary-color-rgb), 0.06);
-            backdrop-filter: blur(12px);
+                0 0 0 1px rgba(67, 24, 255, 0.08);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
         }
 
         .card.solid {
@@ -251,9 +244,9 @@
 
         input {
             width: 100%;
-            border-radius: 10px;
-            border: 1px solid var(--border-color);
-            background: color-mix(in srgb, var(--bg-primary) 70%, black 30%);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(11, 20, 55, 0.7);
             color: var(--text-primary);
             padding: 10px 12px;
             font-size: 0.95rem;
@@ -262,27 +255,28 @@
         }
 
         input:focus {
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb), 0.22);
-            background: color-mix(in srgb, var(--bg-primary) 60%, black 40%);
+            border-color: rgba(67, 24, 255, 0.7);
+            box-shadow: 0 0 0 2px rgba(67, 24, 255, 0.2);
+            background: rgba(11, 20, 55, 0.9);
         }
 
         button {
             width: 100%;
             border: 0;
-            border-radius: 10px;
+            border-radius: 12px;
             padding: 11px 14px;
             font-size: 0.95rem;
             font-weight: 650;
             color: white;
-            background: linear-gradient(180deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 76%, black 24%));
+            background: linear-gradient(310deg, #4318ff 0%, #0075ff 100%);
             cursor: pointer;
             transition: transform 100ms ease, filter 120ms ease, box-shadow 120ms ease;
-            box-shadow: 0 8px 18px rgba(var(--primary-color-rgb), 0.28);
+            box-shadow: 0 8px 22px rgba(67, 24, 255, 0.4);
         }
 
         button:hover {
-            filter: brightness(1.06);
+            filter: brightness(1.08);
+            box-shadow: 0 12px 28px rgba(67, 24, 255, 0.5);
         }
 
         button:active {
@@ -458,12 +452,17 @@
         const pwInput = document.getElementById('new-password');
         const pwInputRepeat = document.getElementById('new-password-repeat');
 
+        function isSafeThemeTokenValue(value) {
+            const normalized = String(value ?? '').trim().toLowerCase();
+            return normalized !== '' && !normalized.includes('url(') && !normalized.includes('expression(');
+        }
+
         function applyThemeTokens(themePayload) {
-            const mode = localStorage.getItem('ninko_theme') === 'light' ? 'light' : 'dark';
             const theme = themePayload?.theme || {};
-            const tokens = mode === 'light' ? (theme.tokens_light || {}) : (theme.tokens_dark || {});
+            const tokens = theme.tokens_dark || {};
             for (const [k, v] of Object.entries(tokens)) {
                 if (typeof k !== 'string' || !k.startsWith('--')) continue;
+                if (!isSafeThemeTokenValue(v)) continue;
                 document.documentElement.style.setProperty(k, String(v));
             }
         }

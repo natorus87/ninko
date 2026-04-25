@@ -214,6 +214,7 @@ const Ninko = {
             this.autoResizeTextarea();
             this.initResizers();
             this.initSidebarTransitions();
+            this.initScrollbarVisibility();
             this._checkTtsAvailable();
             this.initSafeguard();
             this._initCtxIndicator();
@@ -229,7 +230,6 @@ const Ninko = {
             console.error('Ninko init failed:', err);
             this._showInitError(err);
         } finally {
-            document.documentElement.classList.remove('light-mode-pre');
             document.body.style.opacity = '1';
         }
     },
@@ -1556,28 +1556,107 @@ const Ninko = {
         this.renderHistory();
     },
 
-    _dashboardGreeting() {
+    _getWeekday() {
+        const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        return days[new Date().getDay()];
+    },
+
+    _getTimePeriod() {
         const hour = new Date().getHours();
-        if (hour < 11) return 'morning';
-        if (hour < 18) return 'day';
-        return 'evening';
+        if (hour >= 5 && hour < 11) return 'morning';
+        if (hour >= 11 && hour < 17) return 'day';
+        if (hour >= 17 && hour < 22) return 'evening';
+        return 'night';
+    },
+
+    _getWelcomeMessageCacheKey() {
+        return `ninko_welcome_${I18n._lang}_${this.sessionId}`;
+    },
+
+    _getWelcomeMessageKey() {
+        const weekday = this._getWeekday();
+        const period = this._getTimePeriod();
+        
+        // Prioritätslogik: weekday+period → period → generic
+        // 1. Versuche weekday.spezifisch + period (z.B. "monday.morning")
+        const weekdayPeriodKey = `chat.welcome.message.weekday.${weekday}.${period}`;
+        
+        // Prüfe ob Keys für diese Kombination existieren
+        let hasWeekdayPeriod = false;
+        for (let i = 0; i < 25; i++) {
+            if (t(weekdayPeriodKey + '.' + i) !== weekdayPeriodKey + '.' + i) {
+                hasWeekdayPeriod = true;
+                break;
+            }
+        }
+        
+        if (hasWeekdayPeriod) {
+            return weekdayPeriodKey;
+        }
+        
+        // 2. Fallback zu period-nur (z.B. "period.morning")
+        const periodKey = `chat.welcome.message.period.${period}`;
+        let hasPeriod = false;
+        for (let i = 0; i < 25; i++) {
+            if (t(periodKey + '.' + i) !== periodKey + '.' + i) {
+                hasPeriod = true;
+                break;
+            }
+        }
+        
+        if (hasPeriod) {
+            return periodKey;
+        }
+        
+        // 3. Fallback zu generic
+        return 'chat.welcome.message.generic';
     },
 
     _getWelcomeMessageVariant(period) {
+        // Neue Logik mit Wochentag, echten Zufall pro Chat
+        // Altes Verhalten für Backward-Kompatibilität beibehalten
+        
+        const messageKey = this._getWelcomeMessageKey();
         const variants = [];
-        for (let i = 0; i < 8; i += 1) {
-            const key = `chat.welcome.message.${period}.${i}`;
+        
+        for (let i = 0; i < 25; i += 1) {
+            const key = `${messageKey}.${i}`;
             const translated = t(key);
             if (translated === key) break;
             variants.push(translated);
         }
-        if (!variants.length) return t('chat.input.ask');
-
-        const now = new Date();
-        const start = new Date(now.getFullYear(), 0, 0);
-        const dayOfYear = Math.floor((now - start) / 86400000);
-        const langSeed = Array.from(I18n._lang || 'de').reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
-        return variants[(dayOfYear + langSeed) % variants.length];
+        
+        if (!variants.length) {
+            // Fallback zu alter Logik für Kompatibilität
+            const oldVariants = [];
+            for (let i = 0; i < 8; i += 1) {
+                const key = `chat.welcome.message.${period}.${i}`;
+                const translated = t(key);
+                if (translated === key) break;
+                oldVariants.push(translated);
+            }
+            if (oldVariants.length) {
+                return oldVariants[Math.floor(Math.random() * oldVariants.length)];
+            }
+            return t('chat.input.ask');
+        }
+        
+        // Echter Zufall pro neuem Chat, stabil innerhalb eines Chats
+        const cacheKey = this._getWelcomeMessageCacheKey();
+        let cachedIndex = sessionStorage.getItem(cacheKey);
+        
+        if (cachedIndex === null) {
+            cachedIndex = Math.floor(Math.random() * variants.length).toString();
+            sessionStorage.setItem(cacheKey, cachedIndex);
+        } else {
+            cachedIndex = parseInt(cachedIndex);
+            if (cachedIndex >= variants.length) {
+                cachedIndex = Math.floor(Math.random() * variants.length);
+                sessionStorage.setItem(cacheKey, cachedIndex.toString());
+            }
+        }
+        
+        return variants[cachedIndex];
     },
 
     _updateChatInputState(mode = 'ask') {
@@ -1589,16 +1668,16 @@ const Ninko = {
     },
 
     _getDashboardHomeHtml() {
-        const b = this._branding || {};
-        const minimal = (b.welcome_mode || 'text') === 'off';
-        const headline = this._escapeHtml(this._getWelcomeMessageVariant(this._dashboardGreeting()));
+        const headline = this._escapeHtml(this._getWelcomeMessageVariant(this._getTimePeriod()));
 
         return `
             <div class="welcome-message dashboard-home">
-                <div class="dh-intro ${minimal ? 'dh-intro-minimal' : ''}">
-                    <div class="dh-headline">
-                        <img class="dh-headline-icon" src="/static/images/logo_icon.png" alt="Ninko">
-                        <h2>${headline}</h2>
+                <div class="dh-shell dh-shell-minimal">
+                    <div class="dh-intro dh-intro-plain">
+                        <div class="dh-headline">
+                            <img class="dh-headline-icon" src="/static/images/logo_icon.png" alt="Ninko">
+                            <h2>${headline}</h2>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1746,21 +1825,9 @@ ${messagesHtml}
         showNotification(t('chat.exportDone'), 'success');
     },
 
-    // --- Theme Toggle ---
-    _setThemeToggleIcon(isLight) {
-        const btn = document.getElementById('theme-toggle');
-        if (!btn) return;
-        const icon = isLight
-            ? '<svg id="theme-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>'
-            : '<svg id="theme-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
-        btn.innerHTML = `${icon}<span>${t('chat.toggleTheme') || 'Theme wechseln'}</span>`;
-    },
-
     restoreTheme() {
-        const saved = localStorage.getItem('ninko_theme');
-        const isLight = saved === 'light';
-        document.body.classList.toggle('light-mode', isLight);
-        this._setThemeToggleIcon(isLight);
+        // Dark mode only — no theme toggle
+        document.body.classList.remove('light-mode');
     },
 
     _clearThemeVars() {
@@ -1775,8 +1842,7 @@ ${messagesHtml}
         this._clearThemeVars();
         const theme = this._activeThemeDefinition;
         if (!theme) return;
-        const isLight = document.body.classList.contains('light-mode');
-        const tokens = isLight ? (theme.tokens_light || {}) : (theme.tokens_dark || {});
+        const tokens = theme.tokens_dark || {};
         const keys = [];
         for (const [k, v] of Object.entries(tokens)) {
             if (!k?.startsWith('--')) continue;
@@ -1815,13 +1881,6 @@ ${messagesHtml}
         }
     },
 
-    toggleTheme() {
-        const isLight = document.body.classList.toggle('light-mode');
-        localStorage.setItem('ninko_theme', isLight ? 'light' : 'dark');
-        this._setThemeToggleIcon(isLight);
-        this.applyActiveThemeTokens();
-        if (document.querySelector('.welcome-message')) this.renderWelcomeState();
-    },
 
     sendQuick(textOrKey) {
         if (!textOrKey || textOrKey === 'undefined') return;
@@ -1990,6 +2049,34 @@ ${messagesHtml}
                 this._ttsAvailable = !!data.TTS_ENABLED;
             }
         } catch { /* TTS bleibt deaktiviert */ }
+    },
+
+    initScrollbarVisibility() {
+        const selectors = [
+            '.sidebar-subnav',
+            '.sidebar-history-section .history-list',
+            '.nav-tabs',
+            '.sidebar-panel-automatisierung .nav-tabs',
+        ];
+        const bound = new WeakSet();
+
+        const attach = (el) => {
+            if (!el || bound.has(el)) return;
+            bound.add(el);
+
+            let hideTimer = null;
+            el.addEventListener('scroll', () => {
+                el.classList.add('is-scrolling');
+                if (hideTimer) clearTimeout(hideTimer);
+                hideTimer = setTimeout(() => {
+                    el.classList.remove('is-scrolling');
+                }, 900);
+            }, { passive: true });
+        };
+
+        selectors.forEach((selector) => {
+            document.querySelectorAll(selector).forEach(attach);
+        });
     },
 
     // --- SafeGuard (Profile-System) -----------------------------------------
@@ -5154,7 +5241,7 @@ ${messagesHtml}
                         </div>
                     </div>
                     <p class="module-config-desc">${mod.description}</p>
-                    <div id="mod-connections-container-${mod.name}" style="display: none; border-top: 1px dashed var(--border-color); padding-top: 1rem; margin-top: 1rem;">
+                    <div id="mod-connections-container-${mod.name}" class="module-connections-container">
                         <h5 style="margin-top:0; margin-bottom: 0.5rem; color: var(--text-color);">Verbindungen / Umgebungen</h5>
                         <div id="connections-list-${mod.name}">Lade Verbindungen...</div>
                         ${this._renderModuleConnectionForm(mod.name)}
@@ -5331,8 +5418,8 @@ ${messagesHtml}
             : '';
 
         return `
-            <div class="add-connection-section" style="margin-top: 1rem; padding: 1rem; background: var(--bg-body); border-radius: 6px; border: 1px solid var(--border-color)">
-                <h6 id="conn-form-title-${moduleName}" style="margin-top:0; margin-bottom: 1rem;">Neue Verbindung hinzufügen</h6>
+            <div class="add-connection-section">
+                <h6 id="conn-form-title-${moduleName}" class="add-connection-title">Neue Verbindung hinzufügen</h6>
                 <input type="hidden" id="conn-edit-id-${moduleName}" value="">
                 <div class="form-row form-row-sm">
                     <label class="form-label" for="conn-new-${moduleName}-name">Name</label>
@@ -5411,7 +5498,7 @@ ${messagesHtml}
                         Als Standard-Verbindung für dieses Modul setzen
                     </label>
                 </div>
-                <div class="form-actions" style="margin-top: 1rem; display: flex; gap: 0.5rem; align-items: center;">
+                <div class="form-actions add-connection-actions">
                     <span id="mod-save-status-${moduleName}" class="save-status"></span>
                     <button class="btn btn-sm btn-primary" id="conn-save-btn-${moduleName}"
                         onclick="Ninko.saveConnection('${moduleName}')">
@@ -5441,16 +5528,16 @@ ${messagesHtml}
             }
 
             container.innerHTML = connections.map(c => `
-                <div class="cluster-card ${c.is_default ? 'cluster-default' : ''}" style="margin-bottom: 0.75rem; display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: var(--bg-hover); border-radius: 4px; border: 1px solid var(--border-color);">
-                    <div class="cluster-info" style="display: flex; flex-direction: column; gap: 0.25rem;">
-                        <span class="cluster-name" style="font-weight: 500;">
+                <div class="cluster-card ${c.is_default ? 'cluster-default' : ''}">
+                    <div class="cluster-info">
+                        <span class="cluster-name">
                             ${this._escapeHtml(c.name)}
-                            <span class="status-badge" style="font-size: 0.6rem; padding: 0.1rem 0.4rem; background: var(--bg-body); border: 1px solid var(--border-color); color: var(--text-color); margin-left: 0.5rem;">${this._escapeHtml(c.environment || '')}</span>
+                            <span class="status-badge status-unknown cluster-env-badge">${this._escapeHtml(c.environment || '')}</span>
                         </span>
-                        ${c.description ? `<span style="font-size: 0.8rem; color: var(--text-muted);">${this._escapeHtml(c.description)}</span>` : ''}
-                        ${c.is_default ? '<span class="status-badge status-ok" style="align-self: flex-start; margin-top: 0.25rem;">Standard</span>' : ''}
+                        ${c.description ? `<span class="cluster-desc">${this._escapeHtml(c.description)}</span>` : ''}
+                        ${c.is_default ? '<span class="status-badge status-ok cluster-default-badge">Standard</span>' : ''}
                     </div>
-                    <div class="cluster-actions" style="display: flex; gap: 0.5rem; align-items: center;">
+                    <div class="cluster-actions">
                         ${!c.is_default ? `<button class="btn btn-sm btn-outline" onclick="Ninko.setDefaultConnection('${moduleName}', '${c.id}')">⭐ Standard</button>` : ''}
                         <button class="btn btn-sm btn-outline" onclick="Ninko.editConnection('${moduleName}', '${c.id}')">✎</button>
                         <button class="btn btn-sm btn-danger" onclick="Ninko.deleteConnection('${moduleName}', '${c.id}')">${this._ic.trash}</button>
