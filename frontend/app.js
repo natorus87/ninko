@@ -851,6 +851,14 @@ const Ninko = {
         this._doSwitchTab(tabId);
     },
 
+    openSidebarPanel(panelId) {
+        const panels = document.getElementById('sidebar-panels');
+        if (!panels) return;
+        panels.classList.remove('show-automatisierung', 'show-secondary');
+        if (panelId === 'automatisierung') panels.classList.add('show-automatisierung');
+        if (panelId === 'secondary') panels.classList.add('show-secondary');
+    },
+
     _doSwitchTab(tabId) {
         const automationTabs = ['automatisierung', 'scripting', 'modules'];
 
@@ -882,24 +890,18 @@ const Ninko = {
         }
 
         // Show/hide sidebar sub-navigation for automatisierung / modules / settings
-        const subnavPanel = document.getElementById('sidebar-subnav');
-        const subnavSections = ['automatisierung', 'settings'];
-        if (subnavPanel) {
-            if (subnavSections.includes(tabId) || automationTabs.includes(tabId)) {
-                subnavPanel.style.display = '';
-                document.querySelectorAll('.subnav-section').forEach(s => s.style.display = 'none');
-                if (tabId === 'modules') {
-                    document.getElementById('subnav-automatisierung')?.style.setProperty('display', '');
-                    document.getElementById('subnav-modules')?.style.setProperty('display', '');
-                } else {
-                    const activeSectionId = automationTabs.includes(tabId) ? 'subnav-automatisierung' : `subnav-${tabId}`;
-                    const activeSection = document.getElementById(activeSectionId);
-                    if (activeSection) activeSection.style.display = '';
-                }
-            } else {
-                subnavPanel.style.display = 'none';
-            }
+        const settingsSubnav = document.getElementById('sidebar-settings-subnav');
+        const settingsSection = document.getElementById('subnav-settings');
+        if (settingsSubnav) {
+            settingsSubnav.style.display = tabId === 'settings' ? '' : 'none';
         }
+        if (settingsSection) {
+            settingsSection.style.display = tabId === 'settings' ? '' : 'none';
+        }
+
+        if (tabId === 'modules') this.openSidebarPanel('secondary');
+        else if (automationTabs.includes(tabId)) this.openSidebarPanel('automatisierung');
+        else this.openSidebarPanel('primary');
 
         const navTop = document.getElementById('nav-tabs-top');
         const navBottom = document.getElementById('nav-tabs-bottom');
@@ -951,6 +953,8 @@ const Ninko = {
 
     // --- Automatisierung Sub-Tab Switching ---
     switchAutoTab(tabId) {
+        this.openSidebarPanel('automatisierung');
+
         // Stop workflows timer when leaving workflows sub-tab
         if (this._activeAutoTab === 'workflows' && tabId !== 'workflows') {
             clearInterval(this._wfRunRefreshTimer);
@@ -995,6 +999,8 @@ const Ninko = {
 
     // --- Module Sub-Tab Switching ---
     switchModuleTab(tabId) {
+        this.openSidebarPanel('secondary');
+
         // Restore previous module panel back to main-content
         if (this._activeModuleTab && this._activeModuleTab !== tabId) {
             const prev = document.getElementById(`tab-${this._activeModuleTab}`);
@@ -1694,13 +1700,18 @@ const Ninko = {
 
     _getDashboardHomeHtml() {
         const headline = this._escapeHtml(this._getWelcomeMessageVariant(this._getTimePeriod()));
+        const dashboardLogo = this._escapeHtml(this._branding?.login_image_url || '/static/images/logo_dashboard_new.png?v=3');
 
         return `
             <div class="welcome-message dashboard-home">
                 <div class="dh-shell dh-shell-minimal">
                     <div class="dh-intro dh-intro-plain">
                         <div class="dh-headline">
-                            <img class="dh-headline-icon" src="/static/images/logo_icon.png" alt="Ninko">
+                            <div class="logo-wrapper dh-headline-logo" aria-hidden="true">
+                                <img class="dh-headline-icon" src="${dashboardLogo}" alt="Ninko">
+                                <div class="eye eye-left"></div>
+                                <div class="eye eye-right"></div>
+                            </div>
                             <h2>${headline}</h2>
                         </div>
                     </div>
@@ -2081,7 +2092,8 @@ ${messagesHtml}
             '.sidebar-subnav',
             '.sidebar-history-section .history-list',
             '.nav-tabs',
-            '.sidebar-panel-automatisierung .nav-tabs',
+            '.sidebar-panel-body',
+            '.module-subnav-list',
         ];
         const bound = new WeakSet();
 

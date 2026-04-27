@@ -294,7 +294,8 @@ label {
 .sidebar-panels {
     display: flex;
     width: 300%;
-    height: 100%;
+    flex: 1;
+    min-height: 0;
     transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -319,16 +320,56 @@ label {
     min-height: 0;
 }
 
+.sidebar-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.9rem 1rem 0.55rem;
+    flex-shrink: 0;
+}
+
+.sidebar-panel-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 0.01em;
+}
+
+.sidebar-back-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.sidebar-back-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.12);
+    transform: translateX(-1px);
+}
+
+.sidebar-panel-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0.15rem 0.8rem 0.9rem;
+}
+
 /* Bottom nav tabs (Module, Logs) */
 .nav-tabs-bottom {
     flex-shrink: 0;
 }
 
 /* Automatisierung panel */
-.sidebar-panel-automatisierung .nav-tabs {
-    flex: 1;
-    overflow-y: auto;
-    padding: 0.5rem;
+.sidebar-panel-automatisierung .sidebar-panel-body {
+    padding-top: 0.15rem;
 }
 
 
@@ -549,10 +590,15 @@ label {
 .subnav-section {
     display: flex;
     flex-direction: column;
+    min-height: 0;
+}
+
+.subnav-section-modules {
+    flex: 1;
 }
 
 .module-subnav-search-wrap {
-    padding: 0.25rem 0.8rem 0.6rem;
+    padding: 0 0 0.7rem;
     position: sticky;
     top: 0;
     z-index: 2;
@@ -581,6 +627,9 @@ label {
 .module-subnav-list {
     display: flex;
     flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
     padding-bottom: 0.3rem;
 }
 
@@ -597,8 +646,8 @@ label {
 .module-nav-row {
     display: flex;
     align-items: center;
-    gap: 0.2rem;
-    padding-right: 0.3rem;
+    gap: 0.3rem;
+    padding-right: 0.05rem;
 }
 
 .module-nav-btn {
@@ -1578,7 +1627,7 @@ label {
 .dh-headline {
     display: flex;
     align-items: center;
-    gap: 1.15rem;
+    gap: 0.1rem;
     margin-bottom: 0.4rem;
 }
 
@@ -1594,6 +1643,37 @@ label {
     border-radius: 0;
     box-shadow: none;
     filter: drop-shadow(0 10px 22px rgba(37, 99, 235, 0.16));
+}
+
+.dh-headline-logo {
+    width: 184px;
+    max-width: 184px;
+    margin: 0 -28px 0 0;
+    flex-shrink: 0;
+    align-self: center;
+    transform: translateY(-4px);
+}
+
+.dh-headline-logo img {
+    width: 100%;
+    height: auto;
+    filter: drop-shadow(0 10px 22px rgba(37, 99, 235, 0.16));
+}
+
+.dh-headline-logo .eye-left,
+.dh-headline-logo .eye-right {
+    width: 5%;
+    height: 7.2%;
+}
+
+.dh-headline-logo .eye-left {
+    left: 42.6%;
+    top: 58.2%;
+}
+
+.dh-headline-logo .eye-right {
+    left: 57.7%;
+    top: 58.2%;
 }
 
 .dh-intro h2 {
@@ -1642,8 +1722,15 @@ label {
     }
 
     .dh-headline-icon {
-        width: 44px;
-        height: 44px;
+        width: 132px;
+        height: 132px;
+    }
+
+    .dh-headline-logo {
+        width: 132px;
+        max-width: 132px;
+        margin-right: -16px;
+        transform: translateY(-2px);
     }
 
     .dh-intro h2 {
@@ -4450,7 +4537,8 @@ label {
 .sidebar-subnav,
 .sidebar-history-section .history-list,
 .nav-tabs,
-.sidebar-panel-automatisierung .nav-tabs {
+.sidebar-panel-body,
+.module-subnav-list {
     scrollbar-width: thin;
     scrollbar-color: rgba(132, 147, 192, 0) transparent;
 }
@@ -4458,21 +4546,24 @@ label {
 .sidebar-subnav::-webkit-scrollbar,
 .sidebar-history-section .history-list::-webkit-scrollbar,
 .nav-tabs::-webkit-scrollbar,
-.sidebar-panel-automatisierung .nav-tabs::-webkit-scrollbar {
+.sidebar-panel-body::-webkit-scrollbar,
+.module-subnav-list::-webkit-scrollbar {
     width: 6px;
 }
 
 .sidebar-subnav::-webkit-scrollbar-track,
 .sidebar-history-section .history-list::-webkit-scrollbar-track,
 .nav-tabs::-webkit-scrollbar-track,
-.sidebar-panel-automatisierung .nav-tabs::-webkit-scrollbar-track {
+.sidebar-panel-body::-webkit-scrollbar-track,
+.module-subnav-list::-webkit-scrollbar-track {
     background: transparent;
 }
 
 .sidebar-subnav::-webkit-scrollbar-thumb,
 .sidebar-history-section .history-list::-webkit-scrollbar-thumb,
 .nav-tabs::-webkit-scrollbar-thumb,
-.sidebar-panel-automatisierung .nav-tabs::-webkit-scrollbar-thumb {
+.sidebar-panel-body::-webkit-scrollbar-thumb,
+.module-subnav-list::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0);
     border-radius: 999px;
     transition: background var(--transition-fast), opacity var(--transition-fast);
@@ -4484,8 +4575,10 @@ label {
 .sidebar-history-section .history-list.is-scrolling,
 .nav-tabs:hover,
 .nav-tabs.is-scrolling,
-.sidebar-panel-automatisierung .nav-tabs:hover,
-.sidebar-panel-automatisierung .nav-tabs.is-scrolling {
+.sidebar-panel-body:hover,
+.sidebar-panel-body.is-scrolling,
+.module-subnav-list:hover,
+.module-subnav-list.is-scrolling {
     scrollbar-color: rgba(132, 147, 192, 0.38) transparent;
 }
 
@@ -4495,8 +4588,10 @@ label {
 .sidebar-history-section .history-list.is-scrolling::-webkit-scrollbar-thumb,
 .nav-tabs:hover::-webkit-scrollbar-thumb,
 .nav-tabs.is-scrolling::-webkit-scrollbar-thumb,
-.sidebar-panel-automatisierung .nav-tabs:hover::-webkit-scrollbar-thumb,
-.sidebar-panel-automatisierung .nav-tabs.is-scrolling::-webkit-scrollbar-thumb {
+.sidebar-panel-body:hover::-webkit-scrollbar-thumb,
+.sidebar-panel-body.is-scrolling::-webkit-scrollbar-thumb,
+.module-subnav-list:hover::-webkit-scrollbar-thumb,
+.module-subnav-list.is-scrolling::-webkit-scrollbar-thumb {
     background: rgba(132, 147, 192, 0.38);
 }
 
@@ -4506,8 +4601,10 @@ label {
 .sidebar-history-section .history-list.is-scrolling::-webkit-scrollbar-thumb:hover,
 .nav-tabs:hover::-webkit-scrollbar-thumb:hover,
 .nav-tabs.is-scrolling::-webkit-scrollbar-thumb:hover,
-.sidebar-panel-automatisierung .nav-tabs:hover::-webkit-scrollbar-thumb:hover,
-.sidebar-panel-automatisierung .nav-tabs.is-scrolling::-webkit-scrollbar-thumb:hover {
+.sidebar-panel-body:hover::-webkit-scrollbar-thumb:hover,
+.sidebar-panel-body.is-scrolling::-webkit-scrollbar-thumb:hover,
+.module-subnav-list:hover::-webkit-scrollbar-thumb:hover,
+.module-subnav-list.is-scrolling::-webkit-scrollbar-thumb:hover {
     background: rgba(169, 181, 221, 0.58);
 }
 
