@@ -108,3 +108,4 @@ NAMESPACE_MIGRATION_RUNBOOK.md
 
 # Playwright MCP State
 .playwright-mcp/
+.claude/settings.local.json
