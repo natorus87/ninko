@@ -16,9 +16,16 @@ spec:
         app: ninko-backend
     spec:
       serviceAccountName: ninko
+      initContainers:
+      - name: init-data-dir
+        image: alpine
+        command: ["sh", "-c", "chown -R 999: /app/data || mkdir -p /app/data && chown -R 999: /app/data && chown -R 999: /app/plugins || mkdir -p /app/plugins && chown -R 999: /app/plugins"]
+        volumeMounts:
+          - name: backend-data
+            mountPath: /app/data
       containers:
         - name: backend
-          image: natorus87/ninko-backend:v1.3.2
+          image: natorus87/ninko-backend:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8000
@@ -51,26 +58,6 @@ spec:
                 secretKeyRef:
                   name: ninko-secrets
                   key: SQLITE_SECRETS_KEY
-            - name: SESSION_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: ninko-secrets
-                  key: SESSION_SECRET
-            - name: BOOTSTRAP_ADMIN_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: ninko-secrets
-                  key: BOOTSTRAP_ADMIN_PASSWORD
-
-            # ─── API Auth / Session Security ───
-            - name: API_AUTH_ENABLED
-              value: "true"
-            - name: ADMIN_USERNAME
-              value: "admin"
-            - name: SESSION_COOKIE_SECURE
-              value: "false"
-            - name: CORS_ALLOW_ORIGINS
-              value: "https://ninko.conbro.local,http://ninko.conbro.local,http://localhost:8000,http://127.0.0.1:8000"
 
             # ─── Core-Module (immer verfügbar) ───
             - name: NINKO_MODULE_WEB_SEARCH
@@ -80,11 +67,7 @@ spec:
             - name: NINKO_MODULE_CODELAB
               value: "true"
             - name: NINKO_MODULE_IMAGE_GEN
-              value: "true"
-            - name: NINKO_MODULE_DATAVIZ
-              value: "true"
-            - name: SCRIPT_TOOLS_ENABLED
-              value: "true"
+              value: "false"
 
             # ─── Modul-Secrets (Fallback wenn kein UI-Connection konfiguriert) ───
             # - name: IONOS_API_KEY
