@@ -271,7 +271,7 @@ const DockerTab = {
                 logWindow.document.write(`
                     <html><head><title>Logs: ${this.escapeHtml(name)}</title>
                     <style>
-                        body { background: #1e1e1e; color: #d4d4d4; font-family: monospace; padding: 1rem; white-space: pre-wrap; font-size: 13px; }
+                        body { background: #1e1e1e; color: #d4d4d4; font-family: monospace; padding: 1rem; white-space: pre-wrap; font-size: 0.65rem; }
                         a { color: #569cd6; }
                     </style></head><body>${this.escapeHtml(text)}</body></html>
                 `);

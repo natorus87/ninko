@@ -33,8 +33,8 @@
 
     --text-main: #ffffff;
     --text-primary: var(--text-main);
-    --text-secondary: rgba(255, 255, 255, 0.74);
-    --text-muted: rgba(255, 255, 255, 0.62);
+    --text-secondary: rgba(255, 255, 255, 0.86);
+    --text-muted: rgba(255, 255, 255, 0.68);
     --text-accent: #ffffff;
     --text-disabled: rgba(255, 255, 255, 0.38);
     --text-color: var(--text-main);
@@ -68,12 +68,12 @@
     --primary-gradient-hover: linear-gradient(135deg, #3b82f6 0%, #7c3aed 100%);
     --accent-gradient-soft: linear-gradient(135deg, rgba(37, 99, 235, 0.22), rgba(109, 40, 217, 0.18));
 
-    --sidebar-width: 313px;
-    --radius-sm: 8px;
-    --radius-md: 12px;
-    --radius-lg: 20px;
-    --radius-xl: 24px;
-    --radius-2xl: 28px;
+    --sidebar-width: 19.5625rem;
+    --radius-sm: 0.5rem;
+    --radius-md: 0.75rem;
+    --radius-lg: 1.25rem;
+    --radius-xl: 1.5rem;
+    --radius-2xl: 1.75rem;
 
     --transition-fast: 160ms cubic-bezier(0.4, 0, 0.2, 1);
     --transition-normal: 260ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -85,7 +85,9 @@
     --shadow-card: 0 20px 50px rgba(0, 0, 0, 0.35);
     --shadow-surface: 0 30px 80px rgba(0, 0, 0, 0.45);
 
-    --header-height: 60px;
+    --header-height: 3.75rem;
+    --font-ui: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    --font-display: var(--font-ui);
 }
 
 
@@ -99,18 +101,20 @@
 }
 
 html {
-    font-size: 16px;
+    /* Compact, but still close to ChatGPT's readable 14-16px UI rhythm. */
+    font-size: 87.5%;
 }
 
 body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: var(--font-ui);
     background:
         radial-gradient(circle at 18% 0%, rgba(109, 40, 217, 0.34), transparent 32%),
         radial-gradient(circle at 82% 10%, rgba(0, 122, 255, 0.18), transparent 28%),
         radial-gradient(circle at 50% 100%, rgba(17, 85, 202, 0.12), transparent 34%),
         linear-gradient(135deg, #070b24 0%, #090d2e 45%, #020617 100%);
     color: var(--text-main);
-    line-height: 1.6;
+    font-weight: 400;
+    line-height: 1.55;
     overflow: hidden;
     height: 100vh;
     -webkit-font-smoothing: antialiased;
@@ -151,7 +155,7 @@ h1, h2, h3, h4, h5, h6,
 .welcome-message h2,
 .dh-intro h2,
 .settings-panel h4 {
-    font-family: 'Manrope', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: var(--font-display);
 }
 
 ::selection {
@@ -214,13 +218,20 @@ label {
     touch-action: manipulation;
 }
 
+button,
+input,
+textarea,
+select {
+    font-family: inherit;
+}
+
 
 /* ─── Layout ─── */
 #app {
     display: flex;
     height: 100vh;
-    gap: 22px;
-    padding: 12px 22px 22px 10px;
+    gap: 1.375rem;
+    padding: 0.75rem 1.375rem 1.375rem 0.625rem;
     position: relative;
     z-index: 1;
 }
@@ -229,12 +240,12 @@ label {
 .card {
     background: var(--bg-card);
     border: 1px solid var(--border-soft);
-    border-radius: 24px;
+    border-radius: 1.5rem;
     box-shadow: var(--shadow-card), inset 0 1px 0 rgba(255, 255, 255, 0.06);
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
     transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
-    padding: 24px;
+    padding: 1.5rem;
 }
 
 .card:hover {
@@ -264,11 +275,11 @@ label {
     flex-direction: column;
     flex-shrink: 0;
     z-index: 10;
-    min-width: 60px;
-    max-width: 500px;
+    min-width: 3.75rem;
+    max-width: 31.25rem;
     overflow: hidden;
     position: relative;
-    border-radius: 30px;
+    border-radius: 1.875rem;
     box-shadow: var(--shadow-surface), inset 0 1px 0 rgba(255, 255, 255, 0.06);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
@@ -444,6 +455,7 @@ label {
     border-radius: 20px;
     cursor: pointer;
     color: var(--text-secondary);
+    font-weight: 500;
     transition: color var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast), opacity var(--transition-fast);
     user-select: none;
     white-space: nowrap;
@@ -478,6 +490,7 @@ label {
 .nav-tab.active {
     background: var(--primary-gradient);
     color: #ffffff;
+    font-weight: 600;
     border-color: rgba(255, 255, 255, 0.1);
     box-shadow: 0 8px 24px rgba(37, 99, 235, 0.35);
 }
@@ -507,7 +520,7 @@ label {
 }
 
 .tab-label {
-    font-size: 0.98rem;
+    font-size: 1rem;
     font-weight: 600;
     white-space: nowrap;
     overflow: hidden;
@@ -559,7 +572,7 @@ label {
 }
 
 .sidebar-section-label {
-    font-size: 0.69rem;
+    font-size: 0.72rem;
     font-weight: 700;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -944,7 +957,7 @@ label {
 
 
 .history-title {
-    font-size: 0.96rem;
+    font-size: 1rem;
     font-weight: 500;
     color: var(--text-muted);
 }
@@ -960,8 +973,9 @@ label {
     border-radius: 18px;
     border: 1px solid transparent;
     cursor: pointer;
-    font-size: 0.96rem;
-    color: var(--text-secondary);
+    font-size: 1rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.78);
     transition: color var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast), opacity var(--transition-fast);
     margin-bottom: 0.24rem;
     white-space: nowrap;
@@ -970,7 +984,7 @@ label {
     display: flex;
     align-items: center;
     gap: 0.55rem;
-    line-height: 1.45;
+    line-height: 1.4;
 }
 
 .history-item:hover {
@@ -983,12 +997,13 @@ label {
     background: linear-gradient(135deg, rgba(37, 99, 235, 0.2), rgba(109, 40, 217, 0.16));
     border-color: rgba(92, 158, 235, 0.22);
     color: #ffffff;
+    font-weight: 600;
     box-shadow: 0 12px 24px rgba(9, 19, 58, 0.3);
 }
 
 .history-item-icon {
     flex-shrink: 0;
-    font-size: 0.96rem;
+    font-size: 1rem;
 }
 
 .history-item-text {
@@ -1678,9 +1693,10 @@ label {
 
 .dh-intro h2 {
     margin-bottom: 0.55rem;
-    font-size: clamp(1.72rem, 3.05vw, 2.85rem);
-    line-height: 1;
-    letter-spacing: -0.04em;
+    font-size: clamp(1.72rem, 2.44vw, 2.85rem);
+    font-weight: 650;
+    line-height: 1.08;
+    letter-spacing: -0.025em;
     max-width: none;
     white-space: nowrap;
     text-wrap: nowrap;
@@ -1736,7 +1752,7 @@ label {
     .dh-intro h2 {
         white-space: normal;
         max-width: 10ch;
-        font-size: clamp(1.9rem, 9vw, 2.8rem);
+        font-size: clamp(1.9rem, 7.2vw, 2.8rem);
     }
 
     .dh-intro p {
@@ -1884,27 +1900,36 @@ label {
     padding: 0.875rem 1.125rem;
     border-radius: var(--radius-lg);
     max-width: 100%;
-    line-height: 1.65;
+    color: rgba(255, 255, 255, 0.92);
+    font-size: 1.125rem;
+    font-weight: 400;
+    line-height: 1.68;
     word-break: break-word;
 }
 
 /* Markdown-Rendering im Chat */
-.chat-bubble p { margin: 0 0 0.5rem; }
+.chat-bubble p { margin: 0 0 0.7rem; }
 .chat-bubble p:last-child { margin-bottom: 0; }
 .chat-bubble h1, .chat-bubble h2, .chat-bubble h3,
 .chat-bubble h4, .chat-bubble h5 {
-    margin: 0.75rem 0 0.35rem;
-    font-weight: 600;
+    margin: 0.95rem 0 0.45rem;
+    color: rgba(255, 255, 255, 0.96);
+    font-weight: 650;
     line-height: 1.3;
+}
+.chat-bubble strong,
+.chat-bubble b {
+    color: rgba(255, 255, 255, 0.97);
+    font-weight: 650;
 }
 .chat-bubble h1 { font-size: 1.2em; }
 .chat-bubble h2 { font-size: 1.1em; }
 .chat-bubble h3 { font-size: 1em; }
 .chat-bubble ul, .chat-bubble ol {
-    margin: 0.35rem 0 0.5rem;
-    padding-left: 1.4rem;
+    margin: 0.45rem 0 0.7rem;
+    padding-left: 1.55rem;
 }
-.chat-bubble li { margin: 0.15rem 0; }
+.chat-bubble li { margin: 0.18rem 0; }
 .chat-bubble hr {
     border: none;
     border-top: 1px solid var(--border-color);
@@ -2062,11 +2087,11 @@ label {
     resize: none;
     background: transparent;
     border: none;
-    color: var(--text-primary);
+    color: rgba(255, 255, 255, 0.92);
     padding: 0;
-    font-size: 0.98rem;
+    font-size: 1.08rem;
     font-family: inherit;
-    line-height: 1.5;
+    line-height: 1.55;
     min-height: 56px;
     max-height: 200px;
     overflow-y: auto;
@@ -2284,7 +2309,7 @@ label {
 
 
 .chat-input::placeholder {
-    color: var(--text-muted);
+    color: rgba(255, 255, 255, 0.58);
 }
 
 /* ── Safeguard Toggle ── */
@@ -4077,7 +4102,7 @@ label {
 .settings-header h2,
 .settings-panel.active > .page-header h2,
 .settings-panel.active > .page-header h3 {
-    font-size: clamp(1.45rem, 2vw, 1.9rem);
+    font-size: clamp(1.45rem, 1.6vw, 1.9rem);
     letter-spacing: -0.03em;
     color: var(--text-primary);
 }
@@ -4747,7 +4772,7 @@ label {
         cursor: pointer;
         padding: 8px 12px;
         color: var(--text-primary);
-        font-size: 24px;
+        font-size: 1.5rem;
         line-height: 1;
         position: fixed;
         left: 12px;
@@ -5895,7 +5920,7 @@ a:hover {
 
 .wf-edge-label {
     fill: var(--text-muted);
-    font-size: 11px;
+    font-size: 0.6875rem;
     text-anchor: middle;
 }
 
@@ -6830,7 +6855,7 @@ a:hover {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 12px;
+    font-size: 0.75rem;
 }
 
 .step-status-running .step-icon {
@@ -6864,7 +6889,7 @@ a:hover {
 
 .typing-error-icon {
     color: var(--error-red);
-    font-size: 12px;
+    font-size: 0.75rem;
     width: 20px;
     text-align: center;
 }
