@@ -812,6 +812,7 @@ def _get_env_connection(module_name: str, prefix: str) -> dict:
         "netbox": ["NETBOX_URL"],
         "gitlab": ["GITLAB_URL"],
         "github": [],
+        "licium": ["LICIUM_BASE_URL", "LICIUM_EMAIL"],
     }
     for key in mappings.get(module_name, []):
         val = os.environ.get(key, "")
@@ -843,6 +844,7 @@ def _get_secret_keys(module_name: str) -> list[str]:
         "netbox": ["NETBOX_TOKEN"],
         "gitlab": ["GITLAB_TOKEN"],
         "github": ["GITHUB_TOKEN"],
+        "licium": ["LICIUM_PASSWORD"],
     }.get(module_name, [])
 
 
