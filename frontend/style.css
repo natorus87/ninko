@@ -898,7 +898,7 @@ select {
     display: flex;
     align-items: center;
     gap: 0.6rem;
-    padding: 0.95rem 1.35rem;
+    padding: 1.75rem 1.35rem 0.85rem;
     border-bottom: 0;
     background: transparent;
 }
