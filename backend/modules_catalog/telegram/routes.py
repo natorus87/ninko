@@ -204,6 +204,51 @@ async def set_voice_reply_config(body: VoiceReplyConfig) -> dict:
     return {"ok": True, **body.model_dump()}
 
 
+class PairingApproveRequest(BaseModel):
+    code: str
+
+
+@router.post("/pairing/approve")
+async def approve_pairing(body: PairingApproveRequest, request: Request) -> dict[str, Any]:
+    """Approve a Telegram pairing code from the dashboard."""
+    bot = get_telegram_bot()
+    if not bot:
+        bot = getattr(request.app.state, "telegram_bot", None)
+    if not bot:
+        raise HTTPException(status_code=500, detail="Telegram bot not ready")
+
+    code = body.code.strip().upper()
+    if not code:
+        raise HTTPException(status_code=400, detail="Code is empty.")
+
+    success = await bot._approve_pairing(code)
+    if success:
+        return {"ok": True, "message": "Pairing erfolgreich. Der Benutzer ist jetzt autorisiert."}
+
+    raise HTTPException(status_code=404, detail="Ungültiger oder abgelaufener Pairing-Code.")
+
+
+@router.get("/pairing/pending")
+async def get_pending_pairings() -> dict[str, Any]:
+    """Return all pending (unconfirmed) pairing codes with their user IDs."""
+    from core.redis_client import get_redis
+
+    redis = get_redis()
+    keys = await redis.connection.keys("ninko:telegram:pairing:*")
+    pending = []
+    for key in keys:
+        code = key.decode().split(":")[-1] if isinstance(key, bytes) else key.split(":")[-1]
+        user_id = await redis.connection.get(key)
+        ttl = await redis.connection.ttl(key)
+        if user_id:
+            pending.append({
+                "code": code,
+                "user_id": user_id.decode() if isinstance(user_id, bytes) else user_id,
+                "ttl_seconds": ttl,
+            })
+    return {"pending": pending}
+
+
 @router.post("/send")
 async def send_message(body: SendMessageRequest, request: Request) -> dict[str, Any]:
     """Send a message directly via the bot (for the dashboard)."""
