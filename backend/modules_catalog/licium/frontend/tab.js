@@ -55,10 +55,13 @@ const LiciumTab = {
             optionsEl.appendChild(opt);
         });
 
-        const defaultConn = this._connections.find(c => c.is_default) || this._connections[0];
-        if (defaultConn && !this._connectionId) {
-            this._connectionId = defaultConn.id;
-            if (labelEl) labelEl.textContent = defaultConn.name + (defaultConn.is_default ? ' (Standard)' : '');
+        const stillValid = this._connections.find(c => c.id === this._connectionId);
+        if (!stillValid) {
+            const defaultConn = this._connections.find(c => c.is_default) || this._connections[0];
+            if (defaultConn) {
+                this._connectionId = defaultConn.id;
+                if (labelEl) labelEl.textContent = defaultConn.name + (defaultConn.is_default ? ' (Standard)' : '');
+            }
         }
     },
 
