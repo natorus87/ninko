@@ -24,23 +24,23 @@ async def check_licium_health(connection_id: str = "") -> dict:
 
         if conn:
             base_url = conn.config.get("base_url", "").rstrip("/")
-            email = conn.config.get("email", "")
+            username = conn.config.get("username", "")
             pw_key = conn.vault_keys.get("LICIUM_PASSWORD", "")
             password = await vault.get_secret(pw_key) if pw_key else ""
         else:
             import os
             base_url = os.environ.get("LICIUM_BASE_URL", "").rstrip("/")
-            email = os.environ.get("LICIUM_EMAIL", "")
+            username = os.environ.get("LICIUM_USERNAME", "")
             password = os.environ.get("LICIUM_PASSWORD", "")
 
         if not base_url:
             return {"status": "error", "detail": "LICIUM_BASE_URL not configured"}
-        if not email or not password:
+        if not username or not password:
             return {"status": "error", "detail": "Licium credentials not configured"}
 
         verify_arg = await get_connection_verify_arg(conn, "licium", default_verify=True)
         async with httpx.AsyncClient(base_url=base_url, verify=verify_arg, timeout=10.0) as client:
-            resp = await client.post("/api/login", json={"email": email, "password": password})
+            resp = await client.post("/api/login", json={"username": username, "password": password})
             if resp.status_code == 200:
                 info_resp = await client.get("/api/system/info")
                 info = info_resp.json() if info_resp.status_code == 200 else {}
@@ -57,7 +57,7 @@ module_manifest = ModuleManifest(
     name="licium",
     display_name="Licium Wiki",
     description="Licium Wissensdatenbank – Notizen erstellen, semantisch suchen, Inhalte strukturieren und als LLM-Wiki verwalten (Karpathy-Pattern: Ingest, Query, Lint).",
-    version="1.0.0",
+    version="1.0.1",
     author="Ninko Team",
     enabled_by_default=False,
     env_prefix="LICIUM_",

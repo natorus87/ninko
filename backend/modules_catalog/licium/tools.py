@@ -61,35 +61,35 @@ async def _licium_session(connection_id: str = "") -> AsyncGenerator[tuple[httpx
         if not conn:
             import os
             base_url = os.environ.get("LICIUM_BASE_URL", "").rstrip("/")
-            email = os.environ.get("LICIUM_EMAIL", "")
+            username = os.environ.get("LICIUM_USERNAME", "")
             password = os.environ.get("LICIUM_PASSWORD", "")
-            if not base_url or not email or not password:
+            if not base_url or not username or not password:
                 raise ValueError(_t(
                     de="Licium nicht konfiguriert. Bitte Verbindung in Einstellungen hinterlegen.",
                     en="Licium not configured. Please set up a connection in Settings.",
                 ))
             verify_arg = True
             async with httpx.AsyncClient(base_url=base_url, verify=verify_arg, timeout=30.0) as client:
-                resp = await client.post("/api/login", json={"email": email, "password": password})
+                resp = await client.post("/api/login", json={"username": username, "password": password})
                 resp.raise_for_status()
                 yield client, base_url
             return
 
     vault = get_vault()
     base_url = conn.config.get("base_url", "").rstrip("/")
-    email = conn.config.get("email", "")
+    username = conn.config.get("username", "")
     pw_key = conn.vault_keys.get("LICIUM_PASSWORD", "")
     password = await vault.get_secret(pw_key) if pw_key else ""
 
-    if not base_url or not email or not password:
+    if not base_url or not username or not password:
         raise ValueError(_t(
-            de="Licium-Verbindung unvollständig: base_url, email und LICIUM_PASSWORD erforderlich.",
-            en="Licium connection incomplete: base_url, email and LICIUM_PASSWORD required.",
+            de="Licium-Verbindung unvollständig: base_url, username und LICIUM_PASSWORD erforderlich.",
+            en="Licium connection incomplete: base_url, username and LICIUM_PASSWORD required.",
         ))
 
     verify_arg = await get_connection_verify_arg(conn, "licium", default_verify=True)
     async with httpx.AsyncClient(base_url=base_url, verify=verify_arg, timeout=30.0) as client:
-        resp = await client.post("/api/login", json={"email": email, "password": password})
+        resp = await client.post("/api/login", json={"username": username, "password": password})
         if resp.status_code != 200:
             raise ValueError(_t(
                 de=f"Licium-Login fehlgeschlagen: HTTP {resp.status_code}",
