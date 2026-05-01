@@ -979,10 +979,11 @@ class TelegramBot:
             return
 
         # Legacy allowlist check (chat-based, for backward compatibility)
+        # Übersprungen wenn User bereits via Pairing oder Policy autorisiert ist.
         from core.connections import ConnectionManager
 
         conn = await ConnectionManager.get_default_connection("telegram")
-        if conn:
+        if conn and not authorized:
             allowed_raw = conn.config.get("allowed_chat_ids", "")
             if allowed_raw:
                 allowed_ids = {
