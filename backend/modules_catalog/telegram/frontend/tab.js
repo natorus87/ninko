@@ -10,6 +10,7 @@
             await this.checkStatus();
             await this.loadAllowedIds();
             await this.loadVoiceReplyConfig();
+            await this.loadPendingPairings();
             if (!this.statusInterval) {
                 this.statusInterval = setInterval(() => this.checkStatus(), 10000);
             }
@@ -240,6 +241,74 @@
             } catch (e) {
                 if (statusEl) statusEl.innerHTML = '<span class="sf sf-error">' + I18n.t('modules.telegram.connectionError') + '</span>';
             }
+        },
+
+        // ── Pairing ──────────────────────────────────────────────────────────
+
+        async approvePairing() {
+            const input = document.getElementById('tg-pairing-code-input');
+            const statusEl = document.getElementById('tg-pairing-status');
+            const code = input?.value?.trim().toUpperCase();
+
+            if (!code || code.length !== 6) {
+                if (statusEl) statusEl.innerHTML = '<span class="sf sf-warn">Bitte einen 6-stelligen Code eingeben.</span>';
+                return;
+            }
+
+            if (statusEl) statusEl.innerHTML = '<span class="sf sf-loading">Bestätige…</span>';
+
+            try {
+                const res = await fetch('/api/telegram/pairing/approve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code }),
+                });
+                const data = await res.json();
+                if (res.ok && data.ok) {
+                    if (statusEl) statusEl.innerHTML = '<span class="sf sf-ok">✅ ' + (data.message || 'Pairing erfolgreich.') + '</span>';
+                    if (input) input.value = '';
+                    await this.loadPendingPairings();
+                    setTimeout(() => { if (statusEl) statusEl.innerHTML = ''; }, 4000);
+                } else {
+                    if (statusEl) statusEl.innerHTML = `<span class="sf sf-error">❌ ${data.detail || 'Ungültiger Code.'}</span>`;
+                }
+            } catch (e) {
+                if (statusEl) statusEl.innerHTML = '<span class="sf sf-error">Verbindungsfehler</span>';
+            }
+        },
+
+        async loadPendingPairings() {
+            try {
+                const res = await fetch('/api/telegram/pairing/pending');
+                if (!res.ok) return;
+                const data = await res.json();
+                const container = document.getElementById('tg-pending-pairings');
+                if (!container) return;
+                const pending = data.pending || [];
+                if (pending.length === 0) {
+                    container.innerHTML = '';
+                    return;
+                }
+                container.innerHTML = `
+                    <p style="font-size:0.8rem;color:var(--text-muted);margin:0 0 0.5rem;">Ausstehende Pairing-Anfragen:</p>
+                    ${pending.map(p => `
+                        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;padding:0.4rem 0.6rem;background:var(--bg-card);border-radius:4px;border:1px solid var(--border-color);">
+                            <code style="font-size:0.85rem;letter-spacing:0.08em;">${p.code}</code>
+                            <span style="font-size:0.8rem;color:var(--text-muted);">User-ID: ${p.user_id}</span>
+                            <span style="font-size:0.75rem;color:var(--text-muted);margin-left:auto;">${Math.round(p.ttl_seconds / 60)} min verbleibend</span>
+                            <button class="btn btn-sm btn-primary" onclick="TelegramModule._quickApprove('${p.code}')" style="padding:0.2rem 0.5rem;font-size:0.78rem;">Bestätigen</button>
+                        </div>
+                    `).join('')}
+                `;
+            } catch (e) {
+                console.error('Telegram: Pending pairings laden fehlgeschlagen', e);
+            }
+        },
+
+        async _quickApprove(code) {
+            const input = document.getElementById('tg-pairing-code-input');
+            if (input) input.value = code;
+            await this.approvePairing();
         },
 
         // ── Voice-Reply ──────────────────────────────────────────────────────
