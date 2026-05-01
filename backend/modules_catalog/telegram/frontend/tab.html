@@ -127,6 +127,30 @@
         <div id="tg-voice-reply-status" style="font-size:0.82rem;min-height:1.2em;"></div>
     </div>
 
+    <div class="k8s-section" id="tg-pairing-section">
+        <h3 class="section-title" style="display:flex;align-items:center;gap:0.5rem;">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            Benutzer autorisieren (Pairing)
+        </h3>
+        <p style="color:var(--text-muted);font-size:0.875rem;margin-bottom:1rem;line-height:1.6;">
+            Sende <code>/pair</code> im Telegram-Chat, um einen 6-stelligen Code zu erhalten. Gib diesen Code hier ein, um den Benutzer zu autorisieren.
+        </p>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+            <input
+                id="tg-pairing-code-input"
+                type="text"
+                placeholder="z.B. AB12CD"
+                maxlength="6"
+                style="flex:1;min-width:120px;max-width:180px;padding:0.4rem 0.65rem;border-radius:4px;border:1px solid var(--border-color);background:var(--bg-card);color:var(--text-color);font-size:0.875rem;font-family:monospace;letter-spacing:0.1em;text-transform:uppercase;"
+                oninput="this.value=this.value.toUpperCase()"
+                onkeydown="if(event.key==='Enter') TelegramModule.approvePairing()"
+            />
+            <button class="btn btn-primary btn-sm" onclick="TelegramModule.approvePairing()">Bestätigen</button>
+        </div>
+        <div id="tg-pairing-status" style="font-size:0.82rem;margin-top:0.5rem;min-height:1.2em;"></div>
+        <div id="tg-pending-pairings" style="margin-top:0.75rem;"></div>
+    </div>
+
     <div class="k8s-section">
         <h3 class="section-title">Testnachricht</h3>
         <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-start;">
