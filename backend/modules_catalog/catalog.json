@@ -85,6 +85,13 @@
       "author": "Ninko Team"
     },
     {
+      "name": "licium",
+      "display_name": "Licium Wiki",
+      "description": "Licium Wissensdatenbank – Notizen erstellen, semantisch suchen, Inhalte strukturieren und als LLM-Wiki verwalten (Karpathy-Pattern: Ingest, Query, Lint).",
+      "version": "1.0.0",
+      "author": "Ninko Team"
+    },
+    {
       "name": "linux_server",
       "display_name": "Linux Server",
       "description": "Linux Server Management über SSH – Befehle, Services, Monitoring, Dateien",
