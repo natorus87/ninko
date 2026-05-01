@@ -812,7 +812,7 @@ def _get_env_connection(module_name: str, prefix: str) -> dict:
         "netbox": ["NETBOX_URL"],
         "gitlab": ["GITLAB_URL"],
         "github": [],
-        "licium": ["LICIUM_BASE_URL", "LICIUM_EMAIL"],
+        "licium": ["LICIUM_BASE_URL", "LICIUM_USERNAME"],
     }
     for key in mappings.get(module_name, []):
         val = os.environ.get(key, "")
