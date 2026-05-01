@@ -5057,6 +5057,12 @@ ${messagesHtml}
             { key: 'context', label: 'Context (optional)', placeholder: 'kubernetes-admin@prod' },
             { key: 'kubeconfig', label: 'Kubeconfig-Datei', type: 'file', isSecret: true },
         ],
+        licium: [
+            { key: 'base_url', label: 'Licium URL', placeholder: 'https://licium.example.com' },
+            { key: 'email', label: 'E-Mail', placeholder: 'user@example.com' },
+            { key: 'LICIUM_PASSWORD', label: 'Passwort', placeholder: '••••••', type: 'password', isSecret: true },
+            { key: 'verify_ssl', label: 'SSL verifizieren (Nein bei selbst-signierten Zertifikaten)', type: 'checkbox' },
+        ],
         pihole: [
             { key: 'url', label: 'Pi-hole URL', placeholder: 'http://192.168.1.2' },
             { key: 'password', label: 'Passwort', placeholder: '••••••', type: 'password', isSecret: true },
