@@ -955,6 +955,16 @@ const Ninko = {
     switchAutoTab(tabId) {
         this.openSidebarPanel('automatisierung');
 
+        // Ensure the automatisierung parent panel is active (e.g. when coming from scripting/modules)
+        const autoPanel = document.getElementById('tab-automatisierung');
+        if (autoPanel && !autoPanel.classList.contains('active')) {
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            autoPanel.classList.add('active');
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+            document.querySelector('.nav-tab[data-tab="automatisierung"]')?.classList.add('active');
+            this.activeTab = 'automatisierung';
+        }
+
         // Stop workflows timer when leaving workflows sub-tab
         if (this._activeAutoTab === 'workflows' && tabId !== 'workflows') {
             clearInterval(this._wfRunRefreshTimer);
