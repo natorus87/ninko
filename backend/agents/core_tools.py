@@ -1074,6 +1074,9 @@ async def run_pipeline(steps: list[dict]) -> str:
     NUTZE DIESES TOOL für alle mehrstufigen Aufgaben die mehrere Module erfordern –
     es ist ZUVERLÄSSIGER als mehrere call_module_agent-Aufrufe in Folge.
 
+    Intern delegiert dieses Tool an die typisierte PipelineEngine mit per-Step-Retry,
+    strukturierten Events und Redis-Checkpoints.
+
     'steps' ist eine Liste von Dictionaries mit:
     - 'module': Name des Moduls (z.B. 'web_search', 'email', 'kubernetes', 'glpi')
     - 'task': Aufgabenbeschreibung für dieses Modul (ohne Kontext – der wird automatisch übergeben)
@@ -1092,23 +1095,8 @@ async def run_pipeline(steps: list[dict]) -> str:
         {"module": "glpi", "task": "Erstelle Incident mit K8s+DNS-Fehlern", "depends_on": [0, 1]}
       ]
     """
-    from agents.orchestrator import get_orchestrator
+    from core.pipeline_engine import get_pipeline_engine, PipelineStep, PipelineStatus
     from core import status_bus
-
-    orchestrator = get_orchestrator()
-    if orchestrator is None:
-        return _t(
-            "Fehler: Orchestrator noch nicht initialisiert.",
-            "Error: Orchestrator not yet initialized.",
-            "Erreur : Orchestrateur pas encore initialisé.",
-            "Error: Orquestador aún no inicializado.",
-            "Errore: Orchestrator non ancora inizializzato.",
-            "Fout: Orchestrator nog niet geïnitialiseerd.",
-            "Błąd: Orchestrator jeszcze nie został zainicjowany.",
-            "Erro: Orquestrador ainda não inicializado.",
-            "エラー: オーケストレーターがまだ初期化されていません。",
-            "错误: 编排器尚未初始化。",
-        )
 
     if not steps:
         return _t(
@@ -1125,227 +1113,66 @@ async def run_pipeline(steps: list[dict]) -> str:
         )
 
     session_id = status_bus.get_session_id()
-    step_results: dict[int, str] = {}  # idx → result
-    results_ordered: list[str] = []
-    aborted = False
 
-    # Display-Namen der Module für Status-Updates voraufladen
-    manifests = {m.name: m for m in orchestrator.registry.list_modules()}
-
-    # Fehler-Erkennung
-    _err_prefixes = (
-        "Fehler",
-        "Die Anfrage hat zu lange gedauert",
-        "Entschuldigung, es ist ein Fehler",
-        "Error",
-        "The request took too long",
-        "Sorry, an error occurred",
+    # SafeGuard-Profil für auto-confirm auswerten
+    from agents.base_agent import _global_safeguard
+    auto_confirm = (
+        _global_safeguard is None
+        or not _global_safeguard.enabled
+        or getattr(
+            await _global_safeguard.resolve_profile(session_id=session_id),
+            "auto_mode",
+            False,
+        )
     )
 
-    # Topologische Gruppen berechnen
-    groups = _build_execution_groups(steps)
-    is_parallel = any(len(g) > 1 for g in groups)
-    if is_parallel:
-        logger.info(
-            "Pipeline mit parallelen Gruppen: %s",
-            [[steps[i].get("module") for i in g] for g in groups],
-        )
-
-    async def _execute_step(i: int) -> tuple[int, str]:
-        """Führt einen einzelnen Pipeline-Step aus und gibt (index, result) zurück."""
-        step = steps[i]
-        module = step.get("module", "").strip()
-        task = step.get("task", "").strip()
-
-        if not module or not task:
-            return i, _t(
-                f"⚠️ Schritt {i + 1}: Übersprungen (module oder task fehlt).",
-                f"⚠️ Step {i + 1}: Skipped (module or task missing).",
-            )
-
-        # Kontext aus depends_on-Steps zusammenführen
-        full_task = task
-        deps = step.get("depends_on")
-        if deps is not None:
-            # Explizite Abhängigkeiten – Ergebnisse aller Dependencies zusammenführen
-            dep_contexts = []
-            for d in deps:
-                if d in step_results:
-                    dep_module = steps[d].get("module", f"Step {d + 1}")
-                    dep_contexts.append(f"[{dep_module}]: {step_results[d]}")
-            if dep_contexts:
-                merged = "\n\n".join(dep_contexts)
-                full_task = (
-                    task
-                    + "\n\n"
-                    + _t(
-                        f"Verwende folgende Ergebnisse als Kontext:\n{merged}",
-                        f"Use the following results as context:\n{merged}",
-                    )
-                )
-        elif i > 0 and i - 1 in step_results:
-            # Kein depends_on → sequenziell, Kontext vom vorherigen Step
-            prev_module = steps[i - 1].get(
-                "module", _t("vorheriger Schritt", "previous step")
-            )
-            full_task = (
-                task
-                + "\n\n"
-                + _t(
-                    f"Verwende folgende Ergebnisse aus '{prev_module}' als Inhalt:\n{step_results[i - 1]}",
-                    f"Use the following results from '{prev_module}' as content:\n{step_results[i - 1]}",
-                )
-            )
-
-        agent = orchestrator.registry.get_agent(module)
-        if agent is None:
-            available = [m.name for m in orchestrator.registry.list_modules()]
-            return i, _t(
-                f"Fehler: Modul '{module}' nicht gefunden. "
-                f"Verfügbar: {', '.join(available)}",
-                f"Error: Module '{module}' not found. "
-                f"Available: {', '.join(available)}",
-                f"Erreur : Module '{module}' non trouvé. "
-                f"Disponible : {', '.join(available)}",
-                f"Error: Módulo '{module}' no encontrado. "
-                f"Disponible : {', '.join(available)}",
-                f"Errore: Modulo '{module}' non trovato. "
-                f"Disponibile : {', '.join(available)}",
-                f"Fout: Module '{module}' niet gevonden. "
-                f"Beschikbaar : {', '.join(available)}",
-                f"Błąd: Moduł '{module}' nie został znaleziony. "
-                f"Dostępne : {', '.join(available)}",
-                f"Erro: Módulo '{module}' não encontrado. "
-                f"Disponível : {', '.join(available)}",
-                f"エラー: モジュール '{module}' が見つかりません。 "
-                f"利用可能: {', '.join(available)}",
-                f"错误: 找不到模块 '{module}'。 可用: {', '.join(available)}",
-            )
-
-        # Status-Update
-        display = manifests[module].display_name if module in manifests else module
-        await status_bus.emit(
-            session_id,
-            _t(
-                f"Rufe {display} auf… ({i + 1}/{len(steps)})",
-                f"Calling {display}… ({i + 1}/{len(steps)})",
-            ),
-        )
-
-        logger.info(
-            "Pipeline Schritt %d/%d – delegiere an '%s': %s…",
-            i + 1,
-            len(steps),
-            module,
-            task[:80],
-        )
+    # Rohe Dicts → typisierte PipelineStep-Objekte
+    typed_steps: list[PipelineStep] = []
+    for raw in steps:
         try:
-            # Pipeline sub-steps: auto-confirm only if safeguard is disabled or profile is in auto mode.
-            # Strict profiles still require per-tool confirmation for destructive operations.
-            from agents.base_agent import _global_safeguard
+            typed_steps.append(PipelineStep.from_dict(raw))
+        except Exception as exc:
+            logger.warning("run_pipeline: Ungültiger Step verworfen: %s – %s", raw, exc)
 
-            pipeline_confirmed = (
-                _global_safeguard is None
-                or not _global_safeguard.enabled
-                or getattr(
-                    await _global_safeguard.resolve_profile(session_id=session_id),
-                    "auto_mode",
-                    False,
-                )
-            )
-            result, _ = await agent.invoke(
-                message=full_task,
-                chat_history=None,
-                session_id=session_id,
-                confirmed=pipeline_confirmed,
-            )
-        except _CORE_TOOL_EXCEPTIONS as exc:
-            logger.error("Pipeline Schritt %d ('%s') Fehler: %s", i + 1, module, exc)
-            result = _t(
-                f"Fehler in Modul '{module}': {exc}",
-                f"Error in module '{module}': {exc}",
-                f"Erreur dans le module '{module}': {exc}",
-                f"Error en el módulo '{module}': {exc}",
-                f"Errore nel modulo '{module}': {exc}",
-                f"Fout in module '{module}': {exc}",
-                f"Błąd w module '{module}': {exc}",
-                f"Erro no módulo '{module}': {exc}",
-                f"モジュール '{module}' でエラーが発生しました: {exc}",
-                f"模块 '{module}' 发生错误: {exc}",
-            )
-        return i, result
+    if not typed_steps:
+        return _t(
+            "Fehler: Alle Schritte wurden verworfen (ungültige module/task Felder).",
+            "Error: All steps were rejected (invalid module/task fields).",
+        )
 
-    # Gruppen sequenziell abarbeiten, Steps innerhalb einer Gruppe parallel
-    for group in groups:
-        if aborted:
-            break
+    engine = get_pipeline_engine()
+    result = await engine.execute(
+        typed_steps,
+        session_id=session_id,
+        auto_confirm=auto_confirm,
+        skip_on_error=False,
+    )
 
-        if len(group) == 1:
-            # Einzelner Step – direkt ausführen
-            idx, result = await _execute_step(group[0])
-            step_results[idx] = result
-            module = steps[idx].get("module", "?")
-            results_ordered.append(
-                _t(
-                    f"**Schritt {idx + 1} – {module}:**\n{result}",
-                    f"**Step {idx + 1} – {module}:**\n{result}",
-                )
-            )
-            if any(result.startswith(p) for p in _err_prefixes):
-                remaining = sum(len(g) for g in groups[groups.index(group) + 1 :])
-                if remaining > 0:
-                    results_ordered.append(
-                        _t(
-                            f"⚠️ Pipeline abgebrochen nach Schritt {idx + 1} – "
-                            f"{remaining} weiterer Schritt(e) übersprungen.",
-                            f"⚠️ Pipeline aborted after step {idx + 1} – "
-                            f"{remaining} remaining step(s) skipped.",
-                        )
-                    )
-                aborted = True
-        else:
-            # Parallele Ausführung via asyncio.gather
-            parallel_label = ", ".join(steps[i].get("module", "?") for i in group)
-            await status_bus.emit(
-                session_id,
-                _t(
-                    f"Starte parallel: {parallel_label}",
-                    f"Starting in parallel: {parallel_label}",
-                ),
-            )
-            gather_results = await asyncio.gather(
-                *[_execute_step(idx) for idx in group],
-                return_exceptions=True,
-            )
-            for item in gather_results:
-                if isinstance(item, BaseException):
-                    logger.error("Pipeline paralleler Step Fehler: %s", item)
-                    continue
-                idx, result = item
-                step_results[idx] = result
-                module = steps[idx].get("module", "?")
-                results_ordered.append(
-                    _t(
-                        f"**Schritt {idx + 1} – {module}:**\n{result}",
-                        f"**Step {idx + 1} – {module}:**\n{result}",
-                    )
-                )
-                if any(result.startswith(p) for p in _err_prefixes):
-                    aborted = True
+    markdown = result.to_markdown()
+    if result.status == PipelineStatus.FAILED:
+        return _t(
+            f"Pipeline fehlgeschlagen: {result.error}\n\n{markdown}",
+            f"Pipeline failed: {result.error}\n\n{markdown}",
+        )
+    return markdown if markdown else _t(
+        "Pipeline abgeschlossen (keine Ausgabe).",
+        "Pipeline completed (no output).",
+    )
 
-            if aborted:
-                remaining = sum(len(g) for g in groups[groups.index(group) + 1 :])
-                if remaining > 0:
-                    results_ordered.append(
-                        _t(
-                            f"⚠️ Pipeline abgebrochen – "
-                            f"{remaining} weiterer Schritt(e) übersprungen.",
-                            f"⚠️ Pipeline aborted – "
-                            f"{remaining} remaining step(s) skipped.",
-                        )
-                    )
 
-    return "\n\n".join(results_ordered)
+# Legacy-Hilfsfunktion: wird von run_parallel_pipeline intern noch benötigt
+def _build_execution_groups_legacy(steps: list[dict]) -> list[list[int]]:
+    """Topologische Sortierung für den Legacy run_parallel_pipeline()-Pfad."""
+    from core.pipeline_engine import _build_execution_groups as _beg, PipelineStep
+    typed = []
+    for s in steps:
+        try:
+            typed.append(PipelineStep.from_dict(s))
+        except Exception:
+            typed.append(PipelineStep(module=s.get("module", "unknown"), task=s.get("task", ""), depends_on=[]))
+    return _beg(typed)
+
+
 
 
 @tool
