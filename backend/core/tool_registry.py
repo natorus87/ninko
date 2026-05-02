@@ -1337,3 +1337,80 @@ def _infer_destructive(tool_name: str) -> bool:
         "merge_github_pull_request",
     }
     return tool_name.startswith(destructive_prefixes) or tool_name in destructive_names
+
+
+# ── ToolSpec: Erweitertes Schema für die Pipeline Engine ─────────────────────
+
+
+from dataclasses import dataclass as _dataclass, field as _field
+from typing import Any as _Any
+
+
+@_dataclass(slots=True, frozen=True)
+class ToolSpec:
+    """
+    Vollständige Spezifikation eines Tools für die Pipeline Engine.
+
+    Ergänzt ToolMetadata um Input-/Output-Schemas, Bestätigungsanforderung,
+    Timeout und Retry-Regeln. Wird von der PipelineEngine für Validierung
+    und SafeGuard-Integration genutzt.
+    """
+
+    name: str
+    module: str
+    description: str = ""
+    tier: "ToolTier" = ToolTier.WRITE_SYSTEM
+    requires_confirmation: bool = False
+    timeout_s: float = 120.0
+    max_retries: int = 2
+    input_schema: dict[str, _Any] = _field(default_factory=dict)
+    output_schema: dict[str, _Any] = _field(default_factory=dict)
+
+    @classmethod
+    def from_metadata(cls, meta: "ToolMetadata") -> "ToolSpec":
+        """Erstellt eine ToolSpec aus vorhandenen ToolMetadata."""
+        tier = meta.tier or _infer_tier(meta.name, meta.destructive)
+        requires_confirmation = tier in (ToolTier.ADMIN, ToolTier.WRITE_SYSTEM)
+        return cls(
+            name=meta.name,
+            module=meta.module,
+            tier=tier,
+            requires_confirmation=requires_confirmation,
+            timeout_s=180.0 if tier == ToolTier.ADMIN else 120.0,
+            max_retries=0 if tier == ToolTier.ADMIN else 2,
+        )
+
+
+# ── Module-Level ToolSpec Registry ───────────────────────────────────────────
+
+_tool_specs: dict[str, "ToolSpec"] = {}
+
+
+def register_tool_spec(spec: "ToolSpec") -> None:
+    """Registriert eine ToolSpec global."""
+    _tool_specs[spec.name] = spec
+
+
+def get_tool_spec(name: str) -> "ToolSpec | None":
+    """Gibt die ToolSpec für ein Tool zurück, falls registriert."""
+    return _tool_specs.get(name)
+
+
+def get_or_infer_tool_spec(name: str, module: str = "unknown") -> "ToolSpec":
+    """
+    Gibt die ToolSpec zurück oder inferiert sie dynamisch aus dem Tool-Namen.
+    Nutzt dieselbe Tier-Heuristik wie _infer_tier().
+    """
+    if name in _tool_specs:
+        return _tool_specs[name]
+
+    tier = _infer_tier(name, _infer_destructive(name))
+    requires_confirmation = tier in (ToolTier.ADMIN, ToolTier.WRITE_SYSTEM, ToolTier.COMMUNICATE)
+    return ToolSpec(
+        name=name,
+        module=module,
+        tier=tier,
+        requires_confirmation=requires_confirmation,
+        timeout_s=180.0 if tier == ToolTier.ADMIN else 120.0,
+        max_retries=0 if tier == ToolTier.ADMIN else 2,
+    )
