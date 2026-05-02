@@ -1570,18 +1570,19 @@ JSON-SCHEMA:
         allowed_modules: list[str] | None = None,
         task_sketch: "TaskSketch | None" = None,
     ) -> tuple[str, bool]:
-        """Tier-4-Pipeline: LLM-Planner → Validierung → run_pipeline-Ausführung.
+        """Tier-4-Pipeline: Deterministischer Plan → optionaler LLM-Refinement → PipelineEngine.
 
-        Erstellt einen strukturierten Ausführungsplan (max 4 Schritte), validiert jeden
-        Schritt gegen die Registry, filtert halluzinierte Utility-Module heraus und führt
-        den Plan via run_pipeline aus.
+        Ablauf:
+        1. TaskSketch-Kandidaten als deterministischer Basis-Plan (kein LLM-Call).
+        2. Optional: LLM-Planner verfeinert den Plan innerhalb von _LLM_ROUTING_TIMEOUT.
+        3. LLM-Output wird gegen die Registry validiert (PipelineEngine.validate_steps_from_dicts).
+        4. Bei LLM-Timeout/-Fehler/-leerem Output: deterministischer Plan aus TaskSketch (KEIN ReAct-Fallback).
+        5. Ausführung via PipelineEngine (typisiert, Retry, Events, Checkpoints).
 
-        Uses TaskSketch if provided for structured planning guidance.
-
-        Fallback: Tier 1 (ReAct-Loop) bei Timeout, Parse-Fehler oder leerem Validierungsresultat.
+        Falls kein deterministischer Plan möglich ist (< 2 valide Module): Tier 1 ReAct-Loop.
         """
         from core.llm_factory import get_llm
-        from core.prestructure.schemas import TaskSketch
+        from core.pipeline_engine import get_pipeline_engine, PipelineStep, PipelineStatus
 
         await status_bus.emit(
             session_id,
@@ -1622,16 +1623,36 @@ JSON-SCHEMA:
             ):
                 utility_explicitly_mentioned.add(mod)
 
-        # Module-Beschreibungen dynamisch aus Registry (mit Capabilities)
+        # ── Stufe 1: Deterministischer Basis-Plan aus TaskSketch ─────────────
+        # Nutzt die bereits vorhandene Modul-Ranking-Analyse ohne LLM-Call.
+        deterministic_steps: list[dict] = []
+        if task_sketch and task_sketch.scope.candidate_modules_ranked:
+            for ranked_mod in task_sketch.scope.candidate_modules_ranked[:4]:
+                if ranked_mod.module not in valid_module_names:
+                    continue
+                if (
+                    ranked_mod.module in _UTILITY_MODULES
+                    and ranked_mod.module not in utility_explicitly_mentioned
+                    and ranked_mod.module not in _CORE_ALWAYS_MODULES
+                ):
+                    continue
+                deterministic_steps.append({
+                    "module": ranked_mod.module,
+                    "task": message,
+                })
+
+        # ── Stufe 2: LLM-Planner als optionaler Refinement-Pass ──────────────
+        # Der LLM-Planner darf den Plan verbessern (bessere task-Beschreibungen,
+        # Abhängigkeiten), aber sein Output wird gegen die Registry validiert.
+        # Bei Fehler → deterministischer Plan aus Stufe 1.
+        llm_steps: list[dict] = []
         module_lines = []
         for m in modules:
             line = f'- "{m.name}": {m.description}'
             if m.agent_capabilities:
-                caps = ", ".join(m.agent_capabilities[:6])
-                line += f"\n    Fähigkeiten: {caps}"
+                line += f"\n    Fähigkeiten: {', '.join(m.agent_capabilities[:6])}"
             if m.routing_keywords:
-                kws = ", ".join(m.routing_keywords[:5])
-                line += f"\n    Keywords: {kws}"
+                line += f"\n    Keywords: {', '.join(m.routing_keywords[:5])}"
             module_lines.append(line)
         module_descriptions = "\n".join(module_lines)
 
@@ -1640,68 +1661,33 @@ JSON-SCHEMA:
             "",
             f"ANFRAGE: {message}",
         ]
-
         if task_sketch:
-            planner_sections.extend(
-                [
-                    "",
-                    "TASK-STRUKTUR (automatisch analysiert):",
-                    f"- Intent: {task_sketch.task.intent}",
-                    f"- Hauptziel: {task_sketch.task.primary_goal}",
-                    f"- Komplexität: {task_sketch.task.complexity}",
-                    f"- Risiko: {task_sketch.risk.level}",
-                    f"- Gewünschte Ausgabe: {', '.join(task_sketch.task.requested_output) if task_sketch.task.requested_output else 'nicht spezifiziert'}",
-                ]
-            )
+            planner_sections.extend([
+                "",
+                "TASK-STRUKTUR (automatisch analysiert):",
+                f"- Intent: {task_sketch.task.intent}",
+                f"- Hauptziel: {task_sketch.task.primary_goal}",
+                f"- Komplexität: {task_sketch.task.complexity}",
+                f"- Risiko: {task_sketch.risk.level}",
+            ])
             if task_sketch.constraints.must_not_do:
-                planner_sections.append(
-                    f"- VERBOTEN: {', '.join(task_sketch.constraints.must_not_do)}"
-                )
+                planner_sections.append(f"- VERBOTEN: {', '.join(task_sketch.constraints.must_not_do)}")
             if task_sketch.constraints.must_include:
-                planner_sections.append(
-                    f"- ERFORDERLICH: {', '.join(task_sketch.constraints.must_include)}"
-                )
-            if task_sketch.uncertainty.missing_information:
-                planner_sections.append(
-                    f"- FEHLENDE INFOS: {', '.join(task_sketch.uncertainty.missing_information)}"
-                )
-
-        planner_sections.extend(
-            [
-                "",
-                f"VERFÜGBARE MODULE:\n{module_descriptions}",
-                "",
-                "REGELN:",
-                "1. Maximal 4 Schritte",
-                "2. Nur Module nutzen die der User EXPLIZIT benötigt oder die als Datenzulieferer zwingend nötig sind",
-                "3. Utility-Module (telegram, email, teams) NUR wenn der User sie explizit erwähnt",
-                "4. Core-Module (web_search, image_gen, codelab, dataviz) sind immer erlaubt",
-                "5. Jeder task-String muss die vollständige Aufgabe für das Modul enthalten",
-            ]
-        )
-
-        if task_sketch:
-            planner_sections.append("6. Beachte TASK-STRUKTUR oben: Intent, Risiko, Constraints")
-            planner_sections.append(
-                "7. Wenn Risiko=high/critical: nur lesende Operationen, keine Schreibzugriffe"
-            )
-            planner_sections.append(
-                "8. Wenn 'evidence' in ERFORDERLICH: sammel Nachweise/Zustandsdaten"
-            )
-            planner_sections.append(
-                "9. Wenn 'safe_next_step' in ERFORDERLICH: nur den nächsten sicheren Schritt planen"
-            )
-            planner_sections.append("10. NUR das JSON-Array zurückgeben — kein erklärender Text")
-        else:
-            planner_sections.append("6. NUR das JSON-Array zurückgeben — kein erklärender Text")
-
-        planner_sections.extend(
-            [
-                "",
-                'AUSGABE: [{"module": "<name>", "task": "<vollständige aufgabe>"}, ...]',
-            ]
-        )
-
+                planner_sections.append(f"- ERFORDERLICH: {', '.join(task_sketch.constraints.must_include)}")
+        planner_sections.extend([
+            "",
+            f"VERFÜGBARE MODULE:\n{module_descriptions}",
+            "",
+            "REGELN:",
+            "1. Maximal 4 Schritte",
+            "2. Utility-Module (telegram, email, teams) NUR wenn explizit erwähnt",
+            "3. Core-Module (web_search, image_gen, codelab, dataviz) immer erlaubt",
+            "4. Nur bekannte Modul-Namen aus VERFÜGBARE MODULE verwenden",
+            "5. Jeder task-String muss die vollständige Aufgabe für das Modul enthalten",
+            "6. NUR das JSON-Array zurückgeben — kein erklärender Text",
+            "",
+            'AUSGABE: [{"module": "<name>", "task": "<vollständige aufgabe>"}, ...]',
+        ])
         planner_prompt = "\n".join(planner_sections)
 
         try:
@@ -1711,100 +1697,66 @@ JSON-SCHEMA:
                 timeout=_LLM_ROUTING_TIMEOUT,
             )
             raw = response.content if hasattr(response, "content") else str(response)
-            # Thinking-Blöcke entfernen
             raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
-            # Erstes JSON-Array extrahieren
             json_match = re.search(r"\[[\s\S]*?\]", raw)
             if not json_match:
                 raise ValueError("Kein JSON-Array im Planner-Output gefunden")
-            steps: list[dict] = _json.loads(json_match.group(0))
+            llm_steps = _json.loads(json_match.group(0))
+            logger.debug("Tier-4-LLM-Planner: %d Schritte vorgeschlagen", len(llm_steps))
         except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
-            logger.warning(
-                "Tier-4-Planner fehlgeschlagen (%s) → Fallback Tier 1",
+            logger.info(
+                "Tier-4-LLM-Planner fehlgeschlagen (%s) → deterministischer Fallback-Plan",
                 exc,
             )
             await status_bus.emit(
                 session_id,
                 _t(
-                    de="Pipeline-Planung fehlgeschlagen, direkte Verarbeitung…",
-                    en="Pipeline planning failed, direct processing…",
-                    fr="Échec de la planification du pipeline, traitement direct…",
-                    es="Error en la planificación del pipeline, procesamiento directo…",
-                    it="Pianificazione pipeline non riuscita, elaborazione diretta…",
-                    nl="Pipeline-planning mislukt, directe verwerking…",
-                    pl="Planowanie pipeline nie powiodło się, bezpośrednie przetwarzanie…",
-                    pt="Falha no planejamento do pipeline, processamento direto…",
-                    ja="パイプライン計画に失敗しました、直接処理中…",
-                    zh="管道规划失败，直接处理中…",
+                    de="Planung via deterministischem Fallback…",
+                    en="Planning via deterministic fallback…",
+                    fr="Planification via fallback déterministe…",
+                    es="Planificando via fallback determinista…",
+                    it="Pianificazione tramite fallback deterministico…",
+                    nl="Planning via deterministisch fallback…",
+                    pl="Planowanie przez deterministyczny fallback…",
+                    pt="Planejamento via fallback determinístico…",
+                    ja="決定論的フォールバックで計画中…",
+                    zh="通过确定性回退进行规划…",
                 ),
             )
-            return await self.invoke(
-                message=message,
-                chat_history=chat_history,
-                session_id=session_id,
-                confirmed=confirmed,
+
+        # ── Stufe 3: Validierung gegen Registry ──────────────────────────────
+        # LLM-Steps bevorzugen, aber nur wenn sie valide sind.
+        # Validierung via PipelineEngine (zentralisierte Logik).
+        from core.pipeline_engine import PipelineEngine
+
+        candidates = llm_steps if llm_steps else deterministic_steps
+        valid_typed_steps = PipelineEngine.validate_steps_from_dicts(
+            candidates,
+            valid_module_names=valid_module_names,
+            utility_modules=_UTILITY_MODULES,
+            utility_mentioned=utility_explicitly_mentioned,
+            core_always_modules=_CORE_ALWAYS_MODULES,
+            max_steps=4,
+        )
+
+        # Falls LLM-Plan nach Validierung leer ist → deterministischen Plan versuchen
+        if not valid_typed_steps and llm_steps and deterministic_steps:
+            logger.warning(
+                "Tier-4: LLM-Plan nach Validierung leer → deterministischer Plan verwendet"
+            )
+            valid_typed_steps = PipelineEngine.validate_steps_from_dicts(
+                deterministic_steps,
+                valid_module_names=valid_module_names,
+                utility_modules=_UTILITY_MODULES,
+                utility_mentioned=utility_explicitly_mentioned,
+                core_always_modules=_CORE_ALWAYS_MODULES,
+                max_steps=4,
             )
 
-        # ── Validierung ────────────────────────────────────────────────────
-        valid_steps: list[dict] = []
-        for step in steps:
-            mod = step.get("module", "").strip()
-            task = step.get("task", "").strip()
-            if not mod or not task:
-                continue
-            if mod not in valid_module_names:
-                logger.warning("Tier-4: Modul '%s' nicht in Registry → verworfen", mod)
-                continue
-            if (
-                mod in _UTILITY_MODULES
-                and mod not in utility_explicitly_mentioned
-                and mod not in _CORE_ALWAYS_MODULES
-            ):
-                logger.warning(
-                    "Tier-4: Utility-Modul '%s' nicht explizit erwähnt → verworfen",
-                    mod,
-                )
-                continue
-
-            if task_sketch:
-                should_skip = False
-                for constraint in task_sketch.constraints.must_not_do:
-                    if constraint.lower() in task.lower():
-                        logger.warning(
-                            "Tier-4: Schritt verstößt gegen Constraint '%s' → verworfen",
-                            constraint,
-                        )
-                        should_skip = True
-                        break
-
-                if should_skip:
-                    continue
-
-                if task_sketch.risk.level in ("high", "critical"):
-                    write_verbs = [
-                        "delete",
-                        "remove",
-                        "drop",
-                        "stop",
-                        "restart",
-                        "update",
-                        "change",
-                        "modify",
-                        "create",
-                        "add",
-                    ]
-                    if any(verb in task.lower() for verb in write_verbs):
-                        logger.warning(
-                            "Tier-4: Schreiboperation bei Risiko=%s erkannt, aber Task erlaubt → Schritt beibehalten",
-                            task_sketch.risk.level,
-                        )
-
-            valid_steps.append({"module": mod, "task": task})
-            if len(valid_steps) >= 4:
-                break
-
-        if not valid_steps:
-            logger.warning("Tier-4: Keine validen Schritte nach Validierung → Fallback Tier 1")
+        if not valid_typed_steps:
+            logger.warning(
+                "Tier-4: Kein valider Plan (weder LLM noch deterministisch) → Tier 1 ReAct-Loop"
+            )
             return await self.invoke(
                 message=message,
                 chat_history=chat_history,
@@ -1814,27 +1766,53 @@ JSON-SCHEMA:
 
         logger.info(
             "Tier-4-Pipeline: %d Schritte: %s",
-            len(valid_steps),
-            [s["module"] for s in valid_steps],
+            len(valid_typed_steps),
+            [s.module for s in valid_typed_steps],
         )
         await status_bus.emit(
             session_id,
             _t(
-                de=f"Führe {len(valid_steps)}-Schritt-Pipeline aus…",
-                en=f"Executing {len(valid_steps)}-step pipeline…",
-                fr=f"Exécution du pipeline à {len(valid_steps)} étapes…",
-                es=f"Ejecutando pipeline de {len(valid_steps)} pasos…",
-                it=f"Esecuzione pipeline a {len(valid_steps)} passaggi…",
-                nl=f"{len(valid_steps)}-staps pipeline uitvoeren…",
-                pl=f"Wykonuję pipeline {len(valid_steps)}-etapowy…",
-                pt=f"Executando pipeline de {len(valid_steps)} etapas…",
-                ja=f"{len(valid_steps)}ステップのパイプラインを実行中…",
-                zh=f"正在执行{len(valid_steps)}步管道…",
+                de=f"Führe {len(valid_typed_steps)}-Schritt-Pipeline aus…",
+                en=f"Executing {len(valid_typed_steps)}-step pipeline…",
+                fr=f"Exécution du pipeline à {len(valid_typed_steps)} étapes…",
+                es=f"Ejecutando pipeline de {len(valid_typed_steps)} pasos…",
+                it=f"Esecuzione pipeline a {len(valid_typed_steps)} passaggi…",
+                nl=f"{len(valid_typed_steps)}-staps pipeline uitvoeren…",
+                pl=f"Wykonuję pipeline {len(valid_typed_steps)}-etapowy…",
+                pt=f"Executando pipeline de {len(valid_typed_steps)} etapas…",
+                ja=f"{len(valid_typed_steps)}ステップのパイプラインを実行中…",
+                zh=f"正在执行{len(valid_typed_steps)}步管道…",
             ),
         )
 
-        result = await run_pipeline.ainvoke({"steps": valid_steps})
-        return str(result), False
+        # ── Stufe 4: Typisierte Ausführung via PipelineEngine ─────────────────
+        engine = get_pipeline_engine()
+
+        # SafeGuard-Profil für auto-confirm auswerten
+        from agents.base_agent import _global_safeguard
+        _safeguard_auto = False
+        if _global_safeguard is not None and _global_safeguard.enabled:
+            try:
+                _profile = await _global_safeguard.resolve_profile(session_id=session_id)
+                _safeguard_auto = bool(getattr(_profile, "auto_mode", False)) if _profile is not None else False
+            except _ORCH_RECOVERABLE_EXCEPTIONS:
+                _safeguard_auto = False
+        auto_confirm = confirmed or _global_safeguard is None or not _global_safeguard.enabled or _safeguard_auto
+
+        pipeline_result = await engine.execute(
+            valid_typed_steps,
+            session_id=session_id,
+            auto_confirm=auto_confirm,
+            skip_on_error=False,
+        )
+
+        if pipeline_result.status == PipelineStatus.FAILED:
+            return _t(
+                de=f"Pipeline fehlgeschlagen: {pipeline_result.error}",
+                en=f"Pipeline failed: {pipeline_result.error}",
+            ), False
+
+        return pipeline_result.to_markdown(), False
 
     async def resume_tool_execution(self, session_id: str) -> tuple[str, bool]:
         """
