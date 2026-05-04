@@ -70,6 +70,7 @@ class CoreSettings(BaseSettings):
     LANGUAGE: str = "de"
     TIMEZONE: str = "Europe/Berlin"
     DATA_DIR: str = "/app/data"
+    DEPLOYMENT_ENV: Literal["development", "production"] = "development"
     LLM_VERIFY_SSL: bool = True  # False = self-signed Zertifikate erlauben
 
     # ── API Security ───────────────────────────────────
@@ -121,6 +122,7 @@ class CoreSettings(BaseSettings):
 
     # ── Plugin Cache ───────────────────────────────────
     PLUGIN_CACHE_TTL_SECONDS: int = 300  # 5 minutes
+    PLUGIN_REPO_ALLOWLIST_REQUIRED: bool = False
 
     # ── CodeLab Resource Limits ───────────────────────
     CODELAB_MAX_CODE_CHARS: int = 100_000
@@ -173,17 +175,27 @@ class CoreSettings(BaseSettings):
         """Validiert Security-kritische Defaults und loggt Warnungen."""
         logger = logging.getLogger("ninko.core.config")
 
+        insecure_defaults = []
         if self.SESSION_SECRET == "change-me-in-production":
-            logger.warning(
-                "SECURITY: SESSION_SECRET ist auf den Default-Wert gesetzt! "
-                "Bitte SESSION_SECRET in der .env-Datei oder als Umgebungsvariable setzen."
-            )
+            insecure_defaults.append("SESSION_SECRET")
+        if self.BOOTSTRAP_ADMIN_PASSWORD == "admin" and not self.ADMIN_PASSWORD:
+            insecure_defaults.append("BOOTSTRAP_ADMIN_PASSWORD")
+        if (
+            self.API_AUTH_ENABLED
+            and self.DEPLOYMENT_ENV == "production"
+            and not self.SESSION_COOKIE_SECURE
+        ):
+            insecure_defaults.append("SESSION_COOKIE_SECURE")
 
-        if self.BOOTSTRAP_ADMIN_PASSWORD == "admin":
-            logger.warning(
-                "SECURITY: BOOTSTRAP_ADMIN_PASSWORD ist 'admin'! "
-                "Bitte BOOTSTRAP_ADMIN_PASSWORD in der .env-Datei setzen."
+        if insecure_defaults:
+            msg = (
+                "SECURITY: Unsichere Defaults konfiguriert: "
+                + ", ".join(insecure_defaults)
+                + ". Bitte produktionssichere Werte setzen."
             )
+            if self.API_AUTH_ENABLED and self.DEPLOYMENT_ENV == "production":
+                raise ValueError(msg)
+            logger.warning(msg)
 
         return self
 

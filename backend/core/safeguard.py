@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING
 
+import openai
 from openai import AsyncOpenAI
 
 from core.tool_registry import ToolTier, get_tool_registry
@@ -47,6 +48,7 @@ _SAFEGUARD_EXCEPTIONS_GENERAL = (
     RuntimeError,
     OSError,
     json.JSONDecodeError,
+    openai.APIError,  # covers BadRequestError (400 "no model"), AuthError, RateLimit, etc.
 )
 
 _SAFEGUARD_EXCEPTIONS_TIMEOUT = (asyncio.TimeoutError,)

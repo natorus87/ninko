@@ -378,3 +378,57 @@ def test_get_pipeline_engine_singleton():
     engine1 = get_pipeline_engine()
     engine2 = get_pipeline_engine()
     assert engine1 is engine2
+
+
+# ── Tests 14-16: Orchestrator Routing (_has_multistep_indicators) ─────────────
+
+
+def _make_orch_for_routing():
+    """Minimale OrchestratorAgent-Instanz für Routing-Tests (kein echter LLM)."""
+    from agents.orchestrator import OrchestratorAgent
+
+    registry = MagicMock()
+    registry.list_modules.return_value = []
+    registry.get_module.return_value = None
+    orch = OrchestratorAgent.__new__(OrchestratorAgent)
+    orch.registry = registry
+    orch._routing_map = {}
+    orch._routing_map_hash = ""
+    return orch
+
+
+def test_multistep_und_with_two_qualified_modules_triggers_tier4():
+    """Einfaches 'und' zwischen zwei klar erkannten Modulen → Tier-4-Trigger."""
+    orch = _make_orch_for_routing()
+    # licium score=3, knowledge_graph score=2 → beide qualifiziert (>=2)
+    scores = {"licium": 3, "knowledge_graph": 2}
+    assert orch._has_multistep_indicators(
+        "Lies meine bestehenden Notizen und ingeste sie ins Ninko-Wiki", scores
+    ) is True
+
+
+def test_multistep_und_with_single_module_no_tier4():
+    """Nur ein qualifiziertes Modul + 'und' → KEIN Tier-4 (Guard greift)."""
+    orch = _make_orch_for_routing()
+    scores = {"kubernetes": 4}
+    assert orch._has_multistep_indicators(
+        "Zeige alle Pods und Deployments", scores
+    ) is False
+
+
+def test_multistep_two_modules_no_und_no_pattern_no_tier4():
+    """Zwei Modul-Treffer, aber kein 'und' und kein Sequenz-Wort → kein Tier-4."""
+    orch = _make_orch_for_routing()
+    scores = {"kubernetes": 2, "licium": 2}
+    assert orch._has_multistep_indicators(
+        "kubernetes licium status", scores
+    ) is False
+
+
+def test_multistep_explicit_pattern_still_works():
+    """Explizites 'danach' löst Tier-4 wie bisher aus."""
+    orch = _make_orch_for_routing()
+    scores = {"kubernetes": 3, "telegram": 1}  # telegram ist Utility, Score>=1 reicht
+    assert orch._has_multistep_indicators(
+        "Prüfe alle K8s-Pods und benachrichtige mich danach per Telegram", scores
+    ) is True

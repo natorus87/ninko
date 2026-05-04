@@ -3073,9 +3073,9 @@ ${messagesHtml}
                 ? DOMPurify.sanitize(html, {
                     ADD_ATTR: ['target', 'rel'],
                     FORBID_TAGS: ['script', 'style', 'iframe', 'form', 'input'],
-                    ALLOWED_URI_REGEXP: /^(https?|mailto):/i,
+                    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|\/api\/images\/|data:image\/(?:png|jpeg|jpg|webp);base64,)/i,
                 })
-                : html;
+                : this._escapeHtml(text);
             // Links immer in neuem Tab öffnen
             return sanitized.replace(/<a /g, '<a target="_blank" rel="noopener noreferrer" ');
         }

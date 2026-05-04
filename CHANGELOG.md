@@ -9,6 +9,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Typed Pipeline Engine** (`core/pipeline_engine.py`): Pydantic-validated `PipelineStep` / `StepResult` / `PipelineResult` schemas replace the ad-hoc string-stack in `run_pipeline()`. Per-step retry with exponential backoff (`RetryPolicy`), `asyncio.gather(return_exceptions=True)` for safe parallel groups, Redis checkpoints after each group, and a structured `PipelineEvent` system (9 event types: `routing_started` → `pipeline_completed`).
+- **Deterministic Pipeline Planning**: `_plan_and_execute_pipeline()` now builds a base plan from `TaskSketch.scope.candidate_modules_ranked` without any LLM call. The LLM planner runs as an optional refinement pass with a 10 s timeout; on failure the deterministic plan is used — no ReAct fallback.
+- **Persistent Session State** (`core/session_state.py`): `SessionState` tracks routing tier, detected modules, pipeline plan, per-step results, errors, and pending confirmations in Redis (`ninko:session_state:<id>`, 24 h TTL).
+- **ToolSpec Registry**: `ToolSpec` frozen dataclass added to `core/tool_registry.py` with `input_schema`, `output_schema`, `requires_confirmation`, `timeout_s`, and `max_retries`. `get_or_infer_tool_spec()` dynamically infers a spec from the tool name using existing tier heuristics.
+- **Pipeline Events** (`core/pipeline_events.py`): Global async listener registry (`on_pipeline_event` / `emit_pipeline_event`) for observability hooks and future UI progress streaming.
+- **15 unit tests** (`tests/test_pipeline_engine.py`) covering single-step success, multi-step sequential execution, notification pipelines, per-step retry-on-failure, invalid JSON rejection, unknown module rejection, confirmation flow (skip vs. auto_confirm), utility module filtering, and the no-ReAct-fallback guarantee.
+
+### Changed
+
+- `run_pipeline()` now delegates entirely to `PipelineEngine` — the old ~200-line string-accumulation loop with `_err_prefixes` string-prefix error detection is removed.
+- Multi-step failure now yields `PipelineResult.status == PARTIAL` (structured, typed) instead of unpredictable ReAct loop re-entry.
+- `validate_steps_from_dicts()` is the single validation entry point used by both the Orchestrator and `run_pipeline()`.
+
 ## [1.3.2] – 2026-04-25
 
 ### Added

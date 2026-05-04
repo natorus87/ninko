@@ -95,6 +95,7 @@ def _parse_github_url(url: str) -> tuple[str, str] | None:
 
 
 _SAFE_BRANCH_RE = re.compile(r"^[a-zA-Z0-9_./ -]{1,128}$")
+_SAFE_REPO_SUBPATH_RE = re.compile(r"^[a-zA-Z0-9_./-]{1,256}$")
 
 
 def _validate_branch(branch: str) -> str:
@@ -111,6 +112,19 @@ def _validate_branch(branch: str) -> str:
     if not branch or not _SAFE_BRANCH_RE.match(branch) or ".." in branch:
         raise ValueError(f"Ungültiger Branch-Name: {branch!r}")
     return branch
+
+
+def _validate_repo_subpath(path: str) -> str:
+    path = path.strip().strip("/")
+    if (
+        not path
+        or ".." in path
+        or path.startswith(("/", "\\"))
+        or "\\" in path
+        or not _SAFE_REPO_SUBPATH_RE.match(path)
+    ):
+        raise ValueError(f"Ungültiger Repository-Pfad: {path!r}")
+    return path
 
 
 def _version_tuple(v: str) -> tuple[int, ...]:
@@ -170,6 +184,40 @@ def _is_repo_allowed(repo_url: str) -> bool:
     return any(
         url == entry or url.startswith(entry.rstrip("/") + "/") for entry in allowed
     )
+
+
+def _plugin_repo_allowlist_required() -> bool:
+    from core.config import get_settings
+
+    settings = get_settings()
+    return (
+        settings.DEPLOYMENT_ENV.lower() == "production"
+        or settings.PLUGIN_REPO_ALLOWLIST_REQUIRED
+    )
+
+
+def _assert_repo_allowed(repo_url: str) -> None:
+    allowlist = os.getenv("NINKO_PLUGIN_REPO_ALLOWLIST", "").strip()
+    if _plugin_repo_allowlist_required() and not allowlist:
+        raise HTTPException(
+            status_code=403,
+            detail="Plugin-Repository-Allowlist ist in dieser Umgebung erforderlich.",
+        )
+    if not _is_repo_allowed(repo_url):
+        raise HTTPException(
+            status_code=403, detail="Repository ist nicht in der erlaubten Allowlist."
+        )
+
+
+def _safe_child_path(base_dir: Path, relative_path: str) -> Path:
+    """Return a resolved child path or raise for archive path traversal."""
+    if not relative_path or relative_path.startswith(("/", "\\")):
+        raise HTTPException(status_code=400, detail="Archiv enthält ungültigen Pfad.")
+    candidate = (base_dir / relative_path).resolve()
+    base_resolved = base_dir.resolve()
+    if candidate != base_resolved and base_resolved not in candidate.parents:
+        raise HTTPException(status_code=400, detail="Archiv enthält ungültigen Pfad.")
+    return candidate
 
 
 # ─── Token-Verschlüsselung (CWE-256 Fix) ────────────────────────────────────
@@ -746,18 +794,22 @@ async def add_repo(
         raise HTTPException(
             status_code=400, detail="Ungültige oder fehlende GitHub-URL."
         )
-    if not _is_repo_allowed(repo_url):
-        raise HTTPException(
-            status_code=403, detail="Repository ist nicht in der erlaubten Allowlist."
+    _assert_repo_allowed(repo_url)
+    try:
+        branch = _validate_branch(body.branch or "main")
+        modules_path = _validate_repo_subpath(
+            body.modules_path or "backend/modules_catalog"
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     repos = await _load_repos()
     new_repo: dict[str, Any] = {
         "id": uuid.uuid4().hex[:10],
         "name": body.name.strip() or repo_url,
         "repo_url": repo_url,
-        "branch": (body.branch or "main").strip(),
-        "modules_path": (body.modules_path or "backend/modules_catalog").strip(),
+        "branch": branch,
+        "modules_path": modules_path,
         "github_token": body.github_token.strip(),
     }
     repos.append(new_repo)
@@ -782,16 +834,20 @@ async def update_repo(
         url = body.repo_url.strip()
         if not _parse_github_url(url):
             raise HTTPException(status_code=400, detail="Ungültige GitHub-URL.")
-        if not _is_repo_allowed(url):
-            raise HTTPException(
-                status_code=403,
-                detail="Repository ist nicht in der erlaubten Allowlist.",
-            )
+        _assert_repo_allowed(url)
         repo["repo_url"] = url
     if body.branch is not None:
-        repo["branch"] = (body.branch or "main").strip()
+        try:
+            repo["branch"] = _validate_branch(body.branch or "main")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     if body.modules_path is not None:
-        repo["modules_path"] = (body.modules_path or "backend/modules_catalog").strip()
+        try:
+            repo["modules_path"] = _validate_repo_subpath(
+                body.modules_path or "backend/modules_catalog"
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     token_value = (body.github_token or "").strip() if body.github_token is not None else ""
     if body.github_token_clear:
@@ -834,6 +890,13 @@ async def list_repo_modules(request: Request, repo_id: str) -> JSONResponse:
         return JSONResponse(
             content={"modules": [], "updates": [], "error": "Ungültige GitHub-URL."}
         )
+    try:
+        _assert_repo_allowed(repo_cfg["repo_url"])
+    except HTTPException as exc:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"modules": [], "updates": [], "error": str(exc.detail)},
+        )
 
     registry = request.app.state.registry
     plugins_dir = Path(__file__).resolve().parent.parent / "plugins"
@@ -855,7 +918,12 @@ async def list_repo_modules(request: Request, repo_id: str) -> JSONResponse:
         branch = _validate_branch(repo_cfg.get("branch", "main"))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    modules_path = repo_cfg.get("modules_path", "backend/modules_catalog")
+    try:
+        modules_path = _validate_repo_subpath(
+            repo_cfg.get("modules_path", "backend/modules_catalog")
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     headers = _github_headers(repo_cfg.get("github_token", ""))
 
     try:
@@ -1021,17 +1089,19 @@ async def install_from_repo(
         raise HTTPException(
             status_code=400, detail="Ungültige GitHub-URL in der Repo-Konfiguration."
         )
-    if not _is_repo_allowed(repo_cfg["repo_url"]):
-        raise HTTPException(
-            status_code=403, detail="Repository ist nicht in der erlaubten Allowlist."
-        )
+    _assert_repo_allowed(repo_cfg["repo_url"])
 
     owner, repo_name = parsed
     try:
         branch = _validate_branch(repo_cfg.get("branch", "main"))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    modules_path = repo_cfg.get("modules_path", "backend/modules_catalog")
+    try:
+        modules_path = _validate_repo_subpath(
+            repo_cfg.get("modules_path", "backend/modules_catalog")
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     headers = _github_headers(repo_cfg.get("github_token", ""))
 
     plugins_dir = Path(__file__).resolve().parent.parent / "plugins"
@@ -1273,13 +1343,19 @@ async def reinstall_plugin(request: Request, plugin_name: str) -> JSONResponse:
     parsed = _parse_github_url(repo_url)
     if not parsed:
         raise HTTPException(status_code=400, detail="Ungültige Repo-URL.")
+    _assert_repo_allowed(repo_url)
 
     owner, repo_name = parsed
     try:
         branch = _validate_branch(repo_cfg.get("branch", "main"))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    modules_path = repo_cfg.get("modules_path", "backend/modules_catalog")
+    try:
+        modules_path = _validate_repo_subpath(
+            repo_cfg.get("modules_path", "backend/modules_catalog")
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     plugins_dir = Path(__file__).resolve().parent.parent / "plugins"
     plugins_dir.mkdir(parents=True, exist_ok=True)
@@ -1341,8 +1417,9 @@ async def reinstall_plugin(request: Request, plugin_name: str) -> JSONResponse:
                         continue
                     target_dir = extract_dir / plugin_name
                     target_dir.mkdir(parents=True, exist_ok=True)
-                    (target_dir / rel).parent.mkdir(parents=True, exist_ok=True)
-                    (target_dir / rel).write_bytes(f.read())
+                    target_path = _safe_child_path(target_dir, rel)
+                    target_path.parent.mkdir(parents=True, exist_ok=True)
+                    target_path.write_bytes(f.read())
 
             plugin_source_dir = extract_dir / plugin_name
             if not (plugin_source_dir / "__init__.py").exists():

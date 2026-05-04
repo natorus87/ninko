@@ -74,9 +74,6 @@ _MAIN_RECOVERABLE_EXCEPTIONS = (
 )
 
 from core.auth import (
-    ROLE_ADMIN,
-    ROLE_READ,
-    ROLE_WRITE,
     auth_tenant_id,
     module_access_allows,
     reset_current_tenant_id,
@@ -85,6 +82,10 @@ from core.auth import (
     resolve_request_role,
     role_allows,
     set_current_tenant_id,
+)
+from core.api_security_policy import (
+    extract_module_id_from_path,
+    required_role_for_request,
 )
 from core.rate_limit import InMemoryRateLimiter
 from core.rbac import RBAC_REDIS_KEY, RbacStore
@@ -577,106 +578,11 @@ else:
 
 
 def _required_role_for_request(path: str, method: str) -> str | None:
-    # Public/health endpoints
-    if path == "/health":
-        return None
-
-    if not path.startswith("/api/"):
-        return None
-
-    if (
-        path == "/api/auth/login"
-        or path == "/api/auth/logout"
-        or path == "/api/auth/me"
-        or path == "/api/auth/change-password"
-    ):
-        return None
-    method_u = method.upper()
-    if method_u == "GET" and (
-        path == "/api/themes/active"
-        or path == "/api/settings/branding"
-        or path.startswith("/api/settings/branding/assets/")
-        or path == "/api/settings/modules"
-        or path == "/api/plugins/check-updates"
-    ):
-        return None
-    if path.startswith("/api/auth/"):
-        return ROLE_ADMIN
-
-    is_mutating = method_u in {"POST", "PUT", "PATCH", "DELETE"}
-
-    # Sensitive read endpoints
-    if path.startswith("/api/secrets"):
-        return ROLE_ADMIN if is_mutating else ROLE_READ
-    if path.startswith("/api/logs"):
-        return ROLE_ADMIN if is_mutating else ROLE_READ
-    if path.startswith("/api/ws"):
-        return ROLE_READ
-    if path.startswith("/api/plugins"):
-        if method_u == "GET" and path == "/api/plugins/check-updates":
-            return None
-        return ROLE_ADMIN
-    if path.startswith("/api/safeguard"):
-        return ROLE_ADMIN if is_mutating else ROLE_READ
-    if path.startswith("/api/settings"):
-        return ROLE_ADMIN if is_mutating else ROLE_READ
-    if path.startswith("/api/connections"):
-        return ROLE_WRITE if is_mutating else ROLE_READ
-    if path.startswith("/api/themes"):
-        return ROLE_WRITE if is_mutating else ROLE_READ
-    if path.startswith("/api/agents"):
-        return ROLE_WRITE if is_mutating else ROLE_READ
-    if path.startswith("/api/workflows"):
-        return ROLE_WRITE if is_mutating else ROLE_READ
-    if path.startswith("/api/memory"):
-        return ROLE_WRITE if is_mutating else ROLE_READ
-    if path.startswith("/api/modules"):
-        return ROLE_READ
-
-    # Default for remaining API endpoints:
-    # - writes require write role
-    # - reads are open unless covered above
-    if is_mutating:
-        return ROLE_WRITE
-    return None
-
-
-_CORE_API_PREFIXES = {
-    "auth",
-    "themes",
-    "modules",
-    "memory",
-    "secrets",
-    "settings",
-    "ws",
-    "safeguard",
-    "scheduler",
-    "plugins",
-    "connections",
-    "agents",
-    "workflows",
-    "logs",
-    "transcription",
-    "tts",
-    "image-gen",
-    "skills",
-    "operations",
-    "chat",
-    "images",
-    "knowledge-graph",
-}
+    return required_role_for_request(path, method)
 
 
 def _extract_module_id_from_path(path: str) -> str | None:
-    if not path.startswith("/api/"):
-        return None
-    parts = [p for p in path.split("/") if p]
-    if len(parts) < 2:
-        return None
-    first = parts[1].strip().lower()
-    if first in _CORE_API_PREFIXES:
-        return None
-    return first
+    return extract_module_id_from_path(path)
 
 
 def _extract_api_key_from_request(request: Request) -> str:

@@ -1403,7 +1403,14 @@ JSON-SCHEMA:
                 qualified.append(mod)
 
         if len(qualified) >= 2:
-            return has_multistep
+            if has_multistep:
+                return True
+            # Einfaches "und"/"and" zwischen zwei klar erkannten Modulen reicht als
+            # Tier-4-Trigger — der Modul-Guard oben verhindert False Positives.
+            # Betrifft: "lies X und ingeste ins Wiki", "prüfe K8s und benachrichtige per Telegram" etc.
+            if re.search(r"\bund\b|\band\b", msg_lower):
+                return True
+            return False
 
         # Fallback: expliziter Multistep + (Utility >=1) + (irgendein anderes Modul >=1)
         if not has_multistep:
@@ -1512,7 +1519,7 @@ JSON-SCHEMA:
         top_score = sorted_f[0][1]
         second_score = sorted_f[1][1]
 
-        if top_score >= 3 and second_score >= 3 and second_score >= (0.4 * top_score):
+        if top_score >= 2 and second_score >= 2 and second_score >= (0.4 * top_score):
             logger.info("Compound erkannt %s → Tier 4", sorted_f[:3])
             return None, True
 

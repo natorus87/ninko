@@ -10,6 +10,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, Field
 
 from core.auth import auth_tenant_id, resolve_request_auth
 from core.knowledge_graph import (
@@ -24,6 +25,36 @@ logger = logging.getLogger("ninko.api.knowledge_graph")
 router = APIRouter(prefix="/api/knowledge-graph", tags=["knowledge-graph"])
 
 
+class EntityCreateRequest(BaseModel):
+    entity_id: str = Field(min_length=1, max_length=256)
+    entity_type: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=256)
+    properties: dict[str, Any] = Field(default_factory=dict)
+
+
+class EntityUpdateRequest(BaseModel):
+    properties: dict[str, Any] = Field(default_factory=dict)
+
+
+class RelationshipCreateRequest(BaseModel):
+    source: str = Field(min_length=1, max_length=256)
+    target: str = Field(min_length=1, max_length=256)
+    relation_type: str = Field(min_length=1, max_length=64)
+    properties: dict[str, Any] = Field(default_factory=dict)
+
+
+class IncidentExtractRequest(BaseModel):
+    module: str = Field(min_length=1, max_length=128)
+    summary: str = Field(min_length=1, max_length=2000)
+    details: str = Field(min_length=1, max_length=20000)
+    resolution: str | None = Field(default=None, max_length=20000)
+
+
+class GraphImportRequest(BaseModel):
+    data: dict[str, Any] = Field(default_factory=dict)
+    merge: bool = False
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Entity CRUD
 # ──────────────────────────────────────────────────────────────────────────────
@@ -32,25 +63,24 @@ router = APIRouter(prefix="/api/knowledge-graph", tags=["knowledge-graph"])
 @router.post("/entities", response_model=ApiResponse)
 async def create_entity(
     request: Request,
-    entity_id: str,
-    entity_type: str,
-    name: str,
-    properties: dict[str, Any] | None = None,
+    body: EntityCreateRequest,
 ) -> ApiResponse:
     """Erstellt eine neue Entität im Knowledge Graph."""
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     try:
         kg = await get_knowledge_graph()
         entity = await kg.add_entity(
-            entity_id=entity_id,
-            entity_type=entity_type,
-            name=name,
-            properties=properties,
+            entity_id=body.entity_id,
+            entity_type=body.entity_type,
+            name=body.name,
+            properties=body.properties,
         )
         return ApiResponse(success=True, data=entity)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("Fehler beim Erstellen der Entität")
-        return ApiResponse(success=False, error=str(exc))
+        raise HTTPException(status_code=500, detail="Entity creation failed.") from exc
 
 
 @router.get("/entities/{entity_id}", response_model=ApiResponse)
@@ -71,12 +101,12 @@ async def get_entity(
 async def update_entity(
     request: Request,
     entity_id: str,
-    properties: dict[str, Any],
+    body: EntityUpdateRequest,
 ) -> ApiResponse:
     """Aktualisiert Properties einer Entität."""
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     kg = await get_knowledge_graph()
-    result = await kg.update_entity(entity_id, properties)
+    result = await kg.update_entity(entity_id, body.properties)
     if not result:
         raise HTTPException(status_code=404, detail=f"Entity {entity_id} not found")
     return ApiResponse(success=True, data=result)
@@ -125,27 +155,24 @@ async def list_entities(
 @router.post("/relationships", response_model=ApiResponse)
 async def create_relationship(
     request: Request,
-    source: str,
-    target: str,
-    relation_type: str,
-    properties: dict[str, Any] | None = None,
+    body: RelationshipCreateRequest,
 ) -> ApiResponse:
     """Erstellt eine Beziehung zwischen zwei Entitäten."""
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     try:
         kg = await get_knowledge_graph()
         rel = await kg.add_relationship(
-            source=source,
-            target=target,
-            relation_type=relation_type,
-            properties=properties,
+            source=body.source,
+            target=body.target,
+            relation_type=body.relation_type,
+            properties=body.properties,
         )
         return ApiResponse(success=True, data=rel)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         logger.exception("Fehler beim Erstellen der Beziehung")
-        return ApiResponse(success=False, error=str(exc))
+        raise HTTPException(status_code=500, detail="Relationship creation failed.") from exc
 
 
 @router.get("/relationships/types", response_model=ApiResponse)
@@ -275,10 +302,7 @@ async def get_suggestions(
 @router.post("/extract/incident", response_model=ApiResponse)
 async def extract_from_incident(
     request: Request,
-    module: str,
-    summary: str,
-    details: str,
-    resolution: str | None = None,
+    body: IncidentExtractRequest,
 ) -> ApiResponse:
     """
     Extrahiert automatisch Entitäten und Beziehungen aus einem Incident.
@@ -288,15 +312,15 @@ async def extract_from_incident(
     try:
         kg = await get_knowledge_graph()
         extracted = await kg.extract_from_incident(
-            module=module,
-            summary=summary,
-            details=details,
-            resolution=resolution or None,
+            module=body.module,
+            summary=body.summary,
+            details=body.details,
+            resolution=body.resolution or None,
         )
         return ApiResponse(success=True, data=extracted)
     except Exception as exc:
         logger.exception("Fehler bei Incident-Extraktion")
-        return ApiResponse(success=False, error=str(exc))
+        raise HTTPException(status_code=500, detail="Incident extraction failed.") from exc
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -329,18 +353,19 @@ async def export_graph(
 @router.post("/import", response_model=ApiResponse)
 async def import_graph(
     request: Request,
-    data: dict,
-    merge: bool = False,
+    body: GraphImportRequest,
 ) -> ApiResponse:
     """Importiert einen Graph aus JSON (node-link Format)."""
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     try:
         kg = await get_knowledge_graph()
-        stats = await kg.import_graph(data, merge=merge)
+        stats = await kg.import_graph(body.data, merge=body.merge)
         return ApiResponse(success=True, data=stats)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("Fehler beim Import")
-        return ApiResponse(success=False, error=str(exc))
+        raise HTTPException(status_code=500, detail="Graph import failed.") from exc
 
 
 @router.get("/visualization", response_model=ApiResponse)

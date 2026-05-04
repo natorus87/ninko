@@ -345,9 +345,25 @@ def _reconfigure_llm(settings: LlmSettings) -> None:
     import core.config
 
     core.config._settings = None
+
+    # SafeGuard-Singleton ebenfalls auf neuen Provider umstellen.
+    # Der SafeGuard-Client wird einmal beim Start erstellt und hält model/base_url
+    # als Instanzattribute — os.environ allein reicht nicht.
+    try:
+        from agents.base_agent import _global_safeguard
+        if _global_safeguard is not None:
+            from core.llm_factory import get_safeguard_openai_client
+            new_client, new_model = get_safeguard_openai_client()
+            _global_safeguard.client = new_client
+            _global_safeguard.model = new_model
+            logger.info("SafeGuard-Client auf neues Modell umgestellt: %s", new_model)
+    except Exception as exc:
+        logger.warning("SafeGuard-Client-Update fehlgeschlagen (nicht kritisch): %s", exc)
+
     logger.info(
-        "LLM-Factory wird beim nächsten Aufruf neu initialisiert: backend=%s",
+        "LLM-Factory wird beim nächsten Aufruf neu initialisiert: backend=%s, model=%s",
         settings.backend,
+        settings.model,
     )
 
 

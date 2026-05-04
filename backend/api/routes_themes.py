@@ -55,11 +55,29 @@ _DEFAULT_REPOS: list[dict[str, str]] = [
         "github_token": "",
     }
 ]
+_SAFE_BRANCH_RE = re.compile(r"^[a-zA-Z0-9_./ -]{1,128}$")
 
 
 def _parse_github_url(url: str) -> tuple[str, str] | None:
     m = re.search(r"github\.com[:/]([^/]+)/([^/.\s]+?)(?:\.git)?\s*$", url.strip())
     return (m.group(1), m.group(2)) if m else None
+
+
+def _validate_branch(branch: str) -> str:
+    branch = branch.strip()
+    if not branch or not _SAFE_BRANCH_RE.match(branch) or ".." in branch:
+        raise HTTPException(status_code=400, detail="Ungültiger Branch-Name.")
+    return branch
+
+
+def _safe_child_path(base_dir: Path, relative_path: str) -> Path:
+    if not relative_path or relative_path.startswith(("/", "\\")):
+        raise HTTPException(status_code=400, detail="Archiv enthält ungültigen Pfad.")
+    candidate = (base_dir / relative_path).resolve()
+    base_resolved = base_dir.resolve()
+    if candidate != base_resolved and base_resolved not in candidate.parents:
+        raise HTTPException(status_code=400, detail="Archiv enthält ungültigen Pfad.")
+    return candidate
 
 
 def _github_headers(token: str) -> dict[str, str]:
@@ -248,7 +266,7 @@ async def list_repo_themes(repo_id: str) -> dict:
     if parsed is None:
         raise HTTPException(status_code=400, detail="Ungültige Repo-URL.")
     owner, repo_name = parsed
-    branch = repo_cfg.get("branch", "main")
+    branch = _validate_branch(repo_cfg.get("branch", "main"))
     themes_path = repo_cfg.get("themes_path", "backend/themes").rstrip("/")
     token = repo_cfg.get("github_token", "")
     headers = _github_headers(token)
@@ -304,7 +322,7 @@ async def install_theme_from_repo(theme_id: str, repo_id: str = Query(default=_O
         raise HTTPException(status_code=400, detail="Ungültige Repo-URL.")
 
     owner, repo_name = parsed
-    branch = repo_cfg.get("branch", "main")
+    branch = _validate_branch(repo_cfg.get("branch", "main"))
     themes_path = repo_cfg.get("themes_path", "backend/themes").rstrip("/")
     token = repo_cfg.get("github_token", "")
     headers = _github_headers(token)
@@ -317,22 +335,22 @@ async def install_theme_from_repo(theme_id: str, repo_id: str = Query(default=_O
         if len(resp.content) > _MAX_TARBALL_SIZE:
             raise HTTPException(status_code=413, detail="Tarball zu groß.")
 
-    tar = tarfile.open(fileobj=io.BytesIO(resp.content), mode="r:gz")
     root = f"{repo_name}-{branch}/"
     target_prefix = f"{root}{themes_path}/{theme_id}/"
     data: dict[str, bytes] = {}
-    for member in tar.getmembers():
-        if not member.isfile():
-            continue
-        if not member.name.startswith(target_prefix):
-            continue
-        rel = member.name[len(target_prefix):]
-        if not rel or ".." in rel or rel.startswith("/"):
-            continue
-        extracted = tar.extractfile(member)
-        if extracted is None:
-            continue
-        data[rel] = extracted.read()
+    with tarfile.open(fileobj=io.BytesIO(resp.content), mode="r:gz") as tar:
+        for member in tar.getmembers():
+            if not member.isfile():
+                continue
+            if not member.name.startswith(target_prefix):
+                continue
+            rel = member.name[len(target_prefix):]
+            if not rel:
+                continue
+            extracted = tar.extractfile(member)
+            if extracted is None:
+                continue
+            data[rel] = extracted.read()
 
     if "theme.json" not in data:
         raise HTTPException(status_code=404, detail="theme.json nicht gefunden.")
@@ -347,7 +365,7 @@ async def install_theme_from_repo(theme_id: str, repo_id: str = Query(default=_O
     target_dir = CUSTOM_THEMES_DIR / theme_id
     target_dir.mkdir(parents=True, exist_ok=True)
     for rel, content in data.items():
-        p = target_dir / rel
+        p = _safe_child_path(target_dir, rel)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(content)
 
