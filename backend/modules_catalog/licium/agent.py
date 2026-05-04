@@ -19,6 +19,7 @@ from .tools import (
     get_licium_note,
     get_licium_wiki_meta,
     setup_licium_wiki,
+    ingest_existing_licium_notes,
     create_licium_note,
     update_licium_note,
     update_licium_wiki_index,
@@ -34,6 +35,11 @@ Wissen wird nicht nur gespeichert, sondern kompiliert, vernetzt und gepflegt.
 ## Deine drei Kernoperationen
 
 ### 1. INGEST — Neue Quelle aufnehmen
+Wenn der Nutzer bestehende Licium-Notizen in das Ninko-Wiki importieren/ingestieren will:
+1. Sofort `ingest_existing_licium_notes()` aufrufen.
+2. Nicht nur `list_licium_tree()` oder `get_licium_wiki_meta()` ausführen.
+3. Nicht ankündigen "ich erstelle jetzt..." — den Tool-Call wirklich ausführen.
+
 Wenn du eine neue Quelle (Text, Artikel, Notiz) aufnehmen sollst, führe diese Schritte aus:
 1. `get_licium_wiki_meta()` aufrufen — falls nicht initialisiert: `setup_licium_wiki()` aufrufen
 2. Quelle analysieren: Entitäten, Konzepte, Key Takeaways extrahieren
@@ -92,6 +98,11 @@ Knowledge is not just stored, but compiled, cross-referenced, and maintained.
 ## Your three core operations
 
 ### 1. INGEST — Add new source
+If the user wants to import/ingest existing Licium notes into the Ninko Wiki:
+1. Immediately call `ingest_existing_licium_notes()`.
+2. Do not only call `list_licium_tree()` or `get_licium_wiki_meta()`.
+3. Do not announce "I will create..." — actually execute the tool call.
+
 When you need to ingest a new source (text, article, note), follow these steps:
 1. Call `get_licium_wiki_meta()` — if not initialized: call `setup_licium_wiki()`
 2. Analyze source: extract entities, concepts, key takeaways
@@ -156,12 +167,44 @@ class LiciumAgent(BaseAgent):
                 get_licium_note,
                 get_licium_wiki_meta,
                 setup_licium_wiki,
+                ingest_existing_licium_notes,
                 create_licium_note,
                 update_licium_note,
                 update_licium_wiki_index,
                 append_licium_log,
                 lint_licium_wiki,
             ],
+        )
+
+    async def invoke(
+        self,
+        message: str,
+        chat_history: list[dict] | None = None,
+        session_id: str = "",
+        confirmed: bool = False,
+    ) -> tuple[str, bool]:
+        """Deterministic fast path for existing-note batch ingest."""
+        msg = (message or "").casefold()
+        wants_existing_notes = any(
+            marker in msg
+            for marker in (
+                "bestehende notizen",
+                "bestehenden notizen",
+                "existing notes",
+                "alle notizen",
+            )
+        )
+        wants_ingest = any(marker in msg for marker in ("ingest", "ingeste", "import"))
+        wants_wiki = "wiki" in msg or "ninko-wiki" in msg or "ninko wiki" in msg
+        if wants_existing_notes and wants_ingest and wants_wiki:
+            result = await ingest_existing_licium_notes.ainvoke({})
+            return str(result), False
+
+        return await super().invoke(
+            message=message,
+            chat_history=chat_history,
+            session_id=session_id,
+            confirmed=confirmed,
         )
 
 

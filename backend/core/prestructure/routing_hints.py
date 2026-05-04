@@ -69,21 +69,21 @@ class RoutingHintInferencer:
         if intent == "answer" and complexity == "simple" and not needs_tools:
             return "direct_answer"
 
-        # Explorer: investigate with read-only execution
-        if intent == "investigate":
-            return "explorer"
-
         # Operator: explicit action with write intent
         if intent == "act" and risk.write_intent_detected:
             return "operator"
 
-        # Workflow: compound complexity with explicit workflow markers
-        if intent == "workflow" or complexity == "compound":
+        # Workflow: explicit workflow markers only.
+        if intent == "workflow":
             return "workflow"
 
         # Planner: multi-step or ambiguous situations
         if complexity in ("multi_step", "compound") or len(candidate_modules) > 1:
             return "planner"
+
+        # Explorer: single-module investigate with read-only execution
+        if intent == "investigate":
+            return "explorer"
 
         # Default to planner for safety
         return "planner"

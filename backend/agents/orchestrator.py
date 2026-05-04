@@ -15,11 +15,11 @@ import asyncio
 import json as _json
 import logging
 import re
-import time
 from dataclasses import dataclass, fields as _dc_fields
 from typing import TYPE_CHECKING
 
 from langchain_core.messages import HumanMessage
+from langchain_core.tools import tool
 
 from agents.base_agent import BaseAgent, _t
 from agents.core_tools import (
@@ -51,11 +51,9 @@ from agents.alert_tools import (
 )
 from agents.script_tools import run_script_tool, list_script_tools
 from agents.data_analysis_subagent import (
-    DataAnalysisSubagent,
     _get_or_create_subagent,
     _cleanup_subagent,
 )
-from modules.image_gen.tools import generate_image
 from core import status_bus
 from core.config import get_settings
 
@@ -63,6 +61,13 @@ from core.prestructure import (
     DeterministicTaskSketchBuilder,
     create_module_metadata_from_registry,
     TaskSketch,
+)
+from core.evidence import (
+    ConstellationValidator,
+    EvidenceTrace,
+    SemanticResolutionResult,
+    SemanticResolver,
+    build_evidence_trace,
 )
 
 if TYPE_CHECKING:
@@ -127,6 +132,18 @@ _MULTISTEP_PATTERNS: list[re.Pattern] = [
 # Timeout für den Pipeline-Planner-LLM-Call
 _LLM_ROUTING_TIMEOUT: float = 10.0
 _COMPLEXITY_CHECK_TIMEOUT: float = 2.0
+
+
+@tool
+async def generate_image(prompt: str, size: str = "1024x1024") -> str:
+    """
+    Generiert ein Bild mit einem KI-Bildgenerierungsmodell.
+    Nutze dieses Tool wenn der User ein Bild, eine Illustration, ein Logo,
+    ein Foto oder eine Grafik erstellen möchte.
+    """
+    from modules.image_gen.tools import generate_image as _generate_image
+
+    return await _generate_image.ainvoke({"prompt": prompt, "size": size})
 
 # ── Routing-Konfiguration ─────────────────────────────────────────────────────
 
@@ -208,6 +225,10 @@ _AGENT_CREATE_PATTERNS: tuple[re.Pattern, ...] = (
 _AGENT_HOWTO_PATTERNS: tuple[re.Pattern, ...] = (
     re.compile(
         r"\bwie\b.{0,30}\b(agent|agenten)\b.{0,20}\b(erstell|anleg|bau)\w*",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bwie\b.{0,30}\b(erstell|anleg|bau)\w*\b.{0,30}\b(agent|agenten)\b",
         re.IGNORECASE,
     ),
     re.compile(
@@ -426,6 +447,11 @@ class OrchestratorAgent(BaseAgent):
         # ── Deterministic Task Pre-structuring ──
         self._task_sketch_builder: DeterministicTaskSketchBuilder | None = None
         self._last_task_sketch: TaskSketch | None = None
+        # ── Evidence Layer ──
+        self._semantic_resolver: SemanticResolver | None = None
+        self._constellation_validator = ConstellationValidator()
+        self._last_semantic_resolution: SemanticResolutionResult | None = None
+        self._last_evidence_trace: EvidenceTrace | None = None
 
     async def _dynamic_prompt_appendix(self) -> str:
         """Fügt eine Übersicht aller verfügbaren Module und konfigurierten Verbindungen an."""
@@ -611,6 +637,7 @@ class OrchestratorAgent(BaseAgent):
             return
         self._routing_map = self.registry.get_routing_map()
         self._routing_dirty = False
+        self._semantic_resolver = None
         logger.info(
             "Routing-Map aktualisiert: %d Keywords → %d Module",
             len(self._routing_map),
@@ -623,6 +650,12 @@ class OrchestratorAgent(BaseAgent):
             module_metadata = create_module_metadata_from_registry(self.registry)
             self._task_sketch_builder = DeterministicTaskSketchBuilder(module_metadata)
         return self._task_sketch_builder
+
+    def _ensure_semantic_resolver(self) -> SemanticResolver:
+        """Initialize or return the semantic resolver with current module metadata."""
+        if self._semantic_resolver is None:
+            self._semantic_resolver = SemanticResolver.from_registry(self.registry)
+        return self._semantic_resolver
 
     def build_task_sketch(
         self,
@@ -659,6 +692,30 @@ class OrchestratorAgent(BaseAgent):
     def get_last_task_sketch(self) -> TaskSketch | None:
         """Return the last built TaskSketch for debugging/observability."""
         return self._last_task_sketch
+
+    def resolve_evidence_semantics(
+        self,
+        message: str,
+        task_sketch: TaskSketch,
+    ) -> SemanticResolutionResult:
+        """Resolve semantic terms and module candidates before planner routing."""
+        resolver = self._ensure_semantic_resolver()
+        candidates = [m.module for m in task_sketch.scope.candidate_modules_ranked]
+        result = resolver.resolve(message, candidate_modules=candidates)
+        self._last_semantic_resolution = result
+        if result.escalation_required:
+            logger.info("Evidence Layer semantic escalation: %s", result.escalation_reason)
+        else:
+            logger.debug(
+                "Evidence Layer resolved semantics: modules=%s confidence=%.2f",
+                result.candidate_modules,
+                result.confidence,
+            )
+        return result
+
+    def get_last_evidence_trace(self) -> EvidenceTrace | None:
+        """Return the last EvidenceTrace for debugging/observability."""
+        return self._last_evidence_trace
 
     def _get_readonly_tools_for_module(self, module: str) -> list:
         from core.safeguard import _TOOL_READONLY
@@ -1461,7 +1518,6 @@ JSON-SCHEMA:
         current_scores = self._get_module_scores(message)
 
         # History-Fallback NUR für Single-Module-Detection (nie für Compound)
-        from_history = False
         if not current_scores and chat_history:
             history_text = " ".join([m.get("content", "") for m in chat_history[-3:]])
             history_scores = self._get_module_scores(history_text)
@@ -1576,6 +1632,7 @@ JSON-SCHEMA:
         confirmed: bool,
         allowed_modules: list[str] | None = None,
         task_sketch: "TaskSketch | None" = None,
+        semantic_resolution: SemanticResolutionResult | None = None,
     ) -> tuple[str, bool]:
         """Tier-4-Pipeline: Deterministischer Plan → optionaler LLM-Refinement → PipelineEngine.
 
@@ -1589,7 +1646,7 @@ JSON-SCHEMA:
         Falls kein deterministischer Plan möglich ist (< 2 valide Module): Tier 1 ReAct-Loop.
         """
         from core.llm_factory import get_llm
-        from core.pipeline_engine import get_pipeline_engine, PipelineStep, PipelineStatus
+        from core.pipeline_engine import get_pipeline_engine, PipelineStatus
 
         await status_bus.emit(
             session_id,
@@ -1633,18 +1690,27 @@ JSON-SCHEMA:
         # ── Stufe 1: Deterministischer Basis-Plan aus TaskSketch ─────────────
         # Nutzt die bereits vorhandene Modul-Ranking-Analyse ohne LLM-Call.
         deterministic_steps: list[dict] = []
+        deterministic_modules: list[str] = []
         if task_sketch and task_sketch.scope.candidate_modules_ranked:
             for ranked_mod in task_sketch.scope.candidate_modules_ranked[:4]:
-                if ranked_mod.module not in valid_module_names:
+                deterministic_modules.append(ranked_mod.module)
+        if semantic_resolution:
+            for module in semantic_resolution.candidate_modules:
+                if module not in deterministic_modules:
+                    deterministic_modules.append(module)
+
+        if deterministic_modules:
+            for module in deterministic_modules[:4]:
+                if module not in valid_module_names:
                     continue
                 if (
-                    ranked_mod.module in _UTILITY_MODULES
-                    and ranked_mod.module not in utility_explicitly_mentioned
-                    and ranked_mod.module not in _CORE_ALWAYS_MODULES
+                    module in _UTILITY_MODULES
+                    and module not in utility_explicitly_mentioned
+                    and module not in _CORE_ALWAYS_MODULES
                 ):
                     continue
                 deterministic_steps.append({
-                    "module": ranked_mod.module,
+                    "module": module,
                     "task": message,
                 })
 
@@ -1681,6 +1747,22 @@ JSON-SCHEMA:
                 planner_sections.append(f"- VERBOTEN: {', '.join(task_sketch.constraints.must_not_do)}")
             if task_sketch.constraints.must_include:
                 planner_sections.append(f"- ERFORDERLICH: {', '.join(task_sketch.constraints.must_include)}")
+        if semantic_resolution:
+            planner_sections.extend([
+                "",
+                "EVIDENCE LAYER SEMANTIC RESOLUTION:",
+                f"- Kandidaten: {', '.join(semantic_resolution.candidate_modules) or 'keine'}",
+                f"- Konfidenz: {semantic_resolution.confidence:.2f}",
+                f"- Eskalation erforderlich: {semantic_resolution.escalation_required}",
+            ])
+            if semantic_resolution.escalation_reason:
+                planner_sections.append(f"- Eskalationsgrund: {semantic_resolution.escalation_reason}")
+            for resolution in semantic_resolution.resolutions[:8]:
+                planner_sections.append(
+                    "- Auflösung: "
+                    f"{resolution.term} -> {resolution.resolved_to} "
+                    f"({resolution.source_module}, {resolution.confidence}, {resolution.reason})"
+                )
         planner_sections.extend([
             "",
             f"VERFÜGBARE MODULE:\n{module_descriptions}",
@@ -1819,7 +1901,19 @@ JSON-SCHEMA:
                 en=f"Pipeline failed: {pipeline_result.error}",
             ), False
 
-        return pipeline_result.to_markdown(), False
+        constellation = self._constellation_validator.validate_pipeline_result(
+            pipeline_result,
+            resolutions=semantic_resolution.resolutions if semantic_resolution else [],
+        )
+        self._last_evidence_trace = build_evidence_trace(
+            session_id=session_id,
+            turn_id=pipeline_result.pipeline_id,
+            resolutions=semantic_resolution.resolutions if semantic_resolution else [],
+            constellation=constellation,
+            escalation_reason=semantic_resolution.escalation_reason if semantic_resolution else None,
+        )
+
+        return f"{pipeline_result.to_markdown()}\n\n{self._last_evidence_trace.to_markdown()}", False
 
     async def resume_tool_execution(self, session_id: str) -> tuple[str, bool]:
         """
@@ -2247,21 +2341,6 @@ JSON-SCHEMA:
 
         self._refresh_routing_map()
 
-        # ── Deterministic Task Pre-structuring ──────────────────────────────
-        # Build TaskSketch for structured routing guidance and observability
-        task_sketch = self.build_task_sketch(message, session_id)
-        candidate_modules = [m.module for m in task_sketch.scope.candidate_modules_ranked]
-        allow_all_modules = (
-            task_sketch.uncertainty.ambiguous
-            and task_sketch.constraints.execution_mode == "planner_decides"
-        )
-        allowed_modules = None if allow_all_modules else candidate_modules
-        preferred_tier: int | None = None
-        preferred_target: str | None = None
-
-        cfg = await self._load_routing_config(session_id)
-        cfg = await self._proactive_routing_adjust(session_id, message, chat_history, cfg)
-
         # ── Direktes Modul-Routing (force_module) ────────────────────────────
         if force_module:
             return await self._route_forced_target(
@@ -2285,6 +2364,25 @@ JSON-SCHEMA:
             logger.info("Explizite Workflow-Erstellungs-Intention erkannt → Auto-Create-Fast-Path.")
             response, did_compact = await self._auto_create_workflow(message, session_id)
             return response, "orchestrator", did_compact
+
+        # ── Deterministic Task Pre-structuring ──────────────────────────────
+        # Build TaskSketch for structured routing guidance and observability
+        task_sketch = self.build_task_sketch(message, session_id)
+        semantic_resolution = self.resolve_evidence_semantics(message, task_sketch)
+        candidate_modules = [m.module for m in task_sketch.scope.candidate_modules_ranked]
+        for module in semantic_resolution.candidate_modules:
+            if module not in candidate_modules:
+                candidate_modules.append(module)
+        allow_all_modules = (
+            task_sketch.uncertainty.ambiguous
+            and task_sketch.constraints.execution_mode == "planner_decides"
+        )
+        allowed_modules = None if allow_all_modules else candidate_modules
+        preferred_tier: int | None = None
+        preferred_target: str | None = None
+
+        cfg = await self._load_routing_config(session_id)
+        cfg = await self._proactive_routing_adjust(session_id, message, chat_history, cfg)
 
         # ── Deterministischer WebSearch → DataViz Fast-Path ─────────────────
         msg_lower = message.lower()
@@ -2347,6 +2445,7 @@ JSON-SCHEMA:
                 confirmed=confirmed,
                 allowed_modules=allowed_modules,
                 task_sketch=task_sketch,
+                semantic_resolution=semantic_resolution,
             )
             return response, None, did_compact
 
@@ -2360,7 +2459,23 @@ JSON-SCHEMA:
                 confirmed=confirmed,
             )
             if tier2_result is not None:
-                return tier2_result
+                response, module_used, did_compact = tier2_result
+                constellation = self._constellation_validator.validate(
+                    [],
+                    resolutions=semantic_resolution.resolutions,
+                )
+                self._last_evidence_trace = build_evidence_trace(
+                    session_id=session_id,
+                    turn_id="tier2",
+                    resolutions=semantic_resolution.resolutions,
+                    constellation=constellation,
+                    escalation_reason=semantic_resolution.escalation_reason,
+                )
+                return (
+                    f"{response}\n\n{self._last_evidence_trace.to_markdown()}",
+                    module_used,
+                    did_compact,
+                )
         # ── Tier 1: Orchestrator-ReAct-Loop ─────────────────────────────
         # LLM entscheidet: call_module_agent, run_pipeline, create_custom_agent oder direkte Antwort.
         logger.info("Tier 1: Orchestrator-ReAct-Loop für: %s…", message[:80])
@@ -2370,7 +2485,22 @@ JSON-SCHEMA:
             session_id=session_id,
             confirmed=confirmed,
         )
-        return response, None, did_compact
+        constellation = self._constellation_validator.validate(
+            [],
+            resolutions=semantic_resolution.resolutions,
+        )
+        self._last_evidence_trace = build_evidence_trace(
+            session_id=session_id,
+            turn_id="tier1",
+            resolutions=semantic_resolution.resolutions,
+            constellation=constellation,
+            escalation_reason=semantic_resolution.escalation_reason,
+        )
+        return (
+            f"{response}\n\n{self._last_evidence_trace.to_markdown()}",
+            None,
+            did_compact,
+        )
 
 
 # ── Globaler Singleton (gesetzt von main.py) ─────────────────────────────────

@@ -359,17 +359,17 @@ async def setup_licium_wiki(connection_id: str = "") -> str:
         Bestätigung mit allen erstellten/gefundenen Ordner- und Notiz-IDs.
     """
     async with _licium_session(connection_id) as (client, _):
-        root_id = await _get_or_create_folder(client, WIKI_ROOT_NAME)
-        meta_id = await _get_or_create_folder(client, WIKI_META_FOLDER, root_id)
-        sources_id = await _get_or_create_folder(client, WIKI_SOURCES_FOLDER, root_id)
-        wiki_id = await _get_or_create_folder(client, WIKI_WIKI_FOLDER, root_id)
-        queries_id = await _get_or_create_folder(client, WIKI_QUERIES_FOLDER, root_id)
-
-        index_initial = "# Ninko Wiki — Index\n\nDiese Seite wird automatisch von Ninko gepflegt.\n\n| Titel | Zusammenfassung | Note-ID | Datum |\n|-------|-----------------|---------|-------|\n"
-        log_initial = "# Ninko Wiki — Operationsprotokoll\n\nDieses Protokoll wird automatisch von Ninko geführt.\n\n"
-
-        index_id, index_created = await _get_or_create_note(client, INDEX_NOTE_TITLE, meta_id, index_initial)
-        log_id, log_created = await _get_or_create_note(client, LOG_NOTE_TITLE, meta_id, log_initial)
+        before = await _get_wiki_meta_raw(client)
+        meta = await _ensure_wiki_structure(client)
+        root_id = meta.get("root_folder_id")
+        meta_id = meta.get("meta_folder_id")
+        sources_id = meta.get("sources_folder_id")
+        wiki_id = meta.get("wiki_folder_id")
+        queries_id = meta.get("queries_folder_id")
+        index_id = meta.get("index_note_id")
+        log_id = meta.get("log_note_id")
+        index_created = not before.get("index_note_id")
+        log_created = not before.get("log_note_id")
 
         return _t(
             de=(
@@ -562,6 +562,139 @@ async def append_licium_log(
         )
 
 
+@tool("ingest_existing_licium_notes")
+async def ingest_existing_licium_notes(
+    max_notes: int = 50,
+    connection_id: str = "",
+) -> str:
+    """Importiert bestehende Licium-Notizen deterministisch in die Ninko-Wiki-Struktur.
+
+    Nutze dieses Tool, wenn der User bestehende Notizen lesen und in das Ninko-Wiki
+    ingestieren/importieren möchte. Das Tool initialisiert die Wiki-Struktur idempotent,
+    überspringt den bestehenden Ninko-Wiki-Baum, spiegelt Notizinhalte in `sources/`,
+    aktualisiert den Index und schreibt einen Log-Eintrag.
+
+    Args:
+        max_notes: Maximale Anzahl zu importierender Notizen pro Lauf.
+        connection_id: Optional — ID einer bestimmten Licium-Verbindung.
+
+    Returns:
+        Markdown-Zusammenfassung mit importierten und übersprungenen Notizen.
+    """
+    max_notes = max(1, min(int(max_notes or 50), 200))
+
+    async with _licium_session(connection_id) as (client, _):
+        await _ensure_wiki_structure(client)
+        meta = await _get_wiki_meta_raw(client)
+        if not meta.get("initialized"):
+            return _t(
+                de="Wiki konnte nicht initialisiert werden. Setup unvollständig.",
+                en="Wiki could not be initialized. Setup is incomplete.",
+            )
+
+        resp = await client.get("/api/tree")
+        resp.raise_for_status()
+        tree = resp.json()
+        nodes = tree if isinstance(tree, list) else tree.get("children", [])
+        all_nodes = _flatten_tree(nodes)
+
+        wiki_root_id = meta.get("root_folder_id")
+        excluded_ids = _collect_descendant_ids(all_nodes, wiki_root_id) if wiki_root_id else set()
+        if wiki_root_id:
+            excluded_ids.add(wiki_root_id)
+
+        candidates = [
+            node
+            for node in all_nodes
+            if node.get("type") == "note" and node.get("id") not in excluded_ids
+        ]
+
+        imported: list[str] = []
+        skipped: list[str] = []
+        sources_id = meta.get("sources_folder_id") or ""
+
+        for node in candidates[:max_notes]:
+            note_id = node.get("id")
+            title = node.get("title") or "Unbenannte Notiz"
+            if not note_id:
+                continue
+
+            note_resp = await client.get(f"/api/notes/{note_id}")
+            if note_resp.status_code != 200:
+                skipped.append(f"{title} ({note_id}) — HTTP {note_resp.status_code}")
+                continue
+
+            note = note_resp.json()
+            content = note.get("content_markdown", "") or note.get("content", "")
+            if not str(content).strip():
+                skipped.append(f"{title} ({note_id}) — leer")
+                continue
+
+            source_title = f"Import: {title}"
+            source_content = (
+                f"# {title}\n\n"
+                f"Quelle: `{note_id}`\n"
+                f"Importiert: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}\n\n"
+                f"---\n\n{content}"
+            )
+            existing_source_id = await _find_note_in_folder(client, sources_id, source_title)
+            if existing_source_id:
+                put_resp = await client.put(
+                    f"/api/notes/{existing_source_id}",
+                    json={"title": source_title, "content": source_content},
+                )
+                put_resp.raise_for_status()
+                source_note_id = existing_source_id
+            else:
+                create_resp = await client.post(
+                    "/api/notes",
+                    json={
+                        "title": source_title,
+                        "type": "note",
+                        "parent_id": sources_id,
+                        "content": source_content,
+                    },
+                )
+                create_resp.raise_for_status()
+                source_note_id = create_resp.json().get("id", "?")
+
+            await _append_index_row(
+                client,
+                meta.get("index_note_id") or "",
+                source_title,
+                f"Importierte bestehende Licium-Notiz: {title}",
+                source_note_id,
+            )
+            imported.append(f"- {title} → {source_note_id} (Quelle: {note_id})")
+
+        await _append_log_entry(
+            client,
+            meta.get("log_note_id") or "",
+            "ingest",
+            f"existing-notes import: {len(imported)} imported, {len(skipped)} skipped",
+        )
+
+        remaining = max(0, len(candidates) - len(imported) - len(skipped))
+        lines = [
+            "## Licium-Ingest abgeschlossen",
+            f"Importiert: {len(imported)}",
+            f"Übersprungen: {len(skipped)}",
+            f"Noch nicht verarbeitet: {remaining}",
+            "",
+        ]
+        if imported:
+            lines.append("### Importierte Notizen")
+            lines.extend(imported[:30])
+        if skipped:
+            lines.append("")
+            lines.append("### Übersprungen")
+            lines.extend(f"- {item}" for item in skipped[:20])
+        if remaining:
+            lines.append("")
+            lines.append(f"Hinweis: Für weitere Notizen erneut mit `max_notes={max_notes}` ausführen.")
+        return "\n".join(lines)
+
+
 @tool("lint_licium_wiki")
 async def lint_licium_wiki(connection_id: str = "") -> str:
     """Analysiert den Gesundheitszustand des Ninko-Wikis (Karpathy Lint-Operation).
@@ -663,6 +796,96 @@ async def lint_licium_wiki(connection_id: str = "") -> str:
 
 
 # ── Interne Hilfsfunktion (kein @tool) ─────────────────────────────────────────
+
+async def _ensure_wiki_structure(client: httpx.AsyncClient) -> dict:
+    """Stellt die Ninko-Wiki-Struktur her und gibt die Metadaten zurück."""
+    root_id = await _get_or_create_folder(client, WIKI_ROOT_NAME)
+    meta_id = await _get_or_create_folder(client, WIKI_META_FOLDER, root_id)
+    await _get_or_create_folder(client, WIKI_SOURCES_FOLDER, root_id)
+    await _get_or_create_folder(client, WIKI_WIKI_FOLDER, root_id)
+    await _get_or_create_folder(client, WIKI_QUERIES_FOLDER, root_id)
+
+    index_initial = (
+        "# Ninko Wiki — Index\n\n"
+        "Diese Seite wird automatisch von Ninko gepflegt.\n\n"
+        "| Titel | Zusammenfassung | Note-ID | Datum |\n"
+        "|-------|-----------------|---------|-------|\n"
+    )
+    log_initial = (
+        "# Ninko Wiki — Operationsprotokoll\n\n"
+        "Dieses Protokoll wird automatisch von Ninko geführt.\n\n"
+    )
+    await _get_or_create_note(client, INDEX_NOTE_TITLE, meta_id, index_initial)
+    await _get_or_create_note(client, LOG_NOTE_TITLE, meta_id, log_initial)
+    return await _get_wiki_meta_raw(client)
+
+
+def _collect_descendant_ids(all_nodes: list[dict], root_id: str) -> set[str]:
+    """Sammelt alle Nachfahren-IDs eines Knotens aus einer flachen Tree-Liste."""
+    descendants: set[str] = set()
+    frontier = [root_id]
+    while frontier:
+        current = frontier.pop()
+        children = [
+            node.get("id")
+            for node in all_nodes
+            if node.get("parent_id") == current and node.get("id")
+        ]
+        for child_id in children:
+            if child_id not in descendants:
+                descendants.add(child_id)
+                frontier.append(child_id)
+    return descendants
+
+
+async def _append_index_row(
+    client: httpx.AsyncClient,
+    index_id: str,
+    title: str,
+    summary: str,
+    note_id: str,
+) -> None:
+    """Fügt dem Wiki-Index eine Zeile hinzu, sofern sie noch nicht existiert."""
+    if not index_id:
+        return
+    note_resp = await client.get(f"/api/notes/{index_id}")
+    note_resp.raise_for_status()
+    current = note_resp.json()
+    current_content = current.get("content_markdown", "") or current.get("content", "")
+    if note_id in current_content:
+        return
+
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    new_row = f"| {title} | {summary} | {note_id} | {date_str} |"
+    updated_content = current_content.rstrip() + "\n" + new_row + "\n"
+    put_resp = await client.put(
+        f"/api/notes/{index_id}",
+        json={"title": INDEX_NOTE_TITLE, "content": updated_content},
+    )
+    put_resp.raise_for_status()
+
+
+async def _append_log_entry(
+    client: httpx.AsyncClient,
+    log_id: str,
+    operation: str,
+    title: str,
+) -> None:
+    """Fügt dem Wiki-Log einen Eintrag hinzu."""
+    if not log_id:
+        return
+    note_resp = await client.get(f"/api/notes/{log_id}")
+    note_resp.raise_for_status()
+    current = note_resp.json()
+    current_content = current.get("content_markdown", "") or current.get("content", "")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
+    updated_content = current_content.rstrip() + f"\n## [{timestamp}] {operation} | {title}\n"
+    put_resp = await client.put(
+        f"/api/notes/{log_id}",
+        json={"title": LOG_NOTE_TITLE, "content": updated_content},
+    )
+    put_resp.raise_for_status()
+
 
 async def _get_wiki_meta_raw(client: httpx.AsyncClient) -> dict:
     """Interne Version von get_licium_wiki_meta ohne Session-Overhead."""

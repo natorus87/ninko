@@ -11,15 +11,10 @@ import json
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
 
 from langchain_core.tools import tool
 
 from core.redis_client import get_redis
-from modules.codelab.tools import execute_code
-
-if TYPE_CHECKING:
-    from modules.scripting.schemas import ScriptToolInvocation
 
 logger = logging.getLogger("ninko.agents.script_tools")
 
@@ -153,6 +148,8 @@ async def execute_script_tool(
                 f"\n{code_with_input}"
             )
 
+        from modules.codelab.tools import execute_code
+
         result = await execute_code.ainvoke(
             {
                 "code": code_with_input,
@@ -272,9 +269,9 @@ async def list_script_tools() -> str:
         return "Keine Script-Tools verfügbar."
 
     lines = ["Verfügbare Script-Tools:"]
-    for tool in tools:
-        desc = tool.get("description", "")
-        lines.append(f"- {tool['name']}: {desc}")
+    for script_tool in tools:
+        desc = script_tool.get("description", "")
+        lines.append(f"- {script_tool['name']}: {desc}")
 
     return "\n".join(lines)
 

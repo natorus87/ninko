@@ -18,9 +18,7 @@ if TYPE_CHECKING:
 from langchain_core.callbacks import AsyncCallbackHandler
 from langchain_core.messages import (
     AIMessage,
-    BaseMessage,
     HumanMessage,
-    SystemMessage,
     ToolMessage,
 )
 from langchain_core.tools import BaseTool
@@ -31,7 +29,7 @@ from core.memory import get_memory
 from core.context_manager import get_context_manager
 from core import status_bus
 from core.events import ToolEvent, emit_tool_event
-from core.tool_error_handling import format_tool_error, sanitize_tool_output, wrap_tools_with_sanitizer
+from core.tool_error_handling import wrap_tools_with_sanitizer
 from core.tool_registry import get_tool_status_label
 
 from agents.middleware import (
@@ -48,6 +46,7 @@ from agents.middleware import (
     MessageBuilderMiddleware,
     AgentExecutionMiddleware,
     ResponseExtractionMiddleware,
+    ToolCompletionValidationMiddleware,
     MemoryStorageMiddleware,
 )
 
@@ -176,13 +175,13 @@ class _StatusEmitter(AsyncCallbackHandler):
             for key in ("password", "secret", "token", "api_key", "apikey", "key"):
                 redacted = re.sub(
                     rf'("{key}"\\s*:\\s*)"[^"]+"',
-                    rf'\\1"***"',
+                    r'\1"***"',
                     redacted,
                     flags=re.IGNORECASE,
                 )
                 redacted = re.sub(
                     rf"({key}\\s*[=:]\\s*)([^\\s,;]+)",
-                    rf"\\1***",
+                    r"\1***",
                     redacted,
                     flags=re.IGNORECASE,
                 )
@@ -636,6 +635,7 @@ class BaseAgent:
             )
         )
         registry.add(ResponseExtractionMiddleware())
+        registry.add(ToolCompletionValidationMiddleware())
         registry.add(
             MemoryStorageMiddleware(
                 auto_memorize_fn=self._auto_memorize,

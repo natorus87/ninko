@@ -13,6 +13,7 @@ from .prompt import (
 from .message import MessageBuilderMiddleware
 from .execution import AgentExecutionMiddleware
 from .postprocess import ResponseExtractionMiddleware, MemoryStorageMiddleware
+from .tool_completion import ToolCompletionValidationMiddleware
 from .deerflow import (
     LoopDetectionMiddleware,
     DanglingToolCallMiddleware,
@@ -37,6 +38,7 @@ __all__ = [
     "AgentExecutionMiddleware",
     "ResponseExtractionMiddleware",
     "MemoryStorageMiddleware",
+    "ToolCompletionValidationMiddleware",
     "LoopDetectionMiddleware",
     "DanglingToolCallMiddleware",
     "GuardrailMiddleware",

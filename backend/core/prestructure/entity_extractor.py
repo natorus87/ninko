@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Set
 
 from core.prestructure.schemas import ScopeEntities, Domain
 from core.prestructure.normalizer import NormalizedInput

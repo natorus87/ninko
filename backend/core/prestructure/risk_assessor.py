@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import List, Set
 
-from core.prestructure.schemas import Intent, RiskInfo, RiskLevel
+from core.prestructure.schemas import Intent, RiskInfo
 from core.prestructure.normalizer import NormalizedInput
 
 

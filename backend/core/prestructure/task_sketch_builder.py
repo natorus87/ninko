@@ -13,7 +13,6 @@ from core.prestructure.schemas import (
     ScopeInfo,
     ScopeEntities,
     ConstraintInfo,
-    RoutingHints,
     UncertaintyInfo,
     DebugInfo,
     RankedModule,
@@ -391,7 +390,7 @@ class DeterministicTaskSketchBuilder:
     ) -> ConstraintInfo:
         """Infer execution constraints based on intent and risk."""
         # Execution mode
-        if intent == "investigate":
+        if intent in ("answer", "investigate"):
             execution_mode: ExecutionMode = "read_only"
         elif risk.write_intent_detected and risk.approval_required:
             execution_mode = "guarded_write"
@@ -431,12 +430,27 @@ class DeterministicTaskSketchBuilder:
             must_include.append("evidence")
             must_include.append("safe_next_step")
 
+        if intent == "investigate":
+            must_include.append("evidence")
+
+        if any(
+            marker in normalized_text
+            for marker in [
+                "naechster schritt",
+                "naechsten schritt",
+                "next step",
+                "sicherer schritt",
+                "safe next step",
+            ]
+        ):
+            must_include.append("safe_next_step")
+
         return ConstraintInfo(
             execution_mode=execution_mode,
             time_sensitivity="normal",
             response_style=response_style,  # type: ignore
             must_not_do=must_not_do,
-            must_include=must_include,
+            must_include=list(dict.fromkeys(must_include)),
             user_constraints=[],
         )
 
@@ -469,6 +483,8 @@ class DeterministicTaskSketchBuilder:
         # Check for missing critical entities
         if intent == "investigate" and not entities.systems:
             missing_info.append("target_system_missing")
+            if not ranked_modules:
+                ambiguous = True
 
         if "namespace" in primary_goal.lower() and not entities.namespaces:
             missing_info.append("namespace_missing")
@@ -476,11 +492,15 @@ class DeterministicTaskSketchBuilder:
         if "cluster" in primary_goal.lower() and not entities.clusters:
             missing_info.append("cluster_missing")
 
+        adjusted_confidence = confidence
+        if missing_info:
+            adjusted_confidence = min(adjusted_confidence, 0.65)
+
         return UncertaintyInfo(
             ambiguous=ambiguous,
             missing_information=missing_info,
             open_questions=open_questions,
-            confidence=round(confidence, 2),
+            confidence=round(adjusted_confidence, 2),
         )
 
     def _collect_debug_info(

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional
 
 from core.prestructure.schemas import RankedModule, ModuleMetadata, ScopeEntities
 from core.prestructure.normalizer import NormalizedInput
@@ -176,8 +176,6 @@ def create_module_metadata_from_registry(registry) -> List[ModuleMetadata]:
 
     Uses the global registry to extract deterministic metadata for ranking.
     """
-    from core.module_registry import ModuleManifest
-
     metadata: List[ModuleMetadata] = []
 
     for manifest in registry.list_modules():

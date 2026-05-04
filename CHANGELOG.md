@@ -9,6 +9,27 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.3.3] – 2026-05-04
+
+### Added
+
+- **Evidence Layer** (`core/evidence/`): semantic term resolution, module semantic indexing, field mapping confidence, rule-based constellation validation, and auditable `EvidenceTrace` schemas.
+- **Tool completion validation middleware**: blocks false completion when required module tool calls did not actually run, with a deterministic guard for Licium existing-note imports.
+- **Licium existing-note ingest tool**: `ingest_existing_licium_notes()` initializes the Ninko Wiki structure idempotently, imports existing Licium notes into `sources/`, updates the index, and writes an operations log entry.
+- **Focused Evidence and ToolCompletion tests** covering semantic resolver behavior, contradictory evidence handling, trace readiness, and missing-tool blocking.
+
+### Changed
+
+- Orchestrator integrates semantic evidence resolution after TaskSketch and passes confidence/escalation details into planner and pipeline paths.
+- Prestructure routing now treats simple answers and investigations as read-only, routes explicit workflow intent more conservatively, and marks ambiguous investigations with missing targets.
+- Image generation and Codelab script execution imports are lazy to avoid module side effects during orchestrator import.
+
+### Fixed
+
+- Licium no longer stops after listing notes or checking wiki metadata when the user asks to ingest existing notes into the Ninko Wiki.
+- Semantic glossary matching is stricter to prevent unrelated common words from being mapped to evidence fields.
+- Tool execution detection now handles runtimes where `ToolMessage` has only `tool_call_id` and no `name`.
+
 ### Added
 
 - **Typed Pipeline Engine** (`core/pipeline_engine.py`): Pydantic-validated `PipelineStep` / `StepResult` / `PipelineResult` schemas replace the ad-hoc string-stack in `run_pipeline()`. Per-step retry with exponential backoff (`RetryPolicy`), `asyncio.gather(return_exceptions=True)` for safe parallel groups, Redis checkpoints after each group, and a structured `PipelineEvent` system (9 event types: `routing_started` → `pipeline_completed`).
