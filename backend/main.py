@@ -77,7 +77,6 @@ from core.auth import (
     auth_tenant_id,
     module_access_allows,
     reset_current_tenant_id,
-    resolve_request_auth,
     resolve_request_auth_async,
     resolve_request_role,
     role_allows,
@@ -775,5 +774,5 @@ async def health() -> object:
     return {
         "status": "ok",
         "service": "ninko",
-        "version": "0.9.2",
+        "version": "1.3.3",
     }
