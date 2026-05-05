@@ -517,7 +517,7 @@ class PipelineEngine:
                 task += "\n\nVorherige Ergebnisse als Kontext:\n" + "\n\n".join(dep_parts)
         elif idx > 0 and (idx - 1) in prior_results:
             prev = prior_results[idx - 1]
-            if prev.result:
+            if prev.result and prev.status == StepStatus.COMPLETED:
                 task += f"\n\nErgebnis aus '{prev.module}':\n{prev.result}"
         return task
 
