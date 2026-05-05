@@ -1,7 +1,7 @@
 """Ninko evidence layer: semantic resolution and constellation validation."""
 
 from core.evidence.constellation_validator import ConstellationValidator
-from core.evidence.evidence_trace import build_evidence_trace
+from core.evidence.evidence_trace import build_evidence_trace, persist_evidence_trace
 from core.evidence.glossary_store import GlossaryEntry, GlossaryStore
 from core.evidence.module_semantic_index import ModuleSemanticIndex
 from core.evidence.schemas import (
@@ -28,4 +28,5 @@ __all__ = [
     "SemanticResolver",
     "build_evidence_trace",
     "field_mapping_confidence",
+    "persist_evidence_trace",
 ]
