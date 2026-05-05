@@ -107,23 +107,44 @@ class ConstellationValidator:
         self,
         pipeline_result: Any,
         resolutions: list[FieldResolution] | None = None,
+        skip_modules: frozenset[str] | None = None,
     ) -> ConstellationResult:
-        """Extract minimal facts from a PipelineResult and validate them."""
+        """Extract minimal facts from a PipelineResult and validate them.
+
+        skip_modules: Module-Namen die aus der Analyse ausgeschlossen werden
+        (z.B. Utility/Notification-Module wie telegram, email, teams — deren
+        Execution-Status spiegelt keine Infrastruktur-Gesundheit wider).
+        """
+        skip = skip_modules or frozenset()
         facts: list[EvidenceFact] = []
+        skipped_count = 0
         for step in getattr(pipeline_result, "steps", []):
+            module = getattr(step, "module", "unknown")
+            if module in skip:
+                skipped_count += 1
+                continue
             status = getattr(step, "status", "")
             status_value = getattr(status, "value", str(status))
             facts.append(EvidenceFact(
-                source_module=getattr(step, "module", "unknown"),
+                source_module=module,
                 field="status",
                 value=status_value,
                 description="Pipeline step execution status",
             ))
             if getattr(step, "error", None):
                 facts.append(EvidenceFact(
-                    source_module=getattr(step, "module", "unknown"),
+                    source_module=module,
                     field="open_errors",
                     value=1,
                     description=str(getattr(step, "error", "")),
                 ))
+
+        if not facts and skipped_count > 0:
+            return ConstellationResult(
+                conclusion="All pipeline steps were utility/notification modules — no infrastructure evidence to evaluate.",
+                confidence=1.0,
+                applied_rules=["utility_steps_excluded"],
+                trace=[f"Skipped {skipped_count} utility step(s); no primary module steps found."],
+            )
+
         return self.validate(facts, resolutions=resolutions)
