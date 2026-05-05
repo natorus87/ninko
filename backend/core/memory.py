@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+import threading
 import uuid
 from datetime import datetime, timezone
 
@@ -28,6 +29,39 @@ from core.config import get_settings
 from core.llm_factory import get_embeddings
 
 logger = logging.getLogger("ninko.memory")
+
+_CHROMA_MAX_RETRIES = 3
+_CHROMA_RETRY_DELAY_SECS = 0.5
+
+
+async def _run_with_retry(
+    loop: asyncio.AbstractEventLoop,
+    fn,
+    max_retries: int = _CHROMA_MAX_RETRIES,
+    delay: float = _CHROMA_RETRY_DELAY_SECS,
+):
+    """Führt eine sync ChromaDB-Operation mit Retry aus.
+
+    Retry bei transienten Fehlern (Connection, Timeout) mit exponentiellem Backoff.
+    """
+    last_exc: Exception | None = None
+    for attempt in range(max_retries):
+        try:
+            return await loop.run_in_executor(None, fn)
+        except Exception as exc:
+            last_exc = exc
+            if attempt < max_retries - 1:
+                wait = delay * (2 ** attempt)
+                logger.warning(
+                    "ChromaDB-Operation fehlgeschlagen (Versuch %d/%d), "
+                    "retry in %.1fs: %s",
+                    attempt + 1,
+                    max_retries,
+                    wait,
+                    exc,
+                )
+                await asyncio.sleep(wait)
+    raise last_exc  # type: ignore[misc]
 
 
 class SemanticMemory:
@@ -85,8 +119,8 @@ class SemanticMemory:
         embedding = await self._embeddings.aembed_query(content)
 
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(
-            None,
+        await _run_with_retry(
+            loop,
             lambda: self._collection.add(
                 ids=[doc_id],
                 embeddings=[embedding],
@@ -122,8 +156,8 @@ class SemanticMemory:
         where_filter = {"category": category} if category else None
 
         loop = asyncio.get_running_loop()
-        results = await loop.run_in_executor(
-            None,
+        results = await _run_with_retry(
+            loop,
             lambda: self._collection.query(
                 query_embeddings=[query_embedding],
                 n_results=k,
@@ -175,7 +209,7 @@ class SemanticMemory:
     async def delete(self, doc_id: str) -> None:
         """Löscht einen Eintrag anhand seiner ID."""
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, lambda: self._collection.delete(ids=[doc_id]))
+        await _run_with_retry(loop, lambda: self._collection.delete(ids=[doc_id]))
         logger.debug("Memory-Eintrag gelöscht: id=%s", doc_id)
 
     async def delete_by_content(
@@ -293,11 +327,14 @@ class SemanticMemory:
 
 # Singleton
 _memory: SemanticMemory | None = None
+_memory_lock = threading.Lock()
 
 
 def get_memory() -> SemanticMemory:
-    """Gibt die globale Memory-Instanz zurück (lazy init)."""
+    """Gibt die globale Memory-Instanz zurück (lazy init, thread-safe)."""
     global _memory
     if _memory is None:
-        _memory = SemanticMemory()
+        with _memory_lock:
+            if _memory is None:
+                _memory = SemanticMemory()
     return _memory
