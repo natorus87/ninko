@@ -9,6 +9,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.3.4] – 2026-05-05
+
+### Fixed
+
+- **Licium Wiki initialization on Kubernetes**: Licium's API returns and accepts camelCase fields (`parentId`, `contentMarkdown`). Ninko now reads both snake_case and camelCase fields and sends both variants for compatibility, so `_meta`, `sources`, `wiki`, `queries`, `_index`, and `_log` are created under `Ninko Wiki` instead of at root level.
+- **Evidence escalation for explicit module routing**: explicit candidate module names such as `licium` no longer become unresolved semantic terms.
+- **User-facing EvidenceTrace noise**: normal module answers no longer append an empty `Evidence Trace` unless there are real validation details, contradictions, or escalation reasons.
+
 ## [1.3.3] – 2026-05-04
 
 ### Added

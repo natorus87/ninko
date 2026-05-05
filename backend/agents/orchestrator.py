@@ -717,6 +717,17 @@ class OrchestratorAgent(BaseAgent):
         """Return the last EvidenceTrace for debugging/observability."""
         return self._last_evidence_trace
 
+    def _should_show_user_evidence_trace(self, trace: EvidenceTrace) -> bool:
+        """Return whether an EvidenceTrace contains user-relevant validation details."""
+        if trace.escalation_reason or trace.constellation.contradictions:
+            return True
+        if trace.constellation.trace:
+            return True
+        return any(
+            resolution.reason != "Explicit candidate module reference"
+            for resolution in trace.resolutions
+        )
+
     def _get_readonly_tools_for_module(self, module: str) -> list:
         from core.safeguard import _TOOL_READONLY
 
@@ -2471,11 +2482,9 @@ JSON-SCHEMA:
                     constellation=constellation,
                     escalation_reason=semantic_resolution.escalation_reason,
                 )
-                return (
-                    f"{response}\n\n{self._last_evidence_trace.to_markdown()}",
-                    module_used,
-                    did_compact,
-                )
+                if self._should_show_user_evidence_trace(self._last_evidence_trace):
+                    response = f"{response}\n\n{self._last_evidence_trace.to_markdown()}"
+                return response, module_used, did_compact
         # ── Tier 1: Orchestrator-ReAct-Loop ─────────────────────────────
         # LLM entscheidet: call_module_agent, run_pipeline, create_custom_agent oder direkte Antwort.
         logger.info("Tier 1: Orchestrator-ReAct-Loop für: %s…", message[:80])
@@ -2496,11 +2505,9 @@ JSON-SCHEMA:
             constellation=constellation,
             escalation_reason=semantic_resolution.escalation_reason,
         )
-        return (
-            f"{response}\n\n{self._last_evidence_trace.to_markdown()}",
-            None,
-            did_compact,
-        )
+        if self._should_show_user_evidence_trace(self._last_evidence_trace):
+            response = f"{response}\n\n{self._last_evidence_trace.to_markdown()}"
+        return response, None, did_compact
 
 
 # ── Globaler Singleton (gesetzt von main.py) ─────────────────────────────────

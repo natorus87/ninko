@@ -109,11 +109,21 @@ def _flatten_tree(nodes: list[dict], result: Optional[list] = None) -> list[dict
             "id": node.get("id"),
             "title": node.get("title"),
             "type": node.get("type"),
-            "parent_id": node.get("parent_id"),
+            "parent_id": node.get("parent_id") or node.get("parentId"),
         })
         if node.get("children"):
             _flatten_tree(node["children"], result)
     return result
+
+
+def _note_content(note: dict) -> str:
+    """Gibt Markdown-Inhalt unabhängig vom Licium-API-Feldnamen zurück."""
+    return (
+        note.get("content_markdown")
+        or note.get("contentMarkdown")
+        or note.get("content")
+        or ""
+    )
 
 
 def _find_node_by_title(nodes: list[dict], title: str, node_type: str = "folder") -> Optional[dict]:
@@ -164,6 +174,7 @@ async def _get_or_create_folder(client: httpx.AsyncClient, name: str, parent_id:
     payload: dict = {"title": name, "type": "folder"}
     if parent_id:
         payload["parent_id"] = parent_id
+        payload["parentId"] = parent_id
     create_resp = await client.post("/api/notes", json=payload)
     create_resp.raise_for_status()
     return create_resp.json()["id"]
@@ -180,7 +191,14 @@ async def _get_or_create_note(
     if note_id:
         return note_id, False
 
-    payload = {"title": title, "type": "note", "parent_id": parent_id, "content": initial_content}
+    payload = {
+        "title": title,
+        "type": "note",
+        "parent_id": parent_id,
+        "parentId": parent_id,
+        "content": initial_content,
+        "contentMarkdown": initial_content,
+    }
     resp = await client.post("/api/notes", json=payload)
     resp.raise_for_status()
     return resp.json()["id"], True
@@ -275,7 +293,7 @@ async def get_licium_note(note_id: str, connection_id: str = "") -> str:
         resp.raise_for_status()
         note = resp.json()
         title = note.get("title", "Unbekannt")
-        content = note.get("content_markdown", "") or note.get("content", "")
+        content = _note_content(note)
         return f"# {title}\n\nID: {note_id}\n\n{content}"
 
 
@@ -419,8 +437,10 @@ async def create_licium_note(
         payload: dict = {"title": title, "type": note_type}
         if parent_id:
             payload["parent_id"] = parent_id
+            payload["parentId"] = parent_id
         if content and note_type == "note":
             payload["content"] = content
+            payload["contentMarkdown"] = content
 
         resp = await client.post("/api/notes", json=payload)
         resp.raise_for_status()
@@ -454,7 +474,10 @@ async def update_licium_note(
         Bestätigung der Aktualisierung.
     """
     async with _licium_session(connection_id) as (client, _):
-        resp = await client.put(f"/api/notes/{note_id}", json={"title": title, "content": content})
+        resp = await client.put(
+            f"/api/notes/{note_id}",
+            json={"title": title, "content": content, "contentMarkdown": content},
+        )
         if resp.status_code == 404:
             return _t(de=f"Notiz '{note_id}' nicht gefunden.", en=f"Note '{note_id}' not found.")
         resp.raise_for_status()
@@ -497,7 +520,7 @@ async def update_licium_wiki_index(
         note_resp = await client.get(f"/api/notes/{index_id}")
         note_resp.raise_for_status()
         current = note_resp.json()
-        current_content = current.get("content_markdown", "") or current.get("content", "")
+        current_content = _note_content(current)
 
         date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         new_row = f"| {title} | {summary} | {note_id} | {date_str} |"
@@ -506,6 +529,7 @@ async def update_licium_wiki_index(
         put_resp = await client.put(f"/api/notes/{index_id}", json={
             "title": INDEX_NOTE_TITLE,
             "content": updated_content,
+            "contentMarkdown": updated_content,
         })
         put_resp.raise_for_status()
         return _t(
@@ -545,7 +569,7 @@ async def append_licium_log(
         note_resp = await client.get(f"/api/notes/{log_id}")
         note_resp.raise_for_status()
         current = note_resp.json()
-        current_content = current.get("content_markdown", "") or current.get("content", "")
+        current_content = _note_content(current)
 
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
         log_entry = f"\n## [{timestamp}] {operation} | {title}\n"
@@ -554,6 +578,7 @@ async def append_licium_log(
         put_resp = await client.put(f"/api/notes/{log_id}", json={
             "title": LOG_NOTE_TITLE,
             "content": updated_content,
+            "contentMarkdown": updated_content,
         })
         put_resp.raise_for_status()
         return _t(
@@ -606,7 +631,12 @@ async def ingest_existing_licium_notes(
         candidates = [
             node
             for node in all_nodes
-            if node.get("type") == "note" and node.get("id") not in excluded_ids
+            if (
+                node.get("type") == "note"
+                and node.get("id") not in excluded_ids
+                and node.get("title") not in {INDEX_NOTE_TITLE, LOG_NOTE_TITLE}
+                and not str(node.get("title") or "").startswith("Import:")
+            )
         ]
 
         imported: list[str] = []
@@ -625,7 +655,7 @@ async def ingest_existing_licium_notes(
                 continue
 
             note = note_resp.json()
-            content = note.get("content_markdown", "") or note.get("content", "")
+            content = _note_content(note)
             if not str(content).strip():
                 skipped.append(f"{title} ({note_id}) — leer")
                 continue
@@ -641,7 +671,11 @@ async def ingest_existing_licium_notes(
             if existing_source_id:
                 put_resp = await client.put(
                     f"/api/notes/{existing_source_id}",
-                    json={"title": source_title, "content": source_content},
+                    json={
+                        "title": source_title,
+                        "content": source_content,
+                        "contentMarkdown": source_content,
+                    },
                 )
                 put_resp.raise_for_status()
                 source_note_id = existing_source_id
@@ -652,7 +686,9 @@ async def ingest_existing_licium_notes(
                         "title": source_title,
                         "type": "note",
                         "parent_id": sources_id,
+                        "parentId": sources_id,
                         "content": source_content,
+                        "contentMarkdown": source_content,
                     },
                 )
                 create_resp.raise_for_status()
@@ -736,7 +772,7 @@ async def lint_licium_wiki(connection_id: str = "") -> str:
 
         index_resp = await client.get(f"/api/notes/{index_note_id}")
         index_resp.raise_for_status()
-        index_content = index_resp.json().get("content_markdown", "") or ""
+        index_content = _note_content(index_resp.json())
 
         import re
         index_ids = set(re.findall(r'\b([0-9a-f-]{36})\b', index_content))
@@ -752,7 +788,7 @@ async def lint_licium_wiki(connection_id: str = "") -> str:
         for note in wiki_notes[:20]:
             nr = await client.get(f"/api/notes/{note['id']}")
             if nr.status_code == 200:
-                content = nr.json().get("content_markdown", "") or ""
+                content = _note_content(nr.json())
                 if len(content.strip()) < 50:
                     empty_wiki_pages.append(note["title"])
 
@@ -765,7 +801,7 @@ async def lint_licium_wiki(connection_id: str = "") -> str:
         for note in wiki_notes[:15]:
             nr = await client.get(f"/api/notes/{note['id']}")
             if nr.status_code == 200:
-                content = nr.json().get("content_markdown", "") or ""
+                content = _note_content(nr.json())
                 found = re.findall(r'\b([0-9a-f-]{36})\b', content)
                 all_content_ids.update(found)
 
@@ -851,7 +887,7 @@ async def _append_index_row(
     note_resp = await client.get(f"/api/notes/{index_id}")
     note_resp.raise_for_status()
     current = note_resp.json()
-    current_content = current.get("content_markdown", "") or current.get("content", "")
+    current_content = _note_content(current)
     if note_id in current_content:
         return
 
@@ -860,7 +896,11 @@ async def _append_index_row(
     updated_content = current_content.rstrip() + "\n" + new_row + "\n"
     put_resp = await client.put(
         f"/api/notes/{index_id}",
-        json={"title": INDEX_NOTE_TITLE, "content": updated_content},
+        json={
+            "title": INDEX_NOTE_TITLE,
+            "content": updated_content,
+            "contentMarkdown": updated_content,
+        },
     )
     put_resp.raise_for_status()
 
@@ -877,12 +917,16 @@ async def _append_log_entry(
     note_resp = await client.get(f"/api/notes/{log_id}")
     note_resp.raise_for_status()
     current = note_resp.json()
-    current_content = current.get("content_markdown", "") or current.get("content", "")
+    current_content = _note_content(current)
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
     updated_content = current_content.rstrip() + f"\n## [{timestamp}] {operation} | {title}\n"
     put_resp = await client.put(
         f"/api/notes/{log_id}",
-        json={"title": LOG_NOTE_TITLE, "content": updated_content},
+        json={
+            "title": LOG_NOTE_TITLE,
+            "content": updated_content,
+            "contentMarkdown": updated_content,
+        },
     )
     put_resp.raise_for_status()
 

@@ -87,11 +87,24 @@ class SemanticResolver:
     ) -> SemanticResolutionResult:
         """Resolve user terms against glossary and semantic module descriptions."""
         candidate_modules = candidate_modules or []
+        candidate_module_terms = {normalize_term(module): module for module in candidate_modules}
         terms = self._extract_terms(query)
         resolutions: list[FieldResolution] = []
         unresolved_terms: list[str] = []
 
         for term in terms:
+            if term in candidate_module_terms:
+                module = candidate_module_terms[term]
+                resolutions.append(FieldResolution(
+                    term=term,
+                    resolved_to=module,
+                    source_module=module,
+                    confidence="high",
+                    score=1.0,
+                    reason="Explicit candidate module reference",
+                ))
+                continue
+
             glossary_match = self.glossary.find_best(term)
             if glossary_match and glossary_match.score >= UNCERTAIN_CONFIDENCE_THRESHOLD:
                 entry = glossary_match.entry

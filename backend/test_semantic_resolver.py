@@ -46,6 +46,21 @@ class TestSemanticResolver(unittest.TestCase):
         self.assertIn("xqznotion", result.unresolved_terms)
         self.assertIsNotNone(result.escalation_reason)
 
+    def test_explicit_candidate_module_name_does_not_escalate(self):
+        resolver = SemanticResolver(
+            glossary=GlossaryStore([]),
+            module_index=ModuleSemanticIndex([]),
+        )
+
+        result = resolver.resolve(
+            "licium Lies meine bestehenden Notizen und ingeste sie ins Ninko-Wiki",
+            candidate_modules=["licium"],
+        )
+
+        self.assertFalse(result.escalation_required)
+        self.assertEqual(result.unresolved_terms, [])
+        self.assertIn("licium", result.candidate_modules)
+
     def test_field_mapping_outputs_confidence_for_heterogeneous_names(self):
         resolution = field_mapping_confidence("GP_Id", "businesspartner_id")
 
