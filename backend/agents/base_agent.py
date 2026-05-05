@@ -29,8 +29,8 @@ from core.memory import get_memory
 from core.context_manager import get_context_manager
 from core import status_bus
 from core.events import ToolEvent, emit_tool_event
-from core.tool_error_handling import wrap_tools_with_sanitizer
-from core.tool_registry import get_tool_status_label
+from core.tool_error_handling import wrap_tools_with_sanitizer, sanitize_tool_output
+from core.tool_registry import get_tool_status_label, get_tool_registry
 
 from agents.middleware import (
     MiddlewareRegistry,
@@ -111,17 +111,30 @@ def _t(
 class _StatusEmitter(AsyncCallbackHandler):
     """Emittiert Tool-Start-Events als Status-Updates und Audit-Events."""
 
+    _MAX_PENDING = 500  # Obergrenze für nicht-abgeschlossene Tool-Calls
+
     def __init__(self, session_id: str, agent_name: str) -> None:
         self.session_id = session_id
         self.agent_name = agent_name
         self._tool_start_times: dict[str, float] = {}
         self._tool_args: dict[str, dict] = {}  # run_id → args, für on_tool_end
 
+    def _cleanup_run(self, run_id: str) -> None:
+        """Entfernt alle Einträge für einen Run-ID aus den Tracking-Dicts."""
+        self._tool_start_times.pop(run_id, None)
+        self._tool_args.pop(run_id, None)
+
+    def _evict_oldest_if_full(self) -> None:
+        """Entfernt den ältesten Eintrag wenn die Obergrenze erreicht ist."""
+        if len(self._tool_args) >= self._MAX_PENDING:
+            oldest = next(iter(self._tool_args))
+            self._cleanup_run(oldest)
+
     async def on_tool_start(self, serialized: dict, input_str: str, **kwargs) -> None:  # type: ignore[override]
         tool_name = serialized.get("name", "")
         run_id = str(kwargs.get("run_id", ""))
 
-        # Zeitmessung starten + Args für Audit merken
+        self._evict_oldest_if_full()
         self._tool_start_times[run_id] = time.monotonic()
         try:
             self._tool_args[run_id] = _json.loads(input_str) if input_str else {}
@@ -133,6 +146,9 @@ class _StatusEmitter(AsyncCallbackHandler):
         # Nur strukturiertes Event – kein redundantes status-Emit mehr,
         # da das Frontend den label aus dem tool_start-Event selbst anzeigt
         label = get_tool_status_label(tool_name)
+        # Args vor Emit sanitisieren (verhindert Secret-Leakage im Event-Stream)
+        raw_args = self._tool_args.get(run_id, {})
+        safe_args = _json.loads(sanitize_tool_output(_json.dumps(raw_args)))
         await status_bus.emit_event(
             self.session_id,
             {
@@ -141,7 +157,7 @@ class _StatusEmitter(AsyncCallbackHandler):
                 "label": label,
                 "run_id": run_id,
                 "agent": self.agent_name,
-                "args": self._tool_args.get(run_id, {}),
+                "args": safe_args,
             },
         )
 
@@ -189,20 +205,18 @@ class _StatusEmitter(AsyncCallbackHandler):
 
         # Args aus on_tool_start holen
         args = self._tool_args.pop(run_id, {})
+        self._tool_start_times.pop(run_id, None)
 
-        # is_readonly heuristik
-        readonly_tools = {
-            "get_",
-            "list_",
-            "search_",
-            "fetch_",
-            "check_",
-            "load_",
-            "perform_web_search",
-            "recall_memory",
-            "get_available_languages",
-        }
-        is_readonly = any(tool_name.startswith(prefix) for prefix in readonly_tools)
+        # is_readonly: Registry bevorzugt, Heuristik als Fallback
+        registry_result = get_tool_registry().is_readonly(tool_name)
+        if registry_result is not None:
+            is_readonly = registry_result
+        else:
+            _readonly_prefixes = (
+                "get_", "list_", "search_", "fetch_", "check_", "load_",
+                "perform_web_search", "recall_memory", "get_available_languages",
+            )
+            is_readonly = any(tool_name.startswith(p) for p in _readonly_prefixes)
 
         # Event emittieren (non-blocking)
         try:
@@ -234,6 +248,12 @@ class _StatusEmitter(AsyncCallbackHandler):
                 "preview": result_preview,
             },
         )
+
+    async def on_tool_error(self, error: BaseException, **kwargs) -> None:  # type: ignore[override]
+        """Räumt Tracking-Dicts auf wenn ein Tool fehlschlägt (verhindert Memory-Leak)."""
+        run_id = str(kwargs.get("run_id", ""))
+        if run_id:
+            self._cleanup_run(run_id)
 
     async def on_llm_start(self, serialized: dict, messages: list, **kwargs) -> None:  # type: ignore[override]
         await status_bus.emit(
@@ -382,6 +402,9 @@ _safeguard_session_locks_ts: dict[
     str, float
 ] = {}  # session_id → Erstellungszeitpunkt (monotonic)
 _SAFEGUARD_LOCK_TTL_SECS: float = 86400.0  # 24h
+_MAX_SAFEGUARD_LOCKS = 1000  # Obergrenze für gleichzeitige Session-Locks
+_SAFEGUARD_OVERFLOW_LOCKS = 64
+_safeguard_overflow_locks: dict[int, asyncio.Lock] = {}
 
 _global_safeguard: "SafeguardMiddleware | None" = None
 
@@ -396,46 +419,54 @@ def set_global_safeguard(sg: "SafeguardMiddleware") -> None:
 def _get_safeguard_session_lock(session_id: str) -> asyncio.Lock:
     """Gibt den Lock für eine Session zurück (lazy init, TTL 24h).
 
-    Bereinigt abgelaufene Einträge bei jedem Aufruf, um unbegrenztes Wachstum
-    des Dicts zu verhindern (Memory-Leak-Fix).
-
-    In K8s-Umgebungen wird RedisLock verwendet (distributed lock).
-    Im Alleingang (single-instance) fällt zurück auf asyncio.Lock.
+    Hält die Anzahl gespeicherter Session-Locks begrenzt. Aktive Locks werden
+    nicht entfernt; wenn alle Slots belegt sind, fällt die Session auf einen
+    deterministischen Overflow-Lock zurück.
     """
     import time
 
     now = time.monotonic()
-    expired = [
-        sid
-        for sid, ts in _safeguard_session_locks_ts.items()
-        if now - ts > _SAFEGUARD_LOCK_TTL_SECS
-    ]
+
+    expired = []
+    for sid, ts in _safeguard_session_locks_ts.items():
+        lock = _safeguard_session_locks.get(sid)
+        if lock is not None and now - ts > _SAFEGUARD_LOCK_TTL_SECS and not lock.locked():
+            expired.append(sid)
     for sid in expired:
         _safeguard_session_locks.pop(sid, None)
         _safeguard_session_locks_ts.pop(sid, None)
+
+    existing = _safeguard_session_locks.get(session_id)
+    if existing is not None:
+        _safeguard_session_locks_ts[session_id] = now
+        return existing
+
+    while len(_safeguard_session_locks) >= _MAX_SAFEGUARD_LOCKS:
+        evictable = [
+            (sid, ts)
+            for sid, ts in _safeguard_session_locks_ts.items()
+            if not _safeguard_session_locks[sid].locked()
+        ]
+        if not evictable:
+            stripe = abs(hash(session_id)) % _SAFEGUARD_OVERFLOW_LOCKS
+            lock = _safeguard_overflow_locks.get(stripe)
+            if lock is None:
+                lock = asyncio.Lock()
+                _safeguard_overflow_locks[stripe] = lock
+            logger.warning(
+                "Safeguard session lock cap reached (%d); using overflow lock stripe %d.",
+                _MAX_SAFEGUARD_LOCKS,
+                stripe,
+            )
+            return lock
+        oldest_sid = min(evictable, key=lambda item: item[1])[0]
+        _safeguard_session_locks.pop(oldest_sid, None)
+        _safeguard_session_locks_ts.pop(oldest_sid, None)
+
     if session_id not in _safeguard_session_locks:
         _safeguard_session_locks[session_id] = asyncio.Lock()
         _safeguard_session_locks_ts[session_id] = now
     return _safeguard_session_locks[session_id]
-
-
-async def _get_safeguard_session_lock_async(session_id: str) -> Any:
-    """Async distributed lock for K8s multi-instance deployments.
-
-    Returns a RedisLock when Redis is available, otherwise falls back
-    to the local asyncio.Lock for single-instance deployments.
-    """
-    try:
-        from core.distributed_lock import RedisLock
-
-        lock = RedisLock(
-            f"safeguard:session:{session_id}",
-            ttl_ms=int(_SAFEGUARD_LOCK_TTL_SECS * 1000),
-            max_wait_ms=5000,
-        )
-        return lock
-    except Exception:
-        return _get_safeguard_session_lock(session_id)
 
 
 def _get_agent_timeout_seconds() -> int:
@@ -676,9 +707,15 @@ class BaseAgent:
         # Tools mit mindestens 1 Treffer
         relevant = [t for s, t in scored if s > 0]
 
-        # Fallback: zu wenige gefunden → alle Tools zurückgeben
-        if len(relevant) < 3:
-            return self.tools
+        # Fallback: keine Treffer → Obergrenze statt alle Tools
+        if len(relevant) == 0:
+            logger.debug(
+                "JIT Tool Injection: Agent '%s' – keine Treffer, "
+                "beschränke auf %d Tools (Kontext-Sparsamkeit).",
+                self.name,
+                jit_max_tools,
+            )
+            return self.tools[:jit_max_tools]
 
         # Sortiert nach Score, max. JIT-Max-Tools
         top = sorted(scored, key=lambda x: x[0], reverse=True)
