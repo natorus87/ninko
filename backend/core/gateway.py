@@ -51,9 +51,11 @@ class Run:
     completed_at: float = 0.0
     _cancel_event: asyncio.Event = field(default_factory=asyncio.Event)
     _queue: asyncio.Queue = field(default_factory=lambda: asyncio.Queue())
+    _task: asyncio.Task | None = None
 
 
 _MAX_RUNS = 500  # Maximale Anzahl gleichzeitig gespeicherter Runs (DoS-Schutz)
+_STREAM_MAX_EMPTY_POLLS = 1200  # 1200 × 0.5s timeout = 10min max idle wait
 
 
 class RunManager:
@@ -125,13 +127,23 @@ class RunManager:
                 oldest_rid = min(finished, key=lambda x: x[1].completed_at)[0]
                 del self._runs[oldest_rid]
             else:
-                raise RuntimeError(
-                    f"RunManager: Maximale Run-Anzahl ({_MAX_RUNS}) erreicht — "
-                    "alle aktiv, kein Eviction möglich."
+                # Graceful Degradation: ältesten laufenden Run wirklich abbrechen.
+                oldest_running = min(
+                    self._runs.items(), key=lambda x: x[1].created_at
+                )
+                oldest_rid, oldest_run = oldest_running
+                await self._cancel_run(oldest_run)
+                del self._runs[oldest_rid]
+                logger.warning(
+                    "RunManager: Max Runs (%d) erreicht – ältesten laufenden Run %s "
+                    "gecancelt um Platz zu schaffen.",
+                    _MAX_RUNS,
+                    oldest_rid,
                 )
 
         self._runs[run_id] = run
         _task = asyncio.create_task(self._execute_run(run))
+        run._task = _task
         self._bg_tasks.add(_task)
         _task.add_done_callback(self._bg_tasks.discard)
         _task.add_done_callback(self._log_task_exc)
@@ -140,11 +152,20 @@ class RunManager:
     async def get_run(self, run_id: str) -> Run | None:
         return self._runs.get(run_id)
 
+    async def _cancel_run(self, run: Run) -> None:
+        import time as _time
+
+        run._cancel_event.set()
+        run.status = RunStatus.CANCELLED
+        run.completed_at = _time.monotonic()
+        if run._task and not run._task.done():
+            run._task.cancel()
+        await run._queue.put(None)
+
     async def cancel_run(self, run_id: str) -> bool:
         run = self._runs.get(run_id)
         if run and run.status == RunStatus.RUNNING:
-            run._cancel_event.set()
-            run.status = RunStatus.CANCELLED
+            await self._cancel_run(run)
             return True
         return False
 
@@ -153,18 +174,29 @@ class RunManager:
         if not run:
             return
 
+        empty_polls = 0
         while True:
             try:
                 item = await asyncio.wait_for(run._queue.get(), timeout=0.5)
                 if item is None:
                     break
+                empty_polls = 0
                 yield item
             except asyncio.TimeoutError:
+                empty_polls += 1
                 if run.status in (
                     RunStatus.COMPLETED,
                     RunStatus.FAILED,
                     RunStatus.CANCELLED,
                 ):
+                    break
+                if empty_polls >= _STREAM_MAX_EMPTY_POLLS:
+                    logger.warning(
+                        "Stream für Run %s nach %d leeren Polls abgebrochen "
+                        "(Run evtl. hängengeblieben).",
+                        run_id,
+                        empty_polls,
+                    )
                     break
 
     async def _execute_run(self, run: Run) -> None:
@@ -205,6 +237,11 @@ class RunManager:
                 run.status = RunStatus.FAILED
                 run.error = "Run timed out after 600s"
                 logger.warning("Run %s timed out", run.run_id)
+
+            except asyncio.CancelledError:
+                run.status = RunStatus.CANCELLED
+                logger.info("Run %s cancelled", run.run_id)
+                raise
 
             except Exception as exc:
                 run.status = RunStatus.FAILED
