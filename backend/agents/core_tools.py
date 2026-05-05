@@ -98,32 +98,75 @@ def _t(
 
 # Whitelist of allowed executables for execute_cli_command
 _ALLOWED_COMMANDS = {
+    # System info (readonly)
     "uptime",
-    "ping",
     "df",
     "free",
     "ps",
     "uname",
     "hostname",
-    "netstat",
-    "ss",
-    "ip",
-    "dig",
-    "nslookup",
-    "traceroute",
-    "cat",
-    "ls",
-    "echo",
     "date",
     "who",
     "w",
+    "dmesg",
+    # System monitoring (readonly)
+    "top",
+    "vmstat",
+    "iostat",
+    "mpstat",
+    "sar",
+    "load",  # custom loadavg script
+    # Hardware info (readonly)
+    "lscpu",
+    "lsmem",
+    "lsblk",
+    "lsusb",
+    "lspci",
+    # Process management (readonly)
+    "pgrep",
+    # Network diagnostics (readonly, no external fetches)
+    "arp",
+    "dig",
+    "ethtool",
+    "host",
+    "ifconfig",
+    "ip",
+    "iwconfig",
+    "mtr",
+    "netstat",
+    "nslookup",
+    "ping",
+    "ping6",
+    "route",
+    "ss",
+    "traceroute",
+    # Filesystem (readonly)
+    "blkid",
+    "cat",
+    "echo",
+    "file",
+    "findmnt",
+    "head",
+    "ls",
+    "realpath",
+    "stat",
+    "tail",
+    "tree",
+    "wc",
+    # Systemd/journal (readonly)
     "systemctl",
     "journalctl",
-    "dmesg",
-    "curl",
-    "wget",
-    "nmap",
+    # Misc diagnostics (readonly)
+    "id",
+    "ulimit",
+    "locale",
+    # Package/filesystem (readonly usage erwartet, aber schreibend möglich)
+    "dpkg",
+    "rpm",
 }
+
+# Network commands mit Exfiltrations-Risiko – nur mit Safeguard-Bestätigung
+_NETWORK_COMMANDS = {"curl", "wget", "nmap"}
 
 logger = logging.getLogger("ninko.agents.core_tools")
 
@@ -299,6 +342,20 @@ async def execute_cli_command(command: str) -> str:
                 )
 
         try:
+            # Netzwerk-Befehle mit Exfiltrations-Risiko gesondert prüfen
+            try:
+                cmd_parts = shlex.split(command)
+                if cmd_parts and cmd_parts[0] in _NETWORK_COMMANDS:
+                    return _t(
+                        f"Fehler: Der Befehl '{cmd_parts[0]}' ist aus Sicherheitsgründen "
+                        "nicht über execute_cli_command verfügbar. "
+                        "Verwende das passende Modul-Tool (z.B. web_search) oder frage den User.",
+                        f"Error: The command '{cmd_parts[0]}' is not available via "
+                        "execute_cli_command for security reasons. "
+                        "Use the appropriate module tool (e.g. web_search) or ask the user.",
+                    )
+            except (ValueError, TypeError):
+                pass
             args = validate_cli_command(command, _ALLOWED_COMMANDS)
         except PermissionDeniedError as e:
             return _t(
