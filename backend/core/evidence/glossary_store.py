@@ -68,6 +68,16 @@ class GlossaryStore:
         ])
 
     def add(self, entry: GlossaryEntry) -> None:
+        if not entry.canonical.strip():
+            raise ValueError("GlossaryEntry.canonical darf nicht leer sein")
+        if not entry.module.strip():
+            raise ValueError("GlossaryEntry.module darf nicht leer sein")
+        short_aliases = [a for a in entry.aliases if len(normalize_term(a)) < 3]
+        if short_aliases:
+            raise ValueError(
+                f"GlossaryEntry.aliases enthält Terme kürzer als 3 Zeichen: {short_aliases}. "
+                "Kurze Aliases umgehen den length_ratio-Guard."
+            )
         self._entries.append(entry)
 
     def entries(self) -> list[GlossaryEntry]:
@@ -85,8 +95,12 @@ class GlossaryStore:
                 alias_norm = normalize_term(alias)
                 if not alias_norm:
                     continue
-                if alias_norm in normalized or normalized in alias_norm:
-                    score = 1.0 if alias_norm == normalized else 0.86
+                longer = max(len(alias_norm), len(normalized))
+                shorter = min(len(alias_norm), len(normalized))
+                length_ratio = shorter / longer if longer else 0.0
+                if (alias_norm in normalized or normalized in alias_norm) and length_ratio >= 0.6:
+                    # Partial-Matches werden als "uncertain" eingestuft (< HIGH_CONFIDENCE_THRESHOLD 0.78)
+                    score = 1.0 if alias_norm == normalized else min(round(0.7 + length_ratio * 0.16, 2), 0.77)
                 else:
                     score = lexical_similarity(normalized, alias_norm)
                     if score < 0.78:
