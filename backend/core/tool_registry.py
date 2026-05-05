@@ -523,10 +523,16 @@ class ToolRegistry:
         """Ruft Metadaten für ein Tool auf."""
         return self._tools.get(name)
 
-    def is_readonly(self, name: str) -> bool:
-        """Prüft ob ein Tool readonly ist."""
+    def is_readonly(self, name: str) -> bool | None:
+        """Prüft ob ein Tool readonly ist.
+
+        Returns:
+            True wenn Tool registriert und readonly.
+            False wenn Tool registriert und nicht readonly.
+            None wenn Tool nicht registriert (Caller soll entscheiden).
+        """
         meta = self.get(name)
-        return meta.readonly if meta else False
+        return meta.readonly if meta else None
 
     def is_destructive(self, name: str) -> bool:
         """Prüft ob ein Tool destructive ist."""
