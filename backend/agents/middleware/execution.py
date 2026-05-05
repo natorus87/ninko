@@ -15,7 +15,18 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_AGENT_TIMEOUT_SECS = 600
+_DEFAULT_AGENT_TIMEOUT_SECS = 600
+
+
+def _get_timeout() -> int:
+    """Lädt den Agent-Timeout aus der Config mit robustem Fallback."""
+    try:
+        from core.config import get_settings
+
+        timeout = int(get_settings().AGENT_TIMEOUT_SECONDS)
+        return timeout if timeout > 0 else _DEFAULT_AGENT_TIMEOUT_SECS
+    except (ImportError, AttributeError, TypeError, ValueError):
+        return _DEFAULT_AGENT_TIMEOUT_SECS
 
 
 class AgentExecutionMiddleware(BaseMiddleware):
@@ -78,7 +89,7 @@ class AgentExecutionMiddleware(BaseMiddleware):
         return MiddlewareResult()
 
     async def post_process(self, ctx: MiddlewareContext) -> None:
-        timeout = _AGENT_TIMEOUT_SECS
+        timeout = _get_timeout()
         run_config: dict = {"recursion_limit": 10000}
 
         if ctx.session_id and self._callbacks_factory:
