@@ -730,15 +730,12 @@ class OrchestratorAgent(BaseAgent):
         return self._last_evidence_trace
 
     def _should_show_user_evidence_trace(self, trace: EvidenceTrace) -> bool:
-        """Return whether an EvidenceTrace contains user-relevant validation details."""
-        if trace.escalation_reason or trace.constellation.contradictions:
-            return True
-        if trace.constellation.trace:
-            return True
-        return any(
-            resolution.reason != "Explicit candidate module reference"
-            for resolution in trace.resolutions
-        )
+        """Return whether an EvidenceTrace contains user-relevant validation details.
+
+        Only contradictions with meaningful confidence warrant user-facing output.
+        Escalations, unresolved terms, and background trace entries are internal only.
+        """
+        return bool(trace.constellation.contradictions) and trace.constellation.confidence > 0.3
 
     def _get_readonly_tools_for_module(self, module: str) -> list:
         from core.safeguard import _TOOL_READONLY
