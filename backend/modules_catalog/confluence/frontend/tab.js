@@ -1,6 +1,13 @@
 (function() {
     'use strict';
 
+    function esc(s) {
+        if (s == null) return '';
+        const d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+    }
+
     const ConfluenceTab = {
         connId: '',
         refresh: async function() {
@@ -36,9 +43,9 @@
                             pages.slice(0, 10).map(p => {
                                 const statusClass = p.status === 'current' ? 'status-ok' : 'status-warning';
                                 return '<tr>' +
-                                    '<td>' + (p.title || '-') + '</td>' +
-                                    '<td>' + (p.spaceId || '-') + '</td>' +
-                                    '<td><span class="status-badge ' + statusClass + '">' + (p.status || '-') + '</span></td>' +
+                                    '<td>' + esc(p.title) || '-' + '</td>' +
+                                    '<td>' + esc(p.spaceId) || '-' + '</td>' +
+                                    '<td><span class="status-badge ' + statusClass + '">' + esc(p.status) || '-' + '</span></td>' +
                                     '</tr>';
                             }).join('') + '</tbody></table>';
                     }
@@ -46,7 +53,7 @@
                     container.innerHTML = '<p class="empty-state text-error">' + I18n.t('modules.confluence.loadError') + '</p>';
                 }
             } catch (e) {
-                container.innerHTML = '<p class="empty-state text-error">' + I18n.t('modules.confluence.error') + e.message + '</p>';
+                container.innerHTML = '<p class="empty-state text-error">' + I18n.t('modules.confluence.error') + esc(e.message) + '</p>';
             }
         },
 

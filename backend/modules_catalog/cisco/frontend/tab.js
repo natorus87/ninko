@@ -5,6 +5,13 @@
         connectionId: ""
     };
 
+    function esc(s) {
+        if (s == null) return '';
+        const d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+    }
+
     async function loadStatus() {
         try {
             const url = state.connectionId
@@ -27,10 +34,10 @@
 
             document.getElementById('cisco-info').innerHTML = `
                 <table class="data-table">
-                    <tr><td>${I18n.t('modules.cisco.hostname')}</td><td>${data.hostname || '-'}</td></tr>
-                    <tr><td>${I18n.t('modules.cisco.model')}</td><td>${data.model || '-'}</td></tr>
-                    <tr><td>${I18n.t('modules.cisco.interfaces')}</td><td>${data.interfaces_count || 0}</td></tr>
-                    <tr><td>${I18n.t('modules.cisco.vlans')}</td><td>${data.vlans_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.cisco.hostname')}</td><td>${esc(data.hostname) || '-'}</td></tr>
+                    <tr><td>${I18n.t('modules.cisco.model')}</td><td>${esc(data.model) || '-'}</td></tr>
+                    <tr><td>${I18n.t('modules.cisco.interfaces')}</td><td>${esc(data.interfaces_count || 0)}</td></tr>
+                    <tr><td>${I18n.t('modules.cisco.vlans')}</td><td>${esc(data.vlans_count || 0)}</td></tr>
                 </table>
             `;
         } catch (e) {

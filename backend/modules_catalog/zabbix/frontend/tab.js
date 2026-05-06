@@ -3,6 +3,13 @@
   let currentConnection = '';
   let pollingInterval = null;
 
+  function esc(s) {
+    if (s == null) return '';
+    const d = document.createElement('div');
+    d.textContent = String(s);
+    return d.innerHTML;
+  }
+
   async function loadConnections() {
     try {
       const resp = await fetch('/api/connections/zabbix');
@@ -62,8 +69,8 @@
     container.innerHTML = problems.map(p => {
       const severityClass = p.severity >= 4 ? 'error' : p.severity >= 2 ? 'warning' : 'info';
       return `<div class="problem-row ${severityClass}">
-        <div><strong>${p.name || p.eventid}</strong></div>
-        <div style="font-size:0.8em;color:var(--text-secondary)">${p.host || ''} • ${new Date(p.clock * 1000).toLocaleString()}</div>
+        <div><strong>${esc(p.name) || esc(p.eventid)}</strong></div>
+        <div style="font-size:0.8em;color:var(--text-secondary)">${esc(p.host) || ''} • ${new Date(p.clock * 1000).toLocaleString()}</div>
       </div>`;
     }).join('');
   }
@@ -78,7 +85,7 @@
     container.innerHTML = hosts.map(h => {
       const statusClass = h.status == '0' ? 'success' : 'error';
       return `<div class="item-row">
-        <span>${h.name}</span>
+        <span>${esc(h.name)}</span>
         <span style="color:var(--color-${statusClass})">${h.status == '0' ? '●' : '○'}</span>
       </div>`;
     }).join('');

@@ -6,6 +6,13 @@ const CheckmkTab = {
     pollInterval: null,
     currentConnectionId: '',
 
+    esc(s) {
+        if (s == null) return '';
+        const d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+    },
+
     async init() {
         this._setupEvents();
         this._setupClickOutside();
@@ -188,7 +195,7 @@ const CheckmkTab = {
                     const isCrit = line.includes('🔴 CRIT');
                     const isWarn = line.includes('⚠️ WARN');
                     const cls = isCrit ? 'alert-crit' : (isWarn ? 'alert-warn' : '');
-                    return `<div class="alert-item ${cls}">${line}</div>`;
+                    return `<div class="alert-item ${cls}">${esc(line)}</div>`;
                 }).join('');
             } else {
                 alertsEl.innerHTML = '<p class="empty-state">' + I18n.t('modules.checkmk.noData') + '</p>';

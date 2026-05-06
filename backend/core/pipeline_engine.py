@@ -174,11 +174,11 @@ class PipelineResult(BaseModel):
         lines: list[str] = []
         for i, step in enumerate(self.steps):
             if step.status == StepStatus.COMPLETED:
-                lines.append(f"**Schritt {i + 1} ({step.module}):**\n{step.result}")
+                lines.append(f"**{step.module}:**\n{step.result}")
             elif step.status == StepStatus.FAILED:
-                lines.append(f"**Schritt {i + 1} ({step.module}) – Fehler:**\n{step.error or 'Unbekannter Fehler'}")
+                lines.append(f"**{step.module} – Fehler:**\n{step.error or 'Unbekannter Fehler'}")
             elif step.status == StepStatus.SKIPPED:
-                lines.append(f"**Schritt {i + 1} ({step.module}):** Übersprungen.")
+                lines.append(f"**{step.module}:** Übersprungen.")
         return "\n\n".join(lines) if lines else self.summary
 
 
@@ -202,7 +202,6 @@ def _build_execution_groups(steps: list[PipelineStep]) -> list[list[int]]:
                 in_degree[i] += 1
                 dependents[dep].append(i)
 
-    # Steps ohne explizite depends_on: implizite Sequenz (jeder wartet auf Vorgänger)
     has_explicit_deps = any(s.depends_on for s in steps)
     if not has_explicit_deps:
         return [[i] for i in range(n)]
@@ -515,10 +514,6 @@ class PipelineEngine:
                     dep_parts.append(f"[{prior_results[dep_idx].module}]: {prior_results[dep_idx].result}")
             if dep_parts:
                 task += "\n\nVorherige Ergebnisse als Kontext:\n" + "\n\n".join(dep_parts)
-        elif idx > 0 and (idx - 1) in prior_results:
-            prev = prior_results[idx - 1]
-            if prev.result and prev.status == StepStatus.COMPLETED:
-                task += f"\n\nErgebnis aus '{prev.module}':\n{prev.result}"
         return task
 
     def _get_module_agent(self, module: str):

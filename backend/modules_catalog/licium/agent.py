@@ -151,7 +151,14 @@ Ninko Wiki/
 - ALWAYS call tools directly — do not describe what you would do
 - During ingest ALWAYS complete ALL steps, not just partially
 - On errors: provide concrete error message, do not silently abort
-- Always respond in the user's language"""
+- Always respond in the user's language
+
+Output Format for Overviews (ALWAYS):
+- For lists (Wiki pages, Search results, Tree structure): ALWAYS use Markdown tables
+- Example: | Title | Folder | Modified | |------|--------|----------|
+- NEVER use bullet lists, plain text, or JSON
+- Always include units for numbers
+- Color-code page types when helpful
 
 
 class LiciumAgent(BaseAgent):

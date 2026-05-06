@@ -5,6 +5,13 @@
         connectionId: ""
     };
 
+    function esc(s) {
+        if (s == null) return '';
+        const d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+    }
+
     async function loadStatus() {
         try {
             const url = state.connectionId
@@ -60,11 +67,11 @@
             if (data.system && data.manager) {
                 detailsEl.innerHTML = `
                     <table class="data-table">
-                        <tr><td>Manufacturer</td><td>${data.system.manufacturer || "-"}</td></tr>
-                        <tr><td>Serial Number</td><td style="font-family:monospace">${data.system.serial_number || "-"}</td></tr>
-                        <tr><td>UUID</td><td style="font-family:monospace;font-size:0.75rem">${data.system.uuid || "-"}</td></tr>
-                        <tr><td>Firmware</td><td>${data.manager.firmware_version || "-"}</td></tr>
-                        <tr><td>License</td><td>${data.manager.license || "-"}</td></tr>
+                        <tr><td>Manufacturer</td><td>${esc(data.system.manufacturer) || "-"}</td></tr>
+                        <tr><td>Serial Number</td><td style="font-family:monospace">${esc(data.system.serial_number) || "-"}</td></tr>
+                        <tr><td>UUID</td><td style="font-family:monospace;font-size:0.75rem">${esc(data.system.uuid) || "-"}</td></tr>
+                        <tr><td>Firmware</td><td>${esc(data.manager.firmware_version) || "-"}</td></tr>
+                        <tr><td>License</td><td>${esc(data.manager.license) || "-"}</td></tr>
                     </table>
                 `;
             } else {

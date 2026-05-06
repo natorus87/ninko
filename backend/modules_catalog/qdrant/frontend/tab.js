@@ -172,7 +172,7 @@
 
                 if (!resultsDiv) return;
                 if (!results.length || results[0]?.info || results[0]?.error) {
-                    resultsDiv.innerHTML = '<p class="empty-state">' + (results[0]?.info || results[0]?.error || I18n.t('modules.qdrant.noHits')) + '</p>';
+                    resultsDiv.innerHTML = '<p class="empty-state">' + esc(results[0]?.info || results[0]?.error || I18n.t('modules.qdrant.noHits')) + '</p>';
                     return;
                 }
 
@@ -181,21 +181,21 @@
                         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;">
                             <div style="flex:1;">
                                 <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;">
-                                    <strong style="color:var(--text-color);">${i + 1}. ${r.title || I18n.t('modules.qdrant.noTitle')}</strong>
+                                    <strong style="color:var(--text-color);">${i + 1}. ${esc(r.title) || I18n.t('modules.qdrant.noTitle')}</strong>
                                     <span class="status-badge status-ok" style="font-size:0.7rem;">
                                         Score: ${(r.score * 100).toFixed(1)}%
                                     </span>
-                                    ${r.category ? `<span class="status-badge status-unknown" style="font-size:0.7rem;">${r.category}</span>` : ''}
+                                    ${r.category ? `<span class="status-badge status-unknown" style="font-size:0.7rem;">${esc(r.category)}</span>` : ''}
                                 </div>
-                                <p style="color:var(--text-secondary);font-size:0.875rem;margin:0 0 0.4rem 0;line-height:1.5;">${r.content}</p>
+                                <p style="color:var(--text-secondary);font-size:0.875rem;margin:0 0 0.4rem 0;line-height:1.5;">${esc(r.content)}</p>
                                 <div style="font-size:0.75rem;color:var(--text-muted);">
-                                    ${r.tags?.length ? '🏷️ ' + r.tags.join(', ') + ' · ' : ''}
-                                    ${r.source ? '🔗 ' + r.source + ' · ' : ''}
+                                    ${r.tags?.length ? '🏷️ ' + esc(r.tags.join(', ')) + ' · ' : ''}
+                                    ${r.source ? '🔗 ' + esc(r.source) + ' · ' : ''}
                                     ${r.chunk_total > 1 ? `Chunk ${r.chunk_index + 1}/${r.chunk_total}` : ''}
                                 </div>
                             </div>
                             <button class="btn btn-sm" style="color:var(--accent-red);border-color:var(--accent-red);"
-                                    onclick="QdrantTab.confirmDelete('${r.id}', '${(r.title || '').replace(/'/g, "\\'")}')">
+                                    onclick="QdrantTab.confirmDelete('${esc(r.id)}', '${(esc(r.title) || '').replace(/'/g, "\\'")}')">
                                 🗑
                             </button>
                         </div>
@@ -240,15 +240,15 @@
 
                 tbody.innerHTML = entries.map(e => `
                     <tr>
-                        <td class="pod-name" title="${e.title}">${e.title || '—'}</td>
-                        <td><span class="status-badge status-unknown">${e.category || '—'}</span></td>
-                        <td style="font-size:0.8rem;color:var(--text-muted);">${(e.tags || []).join(', ') || '—'}</td>
-                        <td style="font-size:0.8rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${e.source}">${e.source || '—'}</td>
-                        <td style="font-size:0.8rem;color:var(--text-muted);">${e.created_at ? e.created_at.slice(0, 10) : '—'}</td>
+                        <td class="pod-name" title="${esc(e.title)}">${esc(e.title) || '—'}</td>
+                        <td><span class="status-badge status-unknown">${esc(e.category) || '—'}</span></td>
+                        <td style="font-size:0.8rem;color:var(--text-muted);">${esc((e.tags || []).join(', ')) || '—'}</td>
+                        <td style="font-size:0.8rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(e.source)}">${esc(e.source) || '—'}</td>
+                        <td style="font-size:0.8rem;color:var(--text-muted);">${e.created_at ? esc(e.created_at.slice(0, 10)) : '—'}</td>
                         <td style="font-size:0.8rem;color:var(--text-muted);">${e.chunk_total > 1 ? e.chunk_index + 1 + '/' + e.chunk_total : '—'}</td>
                         <td>
                             <button class="btn btn-sm" style="color:var(--accent-red);border-color:var(--accent-red);"
-                                    onclick="QdrantTab.confirmDelete('${e.id}', '${(e.title || '').replace(/'/g, "\\'")}')">🗑</button>
+                                    onclick="QdrantTab.confirmDelete('${esc(e.id)}', '${(esc(e.title) || '').replace(/'/g, "\\'")}')">🗑</button>
                         </td>
                     </tr>
                 `).join('');

@@ -685,7 +685,7 @@
                     if (sel) {
                         sel.innerHTML = '<option value="">– Agenten wählen –</option>' +
                             (data.agents || []).map(a =>
-                                `<option value="${a.id}" ${a.id === node.config.agent_id ? 'selected' : ''}>${a.name}</option>`
+                                `<option value="${this._escapeHtml(a.id)}" ${a.id === node.config.agent_id ? 'selected' : ''}>${this._escapeHtml(a.name)}</option>`
                             ).join('');
                         if (node.config.agent_id) sel.value = node.config.agent_id;
                     }
@@ -700,7 +700,7 @@
                     if (sel) {
                         sel.innerHTML = '<option value="">– Workflow wählen –</option>' +
                             (data.workflows || []).map(wf =>
-                                `<option value="${wf.id}" ${wf.id === node.config.workflow_id ? 'selected' : ''}>${wf.name}</option>`
+                                `<option value="${this._escapeHtml(wf.id)}" ${wf.id === node.config.workflow_id ? 'selected' : ''}>${this._escapeHtml(wf.name)}</option>`
                             ).join('');
                         if (node.config.workflow_id) sel.value = node.config.workflow_id;
                     }
@@ -715,7 +715,7 @@
                     if (sel) {
                         sel.innerHTML = '<option value="">– Script wählen –</option>' +
                             (data.scripts || []).map(s =>
-                                `<option value="${s.id}" ${s.id === node.config.script_id ? 'selected' : ''}>${s.name}</option>`
+                                `<option value="${this._escapeHtml(s.id)}" ${s.id === node.config.script_id ? 'selected' : ''}>${this._escapeHtml(s.name)}</option>`
                             ).join('');
                         if (node.config.script_id) sel.value = node.config.script_id;
                     }
@@ -892,8 +892,8 @@
                 const historyEl = document.getElementById('run-history-list');
                 if (historyEl) {
                     historyEl.innerHTML = runs.map(r => `
-                        <div class="run-history-item" onclick="Ninko._showRunDetail('${wfId}', '${r.id}')">
-                            <span class="run-status-badge run-${r.status}">${r.status}</span>
+                        <div class="run-history-item" onclick="Ninko._showRunDetail('${this._escapeHtml(wfId)}', '${this._escapeHtml(r.id)}')">
+                            <span class="run-status-badge run-${this._escapeHtml(r.status)}">${this._escapeHtml(r.status)}</span>
                             <span>${r.started_at ? new Date(r.started_at).toLocaleString('de') : '–'}</span>
                             <span>${r.duration_ms ? (r.duration_ms / 1000).toFixed(1) + 's' : '–'}</span>
                         </div>

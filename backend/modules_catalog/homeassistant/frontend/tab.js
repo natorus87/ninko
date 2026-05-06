@@ -5,6 +5,13 @@ const HomeAssistantTab = {
     API_PREFIX: '/api/homeassistant',
     currentConnectionId: '',
 
+    esc(s) {
+        if (s == null) return '';
+        const d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+    },
+
     async init() {
         console.log("Home Assistant Modul JS initialisiert.");
         const refreshBtn = document.getElementById("ha-refresh-btn");
@@ -93,7 +100,7 @@ const HomeAssistantTab = {
 
             if (statusAlert) {
                 statusAlert.style.borderColor = 'var(--accent-green)';
-                statusAlert.innerHTML = `<span class="sf sf-ok">${I18n.t('modules.homeassistant.connectedTo')}<strong>${data.location_name || 'Home Assistant'}</strong>${I18n.t('modules.homeassistant.reached')} <a href="${data.url}" target="_blank" style="color: var(--accent-blue);">${data.url}</a></span>`;
+                statusAlert.innerHTML = `<span class="sf sf-ok">${I18n.t('modules.homeassistant.connectedTo')}<strong>${esc(data.location_name) || 'Home Assistant'}</strong>${I18n.t('modules.homeassistant.reached')} <a href="${esc(data.url)}" target="_blank" style="color: var(--accent-blue);">${esc(data.url)}</a></span>`;
             }
 
             if (contentArea) {
@@ -103,7 +110,7 @@ const HomeAssistantTab = {
             console.error(err);
             if (statusAlert) {
                 statusAlert.style.borderColor = 'var(--accent-red)';
-                statusAlert.innerHTML = `<span class="sf sf-error">Fehler beim Abrufen der Daten: ${err.message}</span>`;
+                statusAlert.innerHTML = `<span class="sf sf-error">Fehler beim Abrufen der Daten: ${this.esc(err.message)}</span>`;
             }
         } finally {
             if (refreshBtn) refreshBtn.disabled = false;
@@ -135,10 +142,10 @@ const HomeAssistantTab = {
                     html += `<li>${I18n.t('modules.homeassistant.noLights')}</li>`;
                 } else {
                     data.lights.forEach(l => {
-                        const name = l.attributes.friendly_name || l.entity_id;
+                        const name = this.esc(l.attributes.friendly_name || l.entity_id);
                         const state = l.state === "on" ? '<span style="color:var(--success, #10b981)">' + I18n.t('modules.homeassistant.on') + '</span>' : '<span style="color:var(--text-secondary, #9ca3af)">' + I18n.t('modules.homeassistant.off') + '</span>';
                         html += `<li style="padding: 0.5rem 0; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between;">
-                            <span>${name} <small style="color: var(--text-secondary); margin-left:8px;">(${l.entity_id})</small></span>
+                            <span>${name} <small style="color: var(--text-secondary); margin-left:8px;">(${this.esc(l.entity_id)})</small></span>
                             <span>${state}</span>
                         </li>`;
                     });

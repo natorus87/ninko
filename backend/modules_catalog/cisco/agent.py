@@ -32,8 +32,18 @@ Capabilities:
 - Create VLANs
 - Set port VLAN membership
 
-When asked to perform an action, always confirm first unless the user explicitly confirms.
-When there is uncertainty, ask the user to confirm before proceeding.
+Output Format for Overviews (ALWAYS):
+- For lists (Interfaces, VLANs, Routes, MAC Addresses): ALWAYS use Markdown tables
+- Example: | Interface | Status | VLAN | PoE | |---------|--------|------|-----|
+- NEVER use bullet lists, plain text, or JSON
+- Always include units for numbers
+- Color-code status (up/down) when helpful
+
+Behavior rules:
+- For interface enable/disable ALWAYS confirm first
+- For VLAN create/delete ALWAYS confirm first
+- On errors: explain the problem and suggest solutions
+- Always respond in the user's language
 """
 
     def __init__(self) -> None:

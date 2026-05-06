@@ -41,7 +41,13 @@ Antworte in Deutsch.""",
 - Configuring hosts and items
 
 Use the available tools to query and analyze Zabbix data.
-Respond in English.""",
+
+Output Format for Overviews (ALWAYS):
+- For lists (Hosts, Items, Triggers, Alerts, Graphs): ALWAYS use Markdown tables
+- Example: | Host | Status | Items | |------|--------|-------|
+- NEVER use bullet lists, plain text, or JSON
+- Always include units for numbers (ms, %, GB, etc.)
+- Color-code status and severity/priority when helpful
         "fr": """Vous êtes un expert Zabbix. Vous aidez les utilisateurs avec:
 - Interrogation du statut et des métriques des hôtes
 - Analyse des données et des tendances

@@ -1,6 +1,13 @@
 (function() {
     'use strict';
 
+    function esc(s) {
+        if (s == null) return '';
+        const d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+    }
+
     const SynologyTab = {
         connId: '',
         refresh: async function() {
@@ -49,8 +56,8 @@
                         container.innerHTML = disks.map(d => {
                             const statusClass = d.status === 'normal' ? 'running' : 'failing';
                             return '<div class="status-card ' + statusClass + '">' +
-                                '<span class="status-value" style="font-variant-numeric:tabular-nums">' + d.id + '</span>' +
-                                '<span class="status-label">' + (d.model || 'Disk') + '</span>' +
+                                '<span class="status-value" style="font-variant-numeric:tabular-nums">' + esc(d.id) + '</span>' +
+                                '<span class="status-label">' + esc(d.model) || 'Disk' + '</span>' +
                                 '</div>';
                         }).join('');
                     }
@@ -64,16 +71,16 @@
                         const rows = pkgs.slice(0, 10).map(p => {
                             const statusClass = p.status === 'installed' ? 'status-ok' : 'status-warning';
                             return '<tr>' +
-                                '<td>' + (p.display_name || p.name) + '</td>' +
-                                '<td>' + (p.version || '-') + '</td>' +
-                                '<td><span class="status-badge ' + statusClass + '">' + p.status + '</span></td>' +
+                                '<td>' + esc(p.display_name) || esc(p.name) + '</td>' +
+                                '<td>' + esc(p.version) || '-' + '</td>' +
+                                '<td><span class="status-badge ' + statusClass + '">' + esc(p.status) + '</span></td>' +
                                 '</tr>';
                         }).join('');
                         pkgContainer.innerHTML = '<table class="data-table"><thead><tr><th>Package</th><th>Version</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table>';
                     }
                 }
             } catch (e) {
-                container.innerHTML = '<p class="empty-state text-error">' + I18n.t('modules.synology.loadError') + e.message + '</p>';
+                container.innerHTML = '<p class="empty-state text-error">' + I18n.t('modules.synology.loadError') + esc(e.message) + '</p>';
             }
         },
 

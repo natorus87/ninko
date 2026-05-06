@@ -9,13 +9,14 @@ Supports:
 from __future__ import annotations
 
 import hashlib
-import secrets
+import logging
 import re
+import secrets
 import time
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from core.auth import (
     ROLE_ADMIN,
@@ -31,6 +32,7 @@ from core.redis_client import get_redis
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 rbac_store = RbacStore()
+logger = logging.getLogger("ninko.auth")
 
 _ID_RE = re.compile(r"^[a-zA-Z0-9_\-]{2,64}$")
 
@@ -175,6 +177,17 @@ class UserCreateRequest(BaseModel):
     roles: list[str] = Field(default_factory=list)
     groups: list[str] = Field(default_factory=list)
 
+    @field_validator("password")
+    @classmethod
+    def _password_complexity(cls, v: str) -> str:
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not re.search(r"[a-z]", v):
+            raise ValueError("Password must contain at least one lowercase letter")
+        if not re.search(r"\d", v):
+            raise ValueError("Password must contain at least one digit")
+        return v
+
 
 class UserUpdateRequest(BaseModel):
     tenant_id: str | None = Field(default=None, min_length=1, max_length=64)
@@ -186,10 +199,32 @@ class UserUpdateRequest(BaseModel):
 class UserPasswordRequest(BaseModel):
     password: str = Field(min_length=8, max_length=256)
 
+    @field_validator("password")
+    @classmethod
+    def _password_complexity(cls, v: str) -> str:
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not re.search(r"[a-z]", v):
+            raise ValueError("Password must contain at least one lowercase letter")
+        if not re.search(r"\d", v):
+            raise ValueError("Password must contain at least one digit")
+        return v
+
 
 class ChangeOwnPasswordRequest(BaseModel):
     current_password: str = Field(min_length=1, max_length=256)
     new_password: str = Field(min_length=8, max_length=256)
+
+    @field_validator("new_password")
+    @classmethod
+    def _password_complexity(cls, v: str) -> str:
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not re.search(r"[a-z]", v):
+            raise ValueError("Password must contain at least one lowercase letter")
+        if not re.search(r"\d", v):
+            raise ValueError("Password must contain at least one digit")
+        return v
 
 
 class ApiTokenCreateRequest(BaseModel):
@@ -310,10 +345,9 @@ async def logout(response: Response, request: Request) -> dict:
     Logout: Delete session cookie and blacklist the token.
     Prevents CWE-613: Lack of Logout in Session Tokens.
     """
-    from core.redis_client import get_redis
+    cfg = get_settings()
     import time as _time
 
-    cfg = get_settings()
     token = request.cookies.get(cfg.SESSION_COOKIE_NAME, "").strip()
     if token:
         try:
@@ -329,8 +363,8 @@ async def logout(response: Response, request: Request) -> dict:
                         ttl,
                         "1",
                     )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Token blacklist check failed: %s", exc)
     response.delete_cookie(
         key=cfg.SESSION_COOKIE_NAME,
         path="/",

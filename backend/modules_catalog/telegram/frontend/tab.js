@@ -6,6 +6,13 @@
         statusInterval: null,
         _allowedIds: [],
 
+        esc(s) {
+            if (s == null) return '';
+            const d = document.createElement('div');
+            d.textContent = String(s);
+            return d.innerHTML;
+        },
+
         async init() {
             await this.checkStatus();
             await this.loadAllowedIds();
@@ -90,7 +97,7 @@
                     await this.checkStatus();
                     setTimeout(() => { if (statusEl) statusEl.innerHTML = ''; }, 3000);
                 } else {
-                    if (statusEl) statusEl.innerHTML = `<span class="sf sf-error">${data.detail || I18n.t('modules.telegram.saveFailed')}</span>`;
+                    if (statusEl) statusEl.innerHTML = `<span class="sf sf-error">${this.esc(data.detail) || I18n.t('modules.telegram.saveFailed')}</span>`;
                 }
             } catch (e) {
                 if (statusEl) statusEl.innerHTML = '<span class="sf sf-error">' + I18n.t('modules.telegram.connectionError') + '</span>';
@@ -105,7 +112,7 @@
                     await this.checkStatus();
                 } else {
                     const data = await res.json();
-                    showNotification(I18n.t('modules.telegram.error') + (data.detail || I18n.t('modules.telegram.unknown')), 'error');
+                    showNotification(I18n.t('modules.telegram.error') + (this.esc(data.detail) || I18n.t('modules.telegram.unknown')), 'error');
                 }
             } catch (e) {
                 showNotification(I18n.t('modules.telegram.startError'), 'error');
@@ -120,7 +127,7 @@
                     await this.checkStatus();
                 } else {
                     const data = await res.json();
-                    showNotification(I18n.t('modules.telegram.error') + (data.detail || I18n.t('modules.telegram.stopError')), 'error');
+                    showNotification(I18n.t('modules.telegram.error') + (this.esc(data.detail) || I18n.t('modules.telegram.stopError')), 'error');
                 }
             } catch (e) {
                 showNotification(I18n.t('modules.telegram.stopBotError'), 'error');
@@ -151,7 +158,7 @@
                     if (textarea) textarea.value = '';
                     setTimeout(() => { if (statusEl) statusEl.innerHTML = ''; }, 3000);
                 } else {
-                    if (statusEl) statusEl.innerHTML = `<span class="sf sf-error">${data.detail || I18n.t('modules.telegram.sendError')}</span>`;
+                    if (statusEl) statusEl.innerHTML = `<span class="sf sf-error">${this.esc(data.detail) || I18n.t('modules.telegram.sendError')}</span>`;
                 }
             } catch (e) {
                 if (statusEl) statusEl.innerHTML = '<span class="sf sf-error">' + I18n.t('modules.telegram.connectionError') + '</span>';
@@ -184,9 +191,9 @@
 
             container.innerHTML = this._allowedIds.map(id => `
                 <span style="display:inline-flex;align-items:center;gap:0.35rem;padding:0.25rem 0.6rem;border-radius:4px;background:var(--bg-hover);border:1px solid var(--border-color);font-size:0.82rem;font-family:monospace;">
-                    ${id}
+                    ${this.esc(id)}
                     <button
-                        onclick="TelegramModule.removeAllowedId('${id}')"
+                        onclick="TelegramModule.removeAllowedId('${this.esc(id)}')"
                         title="Entfernen"
                         style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:0;line-height:1;font-size:0.9rem;"
                     >✕</button>
@@ -236,7 +243,7 @@
                     if (statusEl) statusEl.innerHTML = '<span class="sf sf-ok">' + I18n.t('modules.telegram.saved') + '</span>';
                     setTimeout(() => { if (statusEl) statusEl.innerHTML = ''; }, 3000);
                 } else {
-                    if (statusEl) statusEl.innerHTML = `<span class="sf sf-error">${data.detail || I18n.t('modules.telegram.saveFailed')}</span>`;
+                    if (statusEl) statusEl.innerHTML = `<span class="sf sf-error">${this.esc(data.detail) || I18n.t('modules.telegram.saveFailed')}</span>`;
                 }
             } catch (e) {
                 if (statusEl) statusEl.innerHTML = '<span class="sf sf-error">' + I18n.t('modules.telegram.connectionError') + '</span>';
@@ -270,7 +277,7 @@
                     await this.loadPendingPairings();
                     setTimeout(() => { if (statusEl) statusEl.innerHTML = ''; }, 4000);
                 } else {
-                    if (statusEl) statusEl.innerHTML = `<span class="sf sf-error">❌ ${data.detail || 'Ungültiger Code.'}</span>`;
+                    if (statusEl) statusEl.innerHTML = `<span class="sf sf-error">❌ ${this.esc(data.detail) || 'Ungültiger Code.'}</span>`;
                 }
             } catch (e) {
                 if (statusEl) statusEl.innerHTML = '<span class="sf sf-error">Verbindungsfehler</span>';
@@ -293,10 +300,10 @@
                     <p style="font-size:0.8rem;color:var(--text-muted);margin:0 0 0.5rem;">Ausstehende Pairing-Anfragen:</p>
                     ${pending.map(p => `
                         <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;padding:0.4rem 0.6rem;background:var(--bg-card);border-radius:4px;border:1px solid var(--border-color);">
-                            <code style="font-size:0.85rem;letter-spacing:0.08em;">${p.code}</code>
-                            <span style="font-size:0.8rem;color:var(--text-muted);">User-ID: ${p.user_id}</span>
+                            <code style="font-size:0.85rem;letter-spacing:0.08em;">${this.esc(p.code)}</code>
+                            <span style="font-size:0.8rem;color:var(--text-muted);">User-ID: ${this.esc(p.user_id)}</span>
                             <span style="font-size:0.75rem;color:var(--text-muted);margin-left:auto;">${Math.round(p.ttl_seconds / 60)} min verbleibend</span>
-                            <button class="btn btn-sm btn-primary" onclick="TelegramModule._quickApprove('${p.code}')" style="padding:0.2rem 0.5rem;font-size:0.78rem;">Bestätigen</button>
+                            <button class="btn btn-sm btn-primary" onclick="TelegramModule._quickApprove('${this.esc(p.code)}')" style="padding:0.2rem 0.5rem;font-size:0.78rem;">Bestätigen</button>
                         </div>
                     `).join('')}
                 `;
@@ -352,7 +359,7 @@
                     if (statusEl) statusEl.innerHTML = '<span class="sf sf-ok">Gespeichert.</span>';
                     setTimeout(() => { if (statusEl) statusEl.innerHTML = ''; }, 3000);
                 } else {
-                    if (statusEl) statusEl.innerHTML = `<span class="sf sf-error">${data.detail || 'Fehler'}</span>`;
+                    if (statusEl) statusEl.innerHTML = `<span class="sf sf-error">${this.esc(data.detail) || 'Fehler'}</span>`;
                 }
             } catch (e) {
                 if (statusEl) statusEl.innerHTML = '<span class="sf sf-error">Verbindungsfehler</span>';

@@ -13,6 +13,13 @@ const TasmotaTab = {
     pollInterval: null,
     currentConnectionId: '',
 
+    esc(s) {
+        if (s == null) return '';
+        const d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+    },
+
     async init() {
         this._setupEvents();
         this._setupClickOutside();
@@ -174,19 +181,19 @@ const TasmotaTab = {
                     <h4>⚡ Allgemein</h4>
                     <div class="tasmota-stat">
                         <span class="tasmota-stat-label">Hostname</span>
-                        <span class="tasmota-stat-value">${status.hostname || '-'}</span>
+                        <span class="tasmota-stat-value">${this.esc(status.hostname) || '-'}</span>
                     </div>
                     <div class="tasmota-stat">
                         <span class="tasmota-stat-label">IP-Adresse</span>
-                        <span class="tasmota-stat-value">${status.ip_address || '-'}</span>
+                        <span class="tasmota-stat-value">${this.esc(status.ip_address) || '-'}</span>
                     </div>
                     <div class="tasmota-stat">
                         <span class="tasmota-stat-label">Gerätename</span>
-                        <span class="tasmota-stat-value">${status.friendly_name || status.device_name || '-'}</span>
+                        <span class="tasmota-stat-value">${this.esc(status.friendly_name) || this.esc(status.device_name) || '-'}</span>
                     </div>
                     <div class="tasmota-stat">
                         <span class="tasmota-stat-label">Firmware</span>
-                        <span class="tasmota-stat-value">${status.firmware || '-'}</span>
+                        <span class="tasmota-stat-value">${this.esc(status.firmware) || '-'}</span>
                     </div>
                     <div class="tasmota-stat">
                         <span class="tasmota-stat-label">Uptime</span>
@@ -194,7 +201,7 @@ const TasmotaTab = {
                     </div>
                     <div class="tasmota-stat">
                         <span class="tasmota-stat-label">WLAN RSSI</span>
-                        <span class="tasmota-stat-value ${rssiClass(status.wifi_rssi)}">${status.wifi_rssi || 0} dBm</span>
+                        <span class="tasmota-stat-value ${rssiClass(status.wifi_rssi)}">${this.esc(status.wifi_rssi) || 0} dBm</span>
                     </div>
                 </div>
 

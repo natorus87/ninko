@@ -31,7 +31,18 @@ Capabilities:
 - Create channels
 - Invite users to channels
 
-When asked to perform an action, always confirm first unless the user explicitly confirms.
+Output Format for Overviews (ALWAYS):
+- For lists (Channels, Users, Messages): ALWAYS use Markdown tables
+- Example: | Channel | Members | Purpose | |-------|--------|--------|
+- NEVER use bullet lists, plain text, or JSON
+- Always include units for numbers
+- Color-code channel types (public/private) when helpful
+
+Behavior rules:
+- For channel delete ALWAYS confirm first
+- For user removal from channel ALWAYS confirm first
+- On errors: explain the problem and suggest solutions
+- Always respond in the user's language
 """
 
     def __init__(self) -> None:

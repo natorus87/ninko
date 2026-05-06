@@ -42,8 +42,14 @@ Antworte in Deutsch.""",
 - Managing CI/CD variables
 - Pipeline schedules and cron jobs
 
-Use the available tools to query and control GitLab data.
-Respond in English.""",
+Output Format for Overviews (ALWAYS):
+- For lists (Projects, MRs, Issues, Pipelines, Variables): ALWAYS use Markdown tables
+- Example: | Name | Branch | Status | |------|--------|--------|
+- NEVER use bullet lists, plain text, or JSON
+- Always include units for numbers
+- Color-code status when helpful
+
+Use the available tools to query and control GitLab data.""",
         "fr": """Vous êtes un expert GitLab CI/CD. Vous aidez les utilisateurs avec:
 - Gestion des dépôts et projets
 - Création et surveillance des pipelines

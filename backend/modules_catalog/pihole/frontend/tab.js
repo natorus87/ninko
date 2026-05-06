@@ -61,7 +61,7 @@ const PiholeTab = {
             }
 
             select.innerHTML = conns.map(c =>
-                `<option value="${c.id}" ${c.is_default ? 'selected' : ''}>${c.name} (${c.environment})</option>`
+                `<option value="${c.id == null ? '' : String(c.id).replace(/"/g, '&quot;')}" ${c.is_default ? 'selected' : ''}>${c.name == null ? '' : String(c.name).replace(/</g, '&lt;')} (${c.environment == null ? '' : String(c.environment).replace(/</g, '&lt;')})</option>`
             ).join('');
 
             // Set initial connection
@@ -137,11 +137,12 @@ const PiholeTab = {
 
             if (permitted) {
                 const items = Object.entries(data.top_permitted || {});
+                const s = (v) => v == null ? '' : String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
                 permitted.innerHTML = items.length === 0
                     ? '<p class="empty-state">' + I18n.t('modules.pihole.noData') + '</p>'
                     : items.map(([domain, count]) =>
                         `<div class="top-item">
-                            <span class="top-domain">${domain}</span>
+                            <span class="top-domain">${s(domain)}</span>
                             <span class="top-count">${count.toLocaleString('de-DE')}</span>
                         </div>`
                     ).join('');
@@ -149,11 +150,12 @@ const PiholeTab = {
 
             if (blocked) {
                 const items = Object.entries(data.top_blocked || {});
+                const s = (v) => v == null ? '' : String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
                 blocked.innerHTML = items.length === 0
                     ? '<p class="empty-state">' + I18n.t('modules.pihole.noData') + '</p>'
                     : items.map(([domain, count]) =>
                         `<div class="top-item">
-                            <span class="top-domain">${domain}</span>
+                            <span class="top-domain">${s(domain)}</span>
                             <span class="top-count">${count.toLocaleString('de-DE')}</span>
                         </div>`
                     ).join('');
@@ -181,12 +183,13 @@ const PiholeTab = {
 
             tbody.innerHTML = queries.map(q => {
                 const statusClass = this.getQueryStatusClass(q.status);
+                const s = (v) => v == null ? '' : String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
                 return `<tr>
-                    <td class="pod-name">${q.domain}</td>
-                    <td>${q.client}</td>
-                    <td>${q.type}</td>
-                    <td><span class="status-badge ${statusClass}">${q.status}</span></td>
-                    <td>${q.duration_ms ? q.duration_ms.toFixed(1) : '-'}</td>
+                    <td class="pod-name">${s(q.domain)}</td>
+                    <td>${s(q.client)}</td>
+                    <td>${s(q.type)}</td>
+                    <td><span class="status-badge ${statusClass}">${s(q.status)}</span></td>
+                    <td>${s(q.duration_ms ? q.duration_ms.toFixed(1) : '-')}</td>
                 </tr>`;
             }).join('');
         } catch (err) {

@@ -5,6 +5,13 @@
         connectionId: ""
     };
 
+    function esc(s) {
+        if (s == null) return '';
+        const d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+    }
+
     const DiscordTab = {
         async load() {
             const select = document.getElementById('discord-conn-select');
@@ -81,7 +88,7 @@
                 container.innerHTML = channels.map(ch => `
                     <div class="channel-item">
                         <span class="channel-type">${ch.type === 0 ? '📝' : ch.type === 2 ? '🎤' : '📁'}</span>
-                        <span>${ch.name}</span>
+                        <span>${esc(ch.name)}</span>
                     </div>
                 `).join('');
 
@@ -127,7 +134,7 @@
 
         _showError(msg) {
             const container = document.getElementById('discord-channels-list');
-            if (container) container.innerHTML = `<p class="empty-state text-error">${msg}</p>`;
+            if (container) container.innerHTML = `<p class="empty-state text-error">${esc(msg)}</p>`;
         }
     };
 

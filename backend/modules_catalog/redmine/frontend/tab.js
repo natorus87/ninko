@@ -1,6 +1,13 @@
 (function() {
     'use strict';
 
+    function esc(s) {
+        if (s == null) return '';
+        const d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+    }
+
     const RedmineTab = {
         connId: '',
         refresh: async function() {
@@ -39,10 +46,10 @@
                             issues.slice(0, 10).map(i => {
                                 const statusClass = i.status.is_closed ? 'status-ok' : 'status-warning';
                                 return '<tr>' +
-                                    '<td>' + i.id + '</td>' +
-                                    '<td>' + (i.subject || '-') + '</td>' +
-                                    '<td><span class="status-badge ' + statusClass + '">' + (i.status.name || '-') + '</span></td>' +
-                                    '<td>' + (i.priority ? i.priority.name : '-') + '</td>' +
+                                    '<td>' + esc(i.id) + '</td>' +
+                                    '<td>' + esc(i.subject) || '-' + '</td>' +
+                                    '<td><span class="status-badge ' + statusClass + '">' + esc(i.status.name) || '-' + '</span></td>' +
+                                    '<td>' + esc(i.priority ? i.priority.name : '-') + '</td>' +
                                     '</tr>';
                             }).join('') + '</tbody></table>';
                     }
@@ -50,7 +57,7 @@
                     container.innerHTML = '<p class="empty-state text-error">' + I18n.t('modules.redmine.loadError') + '</p>';
                 }
             } catch (e) {
-                container.innerHTML = '<p class="empty-state text-error">' + I18n.t('modules.redmine.error') + e.message + '</p>';
+                container.innerHTML = '<p class="empty-state text-error">' + I18n.t('modules.redmine.error') + esc(e.message) + '</p>';
             }
         },
 

@@ -5,6 +5,13 @@
         connectionId: ""
     };
 
+    function esc(s) {
+        if (s == null) return '';
+        const d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+    }
+
     async function loadStatus() {
         try {
             const url = state.connectionId
@@ -26,9 +33,9 @@
 
             document.getElementById('ubiquiti-info').innerHTML = `
                 <table class="data-table">
-                    <tr><td>${I18n.t('modules.ubiquiti.devices')}</td><td>${data.devices_count || 0}</td></tr>
-                    <tr><td>${I18n.t('modules.ubiquiti.clients')}</td><td>${data.clients_count || 0}</td></tr>
-                    <tr><td>${I18n.t('modules.ubiquiti.wlans')}</td><td>${data.wlans_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.ubiquiti.devices')}</td><td>${esc(data.devices_count || 0)}</td></tr>
+                    <tr><td>${I18n.t('modules.ubiquiti.clients')}</td><td>${esc(data.clients_count || 0)}</td></tr>
+                    <tr><td>${I18n.t('modules.ubiquiti.wlans')}</td><td>${esc(data.wlans_count || 0)}</td></tr>
                 </table>
             `;
         } catch (e) {

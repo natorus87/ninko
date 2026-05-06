@@ -3,6 +3,13 @@
   let currentConnection = '';
   let pollingInterval = null;
 
+  function esc(s) {
+    if (s == null) return '';
+    const d = document.createElement('div');
+    d.textContent = String(s);
+    return d.innerHTML;
+  }
+
   async function loadConnections() {
     try {
       const resp = await fetch('/api/connections/netbox');
@@ -60,8 +67,8 @@
       return;
     }
     container.innerHTML = sites.map(s => `<div class="item-row">
-      <span>${s.name}</span>
-      <span style="color:var(--text-secondary)">${s.slug}</span>
+      <span>${esc(s.name)}</span>
+      <span style="color:var(--text-secondary)">${esc(s.slug)}</span>
     </div>`).join('');
   }
 
@@ -75,8 +82,8 @@
     container.innerHTML = devices.slice(0, 20).map(d => {
       const statusClass = d.status === 'Active' ? 'success' : 'warning';
       return `<div class="item-row">
-        <span>${d.name}</span>
-        <span style="color:var(--color-${statusClass})">${d.status}</span>
+        <span>${esc(d.name)}</span>
+        <span style="color:var(--color-${statusClass})">${esc(d.status)}</span>
       </div>`;
     }).join('');
   }

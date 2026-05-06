@@ -7,16 +7,23 @@
     return document.getElementById(id);
   }
 
+  function esc(s) {
+    if (s == null) return '';
+    const d = document.createElement('div');
+    d.textContent = String(s);
+    return d.innerHTML;
+  }
+
   function renderList(containerId, items, emptyText, pickLabel) {
     const container = document.getElementById(containerId);
     if (!container) return;
     if (!Array.isArray(items) || !items.length) {
-      container.innerHTML = `<div class="mcp-item">${emptyText}</div>`;
+      container.innerHTML = `<div class="mcp-item">${esc(emptyText)}</div>`;
       return;
     }
     container.innerHTML = items.slice(0, 20).map((item, index) => {
       const label = pickLabel(item);
-      return `<div class="mcp-item" data-index="${index}">${label}</div>`;
+      return `<div class="mcp-item" data-index="${index}">${esc(label)}</div>`;
     }).join('');
   }
 

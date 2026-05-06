@@ -3,6 +3,13 @@
   let currentConnection = '';
   let pollingInterval = null;
 
+  function esc(s) {
+    if (s == null) return '';
+    const d = document.createElement('div');
+    d.textContent = String(s);
+    return d.innerHTML;
+  }
+
   async function loadConnections() {
     try {
       const resp = await fetch('/api/connections/gitlab');
@@ -65,9 +72,9 @@
       return;
     }
     container.innerHTML = pipelines.slice(0, 10).map(p => `<div class="pipeline-row">
-      <span class="status ${p.status}">${p.status}</span>
-      <span>${p.ref}</span>
-      <span style="color:var(--text-secondary);font-size:0.75rem">${p.sha?.substring(0, 8)}</span>
+      <span class="status ${esc(p.status)}">${esc(p.status)}</span>
+      <span>${esc(p.ref)}</span>
+      <span style="color:var(--text-secondary);font-size:0.75rem">${esc(p.sha?.substring(0, 8))}</span>
     </div>`).join('');
   }
 
@@ -79,8 +86,8 @@
       return;
     }
     container.innerHTML = mrs.slice(0, 10).map(mr => `<div class="mr-row">
-      <div><strong>!${mr.iid}</strong> ${mr.title}</div>
-      <div style="font-size:0.75rem;color:var(--text-secondary)">${mr.source_branch} → ${mr.target_branch}</div>
+      <div><strong>!${esc(mr.iid)}</strong> ${esc(mr.title)}</div>
+      <div style="font-size:0.75rem;color:var(--text-secondary)">${esc(mr.source_branch)} → ${esc(mr.target_branch)}</div>
     </div>`).join('');
   }
 

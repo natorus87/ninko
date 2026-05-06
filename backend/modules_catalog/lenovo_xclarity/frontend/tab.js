@@ -5,13 +5,11 @@
         connectionId: ""
     };
 
-    function escapeHtml(value) {
-        return String(value)
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#39;");
+    function esc(s) {
+        if (s == null) return '';
+        const d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
     }
 
     async function loadStatus() {
@@ -35,9 +33,9 @@
 
             document.getElementById('xclarity-info').innerHTML = `
                 <table class="data-table">
-                    <tr><td>${I18n.t('modules.lenovo_xclarity.servers')}</td><td>${data.servers_count || 0}</td></tr>
-                    <tr><td>${I18n.t('modules.lenovo_xclarity.chassis')}</td><td>${data.chassis_count || 0}</td></tr>
-                    <tr><td>${I18n.t('modules.lenovo_xclarity.storage')}</td><td>${data.storage_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.lenovo_xclarity.servers')}</td><td>${esc(data.servers_count || 0)}</td></tr>
+                    <tr><td>${I18n.t('modules.lenovo_xclarity.chassis')}</td><td>${esc(data.chassis_count || 0)}</td></tr>
+                    <tr><td>${I18n.t('modules.lenovo_xclarity.storage')}</td><td>${esc(data.storage_count || 0)}</td></tr>
                 </table>
             `;
         } catch (e) {

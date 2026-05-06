@@ -5,6 +5,14 @@
         connectionId: ""
     };
 
+    // HTML escape helper — never put unescaped user data into innerHTML
+    function esc(s) {
+        if (s == null) return '';
+        const d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+    }
+
     // Helper for i18n with fallback (English)
     function t(key, fallback) {
         if (typeof I18n !== 'undefined' && I18n.t) {
@@ -50,8 +58,8 @@
             data.wlan.forEach((w, i) => {
                 wlanList.innerHTML += `
                     <tr>
-                        <td>${w.ssid || (t('fritzbox.wlanService', 'WLAN Service ') + (i + 1))}</td>
-                        <td>${w.channel || "-"}</td>
+                        <td>${esc(w.ssid) || (t('fritzbox.wlanService', 'WLAN Service ') + (i + 1))}</td>
+                        <td>${esc(w.channel) || "-"}</td>
                         <td>${w.enabled ? '<span class="status-badge status-ok">' + t('fritzbox.on', 'On') + '</span>' : '<span class="status-badge status-unknown">' + t('fritzbox.off', 'Off') + '</span>'}</td>
                     </tr>
                 `;
@@ -88,10 +96,10 @@
 
                 tbody.innerHTML += `
                     <tr>
-                        <td>${d.name}</td>
-                        <td style="font-family: monospace; color: var(--accent-blue);">${d.ip || "-"}</td>
-                        <td style="font-family: monospace; font-size: 0.8rem; color: var(--text-muted);">${d.mac || "-"}</td>
-                        <td>${d.interface || "-"}</td>
+                        <td>${esc(d.name)}</td>
+                        <td style="font-family: monospace; color: var(--accent-blue);">${esc(d.ip) || "-"}</td>
+                        <td style="font-family: monospace; font-size: 0.8rem; color: var(--text-muted);">${esc(d.mac) || "-"}</td>
+                        <td>${esc(d.interface) || "-"}</td>
                         <td>${statusBadge}</td>
                     </tr>
                 `;

@@ -5,6 +5,13 @@
     window.TeamsTab = {
         _allowedIds: [],
 
+        esc(s) {
+            if (s == null) return '';
+            const d = document.createElement('div');
+            d.textContent = String(s);
+            return d.innerHTML;
+        },
+
         async init() {
             await this.checkStatus();
             await this.loadAllowedIds();
@@ -76,9 +83,9 @@
 
             container.innerHTML = this._allowedIds.map(id => `
                 <span style="display:inline-flex;align-items:center;gap:0.35rem;padding:0.25rem 0.6rem;border-radius:4px;background:var(--bg-hover);border:1px solid var(--border-color);font-size:0.82rem;font-family:monospace;">
-                    ${id}
+                    ${this.esc(id)}
                     <button
-                        onclick="TeamsTab.removeAllowedId('${id}')"
+                        onclick="TeamsTab.removeAllowedId('${this.esc(id)}')"
                         title="Entfernen"
                         style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:0;line-height:1;font-size:0.9rem;"
                     >✕</button>
@@ -125,7 +132,7 @@
                     setTimeout(() => { if (statusEl) statusEl.innerHTML = ''; }, 3000);
                     await this.checkStatus();
                 } else {
-                    if (statusEl) statusEl.innerHTML = `<span class="sf sf-error">${data.detail || I18n.t('modules.teams.saveFailed')}</span>`;
+                    if (statusEl) statusEl.innerHTML = `<span class="sf sf-error">${this.esc(data.detail) || I18n.t('modules.teams.saveFailed')}</span>`;
                 }
             } catch (e) {
                 if (statusEl) statusEl.innerHTML = '<span class="sf sf-error">' + I18n.t('modules.teams.connectionError') + '</span>';
@@ -173,7 +180,7 @@
                     if (statusEl) statusEl.innerHTML = '<span class="sf sf-ok">Gespeichert.</span>';
                     setTimeout(() => { if (statusEl) statusEl.innerHTML = ''; }, 3000);
                 } else {
-                    if (statusEl) statusEl.innerHTML = `<span class="sf sf-error">${data.detail || 'Fehler'}</span>`;
+                    if (statusEl) statusEl.innerHTML = `<span class="sf sf-error">${this.esc(data.detail) || 'Fehler'}</span>`;
                 }
             } catch (e) {
                 if (statusEl) statusEl.innerHTML = '<span class="sf sf-error">Verbindungsfehler</span>';

@@ -5,6 +5,13 @@
         connectionId: ""
     };
 
+    function esc(s) {
+        if (s == null) return '';
+        const d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+    }
+
     async function loadStatus() {
         try {
             const url = state.connectionId
@@ -26,9 +33,9 @@
 
             document.getElementById('intune-devices-list').innerHTML = `
                 <table class="data-table">
-                    <tr><td>${I18n.t('modules.microsoft_intune.devices')}</td><td>${data.devices_count || 0}</td></tr>
-                    <tr><td>${I18n.t('modules.microsoft_intune.policies')}</td><td>${data.policies_count || 0}</td></tr>
-                    <tr><td>${I18n.t('modules.microsoft_intune.apps')}</td><td>${data.apps_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.microsoft_intune.devices')}</td><td>${esc(data.devices_count || 0)}</td></tr>
+                    <tr><td>${I18n.t('modules.microsoft_intune.policies')}</td><td>${esc(data.policies_count || 0)}</td></tr>
+                    <tr><td>${I18n.t('modules.microsoft_intune.apps')}</td><td>${esc(data.apps_count || 0)}</td></tr>
                 </table>
             `;
         } catch (e) {

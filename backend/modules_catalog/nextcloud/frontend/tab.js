@@ -5,6 +5,13 @@
         connectionId: ""
     };
 
+    function esc(s) {
+        if (s == null) return '';
+        const d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+    }
+
     async function loadStatus() {
         try {
             const url = state.connectionId
@@ -31,9 +38,9 @@
 
             document.getElementById('nextcloud-info').innerHTML = `
                 <table class="data-table">
-                    <tr><td>${I18n.t('modules.nextcloud.users')}</td><td>${users}</td></tr>
-                    <tr><td>${I18n.t('modules.nextcloud.shares')}</td><td>${shares}</td></tr>
-                    <tr><td>${I18n.t('modules.nextcloud.storage')}</td><td>${storageGB}${I18n.t('modules.nextcloud.gb')}</td></tr>
+                    <tr><td>${I18n.t('modules.nextcloud.users')}</td><td>${esc(users)}</td></tr>
+                    <tr><td>${I18n.t('modules.nextcloud.shares')}</td><td>${esc(shares)}</td></tr>
+                    <tr><td>${I18n.t('modules.nextcloud.storage')}</td><td>${esc(storageGB)}${I18n.t('modules.nextcloud.gb')}</td></tr>
                 </table>
             `;
         } catch (e) {

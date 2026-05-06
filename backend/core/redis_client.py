@@ -78,7 +78,9 @@ class RedisClient:
         message = json.dumps({"role": role, "content": content})
         await self._redis.rpush(key, message)
         await self._redis.ltrim(key, -max_messages, -1)
-        await self._redis.expire(key, 86400)  # 24h TTL
+        settings = get_settings()
+        chat_history_ttl = getattr(settings, 'CHAT_HISTORY_TTL_SECONDS', 86400)
+        await self._redis.expire(key, chat_history_ttl)
 
     async def get_chat_history(self, session_id: str, limit: int = 100) -> list[dict]:
         """Gibt die Chat-History einer Session zurück (maximal die neuesten `limit` Nachrichten).
@@ -173,7 +175,7 @@ class RedisClient:
         try:
             pong = await self._redis.ping()
             return {"status": "ok", "detail": f"PONG={pong}"}
-        except (RedisError, OSError, RuntimeError, ValueError, TypeError) as exc:
+        except (RedisError, OSError) as exc:
             return {"status": "error", "detail": str(exc)}
 
     # ── Cleanup ────────────────────────────────────────

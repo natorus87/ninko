@@ -32,8 +32,18 @@ Capabilities:
 - Reset iLO
 - Press boot button for BIOS/EFI next boot
 
-When asked to perform an action, always confirm first unless the user explicitly confirms.
-When there is uncertainty, ask the user to confirm the action before proceeding.
+Output Format for Overviews (ALWAYS):
+- For lists (Sensors, Logs, Power Supplies, NICs): ALWAYS use Markdown tables
+- Example: | Sensor | Value | Status | |-------|-------|--------|
+- NEVER use bullet lists, plain text, or JSON
+- Always include units for numbers
+- Color-code status when helpful
+
+Behavior rules:
+- For power operations (on/off/reset) ALWAYS confirm first
+- For boot button press ALWAYS confirm first
+- On errors: explain the problem and suggest solutions
+- Always respond in the user's language
 """
 
     def __init__(self) -> None:

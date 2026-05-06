@@ -188,7 +188,8 @@ class _StatusEmitter(AsyncCallbackHandler):
         if result_str:
             # Primitive Redaction
             redacted = result_str
-            for key in ("password", "secret", "token", "api_key", "apikey", "key"):
+            for key in ("password", "secret", "token", "api_key", "apikey", "key",
+                        "bearer", "auth", "private", "credential"):
                 redacted = re.sub(
                     rf'("{key}"\\s*:\\s*)"[^"]+"',
                     r'\1"***"',
@@ -232,8 +233,8 @@ class _StatusEmitter(AsyncCallbackHandler):
             )
             _evt_task = asyncio.create_task(emit_tool_event(event))
             _evt_task.add_done_callback(_log_bg_task_exception)
-        except Exception:
-            pass  # Audit-Tracking darf nie blockieren
+        except Exception as exc:
+            logger.debug("Audit-Event fehlgeschlagen (non-critical): %s", exc)
 
         await status_bus.emit_event(
             self.session_id,
@@ -363,6 +364,20 @@ def _log_bg_task_exception(task: asyncio.Task) -> None:
             )
     except (asyncio.CancelledError, asyncio.InvalidStateError):
         pass
+
+
+def _cleanup_agent_state() -> None:
+    """Räumt globale Agent-States bei Prozess-Exit auf."""
+    for task in _background_tasks:
+        if not task.done():
+            task.cancel()
+    _background_tasks.clear()
+    _memorize_cooldowns.clear()
+    logger.info("Agent global state cleanup done.")
+
+
+import atexit as _atexit
+_atexit.register(_cleanup_agent_state)
 
 
 # Auto-Memorize Cooldown: (agent_name, session_id) → letzter Zeitstempel (monotonic)

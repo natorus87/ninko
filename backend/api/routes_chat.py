@@ -10,7 +10,7 @@ import logging
 from datetime import datetime, timezone
 from typing import AsyncGenerator
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import StreamingResponse
 
 from schemas.chat import (
@@ -41,7 +41,7 @@ def _parse_sentinel(response_text: str) -> dict:
     """Extrahiert Tool-Infos aus dem Safeguard-Sentinel-String."""
     try:
         return json.loads(response_text[len(_TOOL_SAFEGUARD_SENTINEL):])
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError):
+    except json.JSONDecodeError:
         return {}
 
 
@@ -114,7 +114,7 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
                         outcome="confirmed",
                         rationale=_pending_info.get("rationale", ""),
                     )
-            except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as exc:
+            except json.JSONDecodeError as exc:
                 logger.warning("Audit-Log für Tool-Confirmation fehlgeschlagen: %s", exc)
             # Redis-Key nicht löschen — resume_tool_execution() macht das selbst
             response_text, did_compact = await orchestrator.resume_tool_execution(scoped_session_id)
@@ -296,6 +296,9 @@ async def chat_stream(session_id: str, request: Request) -> StreamingResponse:
     SSE-Stream für Live-Status-Updates während der Chat-Verarbeitung.
     Verbinde BEVOR der POST /api/chat/ abgeschickt wird.
     """
+    auth_ctx = resolve_request_auth(request)
+    if not auth_ctx:
+        raise HTTPException(status_code=401, detail="Unauthorized")
     scoped_session_id = _tenant_session_id(request, session_id)
     q = status_bus.get_queue(scoped_session_id)
 

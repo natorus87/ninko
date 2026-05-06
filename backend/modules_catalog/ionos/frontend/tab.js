@@ -2,6 +2,13 @@
 
 let currentIonosConnectionId = '';
 
+function esc(s) {
+    if (s == null) return '';
+    const d = document.createElement('div');
+    d.textContent = String(s);
+    return d.innerHTML;
+}
+
 (async function initIonosTab() {
     console.log("IONOS DNS Tab initialized");
 

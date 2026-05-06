@@ -6,6 +6,13 @@ const ProxmoxTab = {
     pollInterval: null,
     currentConnectionId: '',
 
+    esc(s) {
+        if (s == null) return '';
+        const d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+    },
+
     async init() {
         await this.loadConnections();
 
@@ -96,10 +103,10 @@ const ProxmoxTab = {
                 <div class="node-card ${node.status === 'online' ? 'node-online' : 'node-offline'}">
                     <div class="node-header">
                         <div>
-                            <span class="node-name">${node.node}</span>
+                            <span class="node-name">${this.esc(node.node)}</span>
                             <div class="node-meta">Proxmox Node</div>
                         </div>
-                        <span class="node-status-badge ${node.status}">${node.status}</span>
+                        <span class="node-status-badge ${node.status}">${this.esc(node.status)}</span>
                     </div>
                     <div class="node-metrics">
                         <div class="metric">
@@ -107,14 +114,14 @@ const ProxmoxTab = {
                             <div class="progress-bar">
                                 <div class="progress-fill ${this.getUsageColor(node.cpu_usage)}" style="width: ${node.cpu_usage}%"></div>
                             </div>
-                            <span class="metric-value">${node.cpu_usage}%</span>
+                            <span class="metric-value">${this.esc(node.cpu_usage)}%</span>
                         </div>
                         <div class="metric">
                             <label>RAM</label>
                             <div class="progress-bar">
                                 <div class="progress-fill ${this.getUsageColor(node.mem_usage)}" style="width: ${node.mem_usage}%"></div>
                             </div>
-                            <span class="metric-value">${node.mem_usage}% (${node.mem_used_human} / ${node.mem_total_human})</span>
+                            <span class="metric-value">${this.esc(node.mem_usage)}% (${this.esc(node.mem_used_human)} / ${this.esc(node.mem_total_human)})</span>
                         </div>
                     </div>
                 </div>
@@ -146,23 +153,23 @@ const ProxmoxTab = {
                 const typeBadge = vm.type === 'lxc' ? 'LXC' : 'VM';
 
                 return `<tr>
-                    <td>${vm.vmid}</td>
+                    <td>${this.esc(vm.vmid)}</td>
                     <td>
                         <div class="vm-name-cell">
-                            <span class="vm-name">${vm.name}</span>
+                            <span class="vm-name">${this.esc(vm.name)}</span>
                             <span class="vm-meta">${vm.type === 'lxc' ? 'Container' : 'Virtual Machine'}</span>
                         </div>
                     </td>
-                    <td><span class="status-badge status-unknown">${typeBadge}</span></td>
-                    <td><span class="status-badge status-node">${vm.node}</span></td>
-                    <td><span class="status-badge ${statusClass}">${vm.status}</span></td>
-                    <td><span class="metric-pill">${vm.cpu_usage}%</span></td>
+                    <td><span class="status-badge status-unknown">${this.esc(typeBadge)}</span></td>
+                    <td><span class="status-badge status-node">${this.esc(vm.node)}</span></td>
+                    <td><span class="status-badge ${statusClass}">${this.esc(vm.status)}</span></td>
+                    <td><span class="metric-pill">${this.esc(vm.cpu_usage)}%</span></td>
                     <td><span class="metric-pill">${memMB}/${memTotalMB} MB</span></td>
                     <td class="action-buttons table-action-group">
                         ${vm.status !== 'running' ?
-                        `<button class="btn btn-sm btn-success" onclick="ProxmoxTab.startVM('${vm.node}', ${vm.vmid})">Start</button>` :
-                        `<button class="btn btn-sm btn-warning" onclick="ProxmoxTab.rebootVM('${vm.node}', ${vm.vmid})">Reboot</button>
-                             <button class="btn btn-sm btn-danger" onclick="ProxmoxTab.stopVM('${vm.node}', ${vm.vmid})">Stop</button>`
+                        `<button class="btn btn-sm btn-success" onclick="ProxmoxTab.startVM('${this.esc(vm.node)}', ${this.esc(vm.vmid)})">Start</button>` :
+                        `<button class="btn btn-sm btn-warning" onclick="ProxmoxTab.rebootVM('${this.esc(vm.node)}', ${this.esc(vm.vmid)})">Reboot</button>
+                             <button class="btn btn-sm btn-danger" onclick="ProxmoxTab.stopVM('${this.esc(vm.node)}', ${this.esc(vm.vmid)})">Stop</button>`
                     }
                     </td>
                 </tr>`;

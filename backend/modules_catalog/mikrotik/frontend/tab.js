@@ -5,6 +5,13 @@
         connectionId: ""
     };
 
+    function esc(s) {
+        if (s == null) return '';
+        const d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+    }
+
     async function loadStatus() {
         try {
             const url = state.connectionId
@@ -27,10 +34,10 @@
 
             document.getElementById('mikrotik-info').innerHTML = `
                 <table class="data-table">
-                    <tr><td>${I18n.t('modules.mikrotik.hostname')}</td><td>${data.hostname || '-'}</td></tr>
-                    <tr><td>${I18n.t('modules.mikrotik.interfaces')}</td><td>${data.interfaces_count || 0}</td></tr>
-                    <tr><td>${I18n.t('modules.mikrotik.routes')}</td><td>${data.routes_count || 0}</td></tr>
-                    <tr><td>${I18n.t('modules.mikrotik.dhcpLeases')}</td><td>${data.dhcp_leases_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.mikrotik.hostname')}</td><td>${esc(data.hostname) || '-'}</td></tr>
+                    <tr><td>${I18n.t('modules.mikrotik.interfaces')}</td><td>${esc(data.interfaces_count || 0)}</td></tr>
+                    <tr><td>${I18n.t('modules.mikrotik.routes')}</td><td>${esc(data.routes_count || 0)}</td></tr>
+                    <tr><td>${I18n.t('modules.mikrotik.dhcpLeases')}</td><td>${esc(data.dhcp_leases_count || 0)}</td></tr>
                 </table>
             `;
         } catch (e) {

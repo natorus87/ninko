@@ -5,6 +5,13 @@
         connectionId: ""
     };
 
+    function esc(s) {
+        if (s == null) return '';
+        const d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+    }
+
     async function loadStatus() {
         try {
             const url = state.connectionId
@@ -26,9 +33,9 @@
 
             document.getElementById('openproject-info').innerHTML = `
                 <table class="data-table">
-                    <tr><td>${I18n.t('modules.openproject.projects')}</td><td>${data.projects_count || 0}</td></tr>
-                    <tr><td>${I18n.t('modules.openproject.workPackages')}</td><td>${data.work_packages_count || 0}</td></tr>
-                    <tr><td>${I18n.t('modules.openproject.users')}</td><td>${data.users_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.openproject.projects')}</td><td>${esc(data.projects_count || 0)}</td></tr>
+                    <tr><td>${I18n.t('modules.openproject.workPackages')}</td><td>${esc(data.work_packages_count || 0)}</td></tr>
+                    <tr><td>${I18n.t('modules.openproject.users')}</td><td>${esc(data.users_count || 0)}</td></tr>
                 </table>
             `;
         } catch (e) {

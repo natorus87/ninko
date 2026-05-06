@@ -5,6 +5,13 @@
         connectionId: ""
     };
 
+    function esc(s) {
+        if (s == null) return '';
+        const d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+    }
+
     async function loadStatus() {
         try {
             const url = state.connectionId
@@ -26,9 +33,9 @@
 
             document.getElementById('netgear-info').innerHTML = `
                 <table class="data-table">
-                    <tr><td>${I18n.t('modules.netgear.model')}</td><td>${data.model || '-'}</td></tr>
-                    <tr><td>${I18n.t('modules.netgear.firmware')}</td><td>${data.firmware || '-'}</td></tr>
-                    <tr><td>${I18n.t('modules.netgear.ports')}</td><td>${data.ports_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.netgear.model')}</td><td>${esc(data.model) || '-'}</td></tr>
+                    <tr><td>${I18n.t('modules.netgear.firmware')}</td><td>${esc(data.firmware) || '-'}</td></tr>
+                    <tr><td>${I18n.t('modules.netgear.ports')}</td><td>${esc(data.ports_count || 0)}</td></tr>
                 </table>
             `;
         } catch (e) {

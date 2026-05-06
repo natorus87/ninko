@@ -5,6 +5,13 @@
         connectionId: ""
     };
 
+    function esc(s) {
+        if (s == null) return '';
+        const d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+    }
+
     async function loadStatus() {
         try {
             const url = state.connectionId
@@ -26,9 +33,9 @@
 
             document.getElementById('slack-info').innerHTML = `
                 <table class="data-table">
-                    <tr><td>${I18n.t('modules.slack.workspace')}</td><td>${data.workspace || '-'}</td></tr>
-                    <tr><td>${I18n.t('modules.slack.channels')}</td><td>${data.channels_count || 0}</td></tr>
-                    <tr><td>${I18n.t('modules.slack.users')}</td><td>${data.users_count || 0}</td></tr>
+                    <tr><td>${I18n.t('modules.slack.workspace')}</td><td>${esc(data.workspace) || '-'}</td></tr>
+                    <tr><td>${I18n.t('modules.slack.channels')}</td><td>${esc(data.channels_count || 0)}</td></tr>
+                    <tr><td>${I18n.t('modules.slack.users')}</td><td>${esc(data.users_count || 0)}</td></tr>
                 </table>
             `;
         } catch (e) {

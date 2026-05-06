@@ -1,6 +1,13 @@
 (function() {
     'use strict';
 
+    function esc(s) {
+        if (s == null) return '';
+        const d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+    }
+
     const JiraTab = {
         connId: '',
         refresh: async function() {
@@ -36,10 +43,10 @@
                             issues.slice(0, 10).map(i => {
                                 const statusClass = i.fields.status.name === 'Done' || i.fields.status.name === 'Closed' ? 'status-ok' : 'status-warning';
                                 return '<tr>' +
-                                    '<td>' + i.key + '</td>' +
-                                    '<td>' + (i.fields.summary || '-') + '</td>' +
-                                    '<td>' + (i.fields.issuetype ? i.fields.issuetype.name : '-') + '</td>' +
-                                    '<td><span class="status-badge ' + statusClass + '">' + (i.fields.status ? i.fields.status.name : '-') + '</span></td>' +
+                                    '<td>' + esc(i.key) + '</td>' +
+                                    '<td>' + esc(i.fields.summary) || '-' + '</td>' +
+                                    '<td>' + esc(i.fields.issuetype ? i.fields.issuetype.name : '-') + '</td>' +
+                                    '<td><span class="status-badge ' + statusClass + '">' + esc(i.fields.status ? i.fields.status.name : '-') + '</span></td>' +
                                     '</tr>';
                             }).join('') + '</tbody></table>';
                     }
@@ -47,7 +54,7 @@
                     container.innerHTML = '<p class="empty-state text-error">' + I18n.t('modules.jira.loadError') + '</p>';
                 }
             } catch (e) {
-                container.innerHTML = '<p class="empty-state text-error">' + I18n.t('modules.jira.error') + e.message + '</p>';
+                container.innerHTML = '<p class="empty-state text-error">' + I18n.t('modules.jira.error') + esc(e.message) + '</p>';
             }
         },
 

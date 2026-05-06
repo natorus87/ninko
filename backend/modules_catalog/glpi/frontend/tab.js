@@ -7,6 +7,13 @@ const GlpiTab = {
     glpiBaseUrl: '',
     currentConnectionId: '',
 
+    esc(s) {
+        if (s == null) return '';
+        const d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+    },
+
     async init() {
         await this.loadConnections();
 
@@ -138,11 +145,11 @@ const GlpiTab = {
                 const dateStr = t.date_creation ? new Date(t.date_creation).toLocaleDateString('de-DE') : '-';
 
                 return `<tr>
-                    <td><a href="${this.glpiBaseUrl}/front/ticket.form.php?id=${t.id}" target="_blank">#${t.id}</a></td>
-                    <td class="ticket-title">${t.title}</td>
-                    <td><span class="priority-badge ${prioClass}">${t.priority_name || t.priority}</span></td>
-                    <td><span class="status-badge ${statusClass}">${t.status_name || t.status}</span></td>
-                    <td>${dateStr}</td>
+                    <td><a href="${this.glpiBaseUrl}/front/ticket.form.php?id=${this.esc(t.id)}" target="_blank">#${this.esc(t.id)}</a></td>
+                    <td class="ticket-title">${this.esc(t.title)}</td>
+                    <td><span class="priority-badge ${prioClass}">${this.esc(t.priority_name || t.priority)}</span></td>
+                    <td><span class="status-badge ${statusClass}">${this.esc(t.status_name || t.status)}</span></td>
+                    <td>${this.esc(dateStr)}</td>
                 </tr>`;
             }).join('');
         } catch (err) {

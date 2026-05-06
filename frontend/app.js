@@ -552,8 +552,7 @@ const Ninko = {
                             panel.innerHTML = (typeof DOMPurify !== 'undefined')
                                 ? DOMPurify.sanitize(html, {
                                     ADD_ATTR: ['target', 'rel', 'onclick', 'style'],
-                                    ADD_TAGS: ['style'],
-                                    FORBID_TAGS: ['script', 'iframe'],
+                                    FORBID_TAGS: ['script', 'iframe', 'style'],
                                 })
                                 : html;
                             hasFrontend = true;
@@ -4031,7 +4030,7 @@ ${messagesHtml}
                 keyEl.dataset.hasKey = '1';
             }
         } catch (err) {
-            st.innerHTML = `<span class="sf sf-error">${err.message}</span>`;
+            st.innerHTML = `<span class="sf sf-error">${this._escapeHtml(err.message)}</span>`;
         } finally {
             btn.disabled = false;
         }
@@ -4126,7 +4125,7 @@ ${messagesHtml}
                 keyEl.dataset.hasKey = '1';
             }
         } catch (err) {
-            st.innerHTML = `<span class="sf sf-error">${err.message}</span>`;
+            st.innerHTML = `<span class="sf sf-error">${this._escapeHtml(err.message)}</span>`;
         } finally {
             btn.disabled = false;
         }
@@ -4208,7 +4207,7 @@ ${messagesHtml}
             st.innerHTML = '<span class="sf sf-ok">Gespeichert</span>';
             st.className = 'save-status';
         } catch (err) {
-            st.innerHTML = `<span class="sf sf-error">${err.message}</span>`;
+            st.innerHTML = `<span class="sf sf-error">${this._escapeHtml(err.message)}</span>`;
             st.className = 'save-status';
         } finally {
             btn.disabled = false;
@@ -4251,7 +4250,7 @@ ${messagesHtml}
                 </tr>`).join('')}
             </tbody></table>`;
         } catch (err) {
-            container.innerHTML = `<p class="text-muted">Fehler: ${err.message}</p>`;
+            container.innerHTML = `<p class="text-muted">Fehler: ${this._escapeHtml(err.message)}</p>`;
         }
     },
 
@@ -4309,7 +4308,7 @@ ${messagesHtml}
                 this.loadTtsVoices();
             }
         } catch (err) {
-            st.innerHTML = `<span class="sf sf-error">${err.message}</span>`;
+            st.innerHTML = `<span class="sf sf-error">${this._escapeHtml(err.message)}</span>`;
             st.className = 'save-status';
         } finally {
             btn.disabled = false;
@@ -6071,7 +6070,7 @@ ${messagesHtml}
             });
 
         } catch (err) {
-            container.innerHTML = `<p class="text-error">Fehler: ${err.message}</p>`;
+            container.innerHTML = `<p class="text-error">Fehler: ${this._escapeHtml(err.message)}</p>`;
         }
     },
 
@@ -6406,66 +6405,67 @@ ${messagesHtml}
 
     _renderRepoCard(repo) {
         const isOfficial = repo.id === 'official';
+        const e = (v) => v == null ? '' : String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
         return `
-        <div class="module-config-card" id="repo-card-${repo.id}" style="margin-bottom:0.75rem;">
+        <div class="module-config-card" id="repo-card-${e(repo.id)}" style="margin-bottom:0.75rem;">
             <div class="module-config-header">
                 <div class="module-config-info" style="min-width:0;">
-                    <span class="module-config-name">${repo.name}</span>
+                    <span class="module-config-name">${e(repo.name)}</span>
                     ${isOfficial ? `<span class="module-config-version" style="background:rgba(var(--primary-color-rgb),0.15);">${t('marketplace.official')}</span>` : ''}
-                    <span class="text-muted" style="font-size:0.75rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block; margin-top:0.1rem;">${repo.repo_url} · ${repo.branch}</span>
+                    <span class="text-muted" style="font-size:0.75rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block; margin-top:0.1rem;">${e(repo.repo_url)} · ${e(repo.branch)}</span>
                 </div>
                 <div style="display:flex; gap:0.35rem; align-items:center; flex-shrink:0;">
-                    <button class="btn btn-outline" onclick="Ninko.loadRepoModules('${repo.id}')"
-                        id="repo-load-btn-${repo.id}"
+                    <button class="btn btn-outline" onclick="Ninko.loadRepoModules('${e(repo.id)}')"
+                        id="repo-load-btn-${e(repo.id)}"
                         style="font-size:0.78rem; padding:0.2rem 0.6rem;">
                         ${t('marketplace.loadModules')}
                     </button>
-                    <button class="btn-icon btn-icon-sm" onclick="Ninko.toggleRepoEdit('${repo.id}')" title="${t('marketplace.editRepo')}">
+                    <button class="btn-icon btn-icon-sm" onclick="Ninko.toggleRepoEdit('${e(repo.id)}')" title="${e(t('marketplace.editRepo'))}">
                         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                     </button>
-                    ${!isOfficial ? `<button class="btn-icon btn-icon-sm" onclick="Ninko.deleteRepo('${repo.id}')" title="${t('marketplace.deleteRepo')}" style="color:var(--error-color);">
+                    ${!isOfficial ? `<button class="btn-icon btn-icon-sm" onclick="Ninko.deleteRepo('${e(repo.id)}')" title="${e(t('marketplace.deleteRepo'))}" style="color:var(--error-color);">
                         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                     </button>` : ''}
                 </div>
             </div>
 
             <!-- Edit-Form (hidden) -->
-            <div id="repo-edit-${repo.id}" style="display:none; border-top:1px dashed var(--border-color); padding-top:0.75rem; margin-top:0.75rem;">
+            <div id="repo-edit-${e(repo.id)}" style="display:none; border-top:1px dashed var(--border-color); padding-top:0.75rem; margin-top:0.75rem;">
                 <div class="form-row form-row-sm">
-                    <label class="form-label">${t('marketplace.repoName')}</label>
-                    <input id="edit-repo-name-${repo.id}" type="text" class="form-input" value="${repo.name}">
+                    <label class="form-label">${e(t('marketplace.repoName'))}</label>
+                    <input id="edit-repo-name-${e(repo.id)}" type="text" class="form-input" value="${e(repo.name)}">
                 </div>
                 <div class="form-row form-row-sm">
-                    <label class="form-label">${t('marketplace.repoUrl')}</label>
-                    <input id="edit-repo-url-${repo.id}" type="text" class="form-input" value="${repo.repo_url}" ${isOfficial ? 'readonly style="opacity:0.6;"' : ''}>
+                    <label class="form-label">${e(t('marketplace.repoUrl'))}</label>
+                    <input id="edit-repo-url-${e(repo.id)}" type="text" class="form-input" value="${e(repo.repo_url)}" ${isOfficial ? 'readonly style="opacity:0.6;"' : ''}>
                 </div>
                 <div class="form-row form-row-sm">
-                    <label class="form-label">${t('marketplace.repoBranch')}</label>
-                    <input id="edit-repo-branch-${repo.id}" type="text" class="form-input" value="${repo.branch}" style="max-width:130px;">
+                    <label class="form-label">${e(t('marketplace.repoBranch'))}</label>
+                    <input id="edit-repo-branch-${e(repo.id)}" type="text" class="form-input" value="${e(repo.branch)}" style="max-width:130px;">
                 </div>
                 <div class="form-row form-row-sm">
-                    <label class="form-label">${t('marketplace.repoPath')}</label>
-                    <input id="edit-repo-path-${repo.id}" type="text" class="form-input" value="${repo.modules_path}">
+                    <label class="form-label">${e(t('marketplace.repoPath'))}</label>
+                    <input id="edit-repo-path-${e(repo.id)}" type="text" class="form-input" value="${e(repo.modules_path||'')}">
                 </div>
                 <div class="form-row form-row-sm">
-                    <label class="form-label">${t('marketplace.repoToken')} ${repo.github_token_set ? `<span class="text-muted">${t('marketplace.repoTokenSet')}</span>` : ''}</label>
-                    <input id="edit-repo-token-${repo.id}" type="password" class="form-input" placeholder="${t('marketplace.repoTokenPlaceholder')}">
+                    <label class="form-label">${e(t('marketplace.repoToken'))} ${repo.github_token_set ? `<span class="text-muted">${e(t('marketplace.repoTokenSet'))}</span>` : ''}</label>
+                    <input id="edit-repo-token-${e(repo.id)}" type="password" class="form-input" placeholder="${e(t('marketplace.repoTokenPlaceholder'))}">
                 </div>
                 <div class="form-row form-row-sm">
                     <label class="form-label"></label>
                     <label style="font-size:0.82rem; cursor:pointer; display:flex; align-items:center; gap:0.35rem;">
-                        <input type="checkbox" id="edit-repo-token-clear-${repo.id}"> ${t('marketplace.repoTokenClear')}
+                        <input type="checkbox" id="edit-repo-token-clear-${e(repo.id)}"> ${e(t('marketplace.repoTokenClear'))}
                     </label>
                 </div>
                 <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
-                    <button class="btn btn-primary" onclick="Ninko.saveRepoEdit('${repo.id}')" style="font-size:0.82rem;">${t('marketplace.save')}</button>
-                    <button class="btn btn-outline" onclick="Ninko.toggleRepoEdit('${repo.id}')" style="font-size:0.82rem;">${t('marketplace.cancel')}</button>
-                    <span id="edit-repo-status-${repo.id}" class="save-status" style="display:inline; align-self:center;"></span>
+                    <button class="btn btn-primary" onclick="Ninko.saveRepoEdit('${e(repo.id)}')" style="font-size:0.82rem;">${e(t('marketplace.save'))}</button>
+                    <button class="btn btn-outline" onclick="Ninko.toggleRepoEdit('${e(repo.id)}')" style="font-size:0.82rem;">${e(t('marketplace.cancel'))}</button>
+                    <span id="edit-repo-status-${e(repo.id)}" class="save-status" style="display:inline; align-self:center;"></span>
                 </div>
             </div>
 
             <!-- Modul-Liste -->
-            <div id="repo-modules-${repo.id}" style="margin-top:0.5rem;"></div>
+            <div id="repo-modules-${e(repo.id)}" style="margin-top:0.5rem;"></div>
         </div>`;
     },
 
@@ -6605,7 +6605,7 @@ ${messagesHtml}
             const data = await res.json();
 
             if (data.error) {
-                container.innerHTML = `<p style="font-size:0.82rem; color:var(--error-color); padding:0.25rem 0;">${data.error}</p>`;
+                container.innerHTML = `<p style="font-size:0.82rem; color:var(--error-color); padding:0.25rem 0;">${this._escapeHtml(data.error)}</p>`;
                 return;
             }
 
@@ -6728,7 +6728,7 @@ ${messagesHtml}
                 `;
             }).join('');
         } catch (err) {
-            list.innerHTML = `<p class="text-error">Fehler: ${err.message}</p>`;
+            list.innerHTML = `<p class="text-error">Fehler: ${this._escapeHtml(err.message)}</p>`;
         }
     },
 

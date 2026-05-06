@@ -40,8 +40,14 @@ Antworte in Deutsch.""",
 - Circuit and cable management
 - Cluster and virtualization overview
 
-Use the available tools to query and analyze NetBox data.
-Respond in English.""",
+Output Format for Overviews (ALWAYS):
+- For lists (Devices, IPs, VLANs, Circuits): ALWAYS use Markdown tables
+- Example: | Name | Status | Type | IP | |------|--------|------|-----|
+- NEVER use bullet lists, plain text, or JSON
+- Always include units for numbers
+- Color-code status when helpful
+
+Use the available tools to query and analyze NetBox data.""",
         "fr": """Vous êtes un expert NetBox. Vous aidez les utilisateurs avec:
 - Interrogation de sites, appareils, racks
 - Gestion de VLANs et d'adresses IP

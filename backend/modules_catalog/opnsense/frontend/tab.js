@@ -13,6 +13,13 @@ const OPNsenseTab = {
     pollInterval: null,
     currentConnectionId: '',
 
+    esc(s) {
+        if (s == null) return '';
+        const d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+    },
+
     async init() {
         this._setupEvents();
         this._setupClickOutside();
@@ -154,8 +161,17 @@ const OPNsenseTab = {
             if (!container) return;
 
             // Prüfe auf API-Fehler
-            if (statusData.status === 'error') {
-                container.innerHTML = `<p class="empty-state text-error">Status Fehler: ${statusData.detail || 'Unbekannter Fehler'}</p>`;
+if (statusData.status === 'error') {
+                container.innerHTML = `<p class="empty-state text-error">Status Fehler: ${this.esc(statusData.detail) || 'Unbekannter Fehler'}</p>`;
+                return;
+            }
+
+            const status = statusData.data || {};
+            const interfaces = interfacesData.data || [];
+            const services = servicesData.data || [];
+
+            if (status.error) {
+                container.innerHTML = `<p class="empty-state text-error">OPNsense Fehler: ${this.esc(status.error)}</p>`;
                 return;
             }
 
@@ -165,7 +181,7 @@ const OPNsenseTab = {
 
             // Prüfe auf Tool-Fehler in den Daten
             if (status.error) {
-                container.innerHTML = `<p class="empty-state text-error">OPNsense Fehler: ${status.error}</p>`;
+                container.innerHTML = `<p class="empty-state text-error">OPNsense Fehler: ${esc(status.error)}</p>`;
                 return;
             }
 
@@ -175,20 +191,20 @@ const OPNsenseTab = {
                 return 'status-warning';
             };
 
-            container.innerHTML = `
+container.innerHTML = `
                 <div class="opnsense-card">
                     <h4>🖥️ System</h4>
                     <div class="opnsense-stat">
                         <span class="opnsense-stat-label">Version</span>
-                        <span class="opnsense-stat-value">${status.version || '-'}</span>
+                        <span class="opnsense-stat-value">${this.esc(status.version) || '-'}</span>
                     </div>
                     <div class="opnsense-stat">
                         <span class="opnsense-stat-label">Firmware</span>
-                        <span class="opnsense-stat-value">${status.firmware || '-'}</span>
+                        <span class="opnsense-stat-value">${this.esc(status.firmware) || '-'}</span>
                     </div>
                     <div class="opnsense-stat">
                         <span class="opnsense-stat-label">Uptime</span>
-                        <span class="opnsense-stat-value">${status.uptime || '-'}</span>
+                        <span class="opnsense-stat-value">${this.esc(status.uptime) || '-'}</span>
                     </div>
                     <div class="opnsense-stat">
                         <span class="opnsense-stat-label">Load (1m)</span>
@@ -196,11 +212,11 @@ const OPNsenseTab = {
                     </div>
                     <div class="opnsense-stat">
                         <span class="opnsense-stat-label">Memory</span>
-                        <span class="opnsense-stat-value">${status.memory || 0}%</span>
+                        <span class="opnsense-stat-value">${this.esc(status.memory) || 0}%</span>
                     </div>
                     <div class="opnsense-stat">
                         <span class="opnsense-stat-label">Disk</span>
-                        <span class="opnsense-stat-value">${status.disk || 0}%</span>
+                        <span class="opnsense-stat-value">${this.esc(status.disk) || 0}%</span>
                     </div>
                 </div>
 
@@ -208,8 +224,8 @@ const OPNsenseTab = {
                     <h4>🌐 Interfaces (${interfaces.length})</h4>
                     ${interfaces.slice(0, 5).map(iface => `
                         <div class="opnsense-stat">
-                            <span class="opnsense-stat-label">${iface.descr || iface.name}</span>
-                            <span class="opnsense-stat-value ${getStatusClass(iface.status)}">${iface.ipaddr || '-'} ${iface.status ? '(' + iface.status + ')' : ''}</span>
+                            <span class="opnsense-stat-label">${this.esc(iface.descr) || this.esc(iface.name)}</span>
+                            <span class="opnsense-stat-value ${getStatusClass(iface.status)}">${this.esc(iface.ipaddr) || '-'} ${iface.status ? '(' + this.esc(iface.status) + ')' : ''}</span>
                         </div>
                     `).join('')}
                     ${interfaces.length > 5 ? `<div class="opnsense-stat"><span class="opnsense-stat-label">...</span><span class="opnsense-stat-value">+${interfaces.length - 5} weitere</span></div>` : ''}
@@ -219,7 +235,7 @@ const OPNsenseTab = {
                     <h4>⚙️ Services (${services.length})</h4>
                     ${services.slice(0, 8).map(svc => `
                         <div class="opnsense-stat">
-                            <span class="opnsense-stat-label">${svc.description || svc.name}</span>
+                            <span class="opnsense-stat-label">${this.esc(svc.description) || this.esc(svc.name)}</span>
                             <span class="opnsense-stat-value ${svc.running ? 'status-online' : 'status-offline'}">${svc.running ? 'Aktiv' : 'Inaktiv'}</span>
                         </div>
                     `).join('')}

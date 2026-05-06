@@ -83,6 +83,7 @@ class CoreSettings(BaseSettings):
     BOOTSTRAP_ADMIN_PASSWORD: str = "admin"
     SESSION_SECRET: str = "change-me-in-production"
     SESSION_TTL_HOURS: int = 24
+    CHAT_HISTORY_TTL_SECONDS: int = 86400  # 24h, matching SESSION_TTL_HOURS
     SESSION_COOKIE_NAME: str = "ninko_session"
     SESSION_COOKIE_SECURE: bool = False
 
@@ -193,7 +194,10 @@ class CoreSettings(BaseSettings):
                 + ", ".join(insecure_defaults)
                 + ". Bitte produktionssichere Werte setzen."
             )
-            if self.API_AUTH_ENABLED and self.DEPLOYMENT_ENV == "production":
+            if self.API_AUTH_ENABLED and (
+                self.DEPLOYMENT_ENV == "production"
+                or self.SESSION_SECRET == "change-me-in-production"
+            ):
                 raise ValueError(msg)
             logger.warning(msg)
 

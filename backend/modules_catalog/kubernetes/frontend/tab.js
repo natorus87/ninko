@@ -45,7 +45,7 @@ const K8sTab = {
         const container = document.getElementById(optionsContainerId);
         if (!container) return;
         container.innerHTML = options.map(o =>
-            `<div class="cl-select-option${o.selected ? ' selected' : ''}" data-value="${o.value}">${o.label}</div>`
+            `<div class="cl-select-option${o.selected ? ' selected' : ''}" data-value="${o.value == null ? '' : String(o.value).replace(/"/g, '&quot;')}">${o.label == null ? '' : String(o.label).replace(/</g, '&lt;')}</div>`
         ).join('');
         container.querySelectorAll('.cl-select-option').forEach(opt => {
             opt.addEventListener('click', () => {
@@ -211,14 +211,15 @@ const K8sTab = {
 
             tbody.innerHTML = pods.map(pod => {
                 const statusClass = this.getStatusClass(pod.status);
+                const s = (v) => v == null ? '' : String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
                 return `<tr>
-                    <td class="pod-name">${pod.name}</td>
-                    <td><span class="status-badge ${statusClass}">${pod.status}</span></td>
-                    <td>${pod.ready}</td>
-                    <td>${pod.restarts}</td>
-                    <td>${pod.age}</td>
+                    <td class="pod-name">${s(pod.name)}</td>
+                    <td><span class="status-badge ${statusClass}">${s(pod.status)}</span></td>
+                    <td>${s(pod.ready)}</td>
+                    <td>${s(pod.restarts)}</td>
+                    <td>${s(pod.age)}</td>
                     <td>
-                        <button class="btn btn-sm btn-action" onclick="K8sTab.restartPod('${pod.namespace}', '${pod.name}')">
+                        <button class="btn btn-sm btn-action" onclick="K8sTab.restartPod('${s(pod.namespace)}', '${s(pod.name)}')">
                             🔄 Neustart
                         </button>
                     </td>
@@ -244,23 +245,25 @@ const K8sTab = {
                 return;
             }
 
-            container.innerHTML = failing.map(pod => `
+            container.innerHTML = failing.map(pod => {
+                const s = (v) => v == null ? '' : String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+                return `
                 <div class="failing-pod-card">
                     <div class="failing-pod-header">
-                        <span class="pod-name">${pod.name}</span>
-                        <span class="pod-ns">${pod.namespace}</span>
+                        <span class="pod-name">${s(pod.name)}</span>
+                        <span class="pod-ns">${s(pod.namespace)}</span>
                     </div>
                     <div class="failing-pod-issues">
-                        ${pod.issues.map(i => `<span class="issue-badge">${i}</span>`).join('')}
+                        ${(pod.issues || []).map(i => `<span class="issue-badge">${s(i)}</span>`).join('')}
                     </div>
                     <div class="failing-pod-actions">
-                        <span class="restarts-count">${pod.restarts} Neustarts</span>
-                        <button class="btn btn-sm btn-danger" onclick="K8sTab.restartPod('${pod.namespace}', '${pod.name}')">
+                        <span class="restarts-count">${s(pod.restarts)} Neustarts</span>
+                        <button class="btn btn-sm btn-danger" onclick="K8sTab.restartPod('${s(pod.namespace)}', '${s(pod.name)}')">
                             🔄 Neu starten
                         </button>
                     </div>
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
         } catch (err) {
             console.error('K8s Failing Pods Fehler:', err);
             container.innerHTML = '<p class="empty-state text-error">Fehler beim Laden der fehlerhaften Pods.</p>';
