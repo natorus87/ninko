@@ -4729,8 +4729,8 @@ select {
     .sidebar {
         position: fixed;
         left: 12px;
-        top: 12px;
-        height: calc(100vh - 24px);
+        top: env(safe-area-inset-top, 12px);
+        height: calc(100vh - 24px - env(safe-area-inset-bottom, 0px));
         z-index: 1000;
         transform: translateX(-100%);
         transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);

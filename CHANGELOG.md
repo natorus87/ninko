@@ -9,6 +9,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Network Analysis Module** (`backend/modules/network_analysis/`): Core module with `dns_lookup`, `reverse_dns`, `traceroute`, `ping_host`, `get_network_info` tools for real network diagnostics. Routing keywords: `netzwerkanalyse`, `dns lookup`, `traceroute`, `whois`, etc.
+- **Kubernetes NET_RAW capability**: Pod now requests `NET_RAW` capability for `ping`/`traceroute` ICMP/raw socket access.
+
+### Changed
+
+- **Dockerfile**: Added `iputils-ping` and `traceroute` packages for network diagnostics.
+
+### Fixed
+
+- **Safeguard false positives**: `netzwerkanalyse`, `traceroute`, `tracepath`, `dns lookup`, `ip-adresse`, `server-analyse`, `website-analyse` added to safe search keywords in `_fast_prefilter_short()`.
+- **Routing keyword conflict**: Removed `netzwerkanalyse`, `netzwerk-analyse`, `website-analyse`, `server-analyse` from `web_search` manifest — these now route correctly to `network_analysis` module.
+- **RedisRateLimiter NOSCRIPT recovery**: Added `_get_script_sha()` with NOSCRIPT exception handling and automatic script reload.
+
 ## [1.3.4] – 2026-05-05
 
 ### Fixed

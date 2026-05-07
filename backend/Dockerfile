@@ -10,7 +10,7 @@ WORKDIR /app
 # espeak-ng is required by Piper TTS at runtime
 # libpango* is required by weasyprint for PDF generation
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl build-essential g++ ffmpeg espeak-ng libespeak-ng1 nodejs tesseract-ocr tesseract-ocr-deu libpango-1.0-0 libpangoft2-1.0-0 && \
+    apt-get install -y --no-install-recommends curl build-essential g++ ffmpeg espeak-ng libespeak-ng1 nodejs tesseract-ocr tesseract-ocr-deu libpango-1.0-0 libpangoft2-1.0-0 iputils-ping traceroute && \
     rm -rf /var/lib/apt/lists/*
 
 # Install Piper TTS binary (optional – only needed when TTS_ENABLED=true)

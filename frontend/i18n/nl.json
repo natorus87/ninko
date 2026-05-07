@@ -759,6 +759,12 @@
       "error": "Fout: "
     }
   },
+  "modules": {
+    "network_analysis": {
+      "title": "Network Analysis",
+      "desc": "DNS-lookup, WHOIS, traceroute en IP-analyse voor websites en netwerken."
+    }
+  },
   "module.message_hub.title": "Message Hub",
   "module.message_hub.desc": "Bidirectionele routering voor Email, Discord en Telegram",
   "module.message_hub.noRoutes": "Geen routeringsitems geconfigureerd",

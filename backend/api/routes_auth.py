@@ -46,26 +46,31 @@ async def _check_login_rate_limit(username: str) -> tuple[bool, int]:
     """
     Per-username brute-force protection.
     Returns (allowed: bool, retry_after: int).
+    Fails closed (deny) if Redis is unavailable.
     """
-    redis = get_redis()
-    key = f"ninko:login_attempts:{username.lower()}"
+    try:
+        redis = get_redis()
+        key = f"ninko:login_attempts:{username.lower()}"
 
-    # Check if currently locked out
-    lockout_key = f"{key}:locked"
-    is_locked = await redis.connection.get(lockout_key)
-    if is_locked:
-        ttl = await redis.connection.ttl(lockout_key)
-        return False, max(1, ttl)
+        # Check if currently locked out
+        lockout_key = f"{key}:locked"
+        is_locked = await redis.connection.get(lockout_key)
+        if is_locked:
+            ttl = await redis.connection.ttl(lockout_key)
+            return False, max(1, ttl)
 
-    # Get current attempt count
-    attempts = await redis.connection.get(key)
-    if attempts and int(attempts) >= _MAX_LOGIN_ATTEMPTS:
-        # Lock out the user
-        await redis.connection.setex(lockout_key, _LOGIN_LOCKOUT_SECONDS, "1")
-        await redis.connection.delete(key)
-        return False, _LOGIN_LOCKOUT_SECONDS
+        # Get current attempt count
+        attempts = await redis.connection.get(key)
+        if attempts and int(attempts) >= _MAX_LOGIN_ATTEMPTS:
+            # Lock out the user
+            await redis.connection.setex(lockout_key, _LOGIN_LOCKOUT_SECONDS, "1")
+            await redis.connection.delete(key)
+            return False, _LOGIN_LOCKOUT_SECONDS
 
-    return True, 0
+        return True, 0
+    except Exception:
+        # Fail closed: deny login if Redis is unavailable
+        return False, 60
 
 
 async def _record_login_attempt(username: str, success: bool) -> None:

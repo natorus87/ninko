@@ -192,10 +192,7 @@ def _extract_key_from_websocket(websocket: WebSocket) -> str:
         token = auth_header[7:].strip()
         if token:
             return token
-    header_key = websocket.headers.get("X-API-Key", "").strip()
-    if header_key:
-        return header_key
-    return websocket.query_params.get("api_key", "").strip()
+    return websocket.headers.get("X-API-Key", "").strip()
 
 
 def _extract_session_from_websocket(websocket: WebSocket) -> str:

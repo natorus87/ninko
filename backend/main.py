@@ -45,6 +45,7 @@ from api.routes_safeguard import router as safeguard_router
 from api.routes_safeguard_profiles import router as safeguard_profiles_router
 from api.routes_safeguard_audit import router as safeguard_audit_router
 from api.routes_auth import router as auth_router
+from api.routes_auth import _is_trusted_proxy
 from api.routes_themes import router as themes_router
 from api.routes_operations import router as operations_router
 from api.routes_knowledge_graph import router as knowledge_graph_router
@@ -86,7 +87,7 @@ from core.api_security_policy import (
     extract_module_id_from_path,
     required_role_for_request,
 )
-from core.rate_limit import InMemoryRateLimiter
+from core.rate_limit import RedisRateLimiter
 from core.rbac import RBAC_REDIS_KEY, RbacStore
 
 # Redis-Log-Handler (nach Redis-Verfügbarkeit lazy)
@@ -568,7 +569,7 @@ app.add_middleware(
 )
 
 if settings.API_RATE_LIMIT_ENABLED:
-    _rate_limiter = InMemoryRateLimiter(
+    _rate_limiter = RedisRateLimiter(
         per_minute=settings.API_RATE_LIMIT_PER_MINUTE,
         burst=settings.API_RATE_LIMIT_BURST,
     )
@@ -649,7 +650,12 @@ async def api_security_middleware(request: Request, call_next) -> object:
 
         # API-only security/rate limiting
         if path.startswith("/api/"):
+            # CWE-918: Validate X-Forwarded-For only from trusted proxies
             client_ip = request.client.host if request.client else "unknown"
+            if request.client and _is_trusted_proxy(request.client.host):
+                forwarded = request.headers.get("x-forwarded-for", "")
+                if forwarded:
+                    client_ip = forwarded.split(",", 1)[0].strip()
 
             auth_ctx = await resolve_request_auth_async(request)
             tenant_token = set_current_tenant_id(auth_tenant_id(auth_ctx))
@@ -733,6 +739,18 @@ async def add_no_cache_header(request: Request, call_next) -> object:
             "no-store, no-cache, must-revalidate, max-age=0"
         )
         response.headers["Pragma"] = "no-cache"
+    return response
+
+
+# ── Security Headers Middleware ───────────────────────
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next) -> object:
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
 

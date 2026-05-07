@@ -757,6 +757,15 @@
       "openPRs": "Pull Requests abiertas",
       "loadError": "Error al cargar.",
       "error": "Error: "
+    },
+    "network_analysis": {
+      "title": "Network Analysis",
+      "desc": "Búsqueda DNS, WHOIS, traceroute y análisis IP para sitios web y redes."
+    },
+    "copy": {
+      "copy": "Copiar",
+      "copied": "¡Copiado!",
+      "error": "Error"
     }
   },
   "module.message_hub.title": "Message Hub",

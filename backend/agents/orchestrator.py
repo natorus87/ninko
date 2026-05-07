@@ -153,9 +153,9 @@ async def generate_image(prompt: str, size: str = "1024x1024") -> str:
     Nutze dieses Tool wenn der User ein Bild, eine Illustration, ein Logo,
     ein Foto oder eine Grafik erstellen möchte.
     """
-    from modules.image_gen.tools import generate_image as _generate_image
+    from modules.image_gen.tools import generate_image as _gen
 
-    return await _generate_image.ainvoke({"prompt": prompt, "size": size})
+    return await _gen(prompt=prompt, size=size)
 
 # ── Routing-Konfiguration ─────────────────────────────────────────────────────
 

@@ -759,6 +759,12 @@
       "error": "エラー: "
     }
   },
+  "modules": {
+    "network_analysis": {
+      "title": "Network Analysis",
+      "desc": "ウェブサイトとネットワークのDNS検索、WHOIS、Traceroute、IP分析。"
+    }
+  },
   "module.message_hub.title": "Message Hub",
   "module.message_hub.desc": "メール、Discord、Telegramの双方向ルーティング",
   "module.message_hub.noRoutes": "ルーティングエントリが設定されていません",

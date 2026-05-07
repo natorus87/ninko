@@ -79,6 +79,7 @@ services:
       ADMIN_PASSWORD: "${NINKO_ADMIN_PASSWORD:-}"
       BOOTSTRAP_ADMIN_PASSWORD: "${NINKO_BOOTSTRAP_ADMIN_PASSWORD:-admin}"
       SESSION_COOKIE_SECURE: "false"
+      SESSION_SECRET: "${SESSION_SECRET}"
       # TTS (Piper) – deaktiviert by default
       # Aktivieren: TTS_ENABLED=true + piper installieren (scripts/download_voices.sh)
       TTS_ENABLED: "true"
@@ -92,6 +93,10 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    cap_add:
+      - NET_RAW
+    security_opt:
+      - label:disable
     volumes:
       - ./data:/app/data
       - ./data/plugins:/app/plugins

@@ -1316,6 +1316,11 @@ def _infer_readonly(tool_name: str) -> bool:
         "ha_get_entity_details",
         "ha_get_entity_state",
         "ha_list_entities",
+        "dns_lookup",
+        "reverse_dns",
+        "traceroute",
+        "ping_host",
+        "get_network_info",
     }
     return tool_name.startswith(readonly_prefixes) or tool_name in readonly_names
 

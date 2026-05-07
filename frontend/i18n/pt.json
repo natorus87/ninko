@@ -759,6 +759,12 @@
       "error": "Erro: "
     }
   },
+  "modules": {
+    "network_analysis": {
+      "title": "Network Analysis",
+      "desc": "Pesquisa DNS, WHOIS, traceroute e análise de IP para sites e redes."
+    }
+  },
   "module.message_hub.title": "Message Hub",
   "module.message_hub.desc": "Roteamento bidirecional para Email, Discord e Telegram",
   "module.message_hub.noRoutes": "Nenhuma entrada de roteamento configurada",

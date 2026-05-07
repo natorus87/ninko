@@ -759,6 +759,12 @@
       "error": "Błąd: "
     }
   },
+  "modules": {
+    "network_analysis": {
+      "title": "Network Analysis",
+      "desc": "Wyszukiwanie DNS, WHOIS, traceroute i analiza adresów IP dla stron internetowych i sieci."
+    }
+  },
   "module.message_hub.title": "Message Hub",
   "module.message_hub.desc": "Routing dwukierunkowy dla Email, Discord i Telegram",
   "module.message_hub.noRoutes": "Brak skonfigurowanych wpisów routingu",

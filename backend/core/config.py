@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from typing import Literal
 
-from pydantic import model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -80,8 +80,8 @@ class CoreSettings(BaseSettings):
     API_KEY_READ: str = ""
     ADMIN_USERNAME: str = "admin"
     ADMIN_PASSWORD: str = ""
-    BOOTSTRAP_ADMIN_PASSWORD: str = "admin"
-    SESSION_SECRET: str = "change-me-in-production"
+    BOOTSTRAP_ADMIN_PASSWORD: str = ""
+    SESSION_SECRET: str = Field(default="", min_length=32)
     SESSION_TTL_HOURS: int = 24
     CHAT_HISTORY_TTL_SECONDS: int = 86400  # 24h, matching SESSION_TTL_HOURS
     SESSION_COOKIE_NAME: str = "ninko_session"
@@ -177,9 +177,11 @@ class CoreSettings(BaseSettings):
         logger = logging.getLogger("ninko.core.config")
 
         insecure_defaults = []
-        if self.SESSION_SECRET == "change-me-in-production":
+        if not self.SESSION_SECRET:
             insecure_defaults.append("SESSION_SECRET")
-        if self.BOOTSTRAP_ADMIN_PASSWORD == "admin" and not self.ADMIN_PASSWORD:
+        elif len(self.SESSION_SECRET) < 32:
+            insecure_defaults.append("SESSION_SECRET (zu kurz, min 32)")
+        if not self.BOOTSTRAP_ADMIN_PASSWORD and not self.ADMIN_PASSWORD:
             insecure_defaults.append("BOOTSTRAP_ADMIN_PASSWORD")
         if (
             self.API_AUTH_ENABLED
@@ -196,7 +198,8 @@ class CoreSettings(BaseSettings):
             )
             if self.API_AUTH_ENABLED and (
                 self.DEPLOYMENT_ENV == "production"
-                or self.SESSION_SECRET == "change-me-in-production"
+                or not self.SESSION_SECRET
+                or len(self.SESSION_SECRET) < 32
             ):
                 raise ValueError(msg)
             logger.warning(msg)

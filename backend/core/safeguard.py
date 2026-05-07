@@ -1427,6 +1427,14 @@ class SafeguardMiddleware:
             "recherche",
             "recherchiere",
             "recherchier",
+            "netzwerkanalyse",
+            "traceroute",
+            "tracepath",
+            "dns lookup",
+            "dns-abfrage",
+            "ip-adresse",
+            "server-analyse",
+            "website-analyse",
         )
         if any(kw in lower for kw in search_keywords):
             return {

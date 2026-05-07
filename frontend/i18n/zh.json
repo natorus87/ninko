@@ -759,6 +759,12 @@
       "error": "错误: "
     }
   },
+  "modules": {
+    "network_analysis": {
+      "title": "Network Analysis",
+      "desc": "网站和网络 DNS 查询、WHOIS、Traceroute 和 IP 分析。"
+    }
+  },
   "module.message_hub.title": "Message Hub",
   "module.message_hub.desc": "邮件、Discord和Telegram的双向路由",
   "module.message_hub.noRoutes": "未配置路由条目",

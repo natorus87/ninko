@@ -174,7 +174,7 @@ const Ninko = {
                             localStorage.setItem('ninko_lang', d.language);
                         }
                     }
-                } catch { /* Fallback */ }
+                } catch (err) { console.warn('loadBranding failed, using defaults', err); }
             }
 
             // Auth-Guard: verhindert unautorisierte App-Initialisierung (auch bei /index.html Direktaufruf)
@@ -410,10 +410,15 @@ const Ninko = {
     },
 
     _updateMobileNav() {
-        const active = this.activeTab || 'chat';
-        document.querySelectorAll('#mobile-nav .mobile-nav-item').forEach((btn) => {
-            btn.classList.toggle('active', btn.dataset.mobileTab === active);
-        });
+        if (!this._mobileNavFrame) {
+            this._mobileNavFrame = requestAnimationFrame(() => {
+                const active = this.activeTab || 'chat';
+                document.querySelectorAll('#mobile-nav .mobile-nav-item').forEach((btn) => {
+                    btn.classList.toggle('active', btn.dataset.mobileTab === active);
+                });
+                this._mobileNavFrame = null;
+            });
+        }
     },
 
     _updateBreadcrumb() {
@@ -755,7 +760,7 @@ const Ninko = {
             if (!res.ok) return;
             const data = await res.json();
             this._customAgentsCache = (data.agents || []).filter(a => a.enabled);
-        } catch { /* ignorieren */ }
+        } catch (err) { console.warn('loadCustomAgents failed', err); }
     },
 
     _buildModulePicker() {
@@ -1493,17 +1498,17 @@ const Ninko = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(conversation),
             });
-        } catch { /* Server nicht erreichbar – localStorage-Fallback reicht */ }
+        } catch (err) { console.warn('syncHistoryToBackend failed', err); }
         // Immer auch lokal cachen
-        try { localStorage.setItem('ninko_chat_history', JSON.stringify(this.chatHistory)); } catch { /**/ }
+        try { localStorage.setItem('ninko_chat_history', JSON.stringify(this.chatHistory)); } catch (err) { console.warn('localStorage chat history failed', err); }
     },
 
     async deleteHistoryEntry(id) {
         try {
             await fetch(`/api/chat/ui-history/${id}`, { method: 'DELETE' });
-        } catch { /**/ }
+        } catch (err) { console.warn('deleteHistory failed', err); }
         this.chatHistory = this.chatHistory.filter(h => h.id !== id);
-        try { localStorage.setItem('ninko_chat_history', JSON.stringify(this.chatHistory)); } catch { /**/ }
+        try { localStorage.setItem('ninko_chat_history', JSON.stringify(this.chatHistory)); } catch (err) { console.warn('localStorage delete failed', err); }
         this.renderHistory();
     },
 
@@ -1904,7 +1909,7 @@ ${messagesHtml}
             const data = await res.json();
             this._activeThemeId = data.theme_id || 'default';
             this._activeThemeDefinition = data.theme || null;
-        } catch { /* ignore */ }
+        } catch (err) { console.warn('loadActiveTheme failed', err); }
     },
 
     async activateTheme(themeId, silent = false) {
@@ -2093,7 +2098,7 @@ ${messagesHtml}
                 const data = await res.json();
                 this._ttsAvailable = !!data.TTS_ENABLED;
             }
-        } catch { /* TTS bleibt deaktiviert */ }
+        } catch (err) { console.warn('loadTTS failed, TTS stays disabled', err); }
     },
 
     initScrollbarVisibility() {
@@ -2146,7 +2151,7 @@ ${messagesHtml}
                 this._safeguardProfiles = await profilesRes.json();
             }
             this._updateSafeguardBtn();
-        } catch { /* Safeguard-Status nicht abfragbar — Default: on */ }
+        } catch (err) { console.warn('loadSafeguardActive failed', err); }
     },
 
     // Öffnet/schließt den Profil-Picker im Chat-Toolbar
@@ -2230,7 +2235,7 @@ ${messagesHtml}
                 this._safeguardEnabled = profile ? (profile.check_user_messages || profile.check_tool_calls) : true;
                 this._updateSafeguardBtn();
             }
-        } catch { /* Profilwechsel fehlgeschlagen */ }
+        } catch (err) { console.warn('selectSafeguardProfile failed', err); }
     },
 
     // Backward-compat: einfacher Toggle (Moderate ↔ Disabled)
@@ -2266,7 +2271,7 @@ ${messagesHtml}
             <div class="safeguard-confirm-content">
                 <span class="safeguard-confirm-category ${catClass}">${sg.category}</span>
                 ${isInjection ? `<p class="sg-injection-warning">${t('safeguard.injectionWarning')}</p>` : ''}
-                <p class="sg-rationale">${sg.rationale || ''}</p>
+                <p class="sg-rationale">${this._escapeHtml(sg.rationale || '')}</p>
                 <div class="safeguard-confirm-actions">
                     <button class="btn-confirm-action btn-confirm-run" onclick="Ninko.confirmSafeguardAction()">${t('safeguard.confirmRun')}</button>
                     <button class="btn-confirm-action btn-confirm-cancel" onclick="Ninko.cancelSafeguardAction()">${t('safeguard.confirmCancel')}</button>
@@ -2355,7 +2360,7 @@ ${messagesHtml}
                 this._updateSafeguardBtn();
                 this._updateSgProfileDetails(profileId);
             }
-        } catch { /* Setzen fehlgeschlagen */ }
+        } catch (err) { console.warn('selectSafeguardProfile failed', err); }
     },
 
     _renderSgProfileLists() {
@@ -2508,7 +2513,7 @@ ${messagesHtml}
             if (res.ok || res.status === 204) {
                 await this.renderSafeguardSettingsPanel();
             }
-        } catch { /* Löschen fehlgeschlagen */ }
+        } catch (err) { console.warn('deleteSafeguardProfile failed', err); }
     },
 
     // Füllt den Profile-Select im Agent-Editor
@@ -2526,7 +2531,7 @@ ${messagesHtml}
                     const data = await res.json();
                     sel.value = data.source === 'agent' ? data.profile_id : '';
                 }
-            } catch { /* Fallback auf globales Profil */ }
+            } catch (err) { console.warn('loadAgentSafeguardProfile failed', err); }
         }
     },
 
@@ -2641,7 +2646,7 @@ ${messagesHtml}
                     should_reset: false,
                 });
             }
-        } catch { /* kein Fehler anzeigen — optionale Initialisierung */ }
+        } catch (err) { console.warn('initTTS failed', err); }
     },
 
     _bindCtxIndicatorAction() {
@@ -3049,8 +3054,11 @@ ${messagesHtml}
     },
 
     formatText(text) {
-        // [NINKO_IMAGE:url] → inline <img> Tag (beliebige URL — lokal /api/images/ oder extern https://)
-        // Backward-compat: akzeptiert auch alte [KUMIO_IMAGE:url]-Marker.
+        // [NINKO_IMAGE:url] → inline <img> Tag
+        // SECURITY NOTE: Erlaubt beliebige https:// URLs als img src.
+        // Wenn der LLM kompromittiert ist, könnte er bösartige Bilder einbetten.
+        // Dies ist eine bewusste Design-Entscheidung (IT-Dashboard zeigt Screenshots/Diagramme).
+        // Soll dies eingeschränkt werden: ALLOWED_URI_REGEXP anpassen und nur /api/images/ erlauben.
         text = text.replace(/\[(?:NINKO_IMAGE|KUMIO_IMAGE):([^\]]+)\]/g, (_, url) =>
             `<img src="${this._escapeAttr(url)}" alt="Generiertes Bild" style="max-width:100%;border-radius:8px;margin:0.5rem 0;box-shadow:0 2px 8px rgba(0,0,0,0.15);">`);
         // Fallback: /api/images/ URLs die der LLM als Link formatiert hat
@@ -5269,33 +5277,38 @@ ${messagesHtml}
             container.innerHTML = modules.map(mod => {
                 const updateInfo = updatesMap[mod.name] || {};
                 const hasUpdate = updateInfo.update_available;
+                const safeName = this._escapeHtml(mod.name);
+                const safeDisplayName = this._escapeHtml(mod.display_name);
+                const safeDesc = this._escapeHtml(mod.description || '');
+                const safeVersion = this._escapeHtml(mod.version || '');
+                const safeRepoVersion = this._escapeHtml(updateInfo.repo_version || '');
                 return `
-                <div class="module-config-card" id="module-card-${mod.name}">
+                <div class="module-config-card" id="module-card-${safeName}">
                     <div class="module-config-header">
                         <div class="module-config-info">
-                            <span class="module-config-name">${mod.display_name}</span>
-                            <span class="module-config-version">v${mod.version}${hasUpdate ? ' <span class="version-update-indicator">→ ' + updateInfo.repo_version + '</span>' : ''}</span>
+                            <span class="module-config-name">${safeDisplayName}</span>
+                            <span class="module-config-version">v${safeVersion}${hasUpdate ? ' <span class="version-update-indicator">→ ' + safeRepoVersion + '</span>' : ''}</span>
                         </div>
                         <div style="display: flex; gap: 0.5rem; align-items: center; flex-shrink: 0;">
-                            ${hasUpdate ? `<button class="btn-primary btn-sm btn-update" onclick="Ninko.updatePlugin('${mod.name}')" title="Auf Version ${updateInfo.repo_version} aktualisieren"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: middle;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Update</button>` : ''}
+                            ${hasUpdate ? `<button class="btn-primary btn-sm btn-update" onclick="Ninko.updatePlugin('${safeName}')" title="Auf Version ${safeRepoVersion} aktualisieren"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: middle;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Update</button>` : ''}
                             <label class="toggle-switch" title="Aktivieren/Deaktivieren">
                                 <input type="checkbox" ${mod.enabled ? 'checked' : ''}
-                                    id="mod-toggle-${mod.name}"
-                                    onchange="Ninko.toggleModule('${mod.name}', this.checked)">
+                                    id="mod-toggle-${safeName}"
+                                    onchange="Ninko.toggleModule('${safeName}', this.checked)">
                                 <span class="toggle-slider"></span>
                             </label>
-                            <button class="btn-icon btn-icon-sm" onclick="Ninko.toggleModuleSettings('${mod.name}')" title="Einstellungen">
+                            <button class="btn-icon btn-icon-sm" onclick="Ninko.toggleModuleSettings('${safeName}')" title="Einstellungen">
                                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                             </button>
-                            <button class="btn-icon btn-icon-sm" onclick="Ninko.deletePlugin('${mod.name}')" title="Plugin unwiderruflich deinstallieren" style="color: var(--error-color);">
+                            <button class="btn-icon btn-icon-sm" onclick="Ninko.deletePlugin('${safeName}')" title="Plugin unwiderruflich deinstallieren" style="color: var(--error-color);">
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                             </button>
                         </div>
                     </div>
-                    <p class="module-config-desc">${mod.description}</p>
-                    <div id="mod-connections-container-${mod.name}" class="module-connections-container">
+                    <p class="module-config-desc">${safeDesc}</p>
+                    <div id="mod-connections-container-${safeName}" class="module-connections-container">
                         <h5 style="margin-top:0; margin-bottom: 0.5rem; color: var(--text-color);">Verbindungen / Umgebungen</h5>
-                        <div id="connections-list-${mod.name}">Lade Verbindungen...</div>
+                        <div id="connections-list-${safeName}">Lade Verbindungen...</div>
                         ${this._renderModuleConnectionForm(mod.name)}
                     </div>
                 </div>
@@ -6792,7 +6805,7 @@ ${messagesHtml}
             const data = await res.json();
             this._logCache = data.entries || [];
             this._renderLogs();
-        } catch { }
+        } catch (err) { console.warn('loadLogs failed', err); }
     },
 
     _renderLogs() {
@@ -6936,7 +6949,7 @@ ${messagesHtml}
                     document.getElementById('provider-verify-ssl').checked = p.verify_ssl !== false;
                     document.getElementById('provider-is-default').checked = p.is_default;
                 }
-            } catch { }
+            } catch (err) { console.warn('loadLLMProviders failed', err); }
         }
         this.toggleProviderApiKey();
         editor.classList.remove('hidden');

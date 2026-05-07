@@ -6,7 +6,7 @@ Nutzt LangGraph für Tool-Calling und Conversation-Management.
 from __future__ import annotations
 
 import asyncio
-import json as _json
+import json
 import logging
 import re
 import time
@@ -60,7 +60,7 @@ _BASE_AGENT_RECOVERABLE_EXCEPTIONS = (
     KeyError,
     RuntimeError,
     OSError,
-    _json.JSONDecodeError,
+    json.JSONDecodeError,
     asyncio.TimeoutError,
 )
 
@@ -137,8 +137,8 @@ class _StatusEmitter(AsyncCallbackHandler):
         self._evict_oldest_if_full()
         self._tool_start_times[run_id] = time.monotonic()
         try:
-            self._tool_args[run_id] = _json.loads(input_str) if input_str else {}
-        except (_json.JSONDecodeError, TypeError):
+            self._tool_args[run_id] = json.loads(input_str) if input_str else {}
+        except (json.JSONDecodeError, TypeError):
             self._tool_args[run_id] = (
                 {"_raw": str(input_str)[:200]} if input_str else {}
             )
@@ -148,7 +148,7 @@ class _StatusEmitter(AsyncCallbackHandler):
         label = get_tool_status_label(tool_name)
         # Args vor Emit sanitisieren (verhindert Secret-Leakage im Event-Stream)
         raw_args = self._tool_args.get(run_id, {})
-        safe_args = _json.loads(sanitize_tool_output(_json.dumps(raw_args)))
+        safe_args = json.loads(sanitize_tool_output(json.dumps(raw_args)))
         await status_bus.emit_event(
             self.session_id,
             {
@@ -197,7 +197,7 @@ class _StatusEmitter(AsyncCallbackHandler):
                     flags=re.IGNORECASE,
                 )
                 redacted = re.sub(
-                    rf"({key}\\s*[=:]\\s*)([^\\s,;]+)",
+                    rf"({key}\\s*[=:]\\s*)[^\\s,;]{{1,100}}",
                     r"\1***",
                     redacted,
                     flags=re.IGNORECASE,
@@ -960,7 +960,7 @@ class BaseAgent:
             await redis.connection.setex(
                 f"ninko:safeguard_tool_pending:{session_id}",
                 300,
-                _json.dumps(
+                json.dumps(
                     {
                         "tool_name": tool_name,
                         "tool_args": tool_args,
@@ -977,7 +977,7 @@ class BaseAgent:
                 self.name,
                 session_id,
             )
-            return f"{_TOOL_SAFEGUARD_SENTINEL}" + _json.dumps(
+            return f"{_TOOL_SAFEGUARD_SENTINEL}" + json.dumps(
                 {
                     "tool_name": tool_name,
                     "category": sg_result.category.value,
@@ -1127,11 +1127,11 @@ class BaseAgent:
             fact_text = ""
             importance = 0.5  # Default
             try:
-                parsed = _json.loads(content)
+                parsed = json.loads(content)
                 if isinstance(parsed, dict):
                     fact_text = parsed.get("fact", "").strip()
                     importance = float(parsed.get("importance", 0.5))
-            except _json.JSONDecodeError:
+            except json.JSONDecodeError:
                 # Fallback: Altes Format (nur Text)
                 fact_text = content
 

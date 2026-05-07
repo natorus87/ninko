@@ -766,6 +766,10 @@
       "loadError": "Fehler beim Laden.",
       "error": "Fehler: "
     },
+    "network_analysis": {
+      "title": "Network Analysis",
+      "desc": "DNS-Lookup, WHOIS, Traceroute und IP-Analyse für Webseiten und Netzwerke."
+    },
     "copy": {
       "copy": "Kopieren",
       "copied": "Kopiert!",

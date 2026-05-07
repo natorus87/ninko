@@ -16,6 +16,16 @@ spec:
         app: ninko-backend
     spec:
       serviceAccountName: ninko
+      securityContext:
+        seLinuxOptions: {}
+        runAsUser: 0
+        runAsGroup: 0
+        fsGroup: 0
+        supplementalGroups:
+          - 0
+        sysctls:
+          - name: net.ipv4.ping_group_range
+            value: "0 2147483647"
       initContainers:
       - name: init-data-dir
         image: alpine
@@ -27,6 +37,13 @@ spec:
         - name: backend
           image: natorus87/ninko-backend:latest
           imagePullPolicy: Always
+          securityContext:
+            privileged: true
+            capabilities:
+              add:
+                - NET_RAW
+                - NET_ADMIN
+            seLinuxOptions: {}
           ports:
             - containerPort: 8000
           env:

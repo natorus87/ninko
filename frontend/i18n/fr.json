@@ -758,6 +758,10 @@
       "loadError": "Erreur de chargement.",
       "error": "Erreur : "
     },
+    "network_analysis": {
+      "title": "Network Analysis",
+      "desc": "Recherche DNS, WHOIS, traceroute et analyse IP pour sites web et réseaux."
+    },
     "copy": {
       "copy": "Copier",
       "copied": "Copié!",
