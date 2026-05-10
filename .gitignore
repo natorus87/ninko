@@ -92,6 +92,7 @@ AGENTS.md
 .claude/
 .codex
 skills-lock.json
+.agents/skills/
 
 # Lokale Tool-Konfigurationen
 .brv/
@@ -103,6 +104,17 @@ skills-lock.json
 TODO.md
 DONE.md
 PLAN.md
+ACTIONPLAN-2026-04-10.md
+HARDWARE_SAFETY.md
+RELEASE_PLAN_v1.2.0.md
+
+# Lokale Artefakte und Projekt-Overrides
+dashboard_main.png
+login_state.png
+deploy.sh
+pyproject.toml
+pytest.ini
+test_pihole.py
 
 # Interne Migrations-Runbooks
 NAMESPACE_MIGRATION_RUNBOOK.md
