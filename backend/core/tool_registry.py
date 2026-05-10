@@ -805,6 +805,8 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
     # (sonst: _discover_module_tools Fallback oder None → LLM-Fallback)
     messaging_tools = [
         ToolMetadata("send_telegram_message", "telegram", tier=ToolTier.COMMUNICATE),
+        # Pure delegation back to the orchestrator — no external side effect.
+        ToolMetadata("delegate_to_orchestrator", "telegram", tier=ToolTier.READONLY),
         ToolMetadata("send_slack_message", "slack", tier=ToolTier.COMMUNICATE),
         ToolMetadata("send_slack_dm", "slack", tier=ToolTier.COMMUNICATE),
         ToolMetadata("upload_slack_file", "slack", tier=ToolTier.COMMUNICATE),

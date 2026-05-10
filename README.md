@@ -11,14 +11,14 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.3.4-blue.svg" alt="Version"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.3.5-blue.svg" alt="Version"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-stable-brightgreen.svg" alt="Status"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.12-blue.svg" alt="Python"></a>
   <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.115-green.svg" alt="FastAPI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
 </p>
 
-> **v1.3.4 — Current Release:** Ninko is production-ready and actively deployed. The core API and module interfaces are stable. Feedback and contributions welcome.
+> **v1.3.5 — Current Release:** Routing is more deterministic, security defaults are stricter, and the new Network Analysis core module adds real DNS, ping, and traceroute diagnostics.
 
 ---
 
@@ -27,9 +27,9 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 - **Chat Interface** – Control your entire IT infrastructure in natural language
 - **Module Marketplace** – Install any module from GitHub with one click, no rebuild required; supports multiple repos (official + community)
 - **Module Updates** – Check for updates directly from the UI; one-click update button when new versions available
-- **9 core modules** always available: `web_search`, `image_gen`, `codelab`, `dataviz`, `knowledge_graph`, `message_hub`, `scripting`
-- **40 catalog modules** installable on demand: Kubernetes, Proxmox, Checkmk, Pi-hole, Home Assistant, GitHub, GitLab, Cisco, MikroTik, Netgear, Ubiquiti, and more
-- **4-tier orchestrator routing** – Direct / Module Agent / Dynamic Agent / Typed Pipeline Engine (deterministic planning, per-step retry, Redis checkpoints)
+- **8 core modules** always available: `web_search`, `image_gen`, `codelab`, `dataviz`, `knowledge_graph`, `message_hub`, `network_analysis`, `scripting`
+- **39 catalog modules** installable on demand: Kubernetes, Proxmox, Checkmk, Pi-hole, Home Assistant, GitHub, GitLab, Cisco, MikroTik, Netgear, Ubiquiti, and more
+- **4-tier orchestrator routing** – Direct / Module Agent / Dynamic Agent / Typed Pipeline Engine with deterministic planning, confidence scoring, semantic tie-breaking, and Redis checkpoints
 - **Long-term memory** – ChromaDB-backed semantic memory across all sessions
 - **Local LLMs** – Ollama, LM Studio, or any OpenAI-compatible API (no cloud required)
 - **Workflow engine** – Visual DAG editor with parallel branches, retries, sub-workflows, and versioning
@@ -102,7 +102,7 @@ cd ninko
 
 ```bash
 cp .env.example .env
-# Open .env and set SQLITE_SECRETS_KEY:
+# Open .env and set SQLITE_SECRETS_KEY, SESSION_SECRET, and BOOTSTRAP_ADMIN_PASSWORD:
 # python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
 
@@ -216,6 +216,7 @@ Telegram and Teams bots use a pending-message flow: Ninko stores the message for
 | `dataviz` | Data visualization and chart generation |
 | `knowledge_graph` | Knowledge graph visualization with Cytoscape |
 | `message_hub` | Unified messaging platform for multi-channel notifications |
+| `network_analysis` | DNS lookup, reverse DNS, ping, traceroute, and local network diagnostics |
 | `scripting` | Script execution and automation tools |
 
 ### Catalog modules (installable via the Marketplace)
@@ -240,6 +241,7 @@ Telegram and Teams bots use a pending-message flow: Ninko stores the message for
 | `linux_server` | Server administration via SSH |
 | `hpe_ilo` | HPE iLO server management |
 | `jira` | Atlassian Jira issue management |
+| `licium` | Licium wiki and knowledge workflows |
 | `microsoft_entra` | Microsoft Entra identity management |
 | `microsoft_intune` | Microsoft Intune endpoint management |
 | `mikrotik` | MikroTik RouterOS management |
@@ -279,7 +281,8 @@ All settings can be managed through the web UI under **Settings**. Module connec
 | `SQLITE_SECRETS_KEY` | — | **Required**: Encryption key for secrets (generate: `python3 -c "import secrets; print(secrets.token_hex(32))"`) |
 | `API_AUTH_ENABLED` | `true` | Enable authentication system |
 | `SESSION_SECRET` | — | **Required**: Secret for session cookies (generate secure random) |
-| `BOOTSTRAP_ADMIN_PASSWORD` | `admin` | Initial admin password (change immediately!) |
+| `BOOTSTRAP_ADMIN_PASSWORD` | — | Initial admin password for bootstrap/login setup |
+| `ROUTING_EMBEDDING_ENABLED` | `true` | Enable semantic tie-breaker for ambiguous keyword routing |
 | `CHROMA_HOST` | `chromadb` | ChromaDB host for semantic memory |
 | `REDIS_URL` | `redis://redis:6379/0` | Redis connection URL |
 | `LANGUAGE` | `de` | Default response language (de, en, fr, es, it, nl, pl, pt, ja, zh) |

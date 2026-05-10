@@ -507,13 +507,13 @@ class PipelineEngine:
     ) -> str:
         """Reichert den Task-String mit Ergebnissen aus Abhängigkeits-Steps an."""
         task = step.task
-        if step.depends_on:
-            dep_parts: list[str] = []
-            for dep_idx in step.depends_on:
-                if dep_idx in prior_results and prior_results[dep_idx].result:
-                    dep_parts.append(f"[{prior_results[dep_idx].module}]: {prior_results[dep_idx].result}")
-            if dep_parts:
-                task += "\n\nVorherige Ergebnisse als Kontext:\n" + "\n\n".join(dep_parts)
+        dependency_indices = step.depends_on or sorted(i for i in prior_results if i < idx)
+        dep_parts: list[str] = []
+        for dep_idx in dependency_indices:
+            if dep_idx in prior_results and prior_results[dep_idx].result:
+                dep_parts.append(f"[{prior_results[dep_idx].module}]: {prior_results[dep_idx].result}")
+        if dep_parts:
+            task += "\n\nVorherige Ergebnisse als Kontext:\n" + "\n\n".join(dep_parts)
         return task
 
     def _get_module_agent(self, module: str):

@@ -1,5 +1,5 @@
 """
-Telegram Modul – Manifest mit Metadaten und Health-Check.
+Telegram Module — manifest with metadata and health check.
 """
 
 from __future__ import annotations
@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 import httpx
 
+from agents.base_agent import _t
 from core.module_registry import ModuleManifest
 from core.vault import get_vault
 
@@ -14,7 +15,7 @@ logger = logging.getLogger("ninko.modules.telegram")
 
 
 async def check_telegram_health(connection_id: str = "") -> dict:
-    """Health-Check für den Telegram Bot via getMe API."""
+    """Health check for the Telegram Bot via getMe API."""
     try:
         from core.connections import ConnectionManager
 
@@ -32,7 +33,10 @@ async def check_telegram_health(connection_id: str = "") -> dict:
         if not bot_token:
             return {
                 "status": "warning",
-                "detail": "Kein Telegram Bot Token konfiguriert.",
+                "detail": _t(
+                    "Kein Telegram Bot Token konfiguriert.",
+                    "No Telegram Bot Token configured.",
+                ),
             }
 
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -42,13 +46,22 @@ async def check_telegram_health(connection_id: str = "") -> dict:
                 data = resp.json()
                 if data.get("ok"):
                     bot_name = data["result"].get("username", "Unknown Bot")
-                    return {"status": "ok", "detail": f"Verbunden als @{bot_name}"}
+                    return {"status": "ok", "detail": f"Connected as @{bot_name}"}
                 else:
-                    return {"status": "error", "detail": "Telegram API meldete Fehler."}
+                    return {
+                        "status": "error",
+                        "detail": _t(
+                            "Telegram API meldete Fehler.",
+                            "Telegram API reported an error.",
+                        ),
+                    }
             elif resp.status_code == 401:
                 return {
                     "status": "error",
-                    "detail": "Unauthorized: Bot Token ist ungültig.",
+                    "detail": _t(
+                        "Unauthorized: Bot Token ist ungültig.",
+                        "Unauthorized: Bot Token is invalid.",
+                    ),
                 }
             else:
                 return {
@@ -56,28 +69,33 @@ async def check_telegram_health(connection_id: str = "") -> dict:
                     "detail": f"HTTP {resp.status_code}: {resp.text[:100]}",
                 }
 
-    except Exception as e:
-        return {"status": "error", "detail": f"Telegram API nicht erreichbar: {e}"}
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        return {"status": "error", "detail": f"Telegram API unreachable: {exc}"}
 
 
 module_manifest = ModuleManifest(
     name="telegram",
     display_name="Telegram Bot",
     description="Ermöglicht das Chatten mit dem Ninko Orchestrator über Telegram",
-    version="1.1.1",
+    version="1.2.0",
     author="Ninko Team",
     enabled_by_default=True,
     env_prefix="TELEGRAM_",
     required_secrets=[],
     optional_secrets=["TELEGRAM_BOT_TOKEN"],
+    # Schlanke Keyword-Liste: nur explizite Send-/Transport-Intentionen.
+    # Generische Begriffe ("telegram", "messenger", "benachrichtige") wurden
+    # entfernt, weil sie das Tier-2-Routing in Status-/Inhaltsfragen
+    # fehlleiteten. Der transparente Telegram-Agent delegiert ohnehin via
+    # `delegate_to_orchestrator`, wenn er trotzdem getroffen wird.
     routing_keywords=[
-        "telegram",
         "telegram-nachricht",
         "telegram nachricht",
         "per telegram",
         "via telegram",
-        "messenger",
-        "benachrichtige",
+        "auf telegram",
+        "ueber telegram",
+        "über telegram",
         "telegram-gruppe",
         "telegram-kanal",
     ],

@@ -8,11 +8,59 @@ import logging
 
 import httpx
 from langchain_core.tools import tool
+from langchain_core.runnables import RunnableConfig
 
 from agents.base_agent import _t
 from .formatter import format_for_telegram
 
 logger = logging.getLogger("ninko.modules.telegram.tools")
+
+
+@tool
+async def delegate_to_orchestrator(
+    question: str,
+    config: RunnableConfig | None = None,
+) -> str:
+    """
+    Delegate a content question to the main Ninko orchestrator.
+    Use this whenever the user asks for information, status, data, or any
+    action that the Telegram module itself cannot perform (everything except
+    sending a Telegram message). The orchestrator will route to the right
+    module(s) and return the answer as plain text. Do NOT paraphrase the
+    answer — pass the orchestrator's response back verbatim, or feed it into
+    `send_telegram_message` if the user explicitly asked for delivery.
+
+    Args:
+        question: The user's original question, unmodified.
+    """
+    from agents.orchestrator import get_orchestrator
+
+    orchestrator = get_orchestrator()
+    if orchestrator is None:
+        return _t(
+            de="Fehler: Orchestrator ist nicht initialisiert.",
+            en="Error: Orchestrator is not initialised.",
+        )
+
+    session_id = ""
+    if config and isinstance(config, dict):
+        cfg = config.get("configurable") or {}
+        session_id = str(cfg.get("session_id") or cfg.get("thread_id") or "")
+
+    try:
+        response, _did_compact = await orchestrator.invoke(
+            message=question,
+            chat_history=[],
+            session_id=session_id,
+            confirmed=True,
+        )
+        return response
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as exc:
+        logger.exception("delegate_to_orchestrator failed: %s", exc)
+        return _t(
+            de=f"Fehler bei der Delegation an den Orchestrator: {exc}",
+            en=f"Error delegating to orchestrator: {exc}",
+        )
 
 
 @tool

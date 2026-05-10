@@ -769,14 +769,14 @@ const Ninko = {
         const enabledMods = this.modules.filter(m => m.enabled);
         const autoLabel = t('chat.moduleAuto');
         const items = [
-            `<button class="module-picker-item${this._forcedModule === null ? ' selected' : ''}" onclick="Ninko.setForcedModule(null)">
+            `<button class="module-picker-item${this._forcedModule === null ? ' selected' : ''}" data-action="setForcedModule" data-args='[null]'>
                 ${autoLabel}
             </button>`,
             enabledMods.length ? '<div class="module-picker-divider"></div>' : '',
             ...enabledMods.map(m => {
                 const icon = m.dashboard_tab?.icon || '';
                 const label = m.display_name || m.name;
-                return `<button class="module-picker-item${this._forcedModule === m.name ? ' selected' : ''}" onclick="Ninko.setForcedModule('${m.name}')">
+                return `<button class="module-picker-item${this._forcedModule === m.name ? ' selected' : ''}" data-action="setForcedModule" data-args="${JSON.stringify([m.name]).replace(/\"/g, '&quot;')}">
                     ${icon ? icon + ' ' : ''}${label}
                 </button>`;
             }),
@@ -786,7 +786,7 @@ const Ninko = {
             items.push('<div class="module-picker-divider"></div>');
             items.push('<div style="padding:0.25rem 0.75rem;font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;">Meine Agenten</div>');
             this._customAgentsCache.forEach(a => {
-                items.push(`<button class="module-picker-item${this._forcedModule === a.id ? ' selected' : ''}" onclick="Ninko.setForcedModule('${this._escapeHtml(a.id)}', '${this._escapeHtml(a.name)}')">
+                items.push(`<button class="module-picker-item${this._forcedModule === a.id ? ' selected' : ''}" data-action="setForcedModule" data-args="${JSON.stringify([a.id, a.name]).replace(/\"/g, '&quot;')}">
                     🤖 ${this._escapeHtml(a.name)}
                 </button>`);
             });
@@ -1367,6 +1367,15 @@ const Ninko = {
                 const data = await res.json();
                 this.addChatMessage('ai', data.response);
 
+                if (
+                    data.routing_confidence !== null &&
+                    data.routing_confidence !== undefined &&
+                    data.routing_confidence < 0.7
+                ) {
+                    const pct = Math.round(data.routing_confidence * 100);
+                    this.addChatMeta(`⚠️ Unsicheres Routing (${pct} % Konfidenz) – Modul-Zuweisung könnte ungenau sein.`);
+                }
+
                 if (data.confirmation_required && data.safeguard) {
                     this._safeguardPendingMessage = text;
                     this._showSafeguardConfirmPrompt(data.safeguard);
@@ -1476,6 +1485,7 @@ const Ninko = {
         // SECURITY: Chat history wird NICHT in localStorage gespeichert (XSS/CWE-200)
         // da sie potenziell sensitive Daten enthalten kann.
         // Nur Server-Side History wird verwendet.
+        try { localStorage.removeItem('ninko_chat_history'); } catch {}
         try {
             const res = await fetch('/api/chat/ui-history');
             if (res.ok) {
@@ -1499,8 +1509,6 @@ const Ninko = {
                 body: JSON.stringify(conversation),
             });
         } catch (err) { console.warn('syncHistoryToBackend failed', err); }
-        // Immer auch lokal cachen
-        try { localStorage.setItem('ninko_chat_history', JSON.stringify(this.chatHistory)); } catch (err) { console.warn('localStorage chat history failed', err); }
     },
 
     async deleteHistoryEntry(id) {
@@ -1508,7 +1516,6 @@ const Ninko = {
             await fetch(`/api/chat/ui-history/${id}`, { method: 'DELETE' });
         } catch (err) { console.warn('deleteHistory failed', err); }
         this.chatHistory = this.chatHistory.filter(h => h.id !== id);
-        try { localStorage.setItem('ninko_chat_history', JSON.stringify(this.chatHistory)); } catch (err) { console.warn('localStorage delete failed', err); }
         this.renderHistory();
     },
 
@@ -1528,10 +1535,10 @@ const Ninko = {
             const historyTitleAttr = this._escapeAttr(h.title);
             return `
             <div class="history-item ${h.id === this.currentHistoryId ? 'active' : ''}"
-                onclick="Ninko.loadHistoryEntry('${historyId}')"
+                data-action="loadHistoryEntry" data-args="${JSON.stringify([historyId]).replace(/\"/g, '&quot;')}"
                 title="${historyTitleAttr}">
                 <span class="history-item-text">${historyTitle}</span>
-                <button class="history-item-delete" onclick="event.stopPropagation(); Ninko.deleteHistoryEntry('${historyId}')" title="Chat löschen">
+                <button class="history-item-delete" data-action="deleteHistoryEntry" data-args="${JSON.stringify([historyId]).replace(/\"/g, '&quot;')}" data-stop-propagation="true" title="Chat löschen">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m5 0V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
                 </button>
             </div>
@@ -1963,15 +1970,15 @@ ${messagesHtml}
         const avatar = role === 'user' ? avatarUser : avatarAi;
 
         const retryBtn = role === 'ai'
-            ? `<button class="chat-action-btn" title="Wiederholen" onclick="Ninko.retryMessage('${msgId}')">↺</button>`
+            ? `<button class="chat-action-btn" title="Wiederholen" data-action="retryMessage" data-args="${JSON.stringify([msgId]).replace(/\"/g, '&quot;')}">↺</button>`
             : '';
 
         const copyIcon = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
-        const copyBtn = `<button class="chat-action-btn chat-action-copy" title="${t('copy.copy')}" onclick="Ninko.copyMessage('${msgId}', this)">${copyIcon}</button>`;
+        const copyBtn = `<button class="chat-action-btn chat-action-copy" title="${t('copy.copy')}" data-action="copyMessage" data-args="${JSON.stringify([msgId]).replace(/\"/g, '&quot;')}" data-self="true">${copyIcon}</button>`;
 
         const speakerIcon = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`;
         const ttsBtn = (role === 'ai' && this._ttsAvailable)
-            ? `<button class="chat-action-btn chat-action-tts" data-tts-id="${msgId}" title="Vorlesen" onclick="Ninko.speakMessage('${msgId}')">${speakerIcon}</button>`
+            ? `<button class="chat-action-btn chat-action-tts" data-tts-id="${msgId}" title="Vorlesen" data-action="speakMessage" data-args="${JSON.stringify([msgId]).replace(/\"/g, '&quot;')}">${speakerIcon}</button>`
             : '';
 
         const div = document.createElement('div');
@@ -1986,7 +1993,7 @@ ${messagesHtml}
                     ${copyBtn}
                     ${ttsBtn}
                     ${retryBtn}
-                    <button class="chat-action-btn chat-action-delete" title="Löschen" onclick="Ninko.deleteMessage('${msgId}')"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
+                    <button class="chat-action-btn chat-action-delete" title="Löschen" data-action="deleteMessage" data-args="${JSON.stringify([msgId]).replace(/\"/g, '&quot;')}"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
                 </div>
             </div>
         `;
@@ -2192,7 +2199,7 @@ ${messagesHtml}
             const isActive = p.id === activeId;
             const scopeBadge = this._sgScopeBadge(p);
             return `<button class="sg-picker-item${isActive ? ' active' : ''}"
-                onclick="Ninko._selectSafeguardProfile('${p.id}')">
+                data-action="_selectSafeguardProfile" data-args="${JSON.stringify([p.id]).replace(/\"/g, '&quot;')}">
                 <span class="sg-picker-name">${p.name}</span>
                 <span class="sg-picker-scope">${scopeBadge}</span>
             </button>`;
@@ -2201,7 +2208,7 @@ ${messagesHtml}
             <div class="sg-picker-header">${t('safeguard.pickProfile')}</div>
             ${items}
             <div class="sg-picker-footer">
-                <button class="sg-picker-settings" onclick="Ninko._closeSafeguardPicker();Ninko.switchTab('settings');Ninko.switchSettingsTab('safeguard');">
+                <button class="sg-picker-settings" data-actions='[["_closeSafeguardPicker"],["switchTab","settings"],["switchSettingsTab","safeguard"]]'>
                     ${t('safeguard.manageProfiles')}
                 </button>
             </div>`;
@@ -2273,8 +2280,8 @@ ${messagesHtml}
                 ${isInjection ? `<p class="sg-injection-warning">${t('safeguard.injectionWarning')}</p>` : ''}
                 <p class="sg-rationale">${this._escapeHtml(sg.rationale || '')}</p>
                 <div class="safeguard-confirm-actions">
-                    <button class="btn-confirm-action btn-confirm-run" onclick="Ninko.confirmSafeguardAction()">${t('safeguard.confirmRun')}</button>
-                    <button class="btn-confirm-action btn-confirm-cancel" onclick="Ninko.cancelSafeguardAction()">${t('safeguard.confirmCancel')}</button>
+                    <button class="btn-confirm-action btn-confirm-run" data-action="confirmSafeguardAction">${t('safeguard.confirmRun')}</button>
+                    <button class="btn-confirm-action btn-confirm-cancel" data-action="cancelSafeguardAction">${t('safeguard.confirmCancel')}</button>
                 </div>
             </div>
         `;
@@ -2398,8 +2405,8 @@ ${messagesHtml}
                 <span class="sg-profile-card-id text-muted">${escapedId}</span>
                 ${!readonly ? `
                     <div class="sg-profile-card-actions">
-                        <button class="btn btn-xs btn-outline" onclick="Ninko.openSafeguardProfileEditor('${escapedId}')">${t('safeguard.edit')}</button>
-                        <button class="btn btn-xs btn-danger" onclick="Ninko.deleteSafeguardProfile('${escapedId}')">${t('safeguard.delete')}</button>
+                        <button class="btn btn-xs btn-outline" data-action="openSafeguardProfileEditor" data-args="${JSON.stringify([escapedId]).replace(/\"/g, '&quot;')}">${t('safeguard.edit')}</button>
+                        <button class="btn btn-xs btn-danger" data-action="deleteSafeguardProfile" data-args="${JSON.stringify([escapedId]).replace(/\"/g, '&quot;')}">${t('safeguard.delete')}</button>
                     </div>` : ''}
             </div>
             <div class="sg-profile-card-meta">
@@ -3586,7 +3593,7 @@ ${messagesHtml}
                     ${languages.map(l => `
                         <button class="lang-btn ${l.code === currentLang ? 'lang-btn-active' : ''}"
                             data-lang="${l.code}"
-                            onclick="Ninko.setLanguage('${l.code}')">
+                            data-action="setLanguage" data-args="${JSON.stringify([l.code]).replace(/\"/g, '&quot;')}">
                             <span class="lang-flag">${l.flag}</span>
                             <span class="lang-name">${l.label}</span>
                         </button>
@@ -3643,8 +3650,8 @@ ${messagesHtml}
                             ${th.source === 'builtin' ? '<span class="module-config-version">Built-in</span>' : '<span class="module-config-version">Custom</span>'}
                         </div>
                         <div style="display:flex; gap:0.35rem;">
-                            ${active ? '' : `<button class="btn btn-primary btn-sm" onclick="Ninko.activateTheme('${this._escapeHtml(th.id)}')">Aktivieren</button>`}
-                            <button class="btn btn-outline btn-sm" onclick="Ninko.openThemeEditor('${this._escapeHtml(th.id)}')">Editor</button>
+                            ${active ? '' : `<button class="btn btn-primary btn-sm" data-action="activateTheme" data-args="${JSON.stringify([th.id]).replace(/\"/g, '&quot;')}">Aktivieren</button>`}
+                            <button class="btn btn-outline btn-sm" data-action="openThemeEditor" data-args="${JSON.stringify([th.id]).replace(/\"/g, '&quot;')}">Editor</button>
                         </div>
                     </div>
                     ${th.description ? `<p class="module-config-desc">${this._escapeHtml(th.description)}</p>` : ''}
@@ -3842,8 +3849,8 @@ ${messagesHtml}
                         <span class="text-muted" style="font-size:0.76rem;">${this._escapeHtml(repo.repo_url)} · ${this._escapeHtml(repo.branch || 'main')}</span>
                     </div>
                     <div style="display:flex; gap:0.35rem;">
-                        <button class="btn btn-outline btn-sm" onclick="Ninko.loadThemesFromRepo('${this._escapeHtml(repo.id)}')">Themes laden</button>
-                        ${repo.id === 'official' ? '' : `<button class="btn btn-outline btn-sm" style="color:var(--error-color);" onclick="Ninko.deleteThemeRepo('${this._escapeHtml(repo.id)}')">Repo löschen</button>`}
+                        <button class="btn btn-outline btn-sm" data-action="loadThemesFromRepo" data-args="${JSON.stringify([repo.id]).replace(/\"/g, '&quot;')}">Themes laden</button>
+                        ${repo.id === 'official' ? '' : `<button class="btn btn-outline btn-sm" style="color:var(--error-color);" data-action="deleteThemeRepo" data-args="${JSON.stringify([repo.id]).replace(/\"/g, '&quot;')}">Repo löschen</button>`}
                     </div>
                 </div>
                 <div id="theme-repo-themes-${this._escapeHtml(repo.id)}" style="margin-top:0.5rem;"></div>
@@ -3918,7 +3925,7 @@ ${messagesHtml}
                             <span class="module-config-version">${this._escapeHtml(th.version || '')}</span>
                         </div>
                         <button class="btn btn-primary btn-sm" id="theme-install-btn-${this._escapeHtml(repoId)}-${this._escapeHtml(th.id)}"
-                            onclick="Ninko.installThemeFromRepo('${this._escapeHtml(th.id)}','${this._escapeHtml(repoId)}')">
+                            data-action="installThemeFromRepo" data-args="${JSON.stringify([th.id, repoId]).replace(/\"/g, '&quot;')}">
                             Installieren
                         </button>
                     </div>
@@ -4254,7 +4261,7 @@ ${messagesHtml}
                     <td>${v.name}</td>
                     <td>${v.quality}</td>
                     <td><button class="btn btn-outline btn-sm" style="color:var(--error-color);border-color:var(--error-color);"
-                        onclick="Ninko.deleteTtsVoice('${v.lang}','${v.name}')"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></td>
+                        data-action="deleteTtsVoice" data-args="${JSON.stringify([v.lang, v.name]).replace(/\"/g, '&quot;')}"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></td>
                 </tr>`).join('')}
             </tbody></table>`;
         } catch (err) {
@@ -4510,7 +4517,7 @@ ${messagesHtml}
                 <p class="setting-desc">Verwalte Benutzer, Gruppen und Rollen. Rechte können pro Modul konfiguriert werden.</p>
                 <div class="form-actions">
                     <span id="rbac-save-status" class="save-status"></span>
-                    <button class="btn btn-outline btn-sm" onclick="Ninko.loadRbacSettings()">Neu laden</button>
+                    <button class="btn btn-outline btn-sm" data-action="loadRbacSettings">Neu laden</button>
                 </div>
             </div>
 
@@ -4527,7 +4534,7 @@ ${messagesHtml}
                         <option value="">Gruppe (optional)</option>
                         ${groupOptions}
                     </select>
-                    <button class="btn btn-primary btn-sm" onclick="Ninko.createRbacUser()">Benutzer anlegen</button>
+                    <button class="btn btn-primary btn-sm" data-action="createRbacUser">Benutzer anlegen</button>
                 </div>
                 <div id="rbac-users-list">${this._renderRbacUsersTable()}</div>
             </div>
@@ -4541,7 +4548,7 @@ ${messagesHtml}
                     </select>
                     <input id="rbac-token-name" type="text" class="form-input" placeholder="Token-Name" style="max-width:220px;">
                     <input id="rbac-token-exp-hours" type="number" min="1" max="8760" class="form-input" placeholder="Ablauf in Stunden" value="720" style="max-width:180px;">
-                    <button class="btn btn-primary btn-sm" onclick="Ninko.createRbacUserApiToken()">Token erstellen</button>
+                    <button class="btn btn-primary btn-sm" data-action="createRbacUserApiToken">Token erstellen</button>
                 </div>
                 <div id="rbac-token-created" class="save-status" style="margin-bottom:0.6rem;"></div>
                 <div id="rbac-token-list"><p class="text-muted">Bitte Benutzer auswählen.</p></div>
@@ -4561,8 +4568,8 @@ ${messagesHtml}
                     <textarea id="rbac-user-custom-settings-json" class="form-input" rows="8" placeholder='{"dashboard":{"default_module":"kubernetes"}}'></textarea>
                 </div>
                 <div class="form-actions">
-                    <button class="btn btn-outline btn-sm" onclick="Ninko.loadRbacUserCustomSettings()">Laden</button>
-                    <button class="btn btn-primary btn-sm" onclick="Ninko.saveRbacUserCustomSettings()">Speichern</button>
+                    <button class="btn btn-outline btn-sm" data-action="loadRbacUserCustomSettings">Laden</button>
+                    <button class="btn btn-primary btn-sm" data-action="saveRbacUserCustomSettings">Speichern</button>
                 </div>
             </div>
 
@@ -4575,7 +4582,7 @@ ${messagesHtml}
                         <option value="">Rolle zuweisen (optional)</option>
                         ${roleOptions}
                     </select>
-                    <button class="btn btn-primary btn-sm" onclick="Ninko.createRbacGroup()">Gruppe anlegen</button>
+                    <button class="btn btn-primary btn-sm" data-action="createRbacGroup">Gruppe anlegen</button>
                 </div>
                 <div id="rbac-groups-list">${this._renderRbacGroupsTable()}</div>
             </div>
@@ -4590,7 +4597,7 @@ ${messagesHtml}
                         <option value="write">write</option>
                         <option value="admin">admin</option>
                     </select>
-                    <button class="btn btn-primary btn-sm" onclick="Ninko.createRbacRole()">Rolle anlegen</button>
+                    <button class="btn btn-primary btn-sm" data-action="createRbacRole">Rolle anlegen</button>
                 </div>
                 <div class="form-row">
                     <label class="form-label" for="rbac-role-edit-select">Rolle für Modulrechte bearbeiten</label>
@@ -4624,11 +4631,11 @@ ${messagesHtml}
                 <td>${this._escapeHtml((u.roles || []).join(', ') || '-')}</td>
                 <td>${this._escapeHtml((u.groups || []).join(', ') || '-')}</td>
                 <td style="display:flex; gap:0.35rem;">
-                    <button class="btn btn-outline btn-sm" onclick="Ninko.toggleRbacUserActive('${this._escapeHtml(u.username)}', ${u.active ? 'false' : 'true'})">${u.active ? 'Deaktivieren' : 'Aktivieren'}</button>
-                    <button class="btn btn-outline btn-sm" onclick="Ninko.setRbacUserPassword('${this._escapeHtml(u.username)}')">Passwort</button>
-                    <button class="btn btn-outline btn-sm" onclick="Ninko.openRbacUserSettings('${this._escapeHtml(u.username)}')">Settings</button>
-                    <button class="btn btn-outline btn-sm" onclick="Ninko.openRbacUserTokens('${this._escapeHtml(u.username)}')">API-Token</button>
-                    <button class="btn btn-outline btn-sm" style="color:var(--error-color);" onclick="Ninko.deleteRbacUser('${this._escapeHtml(u.username)}')">Löschen</button>
+                    <button class="btn btn-outline btn-sm" data-action="toggleRbacUserActive" data-args="${JSON.stringify([u.username, !u.active]).replace(/\"/g, '&quot;')}">${u.active ? 'Deaktivieren' : 'Aktivieren'}</button>
+                    <button class="btn btn-outline btn-sm" data-action="setRbacUserPassword" data-args="${JSON.stringify([u.username]).replace(/\"/g, '&quot;')}">Passwort</button>
+                    <button class="btn btn-outline btn-sm" data-action="openRbacUserSettings" data-args="${JSON.stringify([u.username]).replace(/\"/g, '&quot;')}">Settings</button>
+                    <button class="btn btn-outline btn-sm" data-action="openRbacUserTokens" data-args="${JSON.stringify([u.username]).replace(/\"/g, '&quot;')}">API-Token</button>
+                    <button class="btn btn-outline btn-sm" style="color:var(--error-color);" data-action="deleteRbacUser" data-args="${JSON.stringify([u.username]).replace(/\"/g, '&quot;')}">Löschen</button>
                 </td>
             </tr>
         `).join('');
@@ -4651,7 +4658,7 @@ ${messagesHtml}
                 <td>${this._escapeHtml((g.roles || []).join(', ') || '-')}</td>
                 <td>${this._escapeHtml(((g.users || []).length).toString())}</td>
                 <td>
-                    ${g.id === 'group_admins' ? '-' : `<button class="btn btn-outline btn-sm" style="color:var(--error-color);" onclick="Ninko.deleteRbacGroup('${this._escapeHtml(g.id)}')">Löschen</button>`}
+                    ${g.id === 'group_admins' ? '-' : `<button class="btn btn-outline btn-sm" style="color:var(--error-color);" data-action="deleteRbacGroup" data-args="${JSON.stringify([g.id]).replace(/\"/g, '&quot;')}">Löschen</button>`}
                 </td>
             </tr>
         `).join('');
@@ -4674,7 +4681,7 @@ ${messagesHtml}
                 <td>${this._escapeHtml(r.base_role || 'read')}</td>
                 <td>${this._escapeHtml(Object.keys(r.module_permissions || {}).join(', ') || '-')}</td>
                 <td>
-                    ${r.id === 'role_admin' ? '-' : `<button class="btn btn-outline btn-sm" style="color:var(--error-color);" onclick="Ninko.deleteRbacRole('${this._escapeHtml(r.id)}')">Löschen</button>`}
+                    ${r.id === 'role_admin' ? '-' : `<button class="btn btn-outline btn-sm" style="color:var(--error-color);" data-action="deleteRbacRole" data-args="${JSON.stringify([r.id]).replace(/\"/g, '&quot;')}">Löschen</button>`}
                 </td>
             </tr>
         `).join('');
@@ -4728,7 +4735,7 @@ ${messagesHtml}
                     </table>
                 </div>
                 <div class="form-actions" style="margin-top:0.5rem;">
-                    <button class="btn btn-primary btn-sm" onclick="Ninko.saveRbacRolePermissions('${this._escapeHtml(roleId)}')">Modulrechte speichern</button>
+                    <button class="btn btn-primary btn-sm" data-action="saveRbacRolePermissions" data-args="${JSON.stringify([roleId]).replace(/\"/g, '&quot;')}">Modulrechte speichern</button>
                 </div>
             </div>
         `;
@@ -4893,7 +4900,7 @@ ${messagesHtml}
                     <td>${this._escapeHtml(t.created_at || '-')}</td>
                     <td>${this._escapeHtml(t.expires_at || '-')}</td>
                     <td>${t.revoked ? 'revoked' : 'active'}</td>
-                    <td>${t.revoked ? '-' : `<button class="btn btn-outline btn-sm" style="color:var(--error-color);" onclick="Ninko.revokeRbacUserApiToken('${this._escapeHtml(username)}','${this._escapeHtml(t.id || '')}')">Revoke</button>`}</td>
+                    <td>${t.revoked ? '-' : `<button class="btn btn-outline btn-sm" style="color:var(--error-color);" data-action="revokeRbacUserApiToken" data-args="${JSON.stringify([username, t.id || '']).replace(/\"/g, '&quot;')}">Revoke</button>`}</td>
                 </tr>
             `).join('');
             listEl.innerHTML = `
@@ -5290,17 +5297,17 @@ ${messagesHtml}
                             <span class="module-config-version">v${safeVersion}${hasUpdate ? ' <span class="version-update-indicator">→ ' + safeRepoVersion + '</span>' : ''}</span>
                         </div>
                         <div style="display: flex; gap: 0.5rem; align-items: center; flex-shrink: 0;">
-                            ${hasUpdate ? `<button class="btn-primary btn-sm btn-update" onclick="Ninko.updatePlugin('${safeName}')" title="Auf Version ${safeRepoVersion} aktualisieren"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: middle;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Update</button>` : ''}
+                            ${hasUpdate ? `<button class="btn-primary btn-sm btn-update" data-action="updatePlugin" data-args="${JSON.stringify([safeName]).replace(/\"/g, '&quot;')}" title="Auf Version ${safeRepoVersion} aktualisieren"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: middle;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Update</button>` : ''}
                             <label class="toggle-switch" title="Aktivieren/Deaktivieren">
                                 <input type="checkbox" ${mod.enabled ? 'checked' : ''}
                                     id="mod-toggle-${safeName}"
                                     onchange="Ninko.toggleModule('${safeName}', this.checked)">
                                 <span class="toggle-slider"></span>
                             </label>
-                            <button class="btn-icon btn-icon-sm" onclick="Ninko.toggleModuleSettings('${safeName}')" title="Einstellungen">
+                            <button class="btn-icon btn-icon-sm" data-action="toggleModuleSettings" data-args="${JSON.stringify([safeName]).replace(/\"/g, '&quot;')}" title="Einstellungen">
                                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                             </button>
-                            <button class="btn-icon btn-icon-sm" onclick="Ninko.deletePlugin('${safeName}')" title="Plugin unwiderruflich deinstallieren" style="color: var(--error-color);">
+                            <button class="btn-icon btn-icon-sm" data-action="deletePlugin" data-args="${JSON.stringify([safeName]).replace(/\"/g, '&quot;')}" title="Plugin unwiderruflich deinstallieren" style="color: var(--error-color);">
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                             </button>
                         </div>
@@ -5473,9 +5480,9 @@ ${messagesHtml}
                 <div class="form-row form-row-sm">
                     <label class="form-label">Beispielprofile</label>
                     <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-                        <button type="button" class="btn btn-sm btn-outline" onclick="Ninko.applyMcpPreset('${moduleName}', 'filesystem_stdio')">Filesystem stdio</button>
-                        <button type="button" class="btn btn-sm btn-outline" onclick="Ninko.applyMcpPreset('${moduleName}', 'remote_http')">Remote HTTP</button>
-                        <button type="button" class="btn btn-sm btn-outline" onclick="Ninko.applyMcpPreset('${moduleName}', 'remote_sse')">Remote SSE</button>
+                        <button type="button" class="btn btn-sm btn-outline" data-action="applyMcpPreset" data-args="${JSON.stringify([moduleName, 'filesystem_stdio']).replace(/\"/g, '&quot;')}">Filesystem stdio</button>
+                        <button type="button" class="btn btn-sm btn-outline" data-action="applyMcpPreset" data-args="${JSON.stringify([moduleName, 'remote_http']).replace(/\"/g, '&quot;')}">Remote HTTP</button>
+                        <button type="button" class="btn btn-sm btn-outline" data-action="applyMcpPreset" data-args="${JSON.stringify([moduleName, 'remote_sse']).replace(/\"/g, '&quot;')}">Remote SSE</button>
                     </div>
                     <small class="text-muted">Füllt typische MCP-Server-Konfigurationen vor. Werte danach bei Bedarf anpassen.</small>
                 </div>
@@ -5566,11 +5573,11 @@ ${messagesHtml}
                 <div class="form-actions add-connection-actions">
                     <span id="mod-save-status-${moduleName}" class="save-status"></span>
                     <button class="btn btn-sm btn-primary" id="conn-save-btn-${moduleName}"
-                        onclick="Ninko.saveConnection('${moduleName}')">
+                        data-action="saveConnection" data-args="${JSON.stringify([moduleName]).replace(/\"/g, '&quot;')}">
                         ➕ Speichern
                     </button>
                     <button class="btn btn-sm btn-outline hidden" id="conn-cancel-btn-${moduleName}"
-                        onclick="Ninko.cancelEditConnection('${moduleName}')">
+                        data-action="cancelEditConnection" data-args="${JSON.stringify([moduleName]).replace(/\"/g, '&quot;')}">
                         Abbrechen
                     </button>
                 </div>
@@ -5603,9 +5610,9 @@ ${messagesHtml}
                         ${c.is_default ? '<span class="status-badge status-ok cluster-default-badge">Standard</span>' : ''}
                     </div>
                     <div class="cluster-actions">
-                        ${!c.is_default ? `<button class="btn btn-sm btn-outline" onclick="Ninko.setDefaultConnection('${moduleName}', '${c.id}')">⭐ Standard</button>` : ''}
-                        <button class="btn btn-sm btn-outline" onclick="Ninko.editConnection('${moduleName}', '${c.id}')">✎</button>
-                        <button class="btn btn-sm btn-danger" onclick="Ninko.deleteConnection('${moduleName}', '${c.id}')">${this._ic.trash}</button>
+                        ${!c.is_default ? `<button class="btn btn-sm btn-outline" data-action="setDefaultConnection" data-args="${JSON.stringify([moduleName, c.id]).replace(/\"/g, '&quot;')}">⭐ Standard</button>` : ''}
+                        <button class="btn btn-sm btn-outline" data-action="editConnection" data-args="${JSON.stringify([moduleName, c.id]).replace(/\"/g, '&quot;')}">✎</button>
+                        <button class="btn btn-sm btn-danger" data-action="deleteConnection" data-args="${JSON.stringify([moduleName, c.id]).replace(/\"/g, '&quot;')}">${this._ic.trash}</button>
                     </div>
                 </div>
             `).join('');
@@ -6428,15 +6435,15 @@ ${messagesHtml}
                     <span class="text-muted" style="font-size:0.75rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block; margin-top:0.1rem;">${e(repo.repo_url)} · ${e(repo.branch)}</span>
                 </div>
                 <div style="display:flex; gap:0.35rem; align-items:center; flex-shrink:0;">
-                    <button class="btn btn-outline" onclick="Ninko.loadRepoModules('${e(repo.id)}')"
+                    <button class="btn btn-outline" data-action="loadRepoModules" data-args="${JSON.stringify([repo.id]).replace(/\"/g, '&quot;')}"
                         id="repo-load-btn-${e(repo.id)}"
                         style="font-size:0.78rem; padding:0.2rem 0.6rem;">
                         ${t('marketplace.loadModules')}
                     </button>
-                    <button class="btn-icon btn-icon-sm" onclick="Ninko.toggleRepoEdit('${e(repo.id)}')" title="${e(t('marketplace.editRepo'))}">
+                    <button class="btn-icon btn-icon-sm" data-action="toggleRepoEdit" data-args="${JSON.stringify([repo.id]).replace(/\"/g, '&quot;')}" title="${e(t('marketplace.editRepo'))}">
                         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                     </button>
-                    ${!isOfficial ? `<button class="btn-icon btn-icon-sm" onclick="Ninko.deleteRepo('${e(repo.id)}')" title="${e(t('marketplace.deleteRepo'))}" style="color:var(--error-color);">
+                    ${!isOfficial ? `<button class="btn-icon btn-icon-sm" data-action="deleteRepo" data-args="${JSON.stringify([repo.id]).replace(/\"/g, '&quot;')}" title="${e(t('marketplace.deleteRepo'))}" style="color:var(--error-color);">
                         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                     </button>` : ''}
                 </div>
@@ -6471,8 +6478,8 @@ ${messagesHtml}
                     </label>
                 </div>
                 <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
-                    <button class="btn btn-primary" onclick="Ninko.saveRepoEdit('${e(repo.id)}')" style="font-size:0.82rem;">${e(t('marketplace.save'))}</button>
-                    <button class="btn btn-outline" onclick="Ninko.toggleRepoEdit('${e(repo.id)}')" style="font-size:0.82rem;">${e(t('marketplace.cancel'))}</button>
+                    <button class="btn btn-primary" data-action="saveRepoEdit" data-args="${JSON.stringify([repo.id]).replace(/\"/g, '&quot;')}" style="font-size:0.82rem;">${e(t('marketplace.save'))}</button>
+                    <button class="btn btn-outline" data-action="toggleRepoEdit" data-args="${JSON.stringify([repo.id]).replace(/\"/g, '&quot;')}" style="font-size:0.82rem;">${e(t('marketplace.cancel'))}</button>
                     <span id="edit-repo-status-${e(repo.id)}" class="save-status" style="display:inline; align-self:center;"></span>
                 </div>
             </div>
@@ -6603,7 +6610,7 @@ ${messagesHtml}
                         ${versionInfo}
                         ${sourceInfo}
                     </div>
-                    <button class="${btnClass}" onclick="Ninko.installFromRepo('${mod.name}','${repoId}')"
+                    <button class="${btnClass}" data-action="installFromRepo" data-args="${JSON.stringify([mod.name, repoId]).replace(/\"/g, '&quot;')}"
                         id="mkt-btn-${repoId}-${mod.name}"
                         style="font-size:0.78rem; padding:0.2rem 0.6rem; flex-shrink:0;">
                         ${btnLabel}
@@ -6819,7 +6826,7 @@ ${messagesHtml}
         // Älteste zuerst anzeigen (neueste am Ende, Auto-Scroll zeigt aktuellste)
         const displayEntries = [...this._logCache].reverse();
         tbody.innerHTML = displayEntries.map((entry, idx) => `
-            <tr class="log-row log-row-${(entry.level || 'INFO').toLowerCase()}" onclick="Ninko._showLogDetail(${this._logCache.length - 1 - idx})">
+            <tr class="log-row log-row-${(entry.level || 'INFO').toLowerCase()}" data-action="_showLogDetail" data-args="${JSON.stringify([this._logCache.length - 1 - idx]).replace(/\"/g, '&quot;')}">
                 <td class="log-ts">${entry.timestamp || ''}</td>
                 <td><span class="log-level-badge ${levelColors[entry.level] || 'log-info'}">${entry.level || 'INFO'}</span></td>
                 <td class="log-cat">${entry.category || ''}</td>
@@ -6830,6 +6837,11 @@ ${messagesHtml}
             const wrapper = document.getElementById('log-table-wrapper');
             if (wrapper) wrapper.scrollTop = wrapper.scrollHeight;
         }
+    },
+
+    hideLogDetailPanel() {
+        const p = document.getElementById('log-detail-panel');
+        if (p) p.classList.add('hidden');
     },
 
     _showLogDetail(idx) {
@@ -6905,15 +6917,15 @@ ${messagesHtml}
                         </div>
                         <div class="provider-actions">
                             <span class="provider-status" title="${this._escapeHtml(p.status || '')}">${statusDot[p.status] || statusDot.unknown}</span>
-                            <button class="btn btn-sm btn-outline" onclick="Ninko.testLlmProvider('${p.id}')">Test</button>
-                            <button class="btn-icon btn-icon-sm" onclick="Ninko.openProviderEditor('${p.id}')">${this._ic.edit}</button>
-                            <button class="btn-icon btn-icon-sm" onclick="Ninko.deleteLlmProvider('${p.id}', ${this._escapeHtml(JSON.stringify(p.name))})" style="color:var(--error-color)">${this._ic.trash}</button>
+                            <button class="btn btn-sm btn-outline" data-action="testLlmProvider" data-args="${JSON.stringify([p.id]).replace(/\"/g, '&quot;')}">Test</button>
+                            <button class="btn-icon btn-icon-sm" data-action="openProviderEditor" data-args="${JSON.stringify([p.id]).replace(/\"/g, '&quot;')}">${this._ic.edit}</button>
+                            <button class="btn-icon btn-icon-sm" data-action="deleteLlmProvider" data-args="${JSON.stringify([p.id, p.name]).replace(/\"/g, '&quot;')}" style="color:var(--error-color)">${this._ic.trash}</button>
                         </div>
                     </div>
                     <div class="provider-meta">
                         <span>${this._escapeHtml({ollama:'Ollama',lmstudio:'LM Studio',openai_compatible:'OpenAI',litellm:'LiteLLM'}[p.backend] || p.backend || '')}</span> · <span>${this._escapeHtml(p.base_url || '')}</span> · <span>${this._escapeHtml(p.model || '')}</span>${p.context_window > 0 ? ` · <span>${(p.context_window >= 1000 ? (p.context_window/1000).toFixed(0)+'k' : p.context_window)} ctx</span>` : ''}${p.verify_ssl === false ? ' · <span style="color:var(--warning-color,#f0b429)" title="SSL-Verifizierung deaktiviert">⚠ SSL off</span>' : ''}
                     </div>
-                    ${!p.is_default ? `<button class="btn btn-sm btn-outline" style="margin-top:0.5rem;" onclick="Ninko.setDefaultProvider('${p.id}')">Als Standard setzen</button>` : ''}
+                    ${!p.is_default ? `<button class="btn btn-sm btn-outline" style="margin-top:0.5rem;" data-action="setDefaultProvider" data-args="${JSON.stringify([p.id]).replace(/\"/g, '&quot;')}">Als Standard setzen</button>` : ''}
                 </div>
             `).join('');
         } catch { container.innerHTML = '<p class="empty-state">Fehler beim Laden.</p>'; }
@@ -7169,7 +7181,7 @@ ${messagesHtml}
                     <td>${firstSeen}</td>
                     <td>${lastSeen}</td>
                     <td>
-                        <button class="btn-icon-sm" onclick="Ninko.resolveAlert('${alert.alert_id}')" title="Resolve">
+                        <button class="btn-icon-sm" data-action="resolveAlert" data-args="${JSON.stringify([alert.alert_id]).replace(/\"/g, '&quot;')}" title="Resolve">
                             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                                 <polyline points="20 6 9 17 4 12"></polyline>
                             </svg>
@@ -7329,5 +7341,63 @@ window.I18n = I18n;
 
     window.addEventListener('pageshow', () => {
         if (!bootStarted) boot();
+    });
+})();
+
+// ── Event-Delegation Dispatcher ────────────────────────────────────────────
+(function () {
+    function _callNinko(method, args) {
+        if (typeof Ninko[method] !== 'function') return;
+        Ninko[method](...args);
+    }
+
+    document.addEventListener('click', function (e) {
+        let el = e.target.closest('[data-actions]');
+        if (el) {
+            try {
+                JSON.parse(el.dataset.actions).forEach(([m, ...a]) => _callNinko(m, a));
+            } catch (_) {}
+            return;
+        }
+        el = e.target.closest('[data-action]');
+        if (!el) return;
+        if (el.dataset.stopPropagation === 'true') e.stopPropagation();
+        const method = el.dataset.action;
+        let args = [];
+        try { args = el.dataset.args ? JSON.parse(el.dataset.args) : []; } catch (_) {}
+        if (el.dataset.event === 'true') args = [e, ...args];
+        if (el.dataset.self === 'true') args = [...args, el];
+        _callNinko(method, args);
+    });
+
+    document.addEventListener('change', function (e) {
+        const el = e.target;
+        const method = el.dataset.change;
+        if (!method) return;
+        let args = [];
+        if (el.dataset.useValue === 'true') args = [el.value];
+        else if (el.dataset.useChecked === 'true') args = [el.checked];
+        _callNinko(method, args);
+    });
+
+    document.addEventListener('input', function (e) {
+        const el = e.target;
+        const method = el.dataset.input;
+        if (!method) return;
+        const args = el.dataset.useValue === 'true' ? [el.value] : [];
+        _callNinko(method, args);
+    });
+
+    // Textarea Enter-Shortcut (ersetzt inline onkeydown)
+    document.addEventListener('DOMContentLoaded', function () {
+        const chatInput = document.getElementById('chat-input');
+        if (chatInput) {
+            chatInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    Ninko.sendMessage();
+                }
+            });
+        }
     });
 })();

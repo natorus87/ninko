@@ -135,6 +135,7 @@ async def generate_image_asset(request: Request, body: ImageGenerateRequest) -> 
             "size_bytes": result.get("size_bytes", 0),
         }
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        logger.error("Image generation provider failed: %s", e)
+        raise HTTPException(status_code=502, detail="Image generation provider failed.") from e

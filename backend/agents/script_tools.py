@@ -150,12 +150,10 @@ async def execute_script_tool(
 
         from modules.codelab.tools import execute_code
 
-        result = await execute_code.ainvoke(
-            {
-                "code": code_with_input,
-                "language": tool_def["language"],
-                "timeout": min(tool_def["timeout"], 300),
-            }
+        result = await execute_code.coroutine(
+            code=code_with_input,
+            language=tool_def["language"],
+            timeout=min(tool_def["timeout"], 300),
         )
 
         finished_at = datetime.now(timezone.utc)

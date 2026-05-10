@@ -331,14 +331,33 @@ class ModuleRegistry:
         return mod.router if mod else None
 
     def get_routing_map(self) -> dict[str, str]:
-        """Aggregiert alle routing_keywords → {keyword: module_name}."""
+        """Aggregiert alle routing_keywords → {keyword: module_name}.
+
+        Der technische Modulname wird automatisch als Alias ergänzt, damit
+        Modul-Autoren ihn nicht zusätzlich in routing_keywords pflegen müssen.
+        """
         routing: dict[str, str] = {}
         duplicates: dict[str, list[str]] = {}
 
         for name, mod in self._modules.items():
-            for kw in mod.manifest.routing_keywords:
+            module_aliases = {
+                name,
+                name.replace("_", " "),
+                name.replace("_", ""),
+                name.replace("-", " "),
+                name.replace("-", ""),
+            }
+            keywords = [*mod.manifest.routing_keywords, *module_aliases]
+            seen_for_module: set[str] = set()
+
+            for kw in keywords:
                 key = kw.lower()
+                if key in seen_for_module:
+                    continue
+                seen_for_module.add(key)
                 if key in routing:
+                    if routing[key] == name:
+                        continue
                     # Duplikat gefunden
                     if key not in duplicates:
                         duplicates[key] = [routing[key]]

@@ -205,5 +205,6 @@ async def create_interactive_chart(request: ChartRequest):
 
         html = pio.to_html(fig, full_html=True, include_plotlyjs="cdn")
         return HTMLResponse(content=html)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as exc:
+        logger.exception("Interactive chart rendering failed")
+        raise HTTPException(status_code=500, detail="Interactive chart rendering failed.") from exc

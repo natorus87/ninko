@@ -57,6 +57,9 @@ class CoreSettings(BaseSettings):
     VAULT_FALLBACK: Literal["sqlite", "none"] = "sqlite"
     SQLITE_SECRETS_KEY: str = ""
 
+    # ── Routing ────────────────────────────────────────
+    ROUTING_EMBEDDING_ENABLED: bool = True  # Embedding-Tie-Breaker (R11)
+
     # ── LLM Inference ──────────────────────────────────
     LLM_TEMPERATURE: float = 0.1
     # ── Context / RAG ──────────────────────────────────

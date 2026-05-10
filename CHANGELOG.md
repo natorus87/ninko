@@ -9,20 +9,40 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.3.5] – 2026-05-10
+
 ### Added
 
 - **Network Analysis Module** (`backend/modules/network_analysis/`): Core module with `dns_lookup`, `reverse_dns`, `traceroute`, `ping_host`, `get_network_info` tools for real network diagnostics. Routing keywords: `netzwerkanalyse`, `dns lookup`, `traceroute`, `whois`, etc.
 - **Kubernetes NET_RAW capability**: Pod now requests `NET_RAW` capability for `ping`/`traceroute` ICMP/raw socket access.
+- **Routing keyword linter CI**: New GitHub workflow and script reject stopwords, accidental duplicate keywords, and unsafe short keywords before they degrade routing quality.
+- **Routing confidence telemetry**: Chat responses now expose `routing_confidence`, the frontend warns below 70 %, and admin endpoints expose routing correction statistics.
+- **Embedding/TF-IDF tie-breaker**: Ambiguous keyword matches can be ranked semantically via the configured embedding backend, with deterministic TF-IDF fallback and correction-based soft learning.
+- **WebSocket session blacklist checks**: WebSocket authentication now honors revoked session tokens asynchronously.
 
 ### Changed
 
 - **Dockerfile**: Added `iputils-ping` and `traceroute` packages for network diagnostics.
+- **Router extraction**: Keyword routing logic moved into `core/router.py`, reducing `orchestrator.py` complexity and making routing decisions directly testable.
+- **Routing behavior**: Removed broad substring fallback, limited compound detection to explicit sequence intent, and added conservative German token normalization for common flexions.
+- **Module aliases**: Technical module names are automatically added as routing aliases with the existing name boost, removing an implicit manifest-author contract.
+- **Telegram module**: Telegram now behaves as a transparent transport bridge and delegates content questions back to the main orchestrator instead of answering as a siloed bot.
+- **Frontend event handling**: Large parts of the static UI migrated from inline handlers to `data-action` delegation while preserving CSP compatibility for legacy module tabs.
+- **Security defaults**: Example and Compose configuration no longer provide an `admin` bootstrap password by default; deployments must set an explicit password and 32+ character `SESSION_SECRET`.
+- **Release metadata**: README, VERSION, Helm chart `appVersion`, and default Helm image tag updated for v1.3.5.
 
 ### Fixed
 
+- **CSP regression guard**: Global CSP remains compatible with existing module frontends that still use inline handlers while the UI migration continues.
+- **Routing admin auth**: `/api/routing/corrections` now checks dict-based auth contexts correctly and requires an admin role.
+- **Stale routing confidence**: Orchestrator routing state is reset at the start of every turn and early return paths set their tier explicitly.
+- **Over-broad routing corrections**: Correction telemetry now matches the same message hash and consumes the pending auto-routing state after a manual module choice.
 - **Safeguard false positives**: `netzwerkanalyse`, `traceroute`, `tracepath`, `dns lookup`, `ip-adresse`, `server-analyse`, `website-analyse` added to safe search keywords in `_fast_prefilter_short()`.
 - **Routing keyword conflict**: Removed `netzwerkanalyse`, `netzwerk-analyse`, `website-analyse`, `server-analyse` from `web_search` manifest — these now route correctly to `network_analysis` module.
 - **RedisRateLimiter NOSCRIPT recovery**: Added `_get_script_sha()` with NOSCRIPT exception handling and automatic script reload.
+- **Archive extraction hardening**: Plugin ZIP extraction validates resolved paths and rejects symlinks before extracting members.
+- **Chat history replacement hardening**: `PUT /api/chat/history/{session_id}` validates message lists and limits both message count and content length.
+- **Provider error leakage**: Image generation, transcription benchmark, and dataviz routes now return generic user-facing errors while logging internal details.
 
 ## [1.3.4] – 2026-05-05
 

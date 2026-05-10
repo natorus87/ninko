@@ -106,7 +106,6 @@ module_manifest = ModuleManifest(
     routing_keywords=[
         "entra",
         "azure ad",
-        "azure ad",
         "microsoft identity",
         "office 365",
         "microsoft 365",

@@ -26,6 +26,7 @@ from core.operation_journal import get_operation_journal
 from core.auth import auth_tenant_id, resolve_request_auth
 from agents.base_agent import _t, _TOOL_SAFEGUARD_SENTINEL
 from core.safeguard import ActionCategory
+from core.routing_telemetry import get_routing_telemetry
 
 logger = logging.getLogger("ninko.api.chat")
 router = APIRouter(prefix="/api/chat", tags=["Chat"])
@@ -208,6 +209,18 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
     # Chat-History laden
     history = await redis.get_chat_history(scoped_session_id)
 
+    # ── R12: Korrektur erkennen (vor route()) ─────────────────────────────────
+    _telemetry = get_routing_telemetry()
+    if body.force_module and _telemetry:
+        _correction = await _telemetry.check_and_record_correction(
+            session_id=scoped_session_id,
+            force_module=body.force_module,
+            message=body.message,
+        )
+        if _correction and hasattr(orchestrator, "apply_embedding_corrections"):
+            _examples = await _telemetry.get_correction_examples(body.force_module)
+            orchestrator.apply_embedding_corrections(body.force_module, _examples)
+
     # Nachricht an Orchestrator routen
     response_text, module_used, did_compact = await orchestrator.route(
         message=body.message,
@@ -280,6 +293,18 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
         )
         await op_journal.clear_pending_for_session(scoped_session_id)
 
+    routing_confidence = getattr(orchestrator, "_last_routing_confidence", None)
+
+    # ── R12: Auto-Routing-Ergebnis für Korrektur-Erkennung speichern ──────────
+    if not body.force_module and module_used and _telemetry:
+        await _telemetry.record_auto_routing(
+            session_id=scoped_session_id,
+            module=module_used,
+            tier=getattr(orchestrator, "_last_tier_used", 0),
+            confidence=routing_confidence,
+            message=body.message,
+        )
+
     return ChatResponse(
         response=response_text,
         module_used=module_used,
@@ -287,6 +312,7 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
         context_budget=budget,
         compacted=did_compact,
         timestamp=datetime.now(timezone.utc),
+        routing_confidence=routing_confidence,
     )
 
 
@@ -351,19 +377,40 @@ async def clear_history(session_id: str, request: Request) -> dict:
     return {"status": "ok", "session_id": session_id, "message": "History gelöscht."}
 
 
+_REPLACE_HISTORY_MAX_MESSAGES = 500
+_REPLACE_HISTORY_MAX_CONTENT_LEN = 32_768
+_REPLACE_HISTORY_ALLOWED_ROLES = frozenset({"user", "assistant"})
+
+
 @router.put("/history/{session_id}")
 async def replace_history(session_id: str, body: dict, request: Request) -> dict:
     """Ersetzt die Chat-History einer Session vollständig (für Löschen/Retry)."""
     redis = get_redis()
     scoped_session_id = _tenant_session_id(request, session_id)
     messages: list[dict] = body.get("messages", [])
+    if not isinstance(messages, list):
+        raise HTTPException(status_code=422, detail="'messages' muss eine Liste sein.")
+    if len(messages) > _REPLACE_HISTORY_MAX_MESSAGES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Maximal {_REPLACE_HISTORY_MAX_MESSAGES} Nachrichten pro Aufruf.",
+        )
     await redis.clear_chat_history(scoped_session_id)
+    stored = 0
     for msg in messages:
+        if not isinstance(msg, dict):
+            continue
         role = msg.get("role", "user")
+        if role not in _REPLACE_HISTORY_ALLOWED_ROLES:
+            continue
         content = msg.get("content", "")
+        if not isinstance(content, str):
+            continue
+        content = content[:_REPLACE_HISTORY_MAX_CONTENT_LEN]
         if content:
             await redis.store_chat_message(session_id=scoped_session_id, role=role, content=content)
-    return {"status": "ok", "session_id": session_id, "count": len(messages)}
+            stored += 1
+    return {"status": "ok", "session_id": session_id, "count": stored}
 
 
 # ── UI History (persistente, geräteübergreifende Konversationsliste) ────────

@@ -387,10 +387,11 @@ async def benchmark_whisper_models(
     except HTTPException:
         raise
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        logger.error("Whisper-Benchmark Dienst nicht verfügbar: %s", exc)
+        raise HTTPException(status_code=503, detail="Transcription service unavailable.") from exc
+    except (ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         logger.error("Whisper-Benchmark fehlgeschlagen: %s", exc)
-        raise HTTPException(status_code=500, detail=f"Benchmark fehlgeschlagen: {exc}")
+        raise HTTPException(status_code=500, detail="Benchmark failed.") from exc
     finally:
         if tmp_path:
             try:

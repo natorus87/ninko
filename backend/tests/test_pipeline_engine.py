@@ -397,13 +397,22 @@ def _make_orch_for_routing():
     return orch
 
 
-def test_multistep_und_with_two_qualified_modules_triggers_tier4():
-    """Einfaches 'und' zwischen zwei klar erkannten Modulen → Tier-4-Trigger."""
+def test_multistep_plain_und_with_two_qualified_modules_no_tier4():
+    """Einfaches 'und' ohne Sequenzabsicht → KEIN Tier-4."""
     orch = _make_orch_for_routing()
     # licium score=3, knowledge_graph score=2 → beide qualifiziert (>=2)
     scores = {"licium": 3, "knowledge_graph": 2}
     assert orch._has_multistep_indicators(
         "Lies meine bestehenden Notizen und ingeste sie ins Ninko-Wiki", scores
+    ) is False
+
+
+def test_multistep_und_dann_with_two_qualified_modules_triggers_tier4():
+    """Explizites 'und dann' zwischen zwei klar erkannten Modulen → Tier-4."""
+    orch = _make_orch_for_routing()
+    scores = {"licium": 3, "knowledge_graph": 2}
+    assert orch._has_multistep_indicators(
+        "Lies meine bestehenden Notizen und dann ingeste sie ins Ninko-Wiki", scores
     ) is True
 
 

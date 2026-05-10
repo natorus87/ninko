@@ -15,12 +15,22 @@ import asyncio
 import json as _json
 import logging
 import re
-from dataclasses import dataclass, fields as _dc_fields
 from typing import TYPE_CHECKING
 
 from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
 
+from core.router import (
+    KeywordRouter,
+    RoutingConfig,
+    ROUTING_PRESETS,
+    SESSION_ROUTING_TTL as _SESSION_ROUTING_TTL,
+    _SPEED_SIGNALS,
+    _CORE_ALWAYS_MODULES,
+    _UTILITY_MODULES,
+    routing_config_key as _routing_config_key,
+    routing_stats_key as _routing_stats_key,
+)
 from agents.base_agent import BaseAgent, _t
 from agents.core_tools import (
     execute_cli_command,
@@ -98,132 +108,12 @@ _ORCH_RECOVERABLE_EXCEPTIONS = (
     _json.JSONDecodeError,
 )
 
-# ── Tier-4 Konstanten ─────────────────────────────────────────────────────────
-
-# Utility-Module zählen für Compound-Scoring nur wenn explizit erwähnt.
-# Core-Module sind immer erlaubt, auch wenn sie nicht explizit genannt werden.
-_CORE_ALWAYS_MODULES: frozenset[str] = frozenset(
-    {
-        "web_search",
-        "image_gen",
-        "codelab",
-        "dataviz",
-    }
-)
-_UTILITY_MODULES: frozenset[str] = frozenset(
-    {
-        "web_search",
-        "image_gen",
-        "telegram",
-        "email",
-        "teams",
-    }
-)
-
-# Sequentielle Verknüpfungs-Muster (word-boundary-gesichert)
-_MULTISTEP_PATTERNS: list[re.Pattern] = [
-    re.compile(p, re.IGNORECASE)
-    for p in [
-        r"\bund\s+dann\b",
-        r"\bund\s+danach\b",
-        r"\bdanach\b",
-        r"\banschlie[ßs]end\b",
-        r"\bals\s+n[äa]chstes\b",
-        r"\bzuerst\b.{1,80}\bdann\b",
-        r"\berst\b.{1,80}\bdann\b",
-        r"\bnachdem\b",
-        r"\bwenn\s+fertig\b",
-        r"\bim\s+anschluss\b",
-        r"\bthen\b",
-        r"\bafter\s+that\b",
-        r"\bfollowed\s+by\b",
-        r"\bwhen\s+done\b",
-    ]
-]
-
-# Timeout für den Pipeline-Planner-LLM-Call
+# ── LLM-Timeouts (Orchestrator-eigene Konstanten) ────────────────────────────
 _LLM_ROUTING_TIMEOUT: float = 10.0
 _COMPLEXITY_CHECK_TIMEOUT: float = 2.0
 
+# ── Intent-Detection-Patterns (Tier-1/3, kein Routing-Concern) ───────────────
 
-@tool
-async def generate_image(prompt: str, size: str = "1024x1024") -> str:
-    """
-    Generiert ein Bild mit einem KI-Bildgenerierungsmodell.
-    Nutze dieses Tool wenn der User ein Bild, eine Illustration, ein Logo,
-    ein Foto oder eine Grafik erstellen möchte.
-    """
-    from modules.image_gen.tools import generate_image as _gen
-
-    return await _gen(prompt=prompt, size=size)
-
-# ── Routing-Konfiguration ─────────────────────────────────────────────────────
-
-
-@dataclass
-class RoutingConfig:
-    """Routing-Konfiguration des Orchestrators (session-scoped).
-
-    Zwei Pfade:
-    - Tier 2 (keyword fast-path): Einzelnes Modul eindeutig erkannt → direkt delegieren.
-    - Tier 1 (invoke): Alles andere → Orchestrator-ReAct-Loop entscheidet selbst
-      via call_module_agent / run_pipeline / create_custom_agent / direkte Antwort.
-    """
-
-    tier1_enabled: bool = True  # ReAct-Loop für alles ohne eindeutigen Keyword-Match
-    tier2_enabled: bool = True  # Keyword-Fast-Path direkt zum Modul-Agent
-    tier4_enabled: bool = True  # Multi-Modul-Pipeline-Planner
-    preset: str = "default"
-
-    @classmethod
-    def from_dict(cls, d: dict) -> "RoutingConfig":
-        known = {f.name for f in _dc_fields(cls)}
-        return cls(**{k: v for k, v in d.items() if k in known})
-
-    def to_dict(self) -> dict:
-        return {f.name: getattr(self, f.name) for f in _dc_fields(self)}
-
-
-ROUTING_PRESETS: dict[str, dict] = {
-    "default": {},
-    # fast: kein Pipeline-Overhead, direkte Antworten priorisiert
-    "fast": {"preset": "fast", "tier4_enabled": False},
-    # module-only: Tier 1 (direkte Antwort) und Tier 4 (Pipeline) deaktiviert
-    "module-only": {
-        "preset": "module-only",
-        "tier1_enabled": False,
-        "tier4_enabled": False,
-    },
-}
-
-# ── Session-scoped Routing State ──────────────────────────────────────────────
-# Routing-Configs und Heuristik-Stats werden in Redis gehalten, damit sie
-# multi-worker- und restart-stabil bleiben.
-_SESSION_ROUTING_TTL = 86400.0  # 24h, matching Redis chat-history TTL
-
-# Speed signals that trigger auto-fast preset for a session (DE + EN)
-_SPEED_SIGNALS = frozenset(
-    {
-        "schnell",
-        "schnelle",
-        "schneller",
-        "schnelles",
-        "quick",
-        "fast",
-        "kurz",
-        "kurze",
-        "kurzer",
-        "kurzes",
-        "brief",
-        "knapp",
-        "simplified",
-        "einfach",
-        "kürzer",
-        "kürze",
-    }
-)
-
-# Explizite Agent-Erstellungs-Intention (DE + EN)
 _AGENT_CREATE_PATTERNS: tuple[re.Pattern, ...] = (
     re.compile(r"\berstell(?:e|en|t)?\b.{0,40}\bagent(?:en)?\b", re.IGNORECASE),
     re.compile(r"\bleg(?:e|en|t)?\b.{0,40}\bagent(?:en)?\b.{0,20}\ban\b", re.IGNORECASE),
@@ -233,7 +123,6 @@ _AGENT_CREATE_PATTERNS: tuple[re.Pattern, ...] = (
     re.compile(r"\bmake\b.{0,40}\bagent\b", re.IGNORECASE),
 )
 
-# How-to / Anleitung statt Ausführung
 _AGENT_HOWTO_PATTERNS: tuple[re.Pattern, ...] = (
     re.compile(
         r"\bwie\b.{0,30}\b(agent|agenten)\b.{0,20}\b(erstell|anleg|bau)\w*",
@@ -250,7 +139,6 @@ _AGENT_HOWTO_PATTERNS: tuple[re.Pattern, ...] = (
     re.compile(r"\banleitung\b.{0,40}\bagent\b", re.IGNORECASE),
 )
 
-# Explizite Workflow-Erstellungs-Intention (DE + EN)
 _WORKFLOW_CREATE_PATTERNS: tuple[re.Pattern, ...] = (
     re.compile(r"\berstell(?:e|en|t)?\b.{0,40}\bworkflow\b", re.IGNORECASE),
     re.compile(r"\bleg(?:e|en|t)?\b.{0,40}\bworkflow\b.{0,20}\ban\b", re.IGNORECASE),
@@ -260,7 +148,6 @@ _WORKFLOW_CREATE_PATTERNS: tuple[re.Pattern, ...] = (
     re.compile(r"\bautomatisier\w*\b.{0,40}\b(ablauf|prozess|workflow)\b", re.IGNORECASE),
 )
 
-# How-to / Anleitung statt Ausführung
 _WORKFLOW_HOWTO_PATTERNS: tuple[re.Pattern, ...] = (
     re.compile(r"\bwie\b.{0,30}\bworkflow\b.{0,20}\b(erstell|anleg|bau)\w*", re.IGNORECASE),
     re.compile(
@@ -271,12 +158,16 @@ _WORKFLOW_HOWTO_PATTERNS: tuple[re.Pattern, ...] = (
 )
 
 
-def _routing_config_key(session_id: str) -> str:
-    return f"ninko:orchestrator:routing:{session_id}"
+@tool
+async def generate_image(prompt: str, size: str = "1024x1024") -> str:
+    """
+    Generiert ein Bild mit einem KI-Bildgenerierungsmodell.
+    Nutze dieses Tool wenn der User ein Bild, eine Illustration, ein Logo,
+    ein Foto oder eine Grafik erstellen möchte.
+    """
+    from modules.image_gen.tools import generate_image as _gen
 
-
-def _routing_stats_key(session_id: str) -> str:
-    return f"ninko:orchestrator:routing_stats:{session_id}"
+    return await _gen(prompt=prompt, size=size)
 
 
 async def get_session_routing_config(session_id: str) -> RoutingConfig | None:
@@ -451,11 +342,17 @@ class OrchestratorAgent(BaseAgent):
         self.registry = registry
         self._routing_map: dict[str, str] = {}
         self._routing_dirty = True
+        self._router: KeywordRouter = KeywordRouter({})
+        from core.embedding_router import EmbeddingRouter
+        self._embedding_router: EmbeddingRouter = EmbeddingRouter()
+        from core.config import get_settings as _get_settings
+        self._routing_embedding_enabled: bool = _get_settings().ROUTING_EMBEDDING_ENABLED
         self._refresh_routing_map()
         # ── Self-adaptive routing config ──
         self._routing_config: RoutingConfig = RoutingConfig()
         self._routing_config_loaded_at: float = 0.0
         self._last_tier_used: int = 0
+        self._last_routing_confidence: float | None = None
         # ── Deterministic Task Pre-structuring ──
         self._task_sketch_builder: DeterministicTaskSketchBuilder | None = None
         self._last_task_sketch: TaskSketch | None = None
@@ -648,6 +545,13 @@ class OrchestratorAgent(BaseAgent):
         if not self._routing_dirty:
             return
         self._routing_map = self.registry.get_routing_map()
+        self._router.update_routing_map(self._routing_map)
+        module_keywords: dict[str, list[str]] = {}
+        for keyword, module_name in self._routing_map.items():
+            module_keywords.setdefault(module_name, []).append(keyword)
+        self._embedding_router.update_module_descriptions(
+            {m: " ".join(kws) for m, kws in module_keywords.items()}
+        )
         self._routing_dirty = False
         self._semantic_resolver = None
         logger.info(
@@ -1423,226 +1327,54 @@ JSON-SCHEMA:
         self._routing_dirty = True
 
     # ──────────────────────────────────────────────────────────────────────
-    # Routing (2-Tier)
+    # Routing – Thin Wrapper (Implementierung: core.router.KeywordRouter)
     # ──────────────────────────────────────────────────────────────────────
 
     @staticmethod
     def _strip_bot_context(message: str) -> str:
-        """Entfernt Bot-Kontext-Präfixe vor dem Keyword-Routing (z. B. '[Telegram Chat-ID: 123]').
-        Das LLM erhält weiterhin den vollen Text — nur die Routing-Erkennung nutzt den bereinigten Text."""
-        return re.sub(
-            r"^\[(?:Telegram Chat-ID|Teams User|Erkannte Sprache):[^\]]+\]\n?",
-            "",
-            message,
-        ).strip()
+        return KeywordRouter.strip_bot_context(message)
 
     def _get_module_scores(self, text: str) -> dict[str, int]:
-        """Keyword-Scoring für einen Text. Gibt Module → Score zurück (ohne History-Fallback)."""
-        text_lower = text.lower()
-        text_compact = re.sub(r"[\W_]+", "", text_lower)
-        scores: dict[str, int] = {}
-        for keyword, module_name in self._routing_map.items():
-            kw_lower = keyword.lower()
-            kw_compact = re.sub(r"[\W_]+", "", kw_lower)
-            matches = len(re.findall(r"\b" + re.escape(kw_lower) + r"\b", text_lower))
-            if len(kw_compact) >= 7 and matches == 0 and kw_compact in text_compact:
-                matches = 1
-            weight = (
-                5 if kw_lower in [module_name.lower(), module_name.lower().replace("-", "")] else 1
-            )
-            if matches > 0:
-                scores[module_name] = scores.get(module_name, 0) + (matches * weight)
-        return scores
+        router = getattr(self, "_router", None)
+        if router is None:
+            router = KeywordRouter(getattr(self, "_routing_map", {}))
+            self._router = router
+        return router.get_scores(text)
 
     def _has_multistep_indicators(
         self,
         message: str,
         current_scores: dict[str, int],
     ) -> bool:
-        """Erkennt explizite sequentielle Multi-Modul-Anfragen.
+        router = getattr(self, "_router", None)
+        if router is None:
+            router = KeywordRouter(getattr(self, "_routing_map", {}))
+            self._router = router
+        return router.has_multistep_indicators(message, current_scores)
 
-        Single-Module-Guard: Gibt False zurück wenn weniger als 2 Module mit Score >= 2
-        in der aktuellen Nachricht erkannt wurden. "Logs anzeigen und dann neustart"
-        (1 Modul) bleibt Tier 2.
-        """
-        msg_lower = message.lower()
-        has_multistep = any(p.search(msg_lower) for p in _MULTISTEP_PATTERNS)
-
-        # Mindestens 2 Module mit ausreichendem Score in aktueller Nachricht.
-        # Utility-Module (web_search, image_gen, telegram, email, teams) reichen bei Score>=1,
-        # wenn sie explizit erwähnt wurden.
-        qualified = []
-        for mod, score in current_scores.items():
-            if score >= 2:
-                qualified.append(mod)
-                continue
-            if mod in _UTILITY_MODULES and score >= 1:
-                qualified.append(mod)
-
-        if len(qualified) >= 2:
-            if has_multistep:
-                return True
-            # Einfaches "und"/"and" zwischen zwei klar erkannten Modulen reicht als
-            # Tier-4-Trigger — der Modul-Guard oben verhindert False Positives.
-            # Betrifft: "lies X und ingeste ins Wiki", "prüfe K8s und benachrichtige per Telegram" etc.
-            if re.search(r"\bund\b|\band\b", msg_lower):
-                return True
-            return False
-
-        # Fallback: expliziter Multistep + (Utility >=1) + (irgendein anderes Modul >=1)
-        if not has_multistep:
-            return False
-        weak_hits = [mod for mod, score in current_scores.items() if score >= 1]
-        has_utility = any(mod in _UTILITY_MODULES for mod in weak_hits)
-        has_other = any(mod not in _UTILITY_MODULES for mod in weak_hits)
-        return has_utility and has_other
+    @staticmethod
+    def _has_confident_top_module(top_score: int, second_score: int) -> bool:
+        return KeywordRouter.has_confident_top_module(top_score, second_score)
 
     def _detect_module_fast(
         self,
         message: str,
         chat_history: list[dict] | None = None,
     ) -> tuple[str | None, bool]:
-        """Keyword-Fast-Path. Gibt (modul, is_compound) zurück.
+        module, is_compound, _ = self._router.detect_module(message, chat_history)
+        return module, is_compound
 
-        - (modul, False): genau ein eindeutiges Modul → Tier 2
-        - (None, True):   mehrere Module → Compound → Tier 4
-        - (None, False):  kein Treffer oder Tier-4-Guard → Tier 1
-        """
-        # Core-Overrides: explizite Core-Feature-Anfragen nicht an Module delegieren
-        core_patterns = [
-            r"\bwork?flows?\b",
-            r"\bworflows?\b",
-            r"\bagenten?\b",
-            r"\bagent\s*erstellen\b",
-            r"\bneuen?\s*agent\b",
-            r"\bcreate\s*agent\b",
-            r"\bnew\s*agent\b",
-            r"\bcli\s*befehl\b",
-            r"\blokales?\s*kommando\b",
-            r"\bskript\s*ausführen\b",
-            r"\bcli\s*command\b",
-            r"\brun\s*script\b",
-            r"\bshell\s*command\b",
-            r"\bterminal\b",
-            r"\bsystembefehl\b",
-            r"\bping\b",
-            r"\buptime\b",
-        ]
-        msg_lower = message.lower()
-        for pattern in core_patterns:
-            if re.search(pattern, msg_lower):
-                logger.info("Core-Override erkannt ('%s'), überspringe Modul-Routing.", pattern)
-                return None, False
-
-        # Scoring der aktuellen Nachricht
-        current_scores = self._get_module_scores(message)
-
-        # History-Fallback NUR für Single-Module-Detection (nie für Compound)
-        if not current_scores and chat_history:
-            history_text = " ".join([m.get("content", "") for m in chat_history[-3:]])
-            history_scores = self._get_module_scores(history_text)
-            if len(history_scores) == 1:
-                best = next(iter(history_scores))
-                logger.info("History-Fast-Path: '%s…' → '%s'", message[:60], best)
-                return best, False
-            elif history_scores:
-                # Mehrere Treffer aus History → ReAct entscheiden lassen (nie Compound)
-                sorted_h = sorted(history_scores.items(), key=lambda x: x[1], reverse=True)
-                logger.info("History-Ambiguität %s → ReAct-Loop", sorted_h)
-                return None, False
-            return None, False
-
-        if not current_scores:
-            logger.info("Kein Keyword-Treffer → ReAct-Loop entscheidet für: '%s…'", message[:60])
-            return None, False
-
-        if len(current_scores) == 1:
-            best = next(iter(current_scores))
-            logger.info(
-                "Keyword-Fast-Path: '%s…' → '%s' (Score: %d)",
-                message[:60],
-                best,
-                current_scores[best],
-            )
-            return best, False
-
-        # Mehrere Module — Utility-Module filtern: nur wenn explizit erwähnt,
-        # außer es handelt sich um Core-Module.
-        filtered: dict[str, int] = {}
-        for mod, score in current_scores.items():
-            if mod in _UTILITY_MODULES:
-                if mod in _CORE_ALWAYS_MODULES:
-                    filtered[mod] = score
-                    continue
-                if (
-                    mod in msg_lower
-                    or mod.replace("_", " ") in msg_lower
-                    or mod.replace("_", "") in msg_lower
-                ):
-                    filtered[mod] = score
-            else:
-                filtered[mod] = score
-
-        if len(filtered) <= 1:
-            if filtered:
-                best = next(iter(filtered))
-                return best, False
-            # Alle Matches waren nicht-explizite Utility-Module → ReAct
-            return None, False
-
-        # Compound-Schwellen: beide Top-Module müssen ≥ 3 Score und ausbalanciert sein
-        sorted_f = sorted(filtered.items(), key=lambda x: x[1], reverse=True)
-        top_score = sorted_f[0][1]
-        second_score = sorted_f[1][1]
-
-        if top_score >= 2 and second_score >= 2 and second_score >= (0.4 * top_score):
-            logger.info("Compound erkannt %s → Tier 4", sorted_f[:3])
-            return None, True
-
-        # Scores zu niedrig oder unausgewogen → stärkstes Modul gewinnt
-        logger.info(
-            "Schwache Ambiguität %s → Tier 2 mit stärkstem Modul '%s'",
-            sorted_f[:3],
-            sorted_f[0][0],
-        )
-        return sorted_f[0][0], False
+    def apply_embedding_corrections(self, module: str, examples: list[str]) -> None:
+        """Leitet Korrektur-Beispiele an den EmbeddingRouter weiter (Soft-Learning)."""
+        self._embedding_router.incorporate_corrections(module, examples)
 
     def _classify_tier(
         self,
         message: str,
         chat_history: list[dict] | None,
         cfg: RoutingConfig | None = None,
-    ) -> tuple[int, str | None]:
-        """
-        3-Tier-Routing (Reihenfolge: 4 → 2 → 1):
-        - Tier 4: Compound (mehrere Module mit hohem Score) ODER explizite sequentielle
-                  Multi-Modul-Anfrage (_has_multistep_indicators) → Pipeline-Planner.
-        - Tier 2: Keyword-Fast-Path → genau ein Modul eindeutig erkannt → direkt delegieren.
-        - Tier 1: Alles andere → Orchestrator-ReAct-Loop: LLM entscheidet selbst.
-
-        Returns:
-            (tier, target_module_or_None)
-        """
-        if cfg is None:
-            cfg = RoutingConfig()
-
-        routing_message = self._strip_bot_context(message)
-        target_module, is_compound = self._detect_module_fast(routing_message, chat_history)
-
-        # ── Tier 4: Multi-Modul-Pipeline ─────────────────────────────────────
-        if cfg.tier4_enabled:
-            if is_compound:
-                return 4, None
-            current_scores = self._get_module_scores(routing_message)
-            if self._has_multistep_indicators(routing_message, current_scores):
-                return 4, None
-
-        # ── Tier 2: Keyword-Fast-Path ─────────────────────────────────────────
-        if cfg.tier2_enabled and target_module:
-            return 2, target_module
-
-        # ── Tier 1: Orchestrator-ReAct-Loop ──────────────────────────────────
-        return 1, None
+    ) -> tuple[int, str | None, float | None]:
+        return self._router.classify_tier(message, chat_history, cfg)
 
     async def _plan_and_execute_pipeline(
         self,
@@ -2379,6 +2111,8 @@ JSON-SCHEMA:
         Returns:
             tuple[str, str | None, bool]: (Antwort, Modul oder None, did_compact)
         """
+        self._last_tier_used = 0
+        self._last_routing_confidence = None
         status_bus.set_session_id(session_id)
         await status_bus.emit(
             session_id,
@@ -2400,6 +2134,7 @@ JSON-SCHEMA:
 
         # ── Direktes Modul-Routing (force_module) ────────────────────────────
         if force_module:
+            self._last_tier_used = 2
             return await self._route_forced_target(
                 force_module,
                 message=message,
@@ -2413,6 +2148,7 @@ JSON-SCHEMA:
         if self._wants_agent_creation(message):
             logger.info("Explizite Agent-Erstellungs-Intention erkannt → Auto-Create-Fast-Path.")
             response, did_compact = await self._auto_create_custom_agent(message, session_id)
+            self._last_tier_used = 1
             return response, "orchestrator", did_compact
 
         # ── Explizite Workflow-Erstellung: deterministischer Create-Fast-Path ─
@@ -2420,6 +2156,7 @@ JSON-SCHEMA:
         if self._wants_workflow_creation(message):
             logger.info("Explizite Workflow-Erstellungs-Intention erkannt → Auto-Create-Fast-Path.")
             response, did_compact = await self._auto_create_workflow(message, session_id)
+            self._last_tier_used = 1
             return response, "orchestrator", did_compact
 
         # ── Deterministic Task Pre-structuring ──────────────────────────────
@@ -2462,6 +2199,7 @@ JSON-SCHEMA:
                 },
             ]
             result = await run_pipeline.ainvoke({"steps": steps})
+            self._last_tier_used = 4
             return str(result), None, False
 
         # ── TaskSketch Routing Hints ─────────────────────────────────────────
@@ -2475,7 +2213,7 @@ JSON-SCHEMA:
                 preferred_tier = 2
                 preferred_target = candidate_modules[0]
 
-        tier, target_module = self._classify_tier(message, chat_history, cfg)
+        tier, target_module, routing_confidence = self._classify_tier(message, chat_history, cfg)
         if preferred_tier is not None:
             tier = preferred_tier
             if preferred_target:
@@ -2489,6 +2227,25 @@ JSON-SCHEMA:
             # Enforce TaskSketch candidate modules for routing.
             tier = 2 if len(candidate_modules) == 1 else 4
             target_module = candidate_modules[0] if tier == 2 else None
+        # ── Embedding-Tie-Breaker (R11) ───────────────────────────────────
+        if tier == 1 and routing_confidence is None and preferred_tier is None:
+            if self._routing_embedding_enabled:
+                routing_message_stripped = self._router.strip_bot_context(message)
+                candidate_scores = self._router.get_scores(routing_message_stripped)
+                if len(candidate_scores) >= 2:
+                    embed_result = await self._embedding_router.arank(
+                        message, list(candidate_scores.keys())
+                    )
+                    if embed_result is not None:
+                        target_module, routing_confidence = embed_result
+                        tier = 2
+                        logger.info(
+                            "Embedding-Tie-Breaker: %s (conf=%.2f) für: %s…",
+                            target_module,
+                            routing_confidence,
+                            message[:60],
+                        )
+
         self._last_tier_used = tier
         await self._update_session_stats(session_id, tier, target_module)
         logger.info("Routing-Tier %d gewählt für: %s…", tier, message[:80])
@@ -2504,6 +2261,7 @@ JSON-SCHEMA:
                 task_sketch=task_sketch,
                 semantic_resolution=semantic_resolution,
             )
+            self._last_routing_confidence = routing_confidence
             return response, None, did_compact
 
         # ── Tier 2: Keyword-Fast-Path direkt zum Modul-Agent ─────────────
@@ -2532,6 +2290,7 @@ JSON-SCHEMA:
                 _et.add_done_callback(_log_background_task_exception)
                 if self._should_show_user_evidence_trace(self._last_evidence_trace):
                     response = f"{response}\n\n{self._last_evidence_trace.to_markdown()}"
+                self._last_routing_confidence = routing_confidence
                 return response, module_used, did_compact
         # ── Tier 1: Orchestrator-ReAct-Loop ─────────────────────────────
         # LLM entscheidet: call_module_agent, run_pipeline, create_custom_agent oder direkte Antwort.
@@ -2557,6 +2316,7 @@ JSON-SCHEMA:
         _et.add_done_callback(_log_background_task_exception)
         if self._should_show_user_evidence_trace(self._last_evidence_trace):
             response = f"{response}\n\n{self._last_evidence_trace.to_markdown()}"
+        self._last_routing_confidence = routing_confidence
         return response, None, did_compact
 
 

@@ -5,8 +5,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Ninko – IT-Operations-AI-Agent Dashboard">
-    <meta http-equiv="Content-Security-Policy"
-          content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' ws: wss:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'; upgrade-insecure-requests;">
     <title>Ninko</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -34,7 +32,7 @@
                 <div class="sidebar-panel sidebar-panel-primary" id="sidebar-panel-primary">
                     <!-- Top Nav -->
                     <ul class="nav-tabs" id="nav-tabs-top">
-                        <li class="nav-tab active" data-tab="chat" onclick="Ninko.newChat()">
+                        <li class="nav-tab active" data-tab="chat" data-action="newChat">
                             <span class="tab-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none"
                                     stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                     stroke-linejoin="round">
@@ -49,7 +47,7 @@
                     </ul>
 
                     <ul class="nav-tabs" id="nav-tabs-back" style="display:none;">
-                        <li class="nav-tab" onclick="Ninko.switchTab('chat')">
+                        <li class="nav-tab" data-action="switchTab" data-args='["chat"]'>
                             <span class="tab-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg></span>
                             <span class="tab-label" data-i18n="nav.back">Zurück</span>
                         </li>
@@ -72,56 +70,56 @@
                     <div id="sidebar-settings-subnav" class="sidebar-subnav" style="display:none">
                         <div id="subnav-settings" class="subnav-section" style="display:none">
                             <div class="settings-category-label">Intelligence</div>
-                            <button class="settings-tab settings-tab-sub active" data-settings-tab="llm" onclick="Ninko.switchSettingsTab('llm')">
+                            <button class="settings-tab settings-tab-sub active" data-settings-tab="llm" data-action="switchSettingsTab" data-args='["llm"]'>
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
                                 LLM Provider
                             </button>
-                            <button class="settings-tab settings-tab-sub" data-settings-tab="skills" onclick="Ninko.switchSettingsTab('skills')">
+                            <button class="settings-tab settings-tab-sub" data-settings-tab="skills" data-action="switchSettingsTab" data-args='["skills"]'>
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
                                 Skills
                             </button>
-                            <button class="settings-tab settings-tab-sub" data-settings-tab="safeguard" onclick="Ninko.switchSettingsTab('safeguard')">
+                            <button class="settings-tab settings-tab-sub" data-settings-tab="safeguard" data-action="switchSettingsTab" data-args='["safeguard"]'>
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
                                 <span data-i18n="safeguard.settingsTab">SafeGuard</span>
                             </button>
 
                             <div class="settings-category-label">Appearance</div>
-                            <button class="settings-tab settings-tab-sub" data-settings-tab="themes" onclick="Ninko.switchSettingsTab('themes')">
+                            <button class="settings-tab settings-tab-sub" data-settings-tab="themes" data-action="switchSettingsTab" data-args='["themes"]'>
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3L4 7.5v9L12 21l8-4.5v-9z"></path><path d="M12 12l8-4.5"></path><path d="M12 12L4 7.5"></path><path d="M12 12v9"></path></svg>
                                 Themes
                             </button>
-                            <button class="settings-tab settings-tab-sub" data-settings-tab="language" onclick="Ninko.switchSettingsTab('language')">
+                            <button class="settings-tab settings-tab-sub" data-settings-tab="language" data-action="switchSettingsTab" data-args='["language"]'>
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
                                 <span data-i18n="settings.language">Sprache</span>
                             </button>
-                            <button class="settings-tab settings-tab-sub" data-settings-tab="tts" onclick="Ninko.switchSettingsTab('tts')">
+                            <button class="settings-tab settings-tab-sub" data-settings-tab="tts" data-action="switchSettingsTab" data-args='["tts"]'>
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
                                 <span data-i18n="settings.tts">Sprachausgabe</span>
                             </button>
-                            <button class="settings-tab settings-tab-sub" data-settings-tab="imagegen" onclick="Ninko.switchSettingsTab('imagegen')">
+                            <button class="settings-tab settings-tab-sub" data-settings-tab="imagegen" data-action="switchSettingsTab" data-args='["imagegen"]'>
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
                                 Bildgenerierung
                             </button>
 
                             <div class="settings-category-label">System</div>
-                            <button class="settings-tab settings-tab-sub" data-settings-tab="modules" onclick="Ninko.switchSettingsTab('modules')">
+                            <button class="settings-tab settings-tab-sub" data-settings-tab="modules" data-action="switchSettingsTab" data-args='["modules"]'>
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
                                 Module
                             </button>
-                            <button class="settings-tab settings-tab-sub" data-settings-tab="access" onclick="Ninko.switchSettingsTab('access')">
+                            <button class="settings-tab settings-tab-sub" data-settings-tab="access" data-action="switchSettingsTab" data-args='["access"]'>
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><path d="M20 8v6"></path><path d="M23 11h-6"></path></svg>
                                 Benutzer & Rollen
                             </button>
-                            <button class="settings-tab settings-tab-sub" data-settings-tab="alerts" onclick="Ninko.switchSettingsTab('alerts')">
+                            <button class="settings-tab settings-tab-sub" data-settings-tab="alerts" data-action="switchSettingsTab" data-args='["alerts"]'>
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
                                 <span data-i18n="nav.alerts">Alerts</span>
                                 <span id="alerts-badge" class="subnav-badge" style="display:none">0</span>
                             </button>
-                            <button class="settings-tab settings-tab-sub" data-settings-tab="logs" onclick="Ninko.switchSettingsTab('logs')">
+                            <button class="settings-tab settings-tab-sub" data-settings-tab="logs" data-action="switchSettingsTab" data-args='["logs"]'>
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                                 <span data-i18n="nav.logs">Logs</span>
                             </button>
-                            <button class="settings-tab settings-tab-sub" data-settings-tab="system" onclick="Ninko.switchSettingsTab('system')">
+                            <button class="settings-tab settings-tab-sub" data-settings-tab="system" data-action="switchSettingsTab" data-args='["system"]'>
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
                                 <span data-i18n="settings.system">System</span>
                             </button>
@@ -131,30 +129,30 @@
 
                 <div class="sidebar-panel sidebar-panel-automatisierung" id="sidebar-panel-automatisierung">
                     <div class="sidebar-panel-header">
-                        <button class="sidebar-back-btn" type="button" onclick="Ninko.openSidebarPanel('primary')" aria-label="Zurück">
+                        <button class="sidebar-back-btn" type="button" data-action="openSidebarPanel" data-args='["primary"]' aria-label="Zurück">
                             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
                         </button>
                         <span class="sidebar-panel-title">Automatisierung</span>
                     </div>
                     <div class="sidebar-panel-body">
                         <div id="subnav-automatisierung" class="subnav-section">
-                            <button class="settings-tab" data-auto-tab="tasks" onclick="Ninko.switchAutoTab('tasks')">
+                            <button class="settings-tab" data-auto-tab="tasks" data-action="switchAutoTab" data-args='["tasks"]'>
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                                 <span data-i18n="nav.tasks">Aufgaben</span>
                             </button>
-                            <button class="settings-tab" data-auto-tab="agents" onclick="Ninko.switchAutoTab('agents')">
+                            <button class="settings-tab" data-auto-tab="agents" data-action="switchAutoTab" data-args='["agents"]'>
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg>
                                 <span data-i18n="nav.agents">Agenten</span>
                             </button>
-                            <button class="settings-tab" data-auto-tab="workflows" onclick="Ninko.switchAutoTab('workflows')">
+                            <button class="settings-tab" data-auto-tab="workflows" data-action="switchAutoTab" data-args='["workflows"]'>
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="5" height="5" rx="1"></rect><rect x="16" y="3" width="5" height="5" rx="1"></rect><rect x="9.5" y="16" width="5" height="5" rx="1"></rect><path d="M5.5 8v3a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8"></path><line x1="12" y1="13" x2="12" y2="16"></line></svg>
                                 <span data-i18n="nav.workflows">Workflows</span>
                             </button>
-                            <button class="settings-tab" data-auto-link="scripting" onclick="Ninko.switchTab('scripting')">
+                            <button class="settings-tab" data-auto-link="scripting" data-action="switchTab" data-args='["scripting"]'>
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
                                 <span>Scripting</span>
                             </button>
-                            <button class="settings-tab" data-auto-link="modules" onclick="Ninko.switchTab('modules')">
+                            <button class="settings-tab" data-auto-link="modules" data-action="switchTab" data-args='["modules"]'>
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.89 1.45l8 4A2 2 0 0 1 22 7.24v9.52a2 2 0 0 1-1.11 1.79l-8 4a2 2 0 0 1-1.78 0l-8-4A2 2 0 0 1 2 16.76V7.24a2 2 0 0 1 1.11-1.79l8-4a2 2 0 0 1 1.78 0z"></path><polyline points="2.32 6.16 12 11 21.68 6.16"></polyline><line x1="12" y1="22.76" x2="12" y2="11"></line></svg>
                                 <span data-i18n="nav.modules">Module</span>
                             </button>
@@ -164,7 +162,7 @@
 
                 <div class="sidebar-panel sidebar-panel-secondary" id="sidebar-panel-secondary">
                     <div class="sidebar-panel-header">
-                        <button class="sidebar-back-btn" type="button" onclick="Ninko.openSidebarPanel('automatisierung')" aria-label="Zurück">
+                        <button class="sidebar-back-btn" type="button" data-action="openSidebarPanel" data-args='["automatisierung"]' aria-label="Zurück">
                             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
                         </button>
                         <span class="sidebar-panel-title">Module</span>
@@ -173,7 +171,7 @@
                         <div id="subnav-modules" class="subnav-section subnav-section-modules">
                             <div class="module-subnav-search-wrap">
                                 <input id="module-subnav-filter" class="module-subnav-filter" type="text" placeholder="Module filtern…"
-                                    oninput="Ninko.filterModuleSidebar(this.value)">
+                                    data-input="filterModuleSidebar" data-use-value="true">
                             </div>
                             <div id="module-subnav-list" class="module-subnav-list">
                                 <!-- Populated dynamically by loadModules() -->
@@ -186,14 +184,14 @@
 
             <div class="sidebar-account-wrap" id="sidebar-account-wrap">
                 <div class="sidebar-account-menu" id="sidebar-account-menu" style="display:none;">
-                    <button class="sidebar-account-menu-item" type="button" onclick="Ninko.openSettingsFromMenu()">
+                    <button class="sidebar-account-menu-item" type="button" data-action="openSettingsFromMenu">
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="3"></circle>
                             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                         </svg>
                         <span>Einstellungen</span>
                     </button>
-                    <button class="sidebar-account-menu-item" type="button" onclick="Ninko.openLanguageFromMenu()">
+                    <button class="sidebar-account-menu-item" type="button" data-action="openLanguageFromMenu">
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="10"></circle>
                             <line x1="2" y1="12" x2="22" y2="12"></line>
@@ -201,7 +199,7 @@
                         </svg>
                         <span>Sprache</span>
                     </button>
-                    <a class="sidebar-account-menu-item" href="https://github.com/natorus87/ninko/blob/main/DOCS.md" target="_blank" rel="noopener noreferrer" onclick="Ninko.closeSidebarUserMenu()">
+                    <a class="sidebar-account-menu-item" href="https://github.com/natorus87/ninko/blob/main/DOCS.md" target="_blank" rel="noopener noreferrer" data-action="closeSidebarUserMenu">
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="10"></circle>
                             <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
@@ -209,7 +207,7 @@
                         </svg>
                         <span>Hilfe (GitHub Docs)</span>
                     </a>
-                    <button class="sidebar-account-menu-item sidebar-account-menu-item-danger" type="button" onclick="Ninko.logout()">
+                    <button class="sidebar-account-menu-item sidebar-account-menu-item-danger" type="button" data-action="logout">
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
                             <polyline points="16 17 21 12 16 7"></polyline>
@@ -219,7 +217,7 @@
                     </button>
                 </div>
 
-                <button class="sidebar-account-trigger" id="sidebar-account-trigger" type="button" onclick="Ninko.toggleSidebarUserMenu(event)" aria-label="Benutzer-Menü" title="Benutzer-Menü">
+                <button class="sidebar-account-trigger" id="sidebar-account-trigger" type="button" data-action="toggleSidebarUserMenu" data-event="true" aria-label="Benutzer-Menü" title="Benutzer-Menü">
                     <div class="sidebar-account-avatar" id="sidebar-account-avatar">A</div>
                     <div class="sidebar-account-meta">
                         <div class="sidebar-account-name" id="sidebar-account-name">admin</div>
@@ -264,8 +262,7 @@
                                     <!-- Zeile 1: Textarea -->
                                     <div class="chat-input-top">
                                         <textarea id="chat-input" class="chat-input" data-i18n-placeholder="chat.input.ask"
-                                            placeholder="Wie kann ich dir helfen?" rows="2"
-                                            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();Ninko.sendMessage()}"></textarea>
+                                            placeholder="Wie kann ich dir helfen?" rows="2"></textarea>
                                     </div>
                                     <!-- Zeile 2: Toolbar -->
                                     <div class="chat-input-toolbar">
@@ -273,7 +270,7 @@
                                         <div class="chat-toolbar-left">
                                             <div class="chat-plus-menu" id="chat-plus-menu">
                                                 <button class="chat-plus-trigger" id="chat-plus-trigger" type="button"
-                                                    onclick="Ninko.toggleChatPlusMenu(event)"
+                                                    data-action="toggleChatPlusMenu" data-event="true"
                                                     aria-label="Weitere Optionen" title="Weitere Optionen">
                                                     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
                                                         <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -284,7 +281,7 @@
                                                     <div class="chat-plus-group">
                                                         <div class="chat-plus-row chat-plus-row-popover">
                                                             <span class="chat-plus-label">SafeGuard</span>
-                                                            <button class="btn-safeguard safeguard-on" id="btn-safeguard" type="button" onclick="Ninko.toggleSafeguardPicker(event)" aria-label="SafeGuard" title="SafeGuard">
+                                                            <button class="btn-safeguard safeguard-on" id="btn-safeguard" type="button" data-action="toggleSafeguardPicker" data-event="true" aria-label="SafeGuard" title="SafeGuard">
                                                                 <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                                                             </button>
                                                             <div id="safeguard-picker" class="safeguard-picker" style="display:none;"></div>
@@ -309,7 +306,7 @@
                                                             <span class="chat-plus-label">Modellwahl</span>
                                                             <div class="module-picker module-picker-inline" id="module-picker">
                                                                 <button class="module-picker-btn" id="module-picker-btn"
-                                                                    onclick="Ninko.toggleModulePicker(event)"
+                                                                    data-action="toggleModulePicker" data-event="true"
                                                                     data-i18n-title="chat.modulePickerTitle" title="Modul vorauswählen">
                                                                     <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
                                                                     <span id="module-picker-label" data-i18n="chat.moduleAuto">Auto</span>
@@ -320,7 +317,7 @@
                                                         </div>
                                                     </div>
                                                     <div class="chat-plus-divider"></div>
-                                                    <button class="chat-plus-action" type="button" onclick="Ninko.exportChatAsHtml(); Ninko.closeChatPlusMenu();"
+                                                    <button class="chat-plus-action" type="button" data-actions='[["exportChatAsHtml"], ["closeChatPlusMenu"]]'
                                                         data-i18n-title="chat.exportTitle" title="Als HTML exportieren">
                                                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
                                                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -335,7 +332,7 @@
                                         </div>
                                         <!-- Rechts: Mic -->
                                         <div class="chat-toolbar-right">
-                                            <button class="btn-mic-inline" id="btn-mic" type="button" onclick="Ninko.toggleRecording()" aria-label="Spracheingabe starten" title="Spracheingabe">
+                                            <button class="btn-mic-inline" id="btn-mic" type="button" data-action="toggleRecording" aria-label="Spracheingabe starten" title="Spracheingabe">
                                                 <span class="mic-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></span>
                                             </button>
                                         </div>
@@ -357,7 +354,7 @@
                 <div id="scripting-overview" class="module-dashboard">
                     <div class="page-header">
                         <h2>Python Scripts</h2>
-                        <button class="btn btn-primary" onclick="Ninko.openScriptEditor(null)">+ Neues Script</button>
+                        <button class="btn btn-primary" data-action="openScriptEditor" data-args='[null]'>+ Neues Script</button>
                     </div>
                     <div id="scripts-list" class="scripts-grid">
                         <p class="empty-state">Lade Scripts…</p>
@@ -367,8 +364,8 @@
                     <div class="page-header">
                         <h2 id="script-editor-title">Neues Script</h2>
                         <div style="display:flex;gap:0.5rem;">
-                            <button class="btn btn-outline" onclick="Ninko.closeScriptEditor()">Abbrechen</button>
-                            <button class="btn btn-primary" id="script-save-btn" onclick="Ninko.saveScript()">Speichern</button>
+                            <button class="btn btn-outline" data-action="closeScriptEditor">Abbrechen</button>
+                            <button class="btn btn-primary" id="script-save-btn" data-action="saveScript">Speichern</button>
                         </div>
                     </div>
                     <div class="editor-grid">
@@ -394,7 +391,7 @@
                                 </div>
                                 <div class="form-row">
                                     <label class="form-checkbox-label">
-                                        <input type="checkbox" id="script-tool-enabled" onchange="Ninko.toggleToolFields()">
+                                        <input type="checkbox" id="script-tool-enabled" data-change="toggleToolFields">
                                         <span>Als Tool verfügbar (für KI-Nutzung)</span>
                                     </label>
                                 </div>
@@ -425,7 +422,7 @@ print('Hello, World!')"></textarea>
                         <div class="editor-sidebar">
                             <div class="setting-group">
                                 <h4>Ausführung</h4>
-                                <button class="btn btn-primary" onclick="Ninko.runCurrentScript()" style="width:100%;">▶ Jetzt ausführen</button>
+                                <button class="btn btn-primary" data-action="runCurrentScript" style="width:100%;">▶ Jetzt ausführen</button>
                                 <div id="script-execution-status" style="margin-top:1rem;display:none;">
                                     <div class="run-status-badge run-running" id="script-run-status">läuft…</div>
                                     <div id="script-run-output" style="margin-top:0.5rem;font-family:monospace;font-size:0.85rem;background:var(--bg-body);padding:0.75rem;border-radius:4px;max-height:200px;overflow-y:auto;"></div>
@@ -457,7 +454,7 @@ print('Hello, World!')"></textarea>
                 <div class="module-dashboard" id="tasks-overview">
                     <div class="page-header">
                         <h2>Geplante Aufgaben</h2>
-                        <button class="btn btn-primary" onclick="Ninko.openTaskEditor()">+ Neue Aufgabe</button>
+                        <button class="btn btn-primary" data-action="openTaskEditor">+ Neue Aufgabe</button>
                     </div>
                     <div id="scheduler-tasks-list" class="tasks-grid">
                         <p class="empty-state">Lade Aufgaben…</p>
@@ -469,8 +466,8 @@ print('Hello, World!')"></textarea>
                     <div class="page-header">
                         <h2>Neue Aufgabe</h2>
                         <div style="display:flex;gap:0.5rem;">
-                            <button class="btn btn-outline" onclick="Ninko.closeTaskEditor()">Abbrechen</button>
-                            <button class="btn btn-primary" id="sched-save-btn" onclick="Ninko.saveScheduledTask()">Speichern</button>
+                            <button class="btn btn-outline" data-action="closeTaskEditor">Abbrechen</button>
+                            <button class="btn btn-primary" id="sched-save-btn" data-action="saveScheduledTask">Speichern</button>
                         </div>
                     </div>
                     <div class="editor-grid">
@@ -487,7 +484,7 @@ print('Hello, World!')"></textarea>
                                     <div class="cron-input-row">
                                         <input id="sched-cron" type="text" class="form-input" placeholder="*/30 * * * *">
                                         <select id="sched-cron-preset" class="form-select form-select-sm"
-                                            onchange="Ninko.applyCronPreset()">
+                                            data-change="applyCronPreset">
                                             <option value="">Vorlage…</option>
                                             <option value="*/5 * * * *">Alle 5 Min</option>
                                             <option value="*/15 * * * *">Alle 15 Min</option>
@@ -513,17 +510,17 @@ print('Hello, World!')"></textarea>
                                     <div class="radio-group">
                                         <label class="radio-label">
                                             <input type="radio" name="sched-type" value="prompt" checked
-                                                onchange="Ninko.toggleSchedType()">
+                                                data-change="toggleSchedType">
                                             Agenten-Auftrag (Prompt)
                                         </label>
                                         <label class="radio-label">
                                             <input type="radio" name="sched-type" value="agent"
-                                                onchange="Ninko.toggleSchedType()">
+                                                data-change="toggleSchedType">
                                             Custom Agent aufrufen
                                         </label>
                                         <label class="radio-label">
                                             <input type="radio" name="sched-type" value="workflow"
-                                                onchange="Ninko.toggleSchedType()">
+                                                data-change="toggleSchedType">
                                             Workflow ausführen
                                         </label>
                                     </div>
@@ -575,7 +572,7 @@ print('Hello, World!')"></textarea>
                 <!-- Logs -->
                 <div id="tasks-logs" class="module-dashboard hidden">
                     <div class="page-header">
-                        <button class="btn btn-icon" onclick="Ninko.hideTaskLogs()" title="Zurück">
+                        <button class="btn btn-icon" data-action="hideTaskLogs" title="Zurück">
                             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
                                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <line x1="19" y1="12" x2="5" y2="12"></line>
@@ -594,9 +591,9 @@ print('Hello, World!')"></textarea>
                     <div class="page-header">
                         <h2>Agent Builder</h2>
                         <div style="display:flex;gap:0.5rem;">
-                            <button class="btn btn-outline" onclick="Ninko.openSkillsPanel()">Skills</button>
-                            <button class="btn btn-outline" onclick="Ninko.openTemplatesPanel()">⚡ Vorlagen</button>
-                            <button class="btn btn-primary" onclick="Ninko.openAgentEditor(null)">+ Neuer Agent</button>
+                            <button class="btn btn-outline" data-action="openSkillsPanel">Skills</button>
+                            <button class="btn btn-outline" data-action="openTemplatesPanel">⚡ Vorlagen</button>
+                            <button class="btn btn-primary" data-action="openAgentEditor" data-args='[null]'>+ Neuer Agent</button>
                         </div>
                     </div>
                     <div id="agents-list" class="agents-grid">
@@ -608,7 +605,7 @@ print('Hello, World!')"></textarea>
                 <div id="agenten-templates" class="module-dashboard hidden">
                     <div class="page-header">
                         <h2>⚡ Agent-Vorlagen</h2>
-                        <button class="btn btn-outline" onclick="Ninko.closeTemplatesPanel()">← Zurück</button>
+                        <button class="btn btn-outline" data-action="closeTemplatesPanel">← Zurück</button>
                     </div>
                     <p class="text-muted" style="margin-bottom:1.25rem;font-size:0.88rem;">Wähle eine Vorlage als Ausgangspunkt – du kannst alles anpassen.</p>
                     <div id="templates-grid" class="agents-grid">
@@ -620,14 +617,14 @@ print('Hello, World!')"></textarea>
                     <div class="page-header">
                         <h2>Skills</h2>
                         <div style="display:flex;gap:0.5rem;">
-                            <button class="btn btn-outline" onclick="Ninko.closeSkillsPanel()">← Zurück</button>
-                            <button class="btn btn-primary" onclick="Ninko.openSkillEditor(null)">+ Neuer Skill</button>
+                            <button class="btn btn-outline" data-action="closeSkillsPanel">← Zurück</button>
+                            <button class="btn btn-primary" data-action="openSkillEditor" data-args='[null]'>+ Neuer Skill</button>
                         </div>
                     </div>
                     <div style="display:flex;gap:0.5rem;margin-bottom:1rem;">
-                        <button class="btn btn-outline skill-subtab active" id="skill-tab-installed" onclick="Ninko.switchSkillTab('installed')">Installiert</button>
-                        <button class="btn btn-outline skill-subtab" id="skill-tab-marketplace" onclick="Ninko.switchSkillTab('marketplace')">Marketplace</button>
-                        <button class="btn btn-outline skill-subtab" id="skill-tab-repos" onclick="Ninko.switchSkillTab('repos')">Repos</button>
+                        <button class="btn btn-outline skill-subtab active" id="skill-tab-installed" data-action="switchSkillTab" data-args='["installed"]'>Installiert</button>
+                        <button class="btn btn-outline skill-subtab" id="skill-tab-marketplace" data-action="switchSkillTab" data-args='["marketplace"]'>Marketplace</button>
+                        <button class="btn btn-outline skill-subtab" id="skill-tab-repos" data-action="switchSkillTab" data-args='["repos"]'>Repos</button>
                     </div>
                     <div id="skills-list" class="agents-grid">
                         <p class="empty-state">Lade Skills…</p>
@@ -645,8 +642,8 @@ print('Hello, World!')"></textarea>
                     <div class="page-header">
                         <h2 id="skill-editor-title">Neuer Skill</h2>
                         <div style="display:flex;gap:0.5rem;">
-                            <button class="btn btn-outline" onclick="Ninko.closeSkillEditor()">Abbrechen</button>
-                            <button class="btn btn-primary" id="skill-save-btn" onclick="Ninko.saveSkill()">Speichern</button>
+                            <button class="btn btn-outline" data-action="closeSkillEditor">Abbrechen</button>
+                            <button class="btn btn-primary" id="skill-save-btn" data-action="saveSkill">Speichern</button>
                         </div>
                     </div>
                     <input type="hidden" id="skill-edit-name">
@@ -697,9 +694,9 @@ print('Hello, World!')"></textarea>
                     <div class="page-header">
                         <h2 id="agent-editor-title">Neuer Agent</h2>
                         <div style="display:flex;gap:0.5rem;">
-                            <button class="btn btn-outline" onclick="Ninko.openTemplatesPanel()">⚡ Vorlage</button>
-                            <button class="btn btn-outline" onclick="Ninko.closeAgentEditor()">Abbrechen</button>
-                            <button class="btn btn-primary" onclick="Ninko.saveAgent()">Speichern</button>
+                            <button class="btn btn-outline" data-action="openTemplatesPanel">⚡ Vorlage</button>
+                            <button class="btn btn-outline" data-action="closeAgentEditor">Abbrechen</button>
+                            <button class="btn btn-primary" data-action="saveAgent">Speichern</button>
                         </div>
                     </div>
                     <div class="editor-grid">
@@ -713,7 +710,7 @@ print('Hello, World!')"></textarea>
                                         placeholder="z.B. Ein Agent der täglich die Kubernetes-Pod-Logs analysiert, CrashLoops erkennt und eine Telegram-Benachrichtigung sendet"></textarea>
                                 </div>
                                 <div style="display:flex;justify-content:flex-end;margin-top:0.5rem;">
-                                    <button class="btn btn-outline" id="agent-generate-btn" onclick="Ninko.generateAgentWithAI()">✨ Generieren</button>
+                                    <button class="btn btn-outline" id="agent-generate-btn" data-action="generateAgentWithAI">✨ Generieren</button>
                                 </div>
                             </div>
                             <div class="setting-group">
@@ -768,14 +765,14 @@ print('Hello, World!')"></textarea>
                                 <div id="agent-skills-list" style="display:flex;flex-direction:column;gap:0.4rem;margin-bottom:0.75rem;">
                                     <p class="text-muted" style="font-size:0.82rem;">Lade Skills…</p>
                                 </div>
-                                <button class="btn btn-sm btn-outline" onclick="Ninko.openSkillEditorFromAgent()">+ Skill erstellen</button>
+                                <button class="btn btn-sm btn-outline" data-action="openSkillEditorFromAgent">+ Skill erstellen</button>
                             </div>
                             <div class="setting-group">
                                 <h4>Ausführungsschritte</h4>
                                 <p class="setting-desc">Geordnete Schritte für diesen Agenten.</p>
                                 <div id="agent-steps-list"></div>
                                 <button class="btn btn-sm btn-outline" style="margin-top:0.75rem;"
-                                    onclick="Ninko.addAgentStep()">+ Schritt hinzufügen</button>
+                                    data-action="addAgentStep">+ Schritt hinzufügen</button>
                             </div>
                         </div>
                     </div>
@@ -788,8 +785,8 @@ print('Hello, World!')"></textarea>
                     <div class="page-header">
                         <h2>Workflows</h2>
                         <div style="display:flex;gap:0.5rem;">
-                            <button class="btn btn-outline" onclick="Ninko.openWorkflowTemplateSelector()">📋 Aus Template</button>
-                            <button class="btn btn-primary" onclick="Ninko.openWorkflowEditor(null)">+ Neuer Workflow</button>
+                            <button class="btn btn-outline" data-action="openWorkflowTemplateSelector">📋 Aus Template</button>
+                            <button class="btn btn-primary" data-action="openWorkflowEditor" data-args='[null]'>+ Neuer Workflow</button>
                         </div>
                     </div>
                     <div id="workflows-list" class="workflows-grid">
@@ -801,7 +798,7 @@ print('Hello, World!')"></textarea>
                     <div class="wf-editor-toolbar">
                         <div style="display:flex;flex-direction:column;gap:0.4rem;">
                             <div style="display:flex;align-items:center;gap:0.75rem;">
-                                <button class="btn btn-icon" onclick="Ninko.closeWorkflowEditor()" title="Zurück zur Übersicht">
+                                <button class="btn btn-icon" data-action="closeWorkflowEditor" title="Zurück zur Übersicht">
                                     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
                                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <line x1="19" y1="12" x2="5" y2="12"></line>
@@ -816,29 +813,29 @@ print('Hello, World!')"></textarea>
                         </div>
                         <div class="wf-node-palette">
                             <span class="palette-label">Hinzufügen:</span>
-                            <button class="btn btn-sm wf-palette-btn wf-palette-trigger" onclick="Ninko.wfAddNode('trigger')" title="Startet den Workflow">⚡ Trigger</button>
-                            <button class="btn btn-sm wf-palette-btn wf-palette-agent" onclick="Ninko.wfAddNode('agent')" title="Führt einen KI-Agenten aus">🤖 Agent</button>
-                            <button class="btn btn-sm wf-palette-btn wf-palette-condition" onclick="Ninko.wfAddNode('condition')" title="Verzweigt anhand einer Bedingung">🔀 Bedingung</button>
-                            <button class="btn btn-sm wf-palette-btn wf-palette-loop" onclick="Ninko.wfAddNode('loop')" title="Wiederholt einen Ablauf">🔁 Loop</button>
-                            <button class="btn btn-sm wf-palette-btn wf-palette-parallel" onclick="Ninko.wfAddNode('parallel')" title="Führt mehrere Aufgaben parallel aus">⚡ Parallel</button>
-                            <button class="btn btn-sm wf-palette-btn wf-palette-subflow" onclick="Ninko.wfAddNode('subflow')" title="Ruft einen anderen Workflow auf">📥 Subflow</button>
-                            <button class="btn btn-sm wf-palette-btn wf-palette-variable" onclick="Ninko.wfAddNode('variable')" title="Setzt eine Variable">📦 Variable</button>
-                            <button class="btn btn-sm wf-palette-btn wf-palette-end" onclick="Ninko.wfAddNode('end')" title="Beendet den Workflow">⏹ Ende</button>
+                            <button class="btn btn-sm wf-palette-btn wf-palette-trigger" data-action="wfAddNode" data-args='["trigger"]' title="Startet den Workflow">⚡ Trigger</button>
+                            <button class="btn btn-sm wf-palette-btn wf-palette-agent" data-action="wfAddNode" data-args='["agent"]' title="Führt einen KI-Agenten aus">🤖 Agent</button>
+                            <button class="btn btn-sm wf-palette-btn wf-palette-condition" data-action="wfAddNode" data-args='["condition"]' title="Verzweigt anhand einer Bedingung">🔀 Bedingung</button>
+                            <button class="btn btn-sm wf-palette-btn wf-palette-loop" data-action="wfAddNode" data-args='["loop"]' title="Wiederholt einen Ablauf">🔁 Loop</button>
+                            <button class="btn btn-sm wf-palette-btn wf-palette-parallel" data-action="wfAddNode" data-args='["parallel"]' title="Führt mehrere Aufgaben parallel aus">⚡ Parallel</button>
+                            <button class="btn btn-sm wf-palette-btn wf-palette-subflow" data-action="wfAddNode" data-args='["subflow"]' title="Ruft einen anderen Workflow auf">📥 Subflow</button>
+                            <button class="btn btn-sm wf-palette-btn wf-palette-variable" data-action="wfAddNode" data-args='["variable"]' title="Setzt eine Variable">📦 Variable</button>
+                            <button class="btn btn-sm wf-palette-btn wf-palette-end" data-action="wfAddNode" data-args='["end"]' title="Beendet den Workflow">⏹ Ende</button>
                         </div>
                         <div style="display:flex;gap:0.5rem;">
-                            <button class="btn btn-outline" onclick="Ninko.closeWorkflowEditor()">Abbrechen</button>
-                            <button class="btn btn-primary" onclick="Ninko.saveWorkflow()">Speichern</button>
+                            <button class="btn btn-outline" data-action="closeWorkflowEditor">Abbrechen</button>
+                            <button class="btn btn-primary" data-action="saveWorkflow">Speichern</button>
                         </div>
                     </div>
                     <div class="wf-editor-body">
                         <div id="wf-canvas-container" class="wf-canvas-container">
                             <div class="wf-zoom-controls">
-                                <button class="btn btn-icon btn-sm" onclick="Ninko.wfZoomOut()" title="Zoom Out">−</button>
+                                <button class="btn btn-icon btn-sm" data-action="wfZoomOut" title="Zoom Out">−</button>
                                 <span id="wf-zoom-level" class="wf-zoom-level">100%</span>
-                                <button class="btn btn-icon btn-sm" onclick="Ninko.wfZoomIn()" title="Zoom In">+</button>
-                                <button class="btn btn-outline btn-sm" onclick="Ninko.wfFitToScreen()" title="Fit to Screen">Fit</button>
-                                <button class="btn btn-outline btn-sm" onclick="Ninko.wfUndo()" title="Undo (Ctrl/Cmd+Z)">Undo</button>
-                                <button class="btn btn-outline btn-sm" onclick="Ninko.wfRedo()" title="Redo (Ctrl/Cmd+Shift+Z)">Redo</button>
+                                <button class="btn btn-icon btn-sm" data-action="wfZoomIn" title="Zoom In">+</button>
+                                <button class="btn btn-outline btn-sm" data-action="wfFitToScreen" title="Fit to Screen">Fit</button>
+                                <button class="btn btn-outline btn-sm" data-action="wfUndo" title="Undo (Ctrl/Cmd+Z)">Undo</button>
+                                <button class="btn btn-outline btn-sm" data-action="wfRedo" title="Redo (Ctrl/Cmd+Shift+Z)">Redo</button>
                             </div>
 
                             <svg id="wf-edges-svg" class="wf-edges-svg"></svg>
@@ -858,19 +855,19 @@ print('Hello, World!')"></textarea>
                 <div id="wf-node-inspector" class="wf-inspector hidden">
                     <div class="wf-inspector-header">
                         <h4 id="wf-inspector-title">Node-Einstellungen</h4>
-                        <button class="btn-close" onclick="Ninko.wfCloseInspector()">✕</button>
+                        <button class="btn-close" data-action="wfCloseInspector">✕</button>
                     </div>
                     <div id="wf-inspector-content"></div>
                     <div id="wf-inspector-footer" style="margin-top:auto; padding-top:1rem;">
                         <button id="wf-node-delete-btn" class="btn btn-sm" style="color:var(--error-color);width:100%;"
-                            onclick="Ninko.wfDeleteSelectedNode()">Node löschen</button>
+                            data-action="wfDeleteSelectedNode">Node löschen</button>
                     </div>
                 </div>
                 <!-- Run Dashboard -->
                 <div id="workflow-run-dashboard" class="wf-run-layout hidden">
                     <div class="wf-run-toolbar">
                         <div style="display:flex;align-items:center;gap:0.75rem;">
-                            <button class="btn btn-icon" onclick="Ninko.closeRunDashboard()" title="Zurück zur Übersicht">
+                            <button class="btn btn-icon" data-action="closeRunDashboard" title="Zurück zur Übersicht">
                                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
                                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <line x1="19" y1="12" x2="5" y2="12"></line>
@@ -898,7 +895,7 @@ print('Hello, World!')"></textarea>
                         <div id="wf-run-inspector" class="wf-run-inspector hidden">
                             <div class="wf-inspector-header">
                                 <h4 id="wf-run-inspector-title">Step-Details</h4>
-                                <button class="btn-close" onclick="Ninko._wfRunCloseInspector()">✕</button>
+                                <button class="btn-close" data-action="_wfRunCloseInspector">✕</button>
                             </div>
                             <div id="wf-run-inspector-content" style="display:flex;flex-direction:column;flex:1;gap:0.75rem;overflow-y:auto;min-height:0;"></div>
                         </div>
@@ -922,7 +919,7 @@ print('Hello, World!')"></textarea>
                                 <div
                                     style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
                                     <h4 style="margin:0;">LLM-Provider</h4>
-                                    <button class="btn btn-sm btn-primary" onclick="Ninko.openProviderEditor(null)">+ Provider hinzufügen</button>
+                                    <button class="btn btn-sm btn-primary" data-action="openProviderEditor" data-args='[null]'>+ Provider hinzufügen</button>
                                 </div>
                                 <div id="llm-providers-list">
                                     <p class="text-muted">Lade Provider…</p>
@@ -938,7 +935,7 @@ print('Hello, World!')"></textarea>
                                 <div class="form-row">
                                     <label class="form-label">
                                         <input type="checkbox" id="embed-use-custom"
-                                            onchange="Ninko.toggleEmbedCustom()">
+                                            data-change="toggleEmbedCustom">
                                         <span data-i18n="settings.embedUseCustom">Eigenen Embedding-Provider konfigurieren</span>
                                     </label>
                                     <span class="form-hint" data-i18n="settings.embedUseCustomHint">Deaktiviert = aktiver LLM-Provider wird auch für Embeddings genutzt</span>
@@ -949,7 +946,7 @@ print('Hello, World!')"></textarea>
                                     <div class="form-row">
                                         <label class="form-label" for="embed-backend" data-i18n="settings.embedBackend">Backend</label>
                                         <select id="embed-backend" class="form-select"
-                                            onchange="Ninko.toggleEmbedApiKey()">
+                                            data-change="toggleEmbedApiKey">
                                             <option value="lmstudio">LM Studio</option>
                                             <option value="ollama">Ollama</option>
                                             <option value="openai_compatible">OpenAI-kompatibel (API-Key)</option>
@@ -979,7 +976,7 @@ print('Hello, World!')"></textarea>
 
                                 <div class="form-actions" style="margin-top:0.75rem;">
                                     <span id="embed-provider-status" class="save-status" style="font-size:0.85rem;"></span>
-                                    <button class="btn btn-sm btn-primary" onclick="Ninko.saveEmbedProvider()" data-i18n="settings.save">💾 Speichern</button>
+                                    <button class="btn btn-sm btn-primary" data-action="saveEmbedProvider" data-i18n="settings.save">💾 Speichern</button>
                                 </div>
                             </div>
 
@@ -997,7 +994,7 @@ print('Hello, World!')"></textarea>
                                 <div class="form-row">
                                     <label class="form-label" for="provider-backend">Backend</label>
                                     <select id="provider-backend" class="form-select"
-                                        onchange="Ninko.toggleProviderApiKey()">
+                                        data-change="toggleProviderApiKey">
                                         <option value="ollama">Ollama</option>
                                         <option value="lmstudio">LM Studio</option>
                                         <option value="litellm">LiteLLM Proxy (API-Key)</option>
@@ -1041,8 +1038,8 @@ print('Hello, World!')"></textarea>
                                 <div class="form-actions">
                                     <span id="provider-save-status" class="save-status"></span>
                                     <button class="btn btn-outline btn-sm"
-                                        onclick="Ninko.closeProviderEditor()">Abbrechen</button>
-                                    <button class="btn btn-primary btn-sm" onclick="Ninko.saveLlmProvider()">Speichern</button>
+                                        data-action="closeProviderEditor">Abbrechen</button>
+                                    <button class="btn btn-primary btn-sm" data-action="saveLlmProvider">Speichern</button>
                                 </div>
                             </div>
 
@@ -1074,7 +1071,7 @@ print('Hello, World!')"></textarea>
                                 <div class="form-row module-upload-row">
                                     <input type="file" id="plugin-upload-file" accept=".zip" class="form-input"
                                         >
-                                    <button class="btn btn-primary" onclick="Ninko.uploadPlugin()"
+                                    <button class="btn btn-primary" data-action="uploadPlugin"
                                         id="plugin-upload-btn">Installieren</button>
                                 </div>
                                 <div id="plugin-upload-status" class="save-status"
@@ -1088,7 +1085,7 @@ print('Hello, World!')"></textarea>
                                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
                                         <span data-i18n="marketplace.title">Modul-Marketplace</span>
                                     </h4>
-                                    <button class="btn btn-outline btn-sm" onclick="Ninko.showAddRepoForm()" id="marketplace-add-btn" data-i18n="marketplace.addRepo">+ Repo hinzufügen</button>
+                                    <button class="btn btn-outline btn-sm" data-action="showAddRepoForm" id="marketplace-add-btn" data-i18n="marketplace.addRepo">+ Repo hinzufügen</button>
                                 </div>
                                 <p class="text-muted modules-marketplace-copy" data-i18n="marketplace.desc">Installiere Module direkt aus GitHub-Repositories. Jedes Repo kann eigene Module anbieten.</p>
 
@@ -1116,8 +1113,8 @@ print('Hello, World!')"></textarea>
                                         <input id="add-repo-token" type="password" class="form-input" data-i18n-placeholder="marketplace.tokenPlaceholder" placeholder="ghp_…">
                                     </div>
                                     <div class="modules-marketplace-actions">
-                                        <button class="btn btn-primary btn-sm" onclick="Ninko.addRepo()" data-i18n="marketplace.add">Hinzufügen</button>
-                                        <button class="btn btn-outline btn-sm" onclick="Ninko.hideAddRepoForm()" data-i18n="marketplace.cancel">Abbrechen</button>
+                                        <button class="btn btn-primary btn-sm" data-action="addRepo" data-i18n="marketplace.add">Hinzufügen</button>
+                                        <button class="btn btn-outline btn-sm" data-action="hideAddRepoForm" data-i18n="marketplace.cancel">Abbrechen</button>
                                         <span id="add-repo-status" class="save-status"></span>
                                     </div>
                                 </div>
@@ -1139,7 +1136,7 @@ print('Hello, World!')"></textarea>
                             <div class="page-header" style="margin-bottom:1rem;">
                                 <h3>Skills</h3>
                                 <div style="display:flex;gap:0.5rem;">
-                                    <button class="btn btn-primary" onclick="Ninko.openSkillsPanelFromSettings()">Skills verwalten →</button>
+                                    <button class="btn btn-primary" data-action="openSkillsPanelFromSettings">Skills verwalten →</button>
                                 </div>
                             </div>
                             <div class="setting-group">
@@ -1151,7 +1148,7 @@ print('Hello, World!')"></textarea>
                             <div class="setting-group" style="margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid var(--border-color);">
                                 <h4>Skill-Marketplace</h4>
                                 <p class="setting-desc">Remote Skills aus Repositories installieren.</p>
-                                <button class="btn btn-outline" onclick="Ninko.openSkillMarketplaceFromSettings()">Marketplace öffnen →</button>
+                                <button class="btn btn-outline" data-action="openSkillMarketplaceFromSettings">Marketplace öffnen →</button>
                             </div>
                         </div>
 
@@ -1215,7 +1212,7 @@ print('Hello, World!')"></textarea>
                                 </div>
                                 <div class="form-row">
                                     <label class="form-label" for="branding-login-head-mode">Login Kopf-Modus</label>
-                                    <select id="branding-login-head-mode" class="form-select" onchange="Ninko.onLoginHeadModeChange()">
+                                    <select id="branding-login-head-mode" class="form-select" data-change="onLoginHeadModeChange">
                                         <option value="image">Bild (Ninko Kopf)</option>
                                         <option value="text">Nur Text</option>
                                         <option value="off">Aus</option>
@@ -1228,8 +1225,8 @@ print('Hello, World!')"></textarea>
                                     <img id="branding-login-preview" src="/static/images/logo_dashboard_new.png?v=3" alt="Login Vorschau" style="margin-top:0.4rem; max-height:110px; max-width:280px; object-fit:contain; border:1px solid var(--border-color); border-radius:8px; padding:6px; background:var(--bg-body);">
                                     <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
                                         <input id="branding-login-file" type="file" class="form-input" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" style="max-width:320px;">
-                                        <button class="btn btn-outline btn-sm" onclick="Ninko.uploadBrandingAsset('login')">Login Bild hochladen</button>
-                                        <button class="btn btn-outline btn-sm" onclick="Ninko.deleteBrandingAsset('login')">Login Bild löschen</button>
+                                        <button class="btn btn-outline btn-sm" data-action="uploadBrandingAsset" data-args='["login"]'>Login Bild hochladen</button>
+                                        <button class="btn btn-outline btn-sm" data-action="deleteBrandingAsset" data-args='["login"]'>Login Bild löschen</button>
                                     </div>
                                 </div>
                                 <div class="form-row" id="branding-login-eyes-row">
@@ -1242,7 +1239,7 @@ print('Hello, World!')"></textarea>
                                     <label class="form-label" for="branding-login-gen-prompt">Login Bild-Generator Prompt (FLUX/Together)</label>
                                     <textarea id="branding-login-gen-prompt" class="form-input" rows="3" placeholder="Futuristic AI guardian head, glowing cyan eyes, dark navy background, clean composition, high detail"></textarea>
                                     <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
-                                        <button class="btn btn-outline btn-sm" onclick="Ninko.generateBrandingLoginImage()">Login Bild generieren</button>
+                                        <button class="btn btn-outline btn-sm" data-action="generateBrandingLoginImage">Login Bild generieren</button>
                                         <span id="branding-login-gen-status" class="save-status"></span>
                                     </div>
                                 </div>
@@ -1268,20 +1265,20 @@ print('Hello, World!')"></textarea>
                                 </div>
                                 <div class="form-actions">
                                     <span id="branding-save-status" class="save-status"></span>
-                                    <button class="btn btn-primary btn-sm" onclick="Ninko.saveBrandingSettings()">Branding speichern</button>
-                                    <button class="btn btn-outline btn-sm" onclick="Ninko.resetBrandingSettings()">Defaults laden</button>
+                                    <button class="btn btn-primary btn-sm" data-action="saveBrandingSettings">Branding speichern</button>
+                                    <button class="btn btn-outline btn-sm" data-action="resetBrandingSettings">Defaults laden</button>
                                 </div>
                             </div>
                             <div class="setting-group">
                                 <h4>Memory</h4>
                                 <div id="settings-memory">
-                                    <button class="btn btn-outline" onclick="Ninko.viewMemoryStats()">Memory-Stats</button>
+                                    <button class="btn btn-outline" data-action="viewMemoryStats">Memory-Stats</button>
                                 </div>
                             </div>
                             <div class="setting-group">
                                 <h4>Secrets</h4>
                                 <div id="settings-secrets">
-                                    <button class="btn btn-outline" onclick="Ninko.viewSecrets()">Secrets verwalten</button>
+                                    <button class="btn btn-outline" data-action="viewSecrets">Secrets verwalten</button>
                                 </div>
                             </div>
                         </div>
@@ -1336,10 +1333,10 @@ print('Hello, World!')"></textarea>
                                 </div>
                                 <div class="form-actions">
                                     <span id="theme-editor-status" class="save-status"></span>
-                                    <button class="btn btn-outline btn-sm" onclick="Ninko.resetThemeEditor()">Neu</button>
-                                    <button class="btn btn-outline btn-sm" onclick="Ninko.duplicateThemeFromEditor()">Duplizieren</button>
-                                    <button class="btn btn-outline btn-sm" onclick="Ninko.deleteThemeFromEditor()">Löschen</button>
-                                    <button class="btn btn-primary btn-sm" onclick="Ninko.saveThemeFromEditor()">Speichern</button>
+                                    <button class="btn btn-outline btn-sm" data-action="resetThemeEditor">Neu</button>
+                                    <button class="btn btn-outline btn-sm" data-action="duplicateThemeFromEditor">Duplizieren</button>
+                                    <button class="btn btn-outline btn-sm" data-action="deleteThemeFromEditor">Löschen</button>
+                                    <button class="btn btn-primary btn-sm" data-action="saveThemeFromEditor">Speichern</button>
                                 </div>
                             </div>
 
@@ -1370,7 +1367,7 @@ print('Hello, World!')"></textarea>
                                 </div>
                                 <div class="form-actions">
                                     <span id="theme-repo-status" class="save-status"></span>
-                                    <button class="btn btn-primary btn-sm" onclick="Ninko.addThemeRepo()">Repo hinzufügen</button>
+                                    <button class="btn btn-primary btn-sm" data-action="addThemeRepo">Repo hinzufügen</button>
                                 </div>
                                 <div id="theme-repos-list" style="margin-top:0.75rem;">
                                     <p class="text-muted">Lade Theme-Repos…</p>
@@ -1391,7 +1388,7 @@ print('Hello, World!')"></textarea>
                                 <h4 data-i18n="settings.stt">Spracheingabe (STT)</h4>
                                 <div class="form-row">
                                     <label class="form-label" for="stt-provider" data-i18n="settings.sttProvider">Provider</label>
-                                    <select id="stt-provider" class="form-select" style="max-width:220px;" onchange="Ninko.onSttProviderChange()">
+                                    <select id="stt-provider" class="form-select" style="max-width:220px;" data-change="onSttProviderChange">
                                         <option value="whisper">Whisper (lokal, built-in)</option>
                                         <option value="openai_compatible">OpenAI-kompatibel (Groq, OpenAI, …)</option>
                                     </select>
@@ -1455,7 +1452,7 @@ print('Hello, World!')"></textarea>
                                 </div>
                                 <div class="form-actions">
                                     <span id="stt-save-status" class="save-status"></span>
-                                    <button class="btn btn-primary btn-sm" id="stt-save-btn" onclick="Ninko.saveSttSettings()" data-i18n="settings.save">💾 Speichern</button>
+                                    <button class="btn btn-primary btn-sm" id="stt-save-btn" data-action="saveSttSettings" data-i18n="settings.save">💾 Speichern</button>
                                 </div>
                             </div>
 
@@ -1492,7 +1489,7 @@ print('Hello, World!')"></textarea>
                                 </div>
                                 <div class="form-actions">
                                     <span id="tts-save-status" class="save-status"></span>
-                                    <button class="btn btn-primary btn-sm" id="tts-save-btn" onclick="Ninko.saveTtsSettings()">Speichern</button>
+                                    <button class="btn btn-primary btn-sm" id="tts-save-btn" data-action="saveTtsSettings">Speichern</button>
                                 </div>
                             </div>
 
@@ -1501,7 +1498,7 @@ print('Hello, World!')"></textarea>
                                 <h4>Vorschau</h4>
                                 <div class="form-row" style="display:flex;gap:0.5rem;align-items:center;">
                                     <input id="tts-preview-text" type="text" class="form-input" placeholder="Hallo, ich bin Ninko." style="flex:1;">
-                                    <button class="btn btn-outline btn-sm" onclick="Ninko.testTtsPreview()">▶ Abspielen</button>
+                                    <button class="btn btn-outline btn-sm" data-action="testTtsPreview">▶ Abspielen</button>
                                 </div>
                                 <p class="text-muted" style="font-size:0.8rem;margin-top:0.25rem;">Nutzt die aktuell gespeicherten Einstellungen (Standard-Stimme &amp; -Sprache).</p>
                                 <audio id="tts-preview-audio" style="display:none;margin-top:0.5rem;" controls></audio>
@@ -1511,7 +1508,7 @@ print('Hello, World!')"></textarea>
                             <div class="setting-group">
                                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
                                     <h4 style="margin:0;">Installierte Stimmen</h4>
-                                    <button class="btn btn-outline btn-sm" onclick="Ninko.loadTtsVoices()">Aktualisieren</button>
+                                    <button class="btn btn-outline btn-sm" data-action="loadTtsVoices">Aktualisieren</button>
                                 </div>
                                 <div id="tts-voices-list"><p class="text-muted">Lade Stimmen…</p></div>
                             </div>
@@ -1525,12 +1522,12 @@ print('Hello, World!')"></textarea>
                                 </p>
                                 <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.75rem;">
                                     <span style="font-size:0.8rem;color:var(--text-muted);align-self:center;">Presets:</span>
-                                    <button class="btn btn-outline btn-sm" onclick="Ninko.fillTtsPreset('de','thorsten-medium')">DE thorsten-medium</button>
-                                    <button class="btn btn-outline btn-sm" onclick="Ninko.fillTtsPreset('de','kerstin-low')">DE kerstin-low</button>
-                                    <button class="btn btn-outline btn-sm" onclick="Ninko.fillTtsPreset('de','ramona-low')">DE ramona-low</button>
-                                    <button class="btn btn-outline btn-sm" onclick="Ninko.fillTtsPreset('de','eva_k-x_low')">DE eva_k-x_low</button>
-                                    <button class="btn btn-outline btn-sm" onclick="Ninko.fillTtsPreset('en','lessac-medium')">EN lessac-medium</button>
-                                    <button class="btn btn-outline btn-sm" onclick="Ninko.fillTtsPreset('en','ryan-medium')">EN ryan-medium</button>
+                                    <button class="btn btn-outline btn-sm" data-action="fillTtsPreset" data-args='["de", "thorsten-medium"]'>DE thorsten-medium</button>
+                                    <button class="btn btn-outline btn-sm" data-action="fillTtsPreset" data-args='["de", "kerstin-low"]'>DE kerstin-low</button>
+                                    <button class="btn btn-outline btn-sm" data-action="fillTtsPreset" data-args='["de", "ramona-low"]'>DE ramona-low</button>
+                                    <button class="btn btn-outline btn-sm" data-action="fillTtsPreset" data-args='["de", "eva_k-x_low"]'>DE eva_k-x_low</button>
+                                    <button class="btn btn-outline btn-sm" data-action="fillTtsPreset" data-args='["en", "lessac-medium"]'>EN lessac-medium</button>
+                                    <button class="btn btn-outline btn-sm" data-action="fillTtsPreset" data-args='["en", "ryan-medium"]'>EN ryan-medium</button>
                                 </div>
                                 <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:flex-end;">
                                     <div>
@@ -1541,7 +1538,7 @@ print('Hello, World!')"></textarea>
                                         <label class="form-label" for="tts-dl-voice">Stimmenname</label>
                                         <input id="tts-dl-voice" type="text" class="form-input" placeholder="thorsten-medium">
                                     </div>
-                                    <button class="btn btn-primary btn-sm" id="tts-dl-btn" onclick="Ninko.downloadTtsVoice()" style="align-self:flex-end;">Herunterladen</button>
+                                    <button class="btn btn-primary btn-sm" id="tts-dl-btn" data-action="downloadTtsVoice" style="align-self:flex-end;">Herunterladen</button>
                                 </div>
                                 <div id="tts-dl-status" class="save-status" style="margin-top:0.5rem;display:block;"></div>
                             </div>
@@ -1593,16 +1590,16 @@ print('Hello, World!')"></textarea>
                                     <div class="logs-toolbar-left">
                                         <span class="toolbar-label" data-i18n="logs.level">Level:</span>
                                         <button class="log-level-btn active" data-level="INFO"
-                                            onclick="Ninko.toggleLogLevel('INFO', this)">INFO</button>
+                                            data-action="toggleLogLevel" data-args='["INFO"]' data-self="true">INFO</button>
                                         <button class="log-level-btn active" data-level="WARN"
-                                            onclick="Ninko.toggleLogLevel('WARN', this)">WARN</button>
+                                            data-action="toggleLogLevel" data-args='["WARN"]' data-self="true">WARN</button>
                                         <button class="log-level-btn active" data-level="ERROR"
-                                            onclick="Ninko.toggleLogLevel('ERROR', this)">ERROR</button>
+                                            data-action="toggleLogLevel" data-args='["ERROR"]' data-self="true">ERROR</button>
                                         <button class="log-level-btn active" data-level="CRIT"
-                                            onclick="Ninko.toggleLogLevel('CRIT', this)">CRIT</button>
+                                            data-action="toggleLogLevel" data-args='["CRIT"]' data-self="true">CRIT</button>
                                         <span class="toolbar-sep"></span>
                                         <select id="log-filter-category" class="form-select form-select-sm"
-                                            onchange="Ninko.applyLogFilters()">
+                                            data-change="applyLogFilters">
                                             <option value="" data-i18n="logs.allCategories">Alle Kategorien</option>
                                             <option value="agent">Agent</option>
                                             <option value="workflow">Workflow</option>
@@ -1611,21 +1608,21 @@ print('Hello, World!')"></textarea>
                                             <option value="llm">LLM</option>
                                         </select>
                                         <input id="log-filter-search" type="text" class="form-input form-input-sm"
-                                            data-i18n-placeholder="logs.search" placeholder="Suchen…" oninput="Ninko.applyLogFilters()">
+                                            data-i18n-placeholder="logs.search" placeholder="Suchen…" data-input="applyLogFilters">
                                     </div>
                                     <div class="logs-toolbar-right">
                                         <select id="log-filter-time" class="form-select form-select-sm"
-                                            onchange="Ninko.applyLogFilters()">
+                                            data-change="applyLogFilters">
                                             <option value="" data-i18n="logs.allTimes">Alle Zeiten</option>
                                             <option value="15" data-i18n="logs.last15min">Letzte 15 Min</option>
                                             <option value="60" data-i18n="logs.lastHour">Letzte Stunde</option>
                                             <option value="1440" data-i18n="logs.last24h">Letzte 24h</option>
                                         </select>
-                                        <button class="btn btn-sm btn-outline" onclick="Ninko.exportLogs('csv')">CSV</button>
-                                        <button class="btn btn-sm btn-outline" onclick="Ninko.exportLogs('json')">JSON</button>
+                                        <button class="btn btn-sm btn-outline" data-action="exportLogs" data-args='["csv"]'>CSV</button>
+                                        <button class="btn btn-sm btn-outline" data-action="exportLogs" data-args='["json"]'>JSON</button>
                                         <label class="toggle-switch" data-i18n-title="logs.autoScroll" title="Auto-Scroll">
                                             <input type="checkbox" id="log-autoscroll" checked
-                                                onchange="Ninko.toggleLogAutoScroll(this.checked)">
+                                                data-change="toggleLogAutoScroll" data-use-checked="true">
                                             <span class="toggle-slider"></span>
                                         </label>
                                         <span style="font-size:0.75rem;color:var(--text-muted);" data-i18n="logs.autoScroll">Auto-Scroll</span>
@@ -1653,7 +1650,7 @@ print('Hello, World!')"></textarea>
                                     <div class="log-detail-header">
                                         <strong data-i18n="logs.detail">Log-Detail</strong>
                                         <button class="btn-close"
-                                            onclick="document.getElementById('log-detail-panel').classList.add('hidden')">✕</button>
+                                            data-action="hideLogDetailPanel">✕</button>
                                     </div>
                                     <div id="log-detail-content" class="log-detail-content"></div>
                                 </div>
@@ -1669,7 +1666,7 @@ print('Hello, World!')"></textarea>
                                 </p>
                                 <div class="form-row">
                                     <label class="form-label" for="imggen-backend">Provider</label>
-                                    <select id="imggen-backend" class="form-select" onchange="Ninko.onImageGenBackendChange()">
+                                    <select id="imggen-backend" class="form-select" data-change="onImageGenBackendChange">
                                         <option value="">-- Provider wählen --</option>
                                         <option value="together_ai">Together AI (Flux, SDXL)</option>
                                         <option value="openai">OpenAI (DALL-E 2/3)</option>
@@ -1696,7 +1693,7 @@ print('Hello, World!')"></textarea>
                                 </div>
                                 <div class="form-actions">
                                     <span id="imggen-save-status" class="save-status"></span>
-                                    <button class="btn btn-primary btn-sm" onclick="Ninko.saveImageGenProvider()">Speichern</button>
+                                    <button class="btn btn-primary btn-sm" data-action="saveImageGenProvider">Speichern</button>
                                 </div>
                             </div>
 
@@ -1705,7 +1702,7 @@ print('Hello, World!')"></textarea>
                                 <p class="setting-desc">Globale OCR-Konfiguration für Module (z.B. GLPI Bildanhänge).</p>
                                 <div class="form-row">
                                     <label class="form-label" for="ocr-provider">Provider</label>
-                                    <select id="ocr-provider" class="form-select" style="max-width:220px;" onchange="Ninko.onOcrProviderChange()">
+                                    <select id="ocr-provider" class="form-select" style="max-width:220px;" data-change="onOcrProviderChange">
                                         <option value="python">Python OCR (pytesseract)</option>
                                         <option value="llm_vision">LLM Vision (OpenAI-kompatibel)</option>
                                     </select>
@@ -1747,7 +1744,7 @@ print('Hello, World!')"></textarea>
 
                                 <div class="form-actions">
                                     <span id="ocr-save-status" class="save-status"></span>
-                                    <button class="btn btn-primary btn-sm" id="ocr-save-btn" onclick="Ninko.saveOcrSettings()">💾 Speichern</button>
+                                    <button class="btn btn-primary btn-sm" id="ocr-save-btn" data-action="saveOcrSettings">💾 Speichern</button>
                                 </div>
                             </div>
                         </div>
@@ -1767,7 +1764,7 @@ print('Hello, World!')"></textarea>
                                 </p>
                                 <div class="form-row">
                                     <label class="form-label" data-i18n="safeguard.activeProfile">Aktives Profil</label>
-                                    <select id="sg-global-profile" class="form-select" onchange="Ninko.setSafeguardGlobalProfile(this.value)"></select>
+                                    <select id="sg-global-profile" class="form-select" data-change="setSafeguardGlobalProfile" data-use-value="true"></select>
                                 </div>
                                 <div id="sg-profile-details" class="sg-profile-details" style="display:none;">
                                     <div class="sg-profile-badge-row" id="sg-profile-badges"></div>
@@ -1778,7 +1775,7 @@ print('Hello, World!')"></textarea>
                             <div class="setting-group">
                                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
                                     <h4 style="margin:0" data-i18n="safeguard.customProfiles">Eigene Profile</h4>
-                                    <button class="btn btn-sm btn-outline" onclick="Ninko.openSafeguardProfileEditor()" data-i18n="safeguard.addProfile">+ Profil hinzufügen</button>
+                                    <button class="btn btn-sm btn-outline" data-action="openSafeguardProfileEditor" data-i18n="safeguard.addProfile">+ Profil hinzufügen</button>
                                 </div>
                                 <div id="sg-custom-profiles-list">
                                     <p class="text-muted" style="font-size:0.85rem;" data-i18n="safeguard.noCustomProfiles">Noch keine eigenen Profile erstellt.</p>
@@ -1837,7 +1834,7 @@ print('Hello, World!')"></textarea>
                                 </div>
                                 <div class="form-row">
                                     <label class="form-label" data-i18n="safeguard.autoMode">Auto-Mode</label>
-                                    <label class="toggle-switch"><input type="checkbox" id="sg-editor-auto-mode" onchange="Ninko._sgToggleAutoPolicy()"><span class="toggle-slider"></span></label>
+                                    <label class="toggle-switch"><input type="checkbox" id="sg-editor-auto-mode" data-change="_sgToggleAutoPolicy"><span class="toggle-slider"></span></label>
                                 </div>
                                 <div id="sg-editor-policy-row" class="form-col" style="display:none;">
                                     <label class="form-label" data-i18n="safeguard.autoModePolicy">Policy (optional)</label>
@@ -1846,8 +1843,8 @@ print('Hello, World!')"></textarea>
                                 </div>
                                 <div class="form-actions">
                                     <span id="sg-editor-status" class="save-status"></span>
-                                    <button class="btn btn-outline btn-sm" onclick="Ninko.closeSafeguardProfileEditor()">Abbrechen</button>
-                                    <button class="btn btn-primary btn-sm" onclick="Ninko.saveSafeguardProfile()">Speichern</button>
+                                    <button class="btn btn-outline btn-sm" data-action="closeSafeguardProfileEditor">Abbrechen</button>
+                                    <button class="btn btn-primary btn-sm" data-action="saveSafeguardProfile">Speichern</button>
                                 </div>
                             </div>
                         </div>
@@ -1860,16 +1857,16 @@ print('Hello, World!')"></textarea>
         </main>
 
         <nav class="mobile-nav" id="mobile-nav" aria-label="Mobile Navigation">
-<button class="mobile-nav-item active" data-mobile-tab="chat" onclick="Ninko.switchTab('chat')" aria-label="Chat">
+<button class="mobile-nav-item active" data-mobile-tab="chat" data-action="switchTab" data-args='["chat"]' aria-label="Chat">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
     </button>
-    <button class="mobile-nav-item" data-mobile-tab="automatisierung" onclick="Ninko.switchTab('automatisierung')" aria-label="Automatisierung">
+    <button class="mobile-nav-item" data-mobile-tab="automatisierung" data-action="switchTab" data-args='["automatisierung"]' aria-label="Automatisierung">
                 <span>Auto</span>
             </button>
-<button class="mobile-nav-item" data-mobile-tab="modules" onclick="Ninko.switchTab('modules')" aria-label="Module">
+<button class="mobile-nav-item" data-mobile-tab="modules" data-action="switchTab" data-args='["modules"]' aria-label="Module">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.89 1.45l8 4A2 2 0 0 1 22 7.24v9.52a2 2 0 0 1-1.11 1.79l-8 4a2 2 0 0 1-1.78 0l-8-4A2 2 0 0 1 2 16.76V7.24a2 2 0 0 1 1.11-1.79l8-4a2 2 0 0 1 1.78 0z"></path></svg>
     </button>
-    <button class="mobile-nav-item" data-mobile-tab="settings" onclick="Ninko.switchTab('settings')" aria-label="Einstellungen">
+    <button class="mobile-nav-item" data-mobile-tab="settings" data-action="switchTab" data-args='["settings"]' aria-label="Einstellungen">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
     </button>
         </nav>
@@ -1906,7 +1903,7 @@ print('Hello, World!')"></textarea>
         <div class="modal" style="max-width:800px;max-height:80vh;display:flex;flex-direction:column;">
             <div class="modal-header">
                 <h3>Workflow aus Template erstellen</h3>
-                <button class="btn btn-icon" onclick="Ninko.closeWorkflowTemplateSelector()">✕</button>
+                <button class="btn btn-icon" data-action="closeWorkflowTemplateSelector">✕</button>
             </div>
             <div class="modal-body" style="overflow-y:auto;flex:1;">
                 <div id="wf-template-list" class="template-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem;">
@@ -1914,7 +1911,7 @@ print('Hello, World!')"></textarea>
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-outline" onclick="Ninko.closeWorkflowTemplateSelector()">Abbrechen</button>
+                <button class="btn btn-outline" data-action="closeWorkflowTemplateSelector">Abbrechen</button>
             </div>
         </div>
     </div>

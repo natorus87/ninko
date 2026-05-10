@@ -37,6 +37,7 @@ data/searxng/
 # Secrets & Keys
 .env
 .env.*
+!.env.example
 *.pem
 *.key
 *.secret

@@ -53,6 +53,7 @@ from api.routes_alerts import router as alerts_router
 from api.routes_subagent import router as subagent_router
 from api.routes_audit import router as audit_router
 from api.routes_metrics import router as metrics_router
+from api.routes_routing import router as routing_router
 
 # Logging konfigurieren
 settings = get_settings()
@@ -375,6 +376,11 @@ async def lifespan(app: FastAPI) -> object:
     orchestrator = OrchestratorAgent(registry)
     app.state.orchestrator = orchestrator
     set_orchestrator(orchestrator)
+
+    # ── Routing-Telemetrie (R12) ──────────────────────
+    from core.routing_telemetry import init_routing_telemetry
+    from core.redis_client import get_redis as _get_redis_telemetry
+    init_routing_telemetry(_get_redis_telemetry())
 
     # ── Monitor Agent (Background) ────────────────────
     monitor = MonitorAgent(registry)
@@ -743,9 +749,34 @@ async def add_no_cache_header(request: Request, call_next) -> object:
 
 
 # ── Security Headers Middleware ───────────────────────
+# CSP als HTTP-Header (überlegen dem <meta>-Tag):
+# - frame-ancestors wirkt nur als HTTP-Header, nicht als <meta>
+# - 'unsafe-inline' bleibt für Scripts vorerst nötig, weil Modul-Frontends
+#   weiterhin inline onclick/oninput/onkeydown und einzelne Inline-Scripts
+#   verwenden. Entfernen erst nach vollständiger Modul-Migration.
+_CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline'; "
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+    "font-src 'self' https://fonts.gstatic.com; "
+    # data: für inline-generierte Bilder (base64), blob: für TTS-Audio-Blobs
+    # https: für Bilder aus externen Quellen (Web-Search-Ergebnisse, Modul-Icons)
+    "img-src 'self' data: blob: https:; "
+    # wss: nur für verschlüsselte WebSocket-Verbindungen; ws: (unverschlüsselt)
+    # wird für lokale Dev-Setups ohne TLS benötigt
+    "connect-src 'self' wss: ws://localhost:* ws://127.0.0.1:*; "
+    "object-src 'none'; "
+    "base-uri 'self'; "
+    "frame-ancestors 'none'; "
+    "form-action 'self'; "
+    "upgrade-insecure-requests;"
+)
+
+
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next) -> object:
     response = await call_next(request)
+    response.headers["Content-Security-Policy"] = _CSP
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
@@ -782,6 +813,7 @@ app.include_router(operations_router)
 app.include_router(knowledge_graph_router)
 app.include_router(alerts_router)
 app.include_router(subagent_router, prefix="/api/subagent")
+app.include_router(routing_router)
 
 
 # ── Health Endpoint ──────────────────────────────────

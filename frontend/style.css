@@ -1766,7 +1766,7 @@ select {
     display: flex;
     margin-bottom: 1.5rem;
     width: 100%;
-    max-width: 760px;
+    max-width: 1100px;
     animation: messageIn 300ms ease;
 }
 
@@ -2058,7 +2058,7 @@ select {
 .chat-input-wrapper {
     display: flex;
     flex-direction: column;
-    max-width: 840px;
+    max-width: 1100px;
     width: 100%;
     margin: 0 auto;
     background: linear-gradient(145deg, rgba(20, 30, 75, 0.78), rgba(8, 13, 40, 0.82));

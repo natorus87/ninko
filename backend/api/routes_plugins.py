@@ -220,6 +220,25 @@ def _safe_child_path(base_dir: Path, relative_path: str) -> Path:
     return candidate
 
 
+def _extract_zip_members_safely(
+    zip_ref: zipfile.ZipFile, extract_dir: Path, members: list[zipfile.ZipInfo]
+) -> None:
+    """Extract ZIP members after validating each target path."""
+    for member in members:
+        if hasattr(member, "is_symlink") and member.is_symlink():
+            raise HTTPException(
+                status_code=400,
+                detail="ZIP-Archiv enthält symbolische Links (nicht erlaubt).",
+            )
+        target_path = _safe_child_path(extract_dir, member.filename)
+        if member.is_dir():
+            target_path.mkdir(parents=True, exist_ok=True)
+            continue
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        with zip_ref.open(member, "r") as src, open(target_path, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+
+
 # ─── Token-Verschlüsselung (CWE-256 Fix) ────────────────────────────────────
 # GitHub-Tokens werden verschlüsselt in Redis gespeichert (Fernet AES-128-CBC).
 # Schlüssel wird aus SESSION_SECRET abgeleitet — wenn kein Secret gesetzt ist,
@@ -638,7 +657,7 @@ async def upload_plugin(request: Request, file: UploadFile = File(...)) -> JSONR
 
     # 1. ZIP in temporäres Verzeichnis speichern
     temp_dir = Path(mkdtemp())
-    zip_path = temp_dir / file.filename
+    zip_path = temp_dir / "upload.zip"
 
     try:
         with open(zip_path, "wb") as buffer:
@@ -661,20 +680,7 @@ async def upload_plugin(request: Request, file: UploadFile = File(...)) -> JSONR
                         status_code=400,
                         detail=f"ZIP-Archiv zu groß: {total_size // (1024 * 1024)} MB (max. 100 MB unkomprimiert).",
                     )
-                extract_dir_resolved = extract_dir.resolve()
-                for member in members:
-                    if hasattr(member, "is_symlink") and member.is_symlink():
-                        raise HTTPException(
-                            status_code=400,
-                            detail="ZIP-Archiv enthält symbolische Links (nicht erlaubt).",
-                        )
-                    dest_path = (extract_dir / member.filename).resolve()
-                    if not str(dest_path).startswith(str(extract_dir_resolved)):
-                        raise HTTPException(
-                            status_code=400,
-                            detail="ZIP-Archiv enthält ungültigen Pfad (Path-Traversal verhindert).",
-                        )
-                zip_ref.extractall(extract_dir)
+                _extract_zip_members_safely(zip_ref, extract_dir, members)
         except zipfile.BadZipFile as exc:
             raise HTTPException(
                 status_code=400,
@@ -1150,20 +1156,7 @@ async def install_from_repo(
                 raise HTTPException(
                     status_code=400, detail="Modul zu groß (max. 100 MB)."
                 )
-            extract_dir_resolved = extract_dir.resolve()
-            for member in members:
-                if hasattr(member, "is_symlink") and member.is_symlink():
-                    raise HTTPException(
-                        status_code=400,
-                        detail="ZIP-Archiv enthält symbolische Links (nicht erlaubt).",
-                    )
-                dest_path = (extract_dir / member.filename).resolve()
-                if not str(dest_path).startswith(str(extract_dir_resolved)):
-                    raise HTTPException(
-                        status_code=400,
-                        detail="ZIP-Archiv enthält ungültigen Pfad (Path-Traversal verhindert).",
-                    )
-            zip_ref.extractall(extract_dir)
+            _extract_zip_members_safely(zip_ref, extract_dir, members)
 
         contents = list(extract_dir.iterdir())
         if len(contents) != 1 or not contents[0].is_dir():

@@ -22,6 +22,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - `/chatid` command now works even when allowlist or pairing restrictions are active
 
+## [1.2.0] - 2026-05-08
+
+### Changed
+- Telegram-Agent ist nun ein **transparenter Transport-Kanal**, kein
+  inhaltlicher Agent mehr. Frühere Antworten wie „Ich bin nur ein
+  Telegram-Bot, frag den Haupt-Agenten" entfallen.
+- System-Prompt komplett überarbeitet (DE/EN), inkl. Source-Detection
+  (`[Telegram Chat-ID:` Präfix → keinen Doppel-Send auslösen).
+
+### Added
+- Neues Tool `delegate_to_orchestrator(question)` — leitet beliebige
+  Inhaltsfragen an den Haupt-Orchestrator weiter (`READONLY` im
+  `tool_registry`).
+- Source-aware Suppression in `bot.py`: nur reine Send-Confirmation-
+  Antworten werden unterdrückt, delegierte Inhalte werden normal
+  zugestellt.
+
+### Removed
+- Generische `routing_keywords` (`telegram`, `messenger`, `benachrichtige`)
+  entfernt, die das Tier-2-Routing in Status- und Inhaltsfragen
+  fehlleiteten.
+
 ## Module Information
 
 - **Name**: telegram

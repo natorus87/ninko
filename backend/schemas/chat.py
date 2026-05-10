@@ -45,6 +45,10 @@ class ChatResponse(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
     confirmation_required: bool = False
     safeguard: dict | None = None
+    routing_confidence: float | None = Field(
+        default=None,
+        description="Routing-Konfidenz [0.0, 1.0]. None = ReAct-Loop. < 0.7 = unsicheres Keyword-Routing.",
+    )
 
 
 class ChatHistoryResponse(BaseModel):

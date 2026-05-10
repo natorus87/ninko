@@ -366,6 +366,28 @@ def resolve_websocket_role(websocket: WebSocket) -> str | None:
     return None
 
 
+async def resolve_websocket_role_async(websocket: WebSocket) -> str | None:
+    """Websocket role resolver that honors revoked session tokens."""
+    cfg = get_settings()
+    if not cfg.API_AUTH_ENABLED:
+        return ROLE_ADMIN
+
+    key = _extract_key_from_websocket(websocket)
+    if key:
+        ctx = _api_key_context(key)
+        if ctx:
+            return str(ctx.get("role", ROLE_READ))
+
+    session_token = _extract_session_from_websocket(websocket)
+    if session_token:
+        if await _is_token_blacklisted(session_token):
+            return None
+        ctx = _session_context(session_token)
+        if ctx:
+            return str(ctx.get("role", ROLE_READ))
+    return None
+
+
 def role_allows(required_role: str, actual_role: str | None) -> bool:
     if actual_role is None:
         return False

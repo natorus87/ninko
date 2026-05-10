@@ -1,0 +1,34 @@
+name: Routing Keyword Lint
+
+on:
+  pull_request:
+    paths:
+      - 'backend/modules/**/manifest.py'
+      - 'backend/modules_catalog/**/manifest.py'
+      - 'scripts/lint_routing_keywords.py'
+      - '.github/workflows/routing-keywords.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/modules/**/manifest.py'
+      - 'backend/modules_catalog/**/manifest.py'
+      - 'scripts/lint_routing_keywords.py'
+      - '.github/workflows/routing-keywords.yml'
+
+jobs:
+  lint-routing-keywords:
+    name: Lint routing keywords
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run routing keyword linter
+        run: python scripts/lint_routing_keywords.py

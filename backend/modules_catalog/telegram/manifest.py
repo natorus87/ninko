@@ -77,20 +77,25 @@ module_manifest = ModuleManifest(
     name="telegram",
     display_name="Telegram Bot",
     description="Ermöglicht das Chatten mit dem Ninko Orchestrator über Telegram",
-    version="1.1.6",
+    version="1.2.0",
     author="Ninko Team",
     enabled_by_default=True,
     env_prefix="TELEGRAM_",
     required_secrets=[],
     optional_secrets=["TELEGRAM_BOT_TOKEN"],
+    # Schlanke Keyword-Liste: nur explizite Send-/Transport-Intentionen.
+    # Generische Begriffe ("telegram", "messenger", "benachrichtige") wurden
+    # entfernt, weil sie das Tier-2-Routing in Status-/Inhaltsfragen
+    # fehlleiteten. Der transparente Telegram-Agent delegiert ohnehin via
+    # `delegate_to_orchestrator`, wenn er trotzdem getroffen wird.
     routing_keywords=[
-        "telegram",
         "telegram-nachricht",
         "telegram nachricht",
         "per telegram",
         "via telegram",
-        "messenger",
-        "benachrichtige",
+        "auf telegram",
+        "ueber telegram",
+        "über telegram",
         "telegram-gruppe",
         "telegram-kanal",
     ],

@@ -1205,16 +1205,35 @@ class TelegramBot:
                 return
 
             # ── Telegram module already sent directly → don't send again ───────
-            # The module calls send_telegram_message → message already delivered.
-            # Exception: error messages are always sent back.
-            if module_used == "telegram" and not any(
-                response_text.lower().startswith(p) for p in ("fehler", "error")
-            ):
-                logger.debug(
-                    "Telegram module already sent for chat %s — suppressing bot response.",
-                    chat_id,
+            # The Telegram agent is now a transparent transport: it may either
+            # call send_telegram_message (then message is already delivered and
+            # we suppress) or call delegate_to_orchestrator and return the
+            # delegated answer verbatim (then we MUST forward it normally).
+            # Heuristic: only suppress if the response is purely a send-
+            # confirmation marker. Errors are always forwarded.
+            if module_used == "telegram":
+                lower = response_text.strip().lower()
+                is_error = any(
+                    lower.startswith(p) for p in ("fehler", "error", "❌")
                 )
-                return
+                # Send-confirmation strings produced by send_telegram_message
+                send_confirm_markers = (
+                    "telegram-nachricht erfolgreich gesendet",
+                    "telegram-nachricht gesendet",
+                    "telegram message sent successfully",
+                    "telegram message sent",
+                )
+                is_send_confirm = (
+                    not is_error
+                    and len(response_text) < 300
+                    and any(m in lower for m in send_confirm_markers)
+                )
+                if is_send_confirm:
+                    logger.debug(
+                        "Telegram module sent directly for chat %s — suppressing duplicate.",
+                        chat_id,
+                    )
+                    return
 
             # ── Text response (for text inputs only) ──────────────────────────
             final_text = _strip_pipeline_headers(response_text)
