@@ -44,7 +44,7 @@ Ninko is a modular, AI-powered IT-Operations platform with an immutable core and
 | File | Description |
 |------|-------------|
 | `base_agent.py` | Abstract base using LangGraph `create_react_agent`, handles context trimming, RAG, Skills, Soul injection |
-| `orchestrator.py` | 4-tier routing: Direct → Module Agent → Dynamic Agent → Workflow pipeline |
+| `orchestrator.py` | LLM-native Function Calling routing; dispatches to direct answer, module agent, dynamic agent, or typed pipeline |
 | `core_tools.py` | Core tools: `create_custom_agent`, `install_skill`, `create_linear_workflow`, etc. |
 | `monitor_agent.py` | Background health check loop |
 | `scheduler_agent.py` | Cron-based scheduled task runner |
@@ -88,11 +88,16 @@ Pydantic models for API request/response validation.
 
 ## Key Concepts
 
-### 4-Tier Routing (orchestrator.py)
-1. **Tier 1 — Direct**: Short queries (<120 chars, no action verbs) → LLM direct answer
-2. **Tier 2 — Module Agent**: Keyword match → delegate to module agent
-3. **Tier 3 — Dynamic Agent**: No module match → search DynamicAgentPool, else generate agent spec + register
-4. **Tier 4 — Workflow**: Multi-step indicators → pipeline execution
+### Routing (orchestrator.py)
+
+Primary mechanism: **LLM-native Function Calling** on tool definitions auto-generated from each module's manifest. The orchestrator exposes four tool families to the model — the chosen tool determines the execution path:
+
+1. **Direct answer** — model responds without calling any module tool
+2. **`call_module_agent`** — single-module delegation (Kubernetes, Proxmox, …)
+3. **Dynamic agent** — spec generated and registered at runtime when no static module fits
+4. **`run_pipeline` / `run_parallel_pipeline`** — typed multi-step workflow with per-step retry and Redis checkpoints
+
+The legacy keyword `core/router.py` was removed in 2026-05; a small `KeywordRouter` shim in `orchestrator.py` keeps backwards-compatible telemetry (`classify_tier` returning 1/2/4) and `routing_keywords`-driven fallback for sessions that disable function calling via `ROUTING_PRESETS`.
 
 ### Skills System
 - SKILL.md format with YAML frontmatter (name, description, modules)
