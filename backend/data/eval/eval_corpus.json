@@ -1,0 +1,756 @@
+{
+  "version": "1.0",
+  "description": "Ninko Function Calling Eval Corpus — 50 queries across 20 modules, 10 languages",
+  "modules": [
+    "kubernetes", "pihole", "proxmox", "github", "gitlab",
+    "homeassistant", "checkmk", "fritzbox", "telegram", "jira",
+    "glpi", "docker", "linux_server", "wordpress", "zabbix",
+    "ubiquiti", "synology", "netbox", "opnsense", "slack"
+  ],
+  "queries": [
+    {
+      "id": 1,
+      "module": "kubernetes",
+      "queries": {
+        "de": "Zeige mir alle Pods im namespace backend",
+        "en": "Show all pods in the backend namespace",
+        "fr": "Affiche tous les pods du namespace backend",
+        "es": "Muestra todos los pods en el namespace backend",
+        "it": "Mostra tutti i pod nel namespace backend",
+        "nl": "Toon alle pods in de backend namespace",
+        "pl": "Pokaż wszystkie pody w namespace backend",
+        "pt": "Mostre todos os pods no namespace backend",
+        "ja": "backend namespaceのすべてのPodを表示",
+        "zh": "显示backend命名空间的所有Pod"
+      }
+    },
+    {
+      "id": 2,
+      "module": "kubernetes",
+      "queries": {
+        "de": "Das Deployment frontend hat CrashLoopBackOff — was ist die Ursache?",
+        "en": "The frontend deployment has CrashLoopBackOff — what's causing it?",
+        "fr": "Le déploiement frontend a un CrashLoopBackOff — quelle en est la cause ?",
+        "es": "El despliegue frontend tiene CrashLoopBackOff — ¿cuál es la causa?",
+        "it": "Il deployment frontend ha CrashLoopBackOff — qual è la causa?",
+        "nl": "Het frontend deployment heeft CrashLoopBackOff — wat is de oorzaak?",
+        "pl": "Deployment frontend ma CrashLoopBackOff — co jest tego przyczyną?",
+        "pt": "O deployment frontend tem CrashLoopBackOff — qual é a causa?",
+        "ja": "フロントエンドのデプロイがCrashLoopBackOffになっています — 原因は何ですか？",
+        "zh": "前端部署出现CrashLoopBackOff — 原因是什么？"
+      }
+    },
+    {
+      "id": 3,
+      "module": "kubernetes",
+      "queries": {
+        "de": "Skaliere das API-Deployment auf 10 Replicas",
+        "en": "Scale the API deployment to 10 replicas",
+        "fr": "Scale la migration API à 10 répliques",
+        "es": "Escala el despliegue API a 10 réplicas",
+        "it": "Scala il deployment API a 10 repliche",
+        "nl": "Schaal het API deployment naar 10 replicas",
+        "pl": "Przeskaluj deployment API do 10 replik",
+        "pt": "Scale o deployment da API para 10 réplicas",
+        "ja": "APIデプロイを10レプリカにスケール",
+        "zh": "将API部署扩展到10个副本"
+      }
+    },
+    {
+      "id": 4,
+      "module": "pihole",
+      "queries": {
+        "de": "Wie viele Domains blockiert Pi-hole aktuell?",
+        "en": "How many domains is Pi-hole currently blocking?",
+        "fr": "Combien de domaines Pi-hole bloque-t-il actuellement ?",
+        "es": "¿Cuántos dominios está bloqueando Pi-hole actualmente?",
+        "it": "Quanti domini sta bloccando Pi-hole al momento?",
+        "nl": "Hoeveel domeinen blokkeert Pi-hole momenteel?",
+        "pl": "Ile domen Pi-hole aktualnie blokuje?",
+        "pt": "Quantos domínios o Pi-hole está bloqueando atualmente?",
+        "ja": "Pi-holeは現在いくつのドメインをブロックしていますか？",
+        "zh": "Pi-hole当前阻止了多少个域名？"
+      }
+    },
+    {
+      "id": 5,
+      "module": "pihole",
+      "queries": {
+        "de": "Blockiere ads.example.com auf meinem Pi-hole",
+        "en": "Block ads.example.com on my Pi-hole",
+        "fr": "Bloque ads.example.com sur mon Pi-hole",
+        "es": "Bloquea ads.example.com en mi Pi-hole",
+        "it": "Blocca ads.example.com sul mio Pi-hole",
+        "nl": "Blokkeer ads.example.com op mijn Pi-hole",
+        "pl": "Zablokuj ads.example.com na moim Pi-hole",
+        "pt": "Bloqueie ads.example.com no meu Pi-hole",
+        "ja": "ads.example.comをPi-holeでブロック",
+        "zh": "在我的Pi-hole上阻止ads.example.com"
+      }
+    },
+    {
+      "id": 6,
+      "module": "pihole",
+      "queries": {
+        "de": "Füge einen lokalen DNS-Eintrag hinzu: dev.local zeigt auf 10.0.0.5",
+        "en": "Add a local DNS record: dev.local points to 10.0.0.5",
+        "fr": "Ajoute un enregistrement DNS local : dev.local pointe vers 10.0.0.5",
+        "es": "Añade un registro DNS local: dev.local apunta a 10.0.0.5",
+        "it": "Aggiungi un record DNS locale: dev.local punta a 10.0.0.5",
+        "nl": "Voeg een lokaal DNS-record toe: dev.local wijst naar 10.0.0.5",
+        "pl": "Dodaj lokalny rekord DNS: dev.local wskazuje na 10.0.0.5",
+        "pt": "Adicione um registro DNS local: dev.local aponta para 10.0.0.5",
+        "ja": "ローカルDNSレコードを追加：dev.localは10.0.0.5を指す",
+        "zh": "添加本地DNS记录：dev.local指向10.0.0.5"
+      }
+    },
+    {
+      "id": 7,
+      "module": "proxmox",
+      "queries": {
+        "de": "Liste alle VMs auf meinem Proxmox-Node auf",
+        "en": "List all VMs on my Proxmox node",
+        "fr": "Liste toutes les VMs sur mon nœud Proxmox",
+        "es": "Lista todas las VMs en mi nodo Proxmox",
+        "it": "Elenca tutte le VM sul mio nodo Proxmox",
+        "nl": "Lijst alle VMs op mijn Proxmox node",
+        "pl": "Wyświetl wszystkie maszyny wirtualne na moim węźle Proxmox",
+        "pt": "Liste todas as VMs no meu nó Proxmox",
+        "ja": "ProxmoxノードのすべてのVMをリスト",
+        "zh": "列出我的Proxmox节点上的所有VM"
+      }
+    },
+    {
+      "id": 8,
+      "module": "proxmox",
+      "queries": {
+        "de": "Die VM 200 ist eingefroren — starte sie hart neu",
+        "en": "VM 200 is frozen — hard restart it",
+        "fr": "La VM 200 est gelée — redémarre-la brutalement",
+        "es": "La VM 200 está congelada — reiníciala forzadamente",
+        "it": "La VM 200 è bloccata — riavviala forzatamente",
+        "nl": "VM 200 is bevroren — hard herstarten",
+        "pl": "Maszyna wirtualna 200 się zawiesiła — wykonaj twardy restart",
+        "pt": "A VM 200 está congelada — reinicie-a forçadamente",
+        "ja": "VM200がフリーズしています — 強制再起動",
+        "zh": "VM 200已冻结 — 强制重启"
+      }
+    },
+    {
+      "id": 9,
+      "module": "github",
+      "queries": {
+        "de": "Trigger den Produktions-Workflow neu",
+        "en": "Re-trigger the production workflow",
+        "fr": "Redéclenche le workflow de production",
+        "es": "Vuelve a activar el workflow de producción",
+        "it": "Riattiva il workflow di produzione",
+        "nl": "Hertrigger het productieworkflow",
+        "pl": "Ponownie uruchom workflow produkcyjny",
+        "pt": "Reative o workflow de produção",
+        "ja": "本番ワークフローを再トリガー",
+        "zh": "重新触发生产工作流"
+      }
+    },
+    {
+      "id": 10,
+      "module": "github",
+      "queries": {
+        "de": "Liste alle offenen Pull-Requests auf",
+        "en": "List all open pull requests",
+        "fr": "Liste toutes les pull requests ouvertes",
+        "es": "Lista todas las pull requests abiertas",
+        "it": "Elenca tutte le pull request aperte",
+        "nl": "Lijst alle open pull requests",
+        "pl": "Wyświetl wszystkie otwarte pull requesty",
+        "pt": "Liste todos os pull requests abertos",
+        "ja": "すべてのオープンなPRをリスト",
+        "zh": "列出所有打开的Pull Request"
+      }
+    },
+    {
+      "id": 11,
+      "module": "gitlab",
+      "queries": {
+        "de": "Zeige mir den Status der CI-Pipeline",
+        "en": "Show me the CI pipeline status",
+        "fr": "Montre-moi le statut du pipeline CI",
+        "es": "Muéstrame el estado de la pipeline CI",
+        "it": "Mostrami lo stato della pipeline CI",
+        "nl": "Toon me de status van de CI pipeline",
+        "pl": "Pokaż status pipeline CI",
+        "pt": "Mostre-me o status do pipeline CI",
+        "ja": "CIパイプラインのステータスを表示",
+        "zh": "显示CI pipeline状态"
+      }
+    },
+    {
+      "id": 12,
+      "module": "gitlab",
+      "queries": {
+        "de": "Erstelle einen neuen Merge-Request für Feature-Branch",
+        "en": "Create a new merge request for the feature branch",
+        "fr": "Crée une nouvelle merge request pour la branche feature",
+        "es": "Crea un nuevo merge request para la rama feature",
+        "it": "Crea una nuova merge request per il branch feature",
+        "nl": "Maak een nieuwe merge request voor de feature branch",
+        "pl": "Utwórz nowy merge request dla gałęzi feature",
+        "pt": "Crie um novo merge request para o branch feature",
+        "ja": "フィーチャーブランチ用の新しいMRを作成",
+        "zh": "为feature分支创建新的Merge Request"
+      }
+    },
+    {
+      "id": 13,
+      "module": "homeassistant",
+      "queries": {
+        "de": "Schalte das Licht im Wohnzimmer aus",
+        "en": "Turn off the living room light",
+        "fr": "Éteins la lumière du salon",
+        "es": "Apaga la luz del salón",
+        "it": "Spegni la luce del soggiorno",
+        "nl": "Doe het licht in de woonkamer uit",
+        "pl": "Wyłącz światło w salonie",
+        "pt": "Desliga a luz da sala de estar",
+        "ja": "リビングルームのライトを消して",
+        "zh": "关闭客厅的灯"
+      }
+    },
+    {
+      "id": 14,
+      "module": "homeassistant",
+      "queries": {
+        "de": "Wie ist die aktuelle Temperatur im Büro?",
+        "en": "What's the current temperature in the office?",
+        "fr": "Quelle est la température actuelle au bureau ?",
+        "es": "¿Cuál es la temperatura actual en la oficina?",
+        "it": "Qual è la temperatura attuale in ufficio?",
+        "nl": "Wat is de huidige temperatuur op kantoor?",
+        "pl": "Jaka jest aktualna temperatura w biurze?",
+        "pt": "Qual é a temperatura atual no escritório?",
+        "ja": "オフィスの現在の温度は？",
+        "zh": "办公室当前温度是多少？"
+      }
+    },
+    {
+      "id": 15,
+      "module": "checkmk",
+      "queries": {
+        "de": "Zeige den Status aller Hosts in Checkmk",
+        "en": "Show the status of all hosts in Checkmk",
+        "fr": "Affiche le statut de tous les hôtes dans Checkmk",
+        "es": "Muestra el estado de todos los hosts en Checkmk",
+        "it": "Mostra lo stato di tutti gli host in Checkmk",
+        "nl": "Toon de status van alle hosts in Checkmk",
+        "pl": "Pokaż status wszystkich hostów w Checkmk",
+        "pt": "Mostre o status de todos os hosts no Checkmk",
+        "ja": "Checkmkの全ホストのステータスを表示",
+        "zh": "显示Checkmk所有主机的状态"
+      }
+    },
+    {
+      "id": 16,
+      "module": "checkmk",
+      "queries": {
+        "de": "Gibt es aktive Alarme auf dem Webserver?",
+        "en": "Are there active alerts on the web server?",
+        "fr": "Y a-t-il des alertes actives sur le serveur web ?",
+        "es": "¿Hay alertas activas en el servidor web?",
+        "it": "Ci sono avvisi attivi sul server web?",
+        "nl": "Zijn er actieve alerts op de webserver?",
+        "pl": "Czy są aktywne alerty na serwerze WWW?",
+        "pt": "Existem alertas ativos no servidor web?",
+        "ja": "Webサーバーでアクティブなアラートはありますか？",
+        "zh": "Web服务器上有活跃告警吗？"
+      }
+    },
+    {
+      "id": 17,
+      "module": "fritzbox",
+      "queries": {
+        "de": "Wie ist die externe IP-Adresse meiner FritzBox?",
+        "en": "What's the external IP address of my FritzBox?",
+        "fr": "Quelle est l'adresse IP externe de ma FritzBox ?",
+        "es": "¿Cuál es la dirección IP externa de mi FritzBox?",
+        "it": "Qual è l'indirizzo IP esterno del mio FritzBox?",
+        "nl": "Wat is het externe IP-adres van mijn FritzBox?",
+        "pl": "Jaki jest zewnętrzny adres IP mojej FritzBox?",
+        "pt": "Qual é o endereço IP externo da minha FritzBox?",
+        "ja": "FritzBoxの外部IPアドレスは？",
+        "zh": "FritzBox的外部IP地址是什么？"
+      }
+    },
+    {
+      "id": 18,
+      "module": "fritzbox",
+      "queries": {
+        "de": "Zeige mir alle verbundenen Geräte im WLAN",
+        "en": "Show me all devices connected to Wi-Fi",
+        "fr": "Montre-moi tous les appareils connectés en Wi-Fi",
+        "es": "Muéstrame todos los dispositivos conectados al Wi-Fi",
+        "it": "Mostrami tutti i dispositivi connessi al Wi-Fi",
+        "nl": "Toon me alle apparaten verbonden met Wi-Fi",
+        "pl": "Pokaż wszystkie urządzenia połączone z Wi-Fi",
+        "pt": "Mostre-me todos os dispositivos conectados ao Wi-Fi",
+        "ja": "Wi-Fiに接続されているすべてのデバイスを表示",
+        "zh": "显示所有连接到Wi-Fi的设备"
+      }
+    },
+    {
+      "id": 19,
+      "module": "telegram",
+      "queries": {
+        "de": "Sende mir eine Testnachricht per Telegram",
+        "en": "Send me a test message via Telegram",
+        "fr": "Envoie-moi un message de test via Telegram",
+        "es": "Envíame un mensaje de prueba por Telegram",
+        "it": "Inviami un messaggio di test tramite Telegram",
+        "nl": "Stuur me een testbericht via Telegram",
+        "pl": "Wyślij mi wiadomość testową przez Telegram",
+        "pt": "Envie-me uma mensagem de teste via Telegram",
+        "ja": "Telegramでテストメッセージを送って",
+        "zh": "通过Telegram发送测试消息"
+      }
+    },
+    {
+      "id": 20,
+      "module": "telegram",
+      "queries": {
+        "de": "Schreibe eine Nachricht an die Entwickler-Gruppe",
+        "en": "Write a message to the developers group",
+        "fr": "Écris un message au groupe des développeurs",
+        "es": "Escribe un mensaje al grupo de desarrolladores",
+        "it": "Scrivi un messaggio al gruppo degli sviluppatori",
+        "nl": "Schrijf een bericht naar de ontwikkelaarsgroep",
+        "pl": "Napisz wiadomość do grupy deweloperów",
+        "pt": "Escreva uma mensagem para o grupo de desenvolvedores",
+        "ja": "開発者グループにメッセージを書く",
+        "zh": "给开发者群组发消息"
+      }
+    },
+    {
+      "id": 21,
+      "module": "jira",
+      "queries": {
+        "de": "Liste meine offenen Tickets auf",
+        "en": "List my open tickets",
+        "fr": "Liste mes tickets ouverts",
+        "es": "Lista mis tickets abiertos",
+        "it": "Elenca i miei ticket aperti",
+        "nl": "Lijst mijn openstaande tickets",
+        "pl": "Wyświetl moje otwarte zgłoszenia",
+        "pt": "Liste meus tickets abertos",
+        "ja": "未完了のチケットをリスト",
+        "zh": "列出我打开的工单"
+      }
+    },
+    {
+      "id": 22,
+      "module": "jira",
+      "queries": {
+        "de": "Erstelle ein neues Bug-Ticket für das Login-Problem",
+        "en": "Create a new bug ticket for the login issue",
+        "fr": "Crée un nouveau ticket de bug pour le problème de connexion",
+        "es": "Crea un nuevo ticket de bug para el problema de inicio de sesión",
+        "it": "Crea un nuovo ticket per il bug del login",
+        "nl": "Maak een nieuw bug ticket aan voor het login-probleem",
+        "pl": "Utwórz nowe zgłoszenie błędu dla problemu z logowaniem",
+        "pt": "Crie um novo ticket de bug para o problema de login",
+        "ja": "ログイン問題のための新しいバグチケットを作成",
+        "zh": "为登录问题创建新的bug工单"
+      }
+    },
+    {
+      "id": 23,
+      "module": "glpi",
+      "queries": {
+        "de": "Eröffne ein neues Ticket für den Drucker-Ausfall",
+        "en": "Open a new ticket for the printer failure",
+        "fr": "Ouvre un nouveau ticket pour la panne d'imprimante",
+        "es": "Abre un nuevo ticket para la falla de la impresora",
+        "it": "Apri un nuovo ticket per il guasto della stampante",
+        "nl": "Open een nieuw ticket voor de printerstoring",
+        "pl": "Otwórz nowe zgłoszenie dotyczące awarii drukarki",
+        "pt": "Abra um novo ticket para a falha da impressora",
+        "ja": "プリンターの故障のための新しいチケットを開く",
+        "zh": "为打印机故障开一个新工单"
+      }
+    },
+    {
+      "id": 24,
+      "module": "glpi",
+      "queries": {
+        "de": "Wie ist der Status von Ticket #1234?",
+        "en": "What's the status of ticket #1234?",
+        "fr": "Quel est le statut du ticket #1234 ?",
+        "es": "¿Cuál es el estado del ticket #1234?",
+        "it": "Qual è lo stato del ticket #1234?",
+        "nl": "Wat is de status van ticket #1234?",
+        "pl": "Jaki jest status zgłoszenia nr 1234?",
+        "pt": "Qual é o status do ticket #1234?",
+        "ja": "チケット#1234のステータスは？",
+        "zh": "工单1234的状态是什么？"
+      }
+    },
+    {
+      "id": 25,
+      "module": "docker",
+      "queries": {
+        "de": "Liste alle laufenden Container auf",
+        "en": "List all running containers",
+        "fr": "Liste tous les conteneurs en cours d'exécution",
+        "es": "Lista todos los contenedores en ejecución",
+        "it": "Elenca tutti i contenitori in esecuzione",
+        "nl": "Lijst alle draaiende containers",
+        "pl": "Wyświetl wszystkie uruchomione kontenery",
+        "pt": "Liste todos os contêineres em execução",
+        "ja": "実行中のコンテナをすべてリスト",
+        "zh": "列出所有运行中的容器"
+      }
+    },
+    {
+      "id": 26,
+      "module": "docker",
+      "queries": {
+        "de": "Start den Redis-Container neu",
+        "en": "Restart the Redis container",
+        "fr": "Redémarre le conteneur Redis",
+        "es": "Reinicia el contenedor Redis",
+        "it": "Riavvia il contenitore Redis",
+        "nl": "Herstart de Redis container",
+        "pl": "Uruchom ponownie kontener Redis",
+        "pt": "Reinicie o contêiner Redis",
+        "ja": "Redisコンテナを再起動",
+        "zh": "重启Redis容器"
+      }
+    },
+    {
+      "id": 27,
+      "module": "linux_server",
+      "queries": {
+        "de": "Wie hoch ist die CPU-Auslastung auf dem Server?",
+        "en": "What's the CPU usage on the server?",
+        "fr": "Quelle est l'utilisation CPU sur le serveur ?",
+        "es": "¿Cuál es el uso de CPU del servidor?",
+        "it": "Qual è l'utilizzo della CPU sul server?",
+        "nl": "Wat is het CPU-gebruik op de server?",
+        "pl": "Jakie jest obciążenie procesora na serwerze?",
+        "pt": "Qual é o uso de CPU no servidor?",
+        "ja": "サーバーのCPU使用率は？",
+        "zh": "服务器CPU使用率是多少？"
+      }
+    },
+    {
+      "id": 28,
+      "module": "linux_server",
+      "queries": {
+        "de": "Prüfe den freien Festplattenplatz",
+        "en": "Check the free disk space",
+        "fr": "Vérifie l'espace disque disponible",
+        "es": "Comprueba el espacio libre en disco",
+        "it": "Verifica lo spazio libero su disco",
+        "nl": "Controleer de vrije schijfruimte",
+        "pl": "Sprawdź wolne miejsce na dysku",
+        "pt": "Verifique o espaço livre em disco",
+        "ja": "空きディスク容量を確認",
+        "zh": "检查可用磁盘空间"
+      }
+    },
+    {
+      "id": 29,
+      "module": "wordpress",
+      "queries": {
+        "de": "Erstelle einen neuen Blogpost zum Thema Kubernetes",
+        "en": "Create a new blog post about Kubernetes",
+        "fr": "Crée un nouvel article de blog sur Kubernetes",
+        "es": "Crea una nueva entrada de blog sobre Kubernetes",
+        "it": "Crea un nuovo post sul blog su Kubernetes",
+        "nl": "Maak een nieuw blogbericht over Kubernetes",
+        "pl": "Utwórz nowy post na blogu o Kubernetes",
+        "pt": "Crie um novo post no blog sobre Kubernetes",
+        "ja": "Kubernetesについての新しいブログ投稿を作成",
+        "zh": "创建关于Kubernetes的新博客文章"
+      }
+    },
+    {
+      "id": 30,
+      "module": "wordpress",
+      "queries": {
+        "de": "Lade ein neues Bild in die Medienbibliothek hoch",
+        "en": "Upload a new image to the media library",
+        "fr": "Télécharge une nouvelle image dans la médiathèque",
+        "es": "Sube una nueva imagen a la biblioteca de medios",
+        "it": "Carica una nuova immagine nella libreria multimediale",
+        "nl": "Upload een nieuwe afbeelding naar de mediabibliotheek",
+        "pl": "Prześlij nowy obraz do biblioteki mediów",
+        "pt": "Carregue uma nova imagem para a biblioteca de mídia",
+        "ja": "メディアライブラリに新しい画像をアップロード",
+        "zh": "将新图片上传到媒体库"
+      }
+    },
+    {
+      "id": 31,
+      "module": "zabbix",
+      "queries": {
+        "de": "Zeige mir die aktuellen Alarme in Zabbix",
+        "en": "Show me the current alarms in Zabbix",
+        "fr": "Montre-moi les alarmes actuelles dans Zabbix",
+        "es": "Muéstrame las alarmas actuales en Zabbix",
+        "it": "Mostrami gli allarmi attuali in Zabbix",
+        "nl": "Toon me de huidige alarmen in Zabbix",
+        "pl": "Pokaż mi aktualne alarmy w Zabbix",
+        "pt": "Mostre-me os alarmes atuais no Zabbix",
+        "ja": "Zabbixの現在のアラームを表示",
+        "zh": "显示Zabbix中的当前告警"
+      }
+    },
+    {
+      "id": 32,
+      "module": "zabbix",
+      "queries": {
+        "de": "Prüfe den Status des Datenbank-Hosts",
+        "en": "Check the status of the database host",
+        "fr": "Vérifie le statut de l'hôte de base de données",
+        "es": "Comprueba el estado del host de base de datos",
+        "it": "Verifica lo stato dell'host del database",
+        "nl": "Controleer de status van de database host",
+        "pl": "Sprawdź status hosta bazy danych",
+        "pt": "Verifique o status do host do banco de dados",
+        "ja": "データベースホストのステータスを確認",
+        "zh": "检查数据库主机的状态"
+      }
+    },
+    {
+      "id": 33,
+      "module": "ubiquiti",
+      "queries": {
+        "de": "Wie ist der Status meines UniFi-WLAN-Access-Points?",
+        "en": "What's the status of my UniFi Wi-Fi access point?",
+        "fr": "Quel est le statut de mon point d'accès UniFi Wi-Fi ?",
+        "es": "¿Cuál es el estado de mi punto de acceso UniFi Wi-Fi?",
+        "it": "Qual è lo stato del mio punto di accesso UniFi Wi-Fi?",
+        "nl": "Wat is de status van mijn UniFi Wi-Fi access point?",
+        "pl": "Jaki jest status mojego punktu dostępu UniFi Wi-Fi?",
+        "pt": "Qual é o status do meu ponto de acesso UniFi Wi-Fi?",
+        "ja": "UniFi Wi-Fiアクセスポイントのステータスは？",
+        "zh": "我的UniFi Wi-Fi接入点状态如何？"
+      }
+    },
+    {
+      "id": 34,
+      "module": "ubiquiti",
+      "queries": {
+        "de": "Neustart den UniFi-Controller",
+        "en": "Restart the UniFi controller",
+        "fr": "Redémarre le contrôleur UniFi",
+        "es": "Reinicia el controlador UniFi",
+        "it": "Riavvia il controller UniFi",
+        "nl": "Herstart de UniFi controller",
+        "pl": "Uruchom ponownie kontroler UniFi",
+        "pt": "Reinicie o controlador UniFi",
+        "ja": "UniFiコントローラーを再起動",
+        "zh": "重启UniFi控制器"
+      }
+    },
+    {
+      "id": 35,
+      "module": "synology",
+      "queries": {
+        "de": "Wie viel Speicherplatz ist auf dem NAS noch frei?",
+        "en": "How much storage space is left on the NAS?",
+        "fr": "Combien d'espace de stockage reste-t-il sur le NAS ?",
+        "es": "¿Cuánto espacio de almacenamiento queda en el NAS?",
+        "it": "Quanto spazio di archiviazione è rimasto sul NAS?",
+        "nl": "Hoeveel opslagruimte is er nog vrij op de NAS?",
+        "pl": "Ile miejsca na dysku zostało na NAS-ie?",
+        "pt": "Quanto espaço de armazenamento resta no NAS?",
+        "ja": "NASの残りのストレージ容量は？",
+        "zh": "NAS上还剩多少存储空间？"
+      }
+    },
+    {
+      "id": 36,
+      "module": "synology",
+      "queries": {
+        "de": "Starte die Surveillance Station neu",
+        "en": "Restart Surveillance Station",
+        "fr": "Redémarre Surveillance Station",
+        "es": "Reinicia Surveillance Station",
+        "it": "Riavvia Surveillance Station",
+        "nl": "Herstart Surveillance Station",
+        "pl": "Uruchom ponownie Surveillance Station",
+        "pt": "Reinicie o Surveillance Station",
+        "ja": "Surveillance Stationを再起動",
+        "zh": "重启Surveillance Station"
+      }
+    },
+    {
+      "id": 37,
+      "module": "netbox",
+      "queries": {
+        "de": "Suche alle IPs im Subnetz 10.11.0.0/24",
+        "en": "Search all IPs in subnet 10.11.0.0/24",
+        "fr": "Recherche toutes les IPs dans le sous-réseau 10.11.0.0/24",
+        "es": "Busca todas las IPs en la subred 10.11.0.0/24",
+        "it": "Cerca tutti gli IP nella subnet 10.11.0.0/24",
+        "nl": "Zoek alle IPs in subnet 10.11.0.0/24",
+        "pl": "Wyszukaj wszystkie IP w podsieci 10.11.0.0/24",
+        "pt": "Pesquise todos os IPs na subrede 10.11.0.0/24",
+        "ja": "サブネット10.11.0.0/24のすべてのIPを検索",
+        "zh": "搜索子网10.11.0.0/24中的所有IP"
+      }
+    },
+    {
+      "id": 38,
+      "module": "netbox",
+      "queries": {
+        "de": "Zeige mir alle VLANs an",
+        "en": "Show me all VLANs",
+        "fr": "Montre-moi tous les VLANs",
+        "es": "Muéstrame todas las VLANs",
+        "it": "Mostrami tutte le VLAN",
+        "nl": "Toon me alle VLANs",
+        "pl": "Pokaż mi wszystkie VLANy",
+        "pt": "Mostre-me todas as VLANs",
+        "ja": "すべてのVLANを表示",
+        "zh": "显示所有VLAN"
+      }
+    },
+    {
+      "id": 39,
+      "module": "opnsense",
+      "queries": {
+        "de": "Wie ist der Status der OPNsense-Firewall?",
+        "en": "What's the status of the OPNsense firewall?",
+        "fr": "Quel est le statut du pare-feu OPNsense ?",
+        "es": "¿Cuál es el estado del firewall OPNsense?",
+        "it": "Qual è lo stato del firewall OPNsense?",
+        "nl": "Wat is de status van de OPNsense firewall?",
+        "pl": "Jaki jest status firewalla OPNsense?",
+        "pt": "Qual é o status do firewall OPNsense?",
+        "ja": "OPNsenseファイアウォールのステータスは？",
+        "zh": "OPNsense防火墙的状态是什么？"
+      }
+    },
+    {
+      "id": 40,
+      "module": "opnsense",
+      "queries": {
+        "de": "Liste die aktuellen Firewall-Regeln auf",
+        "en": "List the current firewall rules",
+        "fr": "Liste les règles de pare-feu actuelles",
+        "es": "Lista las reglas de firewall actuales",
+        "it": "Elenca le regole firewall attuali",
+        "nl": "Lijst de huidige firewall regels",
+        "pl": "Wyświetl bieżące reguły firewalla",
+        "pt": "Liste as regras de firewall atuais",
+        "ja": "現在のファイアウォールルールをリスト",
+        "zh": "列出当前防火墙规则"
+      }
+    },
+    {
+      "id": 41,
+      "module": "slack",
+      "queries": {
+        "de": "Sende eine Nachricht an den #devops-Kanal",
+        "en": "Send a message to the #devops channel",
+        "fr": "Envoie un message au canal #devops",
+        "es": "Envía un mensaje al canal #devops",
+        "it": "Invia un messaggio al canale #devops",
+        "nl": "Stuur een bericht naar het #devops kanaal",
+        "pl": "Wyślij wiadomość na kanał #devops",
+        "pt": "Envie uma mensagem para o canal #devops",
+        "ja": "#devopsチャンネルにメッセージを送信",
+        "zh": "向#devops频道发送消息"
+      }
+    },
+    {
+      "id": 42,
+      "module": "slack",
+      "queries": {
+        "de": "Schicke mir die letzten CI-Resultate als Slack-Nachricht",
+        "en": "Send me the latest CI results as a Slack message",
+        "fr": "Envoie-moi les derniers résultats CI par message Slack",
+        "es": "Envíame los últimos resultados de CI como mensaje de Slack",
+        "it": "Inviami gli ultimi risultati CI come messaggio Slack",
+        "nl": "Stuur me de laatste CI-resultaten als Slack-bericht",
+        "pl": "Wyślij mi najnowsze wyniki CI jako wiadomość Slack",
+        "pt": "Envie-me os últimos resultados de CI como mensagem do Slack",
+        "ja": "最新のCI結果をSlackメッセージで送我",
+        "zh": "把最新的CI结果作为Slack消息发给我"
+      }
+    },
+    {
+      "id": 43,
+      "module": "kubernetes",
+      "compound": true,
+      "queries": {
+        "de": "Starte den nginx-Pod neu und benachrichtige mich danach per Telegram",
+        "en": "Restart the nginx pod and notify me afterwards via Telegram"
+      }
+    },
+    {
+      "id": 44,
+      "module": "docker",
+      "compound": true,
+      "queries": {
+        "de": "Stoppe alle alten Container und schicke mir eine Zusammenfassung per Slack",
+        "en": "Stop all old containers and send me a summary via Slack"
+      }
+    },
+    {
+      "id": 45,
+      "module": "proxmox",
+      "compound": true,
+      "queries": {
+        "de": "Erstelle einen Snapshot von VM 101 und prüfe danach den Backup-Status",
+        "en": "Create a snapshot of VM 101 and then check the backup status"
+      }
+    },
+    {
+      "id": 46,
+      "module": "checkmk",
+      "compound": true,
+      "queries": {
+        "de": "Prüfe alle Hosts in Checkmk und erstelle ein Jira-Ticket für jeden Ausfall",
+        "en": "Check all hosts in Checkmk and create a Jira ticket for each outage"
+      }
+    },
+    {
+      "id": 47,
+      "module": "pihole",
+      "compound": true,
+      "queries": {
+        "de": "Füge ads.baddomain.com zur Blocklist hinzu und leere den Cache",
+        "en": "Add ads.baddomain.com to the blocklist and flush the cache"
+      }
+    },
+    {
+      "id": 48,
+      "module": "linux_server",
+      "compound": true,
+      "queries": {
+        "de": "Prüfe die Festplattennutzung und starte den Server bei Bedarf neu",
+        "en": "Check disk usage and restart the server if needed"
+      }
+    },
+    {
+      "id": 49,
+      "module": "github",
+      "compound": true,
+      "queries": {
+        "de": "Merge den Feature-Branch und trigger dann den Produktions-Workflow",
+        "en": "Merge the feature branch and then trigger the production workflow"
+      }
+    },
+    {
+      "id": 50,
+      "module": "gitlab",
+      "compound": true,
+      "queries": {
+        "de": "Erstelle einen Merge-Request und schicke eine Slack-Nachricht an das Team",
+        "en": "Create a merge request and send a Slack message to the team"
+      }
+    }
+  ]
+}

@@ -44,9 +44,9 @@ module_manifest = ModuleManifest(
     name="qdrant",
     display_name="Qdrant Knowledge Bank",
     description=(
-        "Zentrale KI-Wissensbank auf Basis von Qdrant. "
-        "Speichert und durchsucht Fachwissen, IT-Dokumentation und Runbooks "
-        "per semantischer Vektorsuche mit Payload-Filterung nach Kategorie und Tags."
+        "Qdrant knowledge bank: central AI knowledge base for IT documentation, "
+        "runbooks, and reference content. Semantic vector search with payload "
+        "filtering by category and tags."
     ),
     version="1.1.2",
     author="Ninko Team",

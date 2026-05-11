@@ -25,7 +25,10 @@ async def check_jira_health() -> dict:
 module_manifest = ModuleManifest(
     name="jira",
     display_name="Jira",
-    description="Atlassian Jira Issue Tracking – Issues, Projekte, Sprints, Boards und Workflows.",
+    description=(
+        "Atlassian Jira issue tracking: issues, bugs, stories, tasks, epics "
+        "across projects. Sprints, boards, workflows."
+    ),
     version="1.0.1",
     author="Ninko Team",
     enabled_by_default=False,

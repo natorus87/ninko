@@ -26,7 +26,11 @@ async def check_redmine_health() -> dict:
 module_manifest = ModuleManifest(
     name="redmine",
     display_name="Redmine",
-    description="Redmine Projektmanagement – Tickets, Projekte, Benutzer, Time Entries und Workflows.",
+    description=(
+        "Redmine project management: tickets, issues, projects, tasks, bugs, "
+        "milestones, workflows. Time tracking, HRM, resource planning, attendance, "
+        "leave management, reporting (alphanodes plugins)."
+    ),
     version="1.1.1",
     author="Ninko Team",
     enabled_by_default=False,

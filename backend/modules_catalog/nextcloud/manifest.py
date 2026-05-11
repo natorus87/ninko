@@ -80,7 +80,10 @@ async def check_nextcloud_health() -> dict:
 module_manifest = ModuleManifest(
     name="nextcloud",
     display_name="Nextcloud",
-    description="Nextcloud File Sync and Share – Files, Folders, Shares, Users, and Collaboration.",
+    description=(
+        "Nextcloud / OwnCloud: file sync and share, files, folders, shares, "
+        "users, collaboration, cloud storage."
+    ),
     version="1.0.1",
     author="Ninko",
     enabled_by_default=False,

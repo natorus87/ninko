@@ -19,7 +19,9 @@ async def check_zabbix_health(connection_id: str = "") -> dict:
 module_manifest = ModuleManifest(
     name="zabbix",
     display_name="Zabbix",
-    description="Zabbix Monitoring – Hosts, Items, Trigger, Graphen und Alerts.",
+    description=(
+        "Zabbix monitoring: hosts, items, triggers, graphs, alerts, host metrics."
+    ),
     version="1.0.1",
     author="Ninko",
     enabled_by_default=False,

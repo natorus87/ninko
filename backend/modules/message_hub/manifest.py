@@ -32,8 +32,9 @@ module_manifest = ModuleManifest(
     name="message_hub",
     display_name="Message Hub",
     description=(
-        "Vereint Email (IMAP IDLE), Discord und Telegram als bidirektionale Ninko-Channels. "
-        "SQLite-Routing-Tabelle mappt externe Channel-IDs auf Ninko-Sessions."
+        "Message Hub: bidirectional channel routing across Email (IMAP IDLE), "
+        "Discord, and Telegram. Maps external channel IDs to Ninko sessions; "
+        "manage incoming messages, hub status, and routing rules."
     ),
     version="1.0.0",
     author="Ninko",

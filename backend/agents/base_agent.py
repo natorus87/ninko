@@ -891,8 +891,27 @@ class BaseAgent:
         oder einen Sentinel-String wenn ein Tool-Call Bestätigung benötigt.
         """
         AGENT_TIMEOUT = _get_agent_timeout_seconds()
+        iterations = 0
+        max_iterations = 50
 
         while True:
+            iterations += 1
+            if iterations > max_iterations:
+                logger.error(
+                    "[Safeguard] Iterationsgrenze (%d) erreicht – breche Loop ab "
+                    "(Agent: %s, Session: %s)",
+                    max_iterations,
+                    self.name,
+                    session_id,
+                )
+                return {
+                    "messages": [
+                        AIMessage(
+                            content="[Safeguard] Iterationsgrenze erreicht. "
+                            "Bitte reduziere die Anzahl der Tool-Calls oder teile die Aufgabe auf."
+                        )
+                    ]
+                }
             result = await asyncio.wait_for(
                 sg_agent.ainvoke(input_data, config=thread_config),
                 timeout=AGENT_TIMEOUT,

@@ -41,7 +41,10 @@ async def check_docker_health() -> dict:
 module_manifest = ModuleManifest(
     name="docker",
     display_name="Docker",
-    description="Docker Host Management — Containers, Images, Volumes, System Info",
+    description=(
+        "Docker host management: containers, images, volumes, compose stacks. "
+        "Pull, build, push to dockerhub or private registry; system info."
+    ),
     version="1.1.2",
     author="Ninko Team",
     enabled_by_default=False,

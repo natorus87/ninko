@@ -96,7 +96,10 @@ async def _get_token_client_credentials(
 module_manifest = ModuleManifest(
     name="microsoft_entra",
     display_name="Microsoft Entra",
-    description="Microsoft Entra ID (formerly Azure AD) – Users, Groups, Applications, and Identity Management.",
+    description=(
+        "Microsoft Entra ID (formerly Azure AD) / O365 / M365: users, groups, "
+        "applications, identity management for Microsoft cloud."
+    ),
     version="1.0.1",
     author="Ninko",
     enabled_by_default=False,

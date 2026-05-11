@@ -23,7 +23,10 @@ async def check_wordpress_health() -> dict:
 module_manifest = ModuleManifest(
     name="wordpress",
     display_name="WordPress",
-    description="WordPress-Verwaltung – Plugins, Seiten, Beiträge, Benutzer, Einstellungen",
+    description=(
+        "WordPress / WP CMS: manage plugins, themes, pages, posts, blog, users, "
+        "WooCommerce, wp-cli, permalinks, settings."
+    ),
     version="1.1.2",
     author="Ninko Team",
     enabled_by_default=True,

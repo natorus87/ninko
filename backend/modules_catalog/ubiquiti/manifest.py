@@ -79,7 +79,10 @@ async def check_ubiquiti_health() -> dict:
 module_manifest = ModuleManifest(
     name="ubiquiti",
     display_name="Ubiquiti",
-    description="Ubiquiti UniFi – Switches, Routers, Access Points – Device Status, Clients, Traffic, and WLAN Management.",
+    description=(
+        "Ubiquiti UniFi / EdgeRouter / EdgeSwitch / AirMax: switches, routers, "
+        "access points. Device status, clients, traffic, WLAN management."
+    ),
     version="1.0.1",
     author="Ninko",
     enabled_by_default=False,

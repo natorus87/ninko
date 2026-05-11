@@ -23,7 +23,11 @@ async def check_linux_server_health() -> dict:
 module_manifest = ModuleManifest(
     name="linux_server",
     display_name="Linux Server",
-    description="Linux Server Management via SSH — commands, services, monitoring, files",
+    description=(
+        "Linux server management via SSH: shell commands, systemd services, cron, "
+        "apt, journalctl, df, top, reboot, hostname, users, iptables. "
+        "Manage apache, nginx, mysql, postgres, samba."
+    ),
     version="1.1.2",
     author="Ninko Team",
     enabled_by_default=False,

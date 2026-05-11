@@ -646,7 +646,6 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
         ToolMetadata("get_task", "core", readonly=True),
         ToolMetadata("list_tasks", "core", readonly=True),
         ToolMetadata("task_output", "core", readonly=True),
-        ToolMetadata("get_routing_info", "core", readonly=True),
         ToolMetadata("list_scheduled_tasks", "core", readonly=True),
         # WRITE_DATA — schreibt Daten (Memory, Agenten, Skills, Workflows)
         ToolMetadata("remember_fact", "core", tier=ToolTier.WRITE_DATA),

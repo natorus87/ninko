@@ -52,7 +52,12 @@ async def check_fritzbox_health(connection_id: str = "") -> dict:
 module_manifest = ModuleManifest(
     name="fritzbox",
     display_name="FritzBox",
-    description="Integration und Steuerung von AVM FritzBox Routern via TR-064 und AHA",
+    description=(
+        "AVM FritzBox / fritz!box router control: WiFi/WLAN, smart home (AHA), "
+        "TR-064 / DECT, telephony and calls, network bandwidth, DSL/WAN status, "
+        "external IP, internet connection, router client list, connected network "
+        "devices, WLAN/LAN clients and device counts."
+    ),
     version="1.1.3",
     author="Ninko",
     enabled_by_default=False,

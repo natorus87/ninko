@@ -78,7 +78,10 @@ async def check_netgear_health() -> dict:
 module_manifest = ModuleManifest(
     name="netgear",
     display_name="Netgear",
-    description="Netgear Network Devices – Switches, Routers, Access Points – Port Status, VLANs, and Traffic Management.",
+    description=(
+        "Netgear network devices: ProSafe switches (GS108, GS110, GS116), "
+        "routers, access points. Port status, VLANs, traffic management."
+    ),
     version="1.0.1",
     author="Ninko",
     enabled_by_default=False,

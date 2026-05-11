@@ -8,7 +8,9 @@ from core.module_registry import ModuleManifest
 module_manifest = ModuleManifest(
     name="discord",
     display_name="Discord",
-    description="Discord Bot – Server, Channels, Members und Messages verwalten.",
+    description=(
+        "Discord bot: manage Discord servers, channels, members, and messages."
+    ),
     version="1.1.1",
     author="Ninko",
     enabled_by_default=False,

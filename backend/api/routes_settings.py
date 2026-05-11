@@ -13,6 +13,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Request, HTTPException, UploadFile, File
+from pydantic import BaseModel, Literal
 
 from schemas.settings import (
     LlmSettings,
@@ -51,6 +52,7 @@ REDIS_KEY_MODULES = "ninko:settings:modules"
 REDIS_KEY_K8S_CLUSTERS = "ninko:settings:k8s_clusters"
 REDIS_KEY_LLM_PROVIDERS = "ninko:settings:llm_providers"
 REDIS_KEY_BRANDING = "ninko:settings:branding"
+REDIS_KEY_ROUTING_MODE = "ninko:settings:routing_mode"
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _BRANDING_DIR = (
@@ -1194,6 +1196,78 @@ async def set_default_llm_provider(body: dict) -> dict:
     # LLM-Factory auf neuen Standard umstellen
     _apply_default_provider(providers)
     return {"provider_id": provider_id, "is_default": True}
+
+
+# ═══════════════════════════════════════════════════════
+#  Routing Mode (Function Calling Toggle)
+# ═══════════════════════════════════════════════════════
+
+
+@router.get("/routing/mode")
+async def get_routing_mode() -> dict:
+    """Aktuellen Routing-Modus (Function Calling on/off) abrufen."""
+    redis = get_redis()
+    raw = await redis.connection.get(REDIS_KEY_ROUTING_MODE)
+    if raw:
+        return json.loads(raw)
+    from core.config import get_settings
+
+    cfg = get_settings()
+    return {
+        "function_calling_enabled": cfg.LLM_ENABLE_FUNCTION_CALLING,
+        "tool_choice": cfg.LLM_TOOL_CHOICE,
+        "source": "default",
+    }
+
+
+class RoutingModeUpdate(BaseModel):
+    function_calling_enabled: bool
+    tool_choice: Literal["auto", "required", "none"] = "auto"
+
+
+@router.put("/routing/mode")
+async def update_routing_mode(body: RoutingModeUpdate) -> dict:
+    """Routing-Modus aktualisieren (Function Calling Toggle)."""
+    redis = get_redis()
+    payload = {
+        "function_calling_enabled": body.function_calling_enabled,
+        "tool_choice": body.tool_choice,
+    }
+    await redis.connection.set(REDIS_KEY_ROUTING_MODE, json.dumps(payload))
+    cfg = get_settings()
+    cfg.LLM_ENABLE_FUNCTION_CALLING = body.function_calling_enabled
+    cfg.LLM_TOOL_CHOICE = body.tool_choice
+    logger.info(
+        "Routing-Modus aktualisiert: function_calling=%s, tool_choice=%s",
+        body.function_calling_enabled,
+        body.tool_choice,
+    )
+    return {**payload, "source": "redis"}
+
+
+@router.post("/routing/mode/smoke-test")
+async def smoke_test_function_calling() -> dict:
+    """
+    Smoke-Test: schickt ein Mini-Tool-Schema ins aktuelle Modell
+    und prüft ob es mit tool_use antwortet.
+    """
+    from agents.orchestrator import OrchestratorAgent
+    from core.module_registry import get_registry
+
+    registry = get_registry()
+    if registry is None:
+        return {"supported": False, "error": "Registry not initialized", "recommendation": "Start the backend first"}
+    agent = OrchestratorAgent(registry)
+    try:
+        result = await agent._smoke_test_function_calling()
+        return result
+    except Exception as exc:
+        logger.warning("Function Calling Smoke-Test fehlgeschlagen: %s", exc)
+        return {
+            "supported": False,
+            "error": str(exc)[:200],
+            "recommendation": "Disable Function Calling and use Embedding routing",
+        }
 
 
 # ═══════════════════════════════════════════════════════

@@ -19,7 +19,10 @@ async def check_github_health(connection_id: str = "") -> dict:
 module_manifest = ModuleManifest(
     name="github",
     display_name="GitHub",
-    description="GitHub – Repositories, Actions, Pull Requests, Issues und Releases.",
+    description=(
+        "GitHub: repositories, Actions workflows, pull requests, issues, "
+        "releases, and workflow runs."
+    ),
     version="1.0.1",
     author="Ninko",
     enabled_by_default=False,

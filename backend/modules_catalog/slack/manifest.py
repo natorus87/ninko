@@ -80,7 +80,10 @@ async def check_slack_health() -> dict:
 module_manifest = ModuleManifest(
     name="slack",
     display_name="Slack",
-    description="Slack Team Communication – Channels, Messages, Users, and Notifications.",
+    description=(
+        "Slack team communication: channels, messages, users, bot interactions, "
+        "webhooks, notifications."
+    ),
     version="1.0.1",
     author="Ninko",
     enabled_by_default=False,

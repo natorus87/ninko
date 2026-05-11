@@ -29,7 +29,10 @@ async def check_teams_health(connection_id: str = "") -> dict:
 module_manifest = ModuleManifest(
     name="teams",
     display_name="Microsoft Teams",
-    description="Ermöglicht das Chatten mit dem Ninko Orchestrator über Microsoft Teams",
+    description=(
+        "Microsoft Teams chat: chat with the Ninko orchestrator via "
+        "Microsoft Teams (botframework)."
+    ),
     version="1.1.2",
     author="Ninko Team",
     enabled_by_default=True,

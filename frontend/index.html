@@ -926,6 +926,32 @@ print('Hello, World!')"></textarea>
                                 </div>
                             </div>
 
+                            <!-- Function Calling Toggle -->
+                            <div class="setting-group" style="margin-top:1.5rem;">
+                                <h4 style="margin-top:0;" data-i18n="settings.routingTitle">Modul-Routing</h4>
+                                <p class="text-muted" style="font-size:0.85rem;margin-bottom:1rem;" data-i18n="settings.routingDesc">LLM-basiertes Routing via Native Function Calling. Erfordert ein Modell mit Tool-Unterstützung.</p>
+                                <div class="form-row">
+                                    <label class="form-label">
+                                        <input type="checkbox" id="fn-call-enabled" data-change="toggleFnCall">
+                                        <span data-i18n="settings.fnCallEnabled">Module-Routing über Function Calling (empfohlen)</span>
+                                    </label>
+                                </div>
+                                <div id="fn-call-tool-choice-row" class="form-row" style="display:none;margin-top:0.5rem;">
+                                    <label class="form-label" for="fn-call-tool-choice" data-i18n="settings.fnCallToolChoice">Tool-Auswahl</label>
+                                    <select id="fn-call-tool-choice" class="form-select" style="max-width:200px;">
+                                        <option value="auto">Auto (Standard)</option>
+                                        <option value="required">Required (erzwingt Tool)</option>
+                                        <option value="none">None (deaktiviert)</option>
+                                    </select>
+                                </div>
+                                <div id="fn-call-test-result" style="margin-top:0.75rem;font-size:0.85rem;"></div>
+                                <div class="form-actions" style="margin-top:0.75rem;">
+                                    <span id="fn-call-status" class="save-status" style="font-size:0.85rem;"></span>
+                                    <button class="btn btn-outline btn-sm" data-action="testFnCall" data-i18n="settings.testFnCall">Test Function Calling</button>
+                                    <button class="btn btn-primary btn-sm" data-action="saveRoutingMode" data-i18n="settings.save">💾 Speichern</button>
+                                </div>
+                            </div>
+
                             <!-- Embedding-Provider -->
                             <div class="setting-group" style="margin-top:1.5rem;">
                                 <h4 style="margin-top:0;" data-i18n="settings.embedTitle">Embedding-Provider</h4>

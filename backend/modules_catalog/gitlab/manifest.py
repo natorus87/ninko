@@ -19,7 +19,10 @@ async def check_gitlab_health(connection_id: str = "") -> dict:
 module_manifest = ModuleManifest(
     name="gitlab",
     display_name="GitLab",
-    description="GitLab CI/CD – Repositories, Pipelines, Jobs, Merge Requests und Releases.",
+    description=(
+        "GitLab CI/CD: repositories, pipelines, jobs, merge requests, "
+        "releases, commits."
+    ),
     version="1.0.1",
     author="Ninko",
     enabled_by_default=False,

@@ -78,7 +78,11 @@ async def check_proxmox_health() -> dict:
 module_manifest = ModuleManifest(
     name="proxmox",
     display_name="Proxmox",
-    description="Proxmox VE Management – VMs, Container, Nodes, Snapshots",
+    description=(
+        "Proxmox VE / PVE virtualization: virtual machines (VMs), LXC containers, "
+        "cluster nodes, snapshots, backups. Diagnose hung or stuck VMs and "
+        "dev environments."
+    ),
     version="1.1.2",
     author="Ninko Team",
     enabled_by_default=True,

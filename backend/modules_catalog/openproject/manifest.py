@@ -80,7 +80,10 @@ async def check_openproject_health() -> dict:
 module_manifest = ModuleManifest(
     name="openproject",
     display_name="OpenProject",
-    description="OpenProject Enterprise – Project Management, Tasks, Time Tracking, and Team Collaboration.",
+    description=(
+        "OpenProject enterprise: project and task management, ticketing, "
+        "time tracking, team collaboration."
+    ),
     version="1.0.4",
     author="Ninko",
     enabled_by_default=False,

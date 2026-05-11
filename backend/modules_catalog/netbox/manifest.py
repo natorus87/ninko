@@ -19,7 +19,10 @@ async def check_netbox_health(connection_id: str = "") -> dict:
 module_manifest = ModuleManifest(
     name="netbox",
     display_name="NetBox",
-    description="NetBox DCIM & IPAM – Devices, Circuits, IP-Adressen, VLANs und Rack-Management.",
+    description=(
+        "NetBox DCIM & IPAM: data center inventory and IP address management. "
+        "Devices, racks, circuits, IP addresses, VLANs."
+    ),
     version="1.0.1",
     author="Ninko",
     enabled_by_default=False,

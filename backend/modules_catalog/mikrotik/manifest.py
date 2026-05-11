@@ -79,7 +79,10 @@ async def check_mikrotik_health() -> dict:
 module_manifest = ModuleManifest(
     name="mikrotik",
     display_name="MikroTik",
-    description="MikroTik RouterOS – Switches, Routers, Wireless – Interface Status, Routing, Firewall, and Queue Management.",
+    description=(
+        "MikroTik RouterOS / RouterBoard: switches, routers, wireless. "
+        "Interface status, routing, firewall, queues, WireGuard, CAPsMAN."
+    ),
     version="1.0.1",
     author="Ninko",
     enabled_by_default=False,

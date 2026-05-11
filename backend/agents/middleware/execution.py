@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_AGENT_TIMEOUT_SECS = 600
+_DEFAULT_AGENT_TIMEOUT_SECS = 1800
 
 
 def _get_timeout() -> int:

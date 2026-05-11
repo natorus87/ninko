@@ -76,7 +76,10 @@ async def check_telegram_health(connection_id: str = "") -> dict:
 module_manifest = ModuleManifest(
     name="telegram",
     display_name="Telegram Bot",
-    description="Ermöglicht das Chatten mit dem Ninko Orchestrator über Telegram",
+    description=(
+        "Telegram chat: chat with the Ninko orchestrator via Telegram messages, "
+        "groups, or channels."
+    ),
     version="1.2.0",
     author="Ninko Team",
     enabled_by_default=True,

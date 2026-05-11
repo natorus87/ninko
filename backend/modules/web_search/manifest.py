@@ -34,7 +34,10 @@ async def check_web_search_health() -> dict:
 module_manifest = ModuleManifest(
     name="web_search",
     display_name="Web Search",
-    description="Ermöglicht der KI Web-Suchen über eine lokale SearXNG-Instanz durchzuführen.",
+    description=(
+        "Web search / websearch: search the internet via local SearXNG. "
+        "Find news, current prices, articles, websites, and live information."
+    ),
     version="1.0.0",
     author="Ninko Team",
     enabled_by_default=True,

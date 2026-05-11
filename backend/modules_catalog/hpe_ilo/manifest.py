@@ -84,7 +84,10 @@ async def check_hpe_ilo_health() -> dict:
 module_manifest = ModuleManifest(
     name="hpe_ilo",
     display_name="HPE iLO",
-    description="HPE Integrated Lights-Out (iLO4/iLO5) Server Management via REST API.",
+    description=(
+        "HPE Integrated Lights-Out (iLO4 / iLO5): server management, "
+        "BMC, IPMI for HPE servers via REST API."
+    ),
     version="1.0.1",
     author="Ninko",
     enabled_by_default=False,

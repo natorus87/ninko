@@ -31,7 +31,11 @@ async def check_opnsense_health(connection_id: str = "") -> dict:
 module_manifest = ModuleManifest(
     name="opnsense",
     display_name="OPNsense",
-    description="Management und Monitoring einer OPNsense Firewall via REST API.",
+    description=(
+        "OPNsense firewall management: firewall rules, NAT rules, port forwarding, "
+        "packet filter, interfaces, gateways, DHCP, DNS, VPN (IPsec, OpenVPN, "
+        "WireGuard), firewall logs. Create, modify, allow, block, or delete rules."
+    ),
     version="1.2.1",
     author="Ninko",
     enabled_by_default=False,

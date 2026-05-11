@@ -27,7 +27,10 @@ async def check_image_gen_health() -> dict:
 module_manifest = ModuleManifest(
     name="image_gen",
     display_name="Bildgenerierung",
-    description="KI-Bildgenerierung – Bilder, Illustrationen, Logos mit Flux, DALL-E, Imagen",
+    description=(
+        "AI image generation / image-gen: create images, illustrations, logos, "
+        "graphics, photos, posters using Flux, DALL-E, or Imagen."
+    ),
     version="1.0.0",
     author="Ninko Team",
     enabled_by_default=True,

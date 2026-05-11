@@ -42,8 +42,6 @@ __all__ = [
     "forget_fact",
     "confirm_forget",
     "speak",
-    "configure_routing",
-    "get_routing_info",
     "wait",
     "generate_pdf_report",
     "create_scheduled_task",
@@ -58,6 +56,7 @@ _CORE_TOOL_EXCEPTIONS = (
     RuntimeError,
     OSError,
     asyncio.TimeoutError,
+    asyncio.CancelledError,
 )
 _CORE_IMPORT_EXCEPTIONS = (ImportError, AttributeError, RuntimeError)
 

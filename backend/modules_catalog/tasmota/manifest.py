@@ -39,7 +39,11 @@ async def check_tasmota_health(connection_id: str = "") -> dict:
 module_manifest = ModuleManifest(
     name="tasmota",
     display_name="Tasmota",
-    description="Steuerung und Monitoring von Tasmota-Geräten (ESP8266/ESP32) via HTTP REST API.",
+    description=(
+        "Tasmota smart home devices on ESP8266 / ESP32 (Sonoff, Shelly): "
+        "switches, plugs, relays, sensors. Read temperature, humidity, power "
+        "and energy consumption; MQTT, smart meters."
+    ),
     version="1.1.2",
     author="Ninko",
     enabled_by_default=False,

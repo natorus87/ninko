@@ -30,7 +30,12 @@ async def check_k8s_health() -> dict:
 module_manifest = ModuleManifest(
     name="kubernetes",
     display_name="Kubernetes",
-    description="Kubernetes Cluster Management – Pods, Deployments, Services, Health-Monitoring",
+    description=(
+        "Kubernetes / k8s cluster management: pods, deployments, statefulsets, "
+        "services, ingress, configmaps, secrets, PVCs, volumes, namespaces, nodes, "
+        "helm releases. View logs, restart and scale workloads, diagnose "
+        "CrashLoopBackOff, evicted pods, and kube-system issues."
+    ),
     version="1.2.2",
     author="Ninko Team",
     enabled_by_default=True,

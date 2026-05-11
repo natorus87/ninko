@@ -76,7 +76,10 @@ async def check_cisco_health() -> dict:
 module_manifest = ModuleManifest(
     name="cisco",
     display_name="Cisco",
-    description="Cisco Network Devices – Switches, Routers, Nexus – Interface Status, VLANs, Routing, and Port Management.",
+    description=(
+        "Cisco network devices: IOS / Nexus / Catalyst switches and routers. "
+        "Interface status, VLANs, routing, port management."
+    ),
     version="1.0.1",
     author="Ninko",
     enabled_by_default=False,

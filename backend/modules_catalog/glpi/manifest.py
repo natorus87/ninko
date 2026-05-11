@@ -84,7 +84,10 @@ async def check_glpi_health() -> dict:
 module_manifest = ModuleManifest(
     name="glpi",
     display_name="GLPI Helpdesk",
-    description="GLPI Helpdesk Integration – Tickets, Incidents, SLA-Tracking",
+    description=(
+        "GLPI helpdesk: tickets, incidents, support requests, SLA tracking, "
+        "follow-ups. Open, assign, close, or escalate tickets."
+    ),
     version="1.1.6",
     author="Ninko Team",
     enabled_by_default=True,

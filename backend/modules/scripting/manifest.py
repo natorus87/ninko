@@ -15,7 +15,10 @@ async def check_scripting_health() -> dict:
 module_manifest = ModuleManifest(
     name="scripting",
     display_name="Scripting",
-    description="Persistente Python-Skripte mit sicherer Sandbox-Ausführung",
+    description=(
+        "Scripting / automation: persistent Python scripts with sandboxed execution. "
+        "Run, schedule, batch, or background routines and cron-style automations."
+    ),
     version="0.1.0",
     author="Ninko Team",
     enabled_by_default=True,

@@ -19,7 +19,10 @@ async def check_network_analysis_health() -> dict:
 module_manifest = ModuleManifest(
     name="network_analysis",
     display_name="Network Analysis",
-    description="DNS-Lookup, WHOIS, Traceroute und IP-Analyse für Webseiten und Netzwerke.",
+    description=(
+        "Network analysis: DNS lookup, WHOIS, traceroute, IP and host analysis, "
+        "port scan, ping, server and website analysis, network info."
+    ),
     version="1.0.0",
     author="Ninko Team",
     enabled_by_default=True,

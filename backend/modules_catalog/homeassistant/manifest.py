@@ -19,7 +19,11 @@ async def check_homeassistant_health() -> dict:
 module_manifest = ModuleManifest(
     name="homeassistant",
     display_name="Home Assistant",
-    description="Steuerung und Abfrage von Smart Home Geräten in Home Assistant.",
+    description=(
+        "Home Assistant / HA smart home: control and query lights, switches, "
+        "heating, outlets, sensors, lamps, and HA entities. Turn on/off, adjust, "
+        "automate. Not for router status, FritzBox status, or WLAN/LAN client counts."
+    ),
     version="1.1.2",
     author="Ninko",
     enabled_by_default=False,

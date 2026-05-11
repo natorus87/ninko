@@ -15,7 +15,12 @@ async def check_codelab_health() -> dict:
 module_manifest = ModuleManifest(
     name="codelab",
     display_name="CodeLab",
-    description="Code-Sandbox und KI-gestützte Code- & Textverbesserung",
+    description=(
+        "Code-Lab / coding sandbox: execute and analyze code in Python, Bash, "
+        "JavaScript and other languages. Refactor, review, explain, optimize code; "
+        "find bugs, suggest fixes, write unit tests, regex, algorithms. Improve "
+        "text, spelling, formulation."
+    ),
     version="1.0.0",
     author="Ninko Team",
     enabled_by_default=True,

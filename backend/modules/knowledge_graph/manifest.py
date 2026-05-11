@@ -33,7 +33,11 @@ async def check_knowledge_graph_health() -> dict:
 module_manifest = ModuleManifest(
     name="knowledge_graph",
     display_name="Knowledge Graph",
-    description="Structured entity and relationship graph for IT operations. Visualizes dependencies, analyzes impacts, and enhances RAG with graph-based insights.",
+    description=(
+        "Knowledge graph / KG: structured entity and relationship graph for IT operations. "
+        "Dependencies, impact analysis, system topology, infrastructure relations, "
+        "related systems, network topology, graph queries, RAG enrichment."
+    ),
     version="1.0.0",
     author="Ninko Team",
     enabled_by_default=True,

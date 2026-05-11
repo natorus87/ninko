@@ -33,7 +33,10 @@ async def check_ionos_health() -> dict:
 module_manifest = ModuleManifest(
     name="ionos",
     display_name="IONOS DNS",
-    description="IONOS DNS zones and records management.",
+    description=(
+        "IONOS DNS: manage DNS zones and records (A, CNAME, TXT, etc.) "
+        "via IONOS API."
+    ),
     version="1.1.2",
     author="Ninko",
     enabled_by_default=True,

@@ -24,7 +24,11 @@ async def check_dataviz_health() -> dict:
 module_manifest = ModuleManifest(
     name="dataviz",
     display_name="DataViz Studio",
-    description="Professionelle Diagramme und Visualisierungen aus Daten erstellen. Unterstützt Balken-, Linien-, Kreisdiagramme, Scatterplots und Mermaid-Diagramme.",
+    description=(
+        "Data visualization / dataviz: create professional charts and diagrams from data. "
+        "Bar charts, line charts, pie charts, scatter plots, mermaid diagrams. "
+        "Render via matplotlib or plotly."
+    ),
     version="1.1.0",
     routing_keywords=[
         "diagramm",

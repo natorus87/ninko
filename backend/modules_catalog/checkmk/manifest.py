@@ -33,7 +33,11 @@ async def check_checkmk_health() -> dict:
 module_manifest = ModuleManifest(
     name="checkmk",
     display_name="Checkmk",
-    description="Checkmk Monitoring – Hosts, Services, Status, Alerts und Probleme.",
+    description=(
+        "Checkmk monitoring: hosts, services, alerts, status checks, problems, "
+        "downtime, uptime and availability tracking. Critical, warning, ok, "
+        "and pending states."
+    ),
     version="1.1.1",
     author="Ninko Team",
     enabled_by_default=False,

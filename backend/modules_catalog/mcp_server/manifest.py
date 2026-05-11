@@ -29,7 +29,10 @@ async def check_mcp_server_health(connection_id: str = "") -> dict:
 module_manifest = ModuleManifest(
     name="mcp_server",
     display_name="MCP Server",
-    description="Generic Model Context Protocol integration for arbitrary MCP servers.",
+    description=(
+        "Generic Model Context Protocol (MCP) integration: connect to arbitrary "
+        "MCP servers, expose tools and resources via stdio."
+    ),
     version="1.0.1",
     author="Ninko Team",
     enabled_by_default=False,

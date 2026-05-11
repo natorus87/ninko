@@ -7,7 +7,10 @@ async def check_email_health() -> dict:
 module_manifest = ModuleManifest(
     name="email",
     display_name="Email (SMTP/IMAP)",
-    description="Email client for Ninko. Send via SMTP and read/manage via IMAP. Supports Basic Auth and MSAL (Microsoft 365 OAuth2).",
+    description=(
+        "Email client: send mail via SMTP and read/manage via IMAP. "
+        "Inbox, folders, mailbox; supports Basic Auth and MSAL (Microsoft 365 OAuth2)."
+    ),
     version="1.1.2",
     author="Ninko",
     enabled_by_default=True,

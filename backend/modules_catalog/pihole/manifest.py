@@ -55,7 +55,12 @@ async def check_pihole_health() -> dict:
 module_manifest = ModuleManifest(
     name="pihole",
     display_name="Pi-hole",
-    description="Pi-hole DNS-Server Management – Blocking, Queries, Domains, Statistiken",
+    description=(
+        "Pi-hole DNS server management: ad and tracker blocking, blocklists "
+        "(Gravity), whitelist and blacklist domains, query log and domain "
+        "statistics, custom DNS records (A, CNAME, local DNS), DHCP leases, "
+        "cache flush, network table, system messages and warnings."
+    ),
     version="1.1.2",
     author="Ninko Team",
     enabled_by_default=True,

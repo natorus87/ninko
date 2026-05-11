@@ -25,7 +25,10 @@ async def check_synology_health() -> dict:
 module_manifest = ModuleManifest(
     name="synology",
     display_name="Synology NAS",
-    description="Verwalte Synology NAS: System-Status, Storage, Services, Pakete und Tasks.",
+    description=(
+        "Synology NAS / DiskStation / DSM: system status, storage, RAID, services, "
+        "packages and apps, scheduled tasks, Hyper Backup and other backups."
+    ),
     version="1.0.1",
     author="Ninko Team",
     enabled_by_default=False,

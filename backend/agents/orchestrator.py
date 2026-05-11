@@ -1,36 +1,28 @@
 """
-Ninko Orchestrator Agent – 4-stufige Routing-Logik via ModuleRegistry.
+Ninko Orchestrator Agent – LLM-Native Function Calling Routing.
 
-Stufe 1 – Direkte Ausführung:  Einfache Fragen direkt beantworten.
-Stufe 2 – Modul-Delegation:    Spezialisierte Modul-Agenten einsetzen.
-Stufe 3 – Dynamischer Agent:   Neuen spezialisierten Agenten erstellen und wiederverwenden.
-Stufe 4 – Workflow-Orchestrierung: Mehrstufige Aufgaben als deterministischen Plan ausführen.
-
-Kennt KEINE Modul-Namen hardcodiert, arbeitet ausschließlich mit der Registry.
+Modul-Routing via Native Function Calling im Conversational-Modell.
+Kein separates Router-Modell, kein Keyword-Routing, keine Evidence-Layer.
 """
 
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json as _json
 import logging
 import re
-from typing import TYPE_CHECKING
+from datetime import datetime, timezone
+from dataclasses import dataclass as _dc_dataclass, fields as _dc_fields
+from typing import TYPE_CHECKING, Any
 
-from langchain_core.messages import HumanMessage
+import numpy as np
+
+
+# ── Intent-Detection-Patterns ───────────────────────────────────────────────
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import tool
 
-from core.router import (
-    KeywordRouter,
-    RoutingConfig,
-    ROUTING_PRESETS,
-    SESSION_ROUTING_TTL as _SESSION_ROUTING_TTL,
-    _SPEED_SIGNALS,
-    _CORE_ALWAYS_MODULES,
-    _UTILITY_MODULES,
-    routing_config_key as _routing_config_key,
-    routing_stats_key as _routing_stats_key,
-)
 from agents.base_agent import BaseAgent, _t
 from agents.core_tools import (
     execute_cli_command,
@@ -47,8 +39,6 @@ from agents.core_tools import (
     call_module_agent,
     run_pipeline,
     run_parallel_pipeline,
-    configure_routing,
-    get_routing_info,
     wait,
     create_scheduled_task,
     list_scheduled_tasks,
@@ -66,20 +56,8 @@ from agents.data_analysis_subagent import (
 )
 from core import status_bus
 from core.config import get_settings
-
-from core.prestructure import (
-    DeterministicTaskSketchBuilder,
-    create_module_metadata_from_registry,
-    TaskSketch,
-)
-from core.evidence import (
-    ConstellationValidator,
-    EvidenceTrace,
-    SemanticResolutionResult,
-    SemanticResolver,
-    build_evidence_trace,
-    persist_evidence_trace,
-)
+from core.llm_factory import get_llm, get_embeddings
+from core.redis_client import get_redis
 
 if TYPE_CHECKING:
     from core.module_registry import ModuleRegistry
@@ -158,7 +136,59 @@ _WORKFLOW_HOWTO_PATTERNS: tuple[re.Pattern, ...] = (
 )
 
 
-@tool
+# ── Routing-Konstanten (aus core/router.py) ───────────────────────────────────
+
+_CORE_ALWAYS_MODULES: frozenset[str] = frozenset(
+    {"web_search", "image_gen", "codelab", "dataviz"}
+)
+
+_UTILITY_MODULES: frozenset[str] = frozenset(
+    {"web_search", "image_gen", "telegram", "email", "teams"}
+)
+
+_SPEED_SIGNALS: frozenset[str] = frozenset(
+    {
+        "schnell", "schnelle", "schneller", "schnelles",
+        "quick", "fast", "kurz", "kurze", "kurzer", "kurzes",
+        "brief", "knapp", "simplified", "einfach", "kürzer", "kürze",
+    }
+)
+
+_SESSION_ROUTING_TTL: float = 86400.0
+
+
+def _routing_config_key(session_id: str) -> str:
+    return f"ninko:orchestrator:routing:{session_id}"
+
+
+def _routing_stats_key(session_id: str) -> str:
+    return f"ninko:orchestrator:routing_stats:{session_id}"
+
+
+@_dc_dataclass
+class RoutingConfig:
+    tier1_enabled: bool = True
+    tier2_enabled: bool = True
+    tier4_enabled: bool = True
+    preset: str = "default"
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "RoutingConfig":
+        known = {f.name for f in _dc_fields(cls)}
+        return cls(**{k: v for k, v in d.items() if k in known})
+
+    def to_dict(self) -> dict:
+        return {f.name: getattr(self, f.name) for f in _dc_fields(self)}
+
+
+ROUTING_PRESETS: dict[str, dict] = {
+    "default": {},
+    "fast": {"preset": "fast", "tier4_enabled": False},
+    "module-only": {"preset": "module-only", "tier1_enabled": False, "tier4_enabled": False},
+}
+
+
+# ── Intent-Detection-Patterns (Tier-1/3, kein Routing-Concern) ───────────────
 async def generate_image(prompt: str, size: str = "1024x1024") -> str:
     """
     Generiert ein Bild mit einem KI-Bildgenerierungsmodell.
@@ -263,6 +293,8 @@ Du bist der zentrale Ansprechpartner. Du entscheidest selbst, wie du eine Anfrag
 ENTSCHEIDUNGS-LOGIK:
 1. Ist die Anfrage eindeutig einem Modul zugeordnet (Kubernetes, Pi-hole, HomeAssistant etc.)?
    → `call_module_agent("<modul>", "<vollständige Aufgabe>")` aufrufen.
+   → Bei kurzen Folgefragen ohne neues Ziel ("wie viele?", "zeige Details", "und jetzt?")
+     bleibe beim Modul/Thema der letzten Antwort, außer der User nennt explizit ein anderes Modul.
 2. Erfordert die Anfrage mehrere Module nacheinander?
    → `run_pipeline([{"module":"...", "task":"..."}])` — Ergebnisse werden automatisch weitergegeben.
    → Für PARALLELE Ausführung: `run_parallel_pipeline(groups=[[{...}, {...}], [{...}]])` —
@@ -324,8 +356,6 @@ class OrchestratorAgent(BaseAgent):
             check_alert_state,
             record_alert,
             resolve_alert,
-            configure_routing,
-            get_routing_info,
             wait,
         ]
 
@@ -353,14 +383,369 @@ class OrchestratorAgent(BaseAgent):
         self._routing_config_loaded_at: float = 0.0
         self._last_tier_used: int = 0
         self._last_routing_confidence: float | None = None
-        # ── Deterministic Task Pre-structuring ──
-        self._task_sketch_builder: DeterministicTaskSketchBuilder | None = None
-        self._last_task_sketch: TaskSketch | None = None
-        # ── Evidence Layer ──
-        self._semantic_resolver: SemanticResolver | None = None
-        self._constellation_validator = ConstellationValidator()
-        self._last_semantic_resolution: SemanticResolutionResult | None = None
-        self._last_evidence_trace: EvidenceTrace | None = None
+
+    def _build_module_tools_schema(self) -> list[dict]:
+        """JSON Tool-Defs aus Modul-Manifesten für Function Calling."""
+        tools: list[dict] = []
+        for manifest in self.registry.list_modules():
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name": manifest.name,
+                    "description": manifest.description or "",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "The user's request, possibly clarified or focused by the conversational context",
+                            }
+                        },
+                        "required": ["query"],
+                    },
+                },
+            })
+        return tools
+
+    @staticmethod
+    def _recent_routing_context(chat_history: list[dict] | None, limit: int = 6) -> str:
+        """Kompakter Verlauf für kontextabhängige Function-Calling-Entscheidungen."""
+        if not chat_history:
+            return ""
+        lines: list[str] = []
+        for item in chat_history[-limit:]:
+            role = str(item.get("role", "")).lower()
+            if role not in {"user", "assistant", "system_compaction"}:
+                continue
+            content = str(item.get("content", "")).strip()
+            if not content:
+                continue
+            label = "summary" if role == "system_compaction" else role
+            lines.append(f"{label}: {content[:800]}")
+        return "\n".join(lines)
+
+    async def _get_routing_mode(self) -> tuple[bool, str]:
+        """Liest den Runtime-Routing-Modus aus Redis mit Env-Fallback."""
+        settings = get_settings()
+        enabled = settings.LLM_ENABLE_FUNCTION_CALLING
+        tool_choice = settings.LLM_TOOL_CHOICE
+        try:
+            redis = get_redis()
+            raw = await redis.connection.get("ninko:settings:routing_mode")
+            if raw:
+                data = _json.loads(raw)
+                enabled = bool(data.get("function_calling_enabled", enabled))
+                candidate = str(data.get("tool_choice", tool_choice))
+                if candidate in {"auto", "required", "none"}:
+                    tool_choice = candidate
+        except Exception as exc:
+            logger.debug("Routing mode Redis lookup failed, using settings: %s", exc)
+        return enabled, tool_choice
+
+    # ── Tool-Call Cache (Exact + Semantic) ─────────────────────────────────────
+
+    _TOOL_CALL_CACHE_PREFIX = "ninko:toolcall:"
+    _EXACT_CACHE_TTL = 86400  # 24h
+    _SEMANTIC_CACHE_TTL = 604800  # 7 days
+    _SEMANTIC_THRESHOLD = 0.92
+
+    @staticmethod
+    def _normalize_query_for_cache(query: str) -> str:
+        """Normalisierte Query für Exact-Cache-Key (sha256)."""
+        normalized = re.sub(r"\s+", " ", re.sub(r"[^\w\s]", "", query.lower())).strip()
+        return hashlib.sha256(normalized.encode()).hexdigest()
+
+    async def _route_cache_exact_get(self, query: str) -> list[dict] | None:
+        """Exact-Cache Lookup (sha256). Returns tool_calls list or None."""
+        try:
+            redis = get_redis()
+            key = f"{self._TOOL_CALL_CACHE_PREFIX}exact:{self._normalize_query_for_cache(query)}"
+            raw = await redis.connection.get(key)
+            if raw:
+                data = _json.loads(raw)
+                return data.get("tool_calls")
+        except Exception as exc:
+            logger.debug("Exact cache miss: %s", exc)
+        return None
+
+    async def _route_cache_exact_set(self, query: str, tool_calls: list[dict]) -> None:
+        """Speichert tool_calls im Exact-Cache (24h TTL)."""
+        try:
+            redis = get_redis()
+            key = f"{self._TOOL_CALL_CACHE_PREFIX}exact:{self._normalize_query_for_cache(query)}"
+            payload = _json.dumps({
+                "tool_calls": tool_calls,
+                "ts": datetime.now(timezone.utc).isoformat(),
+            })
+            await redis.connection.set(key, payload, ex=self._EXACT_CACHE_TTL)
+        except Exception as exc:
+            logger.debug("Exact cache set failed: %s", exc)
+
+    async def _route_cache_semantic_get(self, query: str) -> list[dict] | None:
+        """Semantic-Cache Lookup (cos > 0.92). Returns tool_calls or None."""
+        try:
+            redis_client = get_redis()
+            embeddings = get_embeddings()
+            query_vec = embeddings.embed_query(query)
+            all_keys = [key async for key in redis_client.connection.scan_iter(match=f"{self._TOOL_CALL_CACHE_PREFIX}sem:*", count=100)]
+            if not all_keys:
+                return None
+            module_vecs = {}
+            for key in all_keys:
+                raw = await redis_client.connection.get(key)
+                if raw:
+                    data = _json.loads(raw)
+                    vec = data.get("embedding", [])
+                    if vec:
+                        module_vecs[key] = np.array(vec, dtype=np.float32)
+            if not module_vecs:
+                return None
+            q_vec = np.array(query_vec, dtype=np.float32)
+            norm_q = np.linalg.norm(q_vec)
+            best_key, best_score = None, 0.0
+            for key, mod_vec in module_vecs.items():
+                norm_mod = np.linalg.norm(mod_vec)
+                if norm_q > 0 and norm_mod > 0:
+                    score = float(np.dot(q_vec, mod_vec) / (norm_q * norm_mod))
+                    if score > best_score:
+                        best_score, best_key = score, key
+            if best_key and best_score >= self._SEMANTIC_THRESHOLD:
+                raw = await redis_client.connection.get(best_key)
+                if raw:
+                    return _json.loads(raw).get("tool_calls")
+        except Exception as exc:
+            logger.debug("Semantic cache miss: %s", exc)
+        return None
+
+    async def _route_cache_semantic_set(self, query: str, tool_calls: list[dict]) -> None:
+        """Speichert tool_calls im Semantic-Cache (7d TTL) mit Embedding."""
+        try:
+            embeddings = get_embeddings()
+            query_vec = embeddings.embed_query(query)
+            redis = get_redis()
+            sem_key = f"{self._TOOL_CALL_CACHE_PREFIX}sem:{hashlib.sha256(query[:100].encode()).hexdigest()}"
+            payload = _json.dumps({
+                "tool_calls": tool_calls,
+                "embedding": [float(v) for v in query_vec],
+                "ts": datetime.now(timezone.utc).isoformat(),
+            })
+            await redis.connection.set(sem_key, payload, ex=self._SEMANTIC_CACHE_TTL)
+        except Exception as exc:
+            logger.debug("Semantic cache set failed: %s", exc)
+
+    # ── Tool-Call Extraction & Dispatch ────────────────────────────────────────
+
+    def _extract_tool_calls(self, response: AIMessage) -> list[dict]:
+        """Extrahiert tool_use-Blöcke aus dem LLM Response."""
+        tool_calls = getattr(response, "tool_calls", None) or []
+        if not tool_calls:
+            return []
+        result = []
+        for tc in tool_calls:
+            if isinstance(tc, dict):
+                result.append({"name": tc.get("name", ""), "arguments": tc.get("args", tc.get("arguments", {}))})
+            elif hasattr(tc, "name"):
+                args = getattr(tc, "args", {}) or getattr(tc, "arguments", {})
+                result.append({"name": tc.name, "arguments": args if isinstance(args, dict) else {}})
+        return result
+
+    async def _dispatch_tool_call(
+        self,
+        tool_call: dict,
+        message: str,
+        chat_history: list[dict] | None,
+        session_id: str,
+        confirmed: bool,
+    ) -> tuple[str, str | None, bool]:
+        """Führt einen einzelnen tool_call aus."""
+        tool_name = tool_call.get("name", "")
+        tool_args = tool_call.get("arguments", {})
+        query = tool_args.get("query", message)
+
+        result = await self._invoke_module_agent(
+            tool_name,
+            message=query,
+            chat_history=chat_history,
+            session_id=session_id,
+            confirmed=confirmed,
+            status_message=_t(
+                de=f"Modul '{tool_name}' wird ausgeführt…",
+                en=f"Executing module '{tool_name}'…",
+            ),
+            log_prefix="FunctionCalling",
+        )
+        return result
+
+    async def _dispatch_tool_calls(
+        self,
+        tool_calls: list[dict],
+        message: str,
+        chat_history: list[dict] | None,
+        session_id: str,
+        confirmed: bool,
+    ) -> tuple[str, str | None, bool]:
+        """Führt mehrere tool_calls sequenziell aus (Pipeline-Sequenz)."""
+        if len(tool_calls) == 1:
+            return await self._dispatch_tool_call(tool_calls[0], message, chat_history, session_id, confirmed)
+
+        steps = []
+        for tc in tool_calls:
+            steps.append({
+                "module": tc.get("name", ""),
+                "task": tc.get("arguments", {}).get("query", message),
+            })
+
+        await status_bus.emit(
+            session_id,
+            _t(de="Pipelines werden ausgeführt…", en="Executing pipeline…"),
+        )
+        try:
+            from core.pipeline_engine import get_pipeline_engine, PipelineStep, PipelineStatus
+            engine = get_pipeline_engine()
+            typed_steps = [PipelineStep.from_dict(s) for s in steps]
+            result = await engine.execute(
+                typed_steps,
+                session_id=session_id,
+                auto_confirm=confirmed,
+                skip_on_error=False,
+            )
+            markdown = result.to_markdown()
+            status = result.status
+            if status == PipelineStatus.FAILED:
+                return f"Pipeline fehlgeschlagen: {result.error}\n\n{markdown}", None, False
+            return markdown if markdown else _t("Pipeline abgeschlossen.", "Pipeline completed."), None, False
+        except Exception as exc:
+            logger.error("Pipeline execution failed: %s", exc)
+            return f"Pipeline-Fehler: {exc}", None, False
+
+    # ── LLM Function Calling Route ──────────────────────────────────────────────
+
+    async def _llm_route_with_function_calling(
+        self,
+        message: str,
+        chat_history: list[dict] | None,
+        session_id: str,
+        confirmed: bool,
+    ) -> tuple[str, str | None, bool]:
+        """Führt LLM-Native Function Calling Routing durch."""
+        function_calling_enabled, tool_choice = await self._get_routing_mode()
+        if not function_calling_enabled or tool_choice == "none":
+            return await self._fallback_to_react_loop(message, chat_history, session_id, confirmed)
+
+        await status_bus.emit(
+            session_id,
+            _t(de="Analysiere Routing…", en="Analyzing routing…"),
+        )
+
+        routing_context = self._recent_routing_context(chat_history)
+        cache_text = f"{routing_context}\nCURRENT: {message}" if routing_context else message
+
+        if hit := await self._route_cache_exact_get(cache_text):
+            return await self._dispatch_tool_calls(hit, message, chat_history, session_id, confirmed)
+        if hit := await self._route_cache_semantic_get(cache_text):
+            return await self._dispatch_tool_calls(hit, message, chat_history, session_id, confirmed)
+
+        tools = self._build_module_tools_schema()
+        if not tools:
+            return await self._fallback_to_react_loop(message, chat_history, session_id, confirmed)
+
+        llm = get_llm()
+        system_msg = SystemMessage(
+            content=(
+                SYSTEM_PROMPT
+                + "\n\n"
+                + "ROUTING-KONTEXT: Nutze den aktuellen Gesprächsverlauf für Folgefragen. "
+                + "Wenn die neue Nachricht kein neues Ziel nennt, route auf dasselbe Modul/Thema wie die letzte relevante Antwort."
+                + "\n\n"
+                + (await self._dynamic_prompt_appendix())
+            )
+        )
+        messages = [system_msg]
+        if routing_context:
+            messages.append(SystemMessage(content=f"AKTUELLER GESPRÄCHSKONTEXT:\n{routing_context}"))
+        messages.append(HumanMessage(content=message))
+
+        try:
+            llm_kwargs: dict[str, Any] = {"tools": tools}
+            if tool_choice in {"auto", "required"}:
+                llm_kwargs["tool_choice"] = tool_choice
+            response: AIMessage = await llm.ainvoke(
+                messages,
+                **llm_kwargs,
+            )
+        except Exception as exc:
+            logger.warning("Function Calling LLM call failed: %s — falling back to ReAct", exc)
+            return await self._fallback_to_react_loop(message, chat_history, session_id, confirmed)
+
+        tool_calls = self._extract_tool_calls(response)
+        if not tool_calls:
+            text = getattr(response, "content", "") or ""
+            return str(text) if text else _t("Keine Antwort.", "No response."), None, False
+
+        await self._route_cache_exact_set(cache_text, tool_calls)
+        await self._route_cache_semantic_set(cache_text, tool_calls)
+
+        return await self._dispatch_tool_calls(tool_calls, message, chat_history, session_id, confirmed)
+
+    async def _smoke_test_function_calling(self) -> dict:
+        """Testet ob das aktuelle LLM Function Calling unterstützt."""
+        try:
+            from langchain_core.messages import HumanMessage, SystemMessage
+
+            tools = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "ping",
+                        "description": "Test tool that responds with pong.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "text": {"type": "string", "description": "Text to echo back."}
+                            },
+                            "required": ["text"],
+                        },
+                    },
+                }
+            ]
+            llm = get_llm()
+            system_msg = SystemMessage(
+                content="You are a test assistant. Use the ping tool if the user says ping."
+            )
+            messages = [system_msg, HumanMessage(content="ping")]
+            _, tool_choice = await self._get_routing_mode()
+            llm_kwargs: dict[str, Any] = {"tools": tools}
+            if tool_choice in {"auto", "required"}:
+                llm_kwargs["tool_choice"] = tool_choice
+            response = await llm.ainvoke(messages, **llm_kwargs)
+            has_tool_call = hasattr(response, "tool_calls") and bool(response.tool_calls)
+            return {
+                "supported": has_tool_call,
+                "response_type": type(response).__name__,
+                "has_tool_calls": has_tool_call,
+            }
+        except Exception as exc:
+            return {
+                "supported": False,
+                "error": str(exc)[:200],
+                "recommendation": "Disable Function Calling and use Embedding routing",
+            }
+
+    async def _fallback_to_react_loop(
+        self,
+        message: str,
+        chat_history: list[dict] | None,
+        session_id: str,
+        confirmed: bool,
+    ) -> tuple[str, str | None, bool]:
+        """Fallback auf ReAct-Loop wenn Function Calling deaktiviert oder fehlschlägt."""
+        response, did_compact = await self.invoke(
+            message=message,
+            chat_history=chat_history,
+            session_id=session_id,
+            confirmed=confirmed,
+        )
+        return response, None, did_compact
 
     async def _dynamic_prompt_appendix(self) -> str:
         """Fügt eine Übersicht aller verfügbaren Module und konfigurierten Verbindungen an."""
@@ -553,93 +938,26 @@ class OrchestratorAgent(BaseAgent):
             {m: " ".join(kws) for m, kws in module_keywords.items()}
         )
         self._routing_dirty = False
-        self._semantic_resolver = None
         logger.info(
             "Routing-Map aktualisiert: %d Keywords → %d Module",
             len(self._routing_map),
             len(set(self._routing_map.values())),
         )
 
-    def _ensure_task_sketch_builder(self) -> DeterministicTaskSketchBuilder:
-        """Initialize or return the TaskSketchBuilder with current module metadata."""
-        if self._task_sketch_builder is None:
-            module_metadata = create_module_metadata_from_registry(self.registry)
-            self._task_sketch_builder = DeterministicTaskSketchBuilder(module_metadata)
-        return self._task_sketch_builder
+    def build_task_sketch(self, message: str, session_id: str = "", conversation_turn_id: str | None = None):
+        return None
 
-    def _ensure_semantic_resolver(self) -> SemanticResolver:
-        """Initialize or return the semantic resolver with current module metadata."""
-        if self._semantic_resolver is None:
-            self._semantic_resolver = SemanticResolver.from_registry(self.registry)
-        return self._semantic_resolver
+    def get_last_task_sketch(self):
+        return None
 
-    def build_task_sketch(
-        self,
-        message: str,
-        session_id: str = "",
-        conversation_turn_id: str | None = None,
-    ) -> TaskSketch:
-        """
-        Build deterministic TaskSketch from user message.
+    def resolve_evidence_semantics(self, message: str, task_sketch: Any):
+        return None
 
-        This provides structured pre-analysis for routing decisions
-        and observability without LLM calls.
-        """
-        builder = self._ensure_task_sketch_builder()
-        result = builder.build(
-            user_message=message,
-            session_id=session_id,
-            conversation_turn_id=conversation_turn_id,
-        )
-        self._last_task_sketch = result.sketch
+    def get_last_evidence_trace(self) -> None:
+        return None
 
-        # Log for observability
-        logger.debug(
-            "TaskSketch built in %.2fms: intent=%s, complexity=%s, risk=%s, modules=%s",
-            result.build_time_ms,
-            result.sketch.task.intent,
-            result.sketch.task.complexity,
-            result.sketch.risk.level,
-            [m.module for m in result.sketch.scope.candidate_modules_ranked],
-        )
-
-        return result.sketch
-
-    def get_last_task_sketch(self) -> TaskSketch | None:
-        """Return the last built TaskSketch for debugging/observability."""
-        return self._last_task_sketch
-
-    def resolve_evidence_semantics(
-        self,
-        message: str,
-        task_sketch: TaskSketch,
-    ) -> SemanticResolutionResult:
-        """Resolve semantic terms and module candidates before planner routing."""
-        resolver = self._ensure_semantic_resolver()
-        candidates = [m.module for m in task_sketch.scope.candidate_modules_ranked]
-        result = resolver.resolve(message, candidate_modules=candidates)
-        self._last_semantic_resolution = result
-        if result.escalation_required:
-            logger.info("Evidence Layer semantic escalation: %s", result.escalation_reason)
-        else:
-            logger.debug(
-                "Evidence Layer resolved semantics: modules=%s confidence=%.2f",
-                result.candidate_modules,
-                result.confidence,
-            )
-        return result
-
-    def get_last_evidence_trace(self) -> EvidenceTrace | None:
-        """Return the last EvidenceTrace for debugging/observability."""
-        return self._last_evidence_trace
-
-    def _should_show_user_evidence_trace(self, trace: EvidenceTrace) -> bool:
-        """Return whether an EvidenceTrace contains user-relevant validation details.
-
-        Only contradictions with meaningful confidence warrant user-facing output.
-        Escalations, unresolved terms, and background trace entries are internal only.
-        """
-        return bool(trace.constellation.contradictions) and trace.constellation.confidence > 0.3
+    def _should_show_user_evidence_trace(self, trace: Any) -> bool:
+        return False
 
     def _get_readonly_tools_for_module(self, module: str) -> list:
         from core.safeguard import _TOOL_READONLY
@@ -1135,7 +1453,7 @@ ANTWORTE NUR MIT JSON, keine Erklärungen davor oder danach:
         pool = get_agent_pool()
 
         # Prüfen ob Agent mit gleichem Namen bereits existiert
-        existing = pool._meta.get(name.lower().replace(" ", "-"))
+        existing = [a for a in pool.list_agents() if a.get("name", "").lower().replace(" ", "-") == name.lower().replace(" ", "-")]
         if existing:
             # Füge Zahl hinzu um Eindeutigkeit zu garantieren
             import time
@@ -1383,8 +1701,8 @@ JSON-SCHEMA:
         session_id: str,
         confirmed: bool,
         allowed_modules: list[str] | None = None,
-        task_sketch: "TaskSketch | None" = None,
-        semantic_resolution: SemanticResolutionResult | None = None,
+        task_sketch: Any = None,
+        semantic_resolution: Any = None,
     ) -> tuple[str, bool]:
         """Tier-4-Pipeline: Deterministischer Plan → optionaler LLM-Refinement → PipelineEngine.
 
@@ -1684,25 +2002,7 @@ JSON-SCHEMA:
                 en=f"Pipeline failed: {pipeline_result.error}",
             ), False
 
-        constellation = self._constellation_validator.validate_pipeline_result(
-            pipeline_result,
-            resolutions=semantic_resolution.resolutions if semantic_resolution else [],
-            skip_modules=_UTILITY_MODULES,
-        )
-        self._last_evidence_trace = build_evidence_trace(
-            session_id=session_id,
-            turn_id=pipeline_result.pipeline_id,
-            resolutions=semantic_resolution.resolutions if semantic_resolution else [],
-            constellation=constellation,
-            escalation_reason=semantic_resolution.escalation_reason if semantic_resolution else None,
-        )
-        _et = asyncio.create_task(persist_evidence_trace(self._last_evidence_trace))
-        _et.add_done_callback(_log_background_task_exception)
-
-        trace = self._last_evidence_trace
-        show_trace = not trace.ready_for_synthesis
-        evidence_md = f"\n\n{trace.to_markdown()}" if show_trace else ""
-        return f"{pipeline_result.to_markdown()}{evidence_md}", False
+        return pipeline_result.to_markdown(), False
 
     async def resume_tool_execution(self, session_id: str) -> tuple[str, bool]:
         """
@@ -1746,7 +2046,8 @@ JSON-SCHEMA:
                     from core.agent_pool import get_agent_pool
 
                     pool = get_agent_pool()
-                    agent = pool.get_agent_by_id(agent_name)
+                    pool_agent, _ = pool.get_agent_by_id(agent_name)
+                    agent = pool_agent
                 except _ORCH_RECOVERABLE_EXCEPTIONS:
                     agent = None
 
@@ -2101,12 +2402,10 @@ JSON-SCHEMA:
         force_module: str | None = None,
     ) -> tuple[str, str | None, bool]:
         """
-        3-Tier-Routing (Reihenfolge: 4 → 2 → 1):
-        - Tier 4: Compound-Erkennung oder explizit sequentielle Multi-Modul-Anfrage
-                  → LLM-Planner → validierter JSON-Plan → run_pipeline.
-        - Tier 2: Keyword-Fast-Path → genau ein Modul eindeutig erkannt → direkt delegieren.
-        - Tier 1: Orchestrator-ReAct-Loop → LLM entscheidet: call_module_agent,
-          run_pipeline, create_custom_agent, generate_image oder direkte Antwort.
+        LLM-Native Function Calling Routing (primär) mit 4-Tier-Fallback.
+
+        Primärpfad: LLM mit Tool-Schema → tool_use-Blöcke → Dispatch.
+        Fallback: 4-Tier-Routing (Keyword + Embedding + ReAct).
 
         Returns:
             tuple[str, str | None, bool]: (Antwort, Modul oder None, did_compact)
@@ -2119,20 +2418,12 @@ JSON-SCHEMA:
             _t(
                 de="Analysiere deine Anfrage…",
                 en="Analyzing your request…",
-                fr="Analyse de votre demande…",
-                es="Analizando tu solicitud…",
-                it="Analizzando la tua richiesta…",
-                nl="Je verzoek analyseren…",
-                pl="Analizowanie Twojego żądania…",
-                pt="Analisando sua solicitação…",
-                ja="リクエストを分析中…",
-                zh="正在分析您的请求…",
             ),
         )
 
         self._refresh_routing_map()
 
-        # ── Direktes Modul-Routing (force_module) ────────────────────────────
+        # ── Deterministische Fast-Paths (kein LLM-Routing nötig) ────────────
         if force_module:
             self._last_tier_used = 2
             return await self._route_forced_target(
@@ -2143,181 +2434,54 @@ JSON-SCHEMA:
                 confirmed=confirmed,
             )
 
-        # ── Explizite Agent-Erstellung: deterministischer Create-Fast-Path ──
-        # Verhindert "nur Anleitung", wenn der User klar "Agent erstellen" verlangt.
         if self._wants_agent_creation(message):
-            logger.info("Explizite Agent-Erstellungs-Intention erkannt → Auto-Create-Fast-Path.")
+            logger.info("Explizite Agent-Erstellungs-Intention → Auto-Create-Fast-Path.")
             response, did_compact = await self._auto_create_custom_agent(message, session_id)
             self._last_tier_used = 1
             return response, "orchestrator", did_compact
 
-        # ── Explizite Workflow-Erstellung: deterministischer Create-Fast-Path ─
-        # Verhindert "nur Anleitung", wenn der User klar "Workflow erstellen" verlangt.
         if self._wants_workflow_creation(message):
-            logger.info("Explizite Workflow-Erstellungs-Intention erkannt → Auto-Create-Fast-Path.")
+            logger.info("Explizite Workflow-Erstellungs-Intention → Auto-Create-Fast-Path.")
             response, did_compact = await self._auto_create_workflow(message, session_id)
             self._last_tier_used = 1
             return response, "orchestrator", did_compact
 
-        # ── Deterministic Task Pre-structuring ──────────────────────────────
-        # Build TaskSketch for structured routing guidance and observability
-        task_sketch = self.build_task_sketch(message, session_id)
-        semantic_resolution = self.resolve_evidence_semantics(message, task_sketch)
-        candidate_modules = [m.module for m in task_sketch.scope.candidate_modules_ranked]
-        for module in semantic_resolution.candidate_modules:
-            if module not in candidate_modules:
-                candidate_modules.append(module)
-        allow_all_modules = (
-            task_sketch.uncertainty.ambiguous
-            and task_sketch.constraints.execution_mode == "planner_decides"
-        )
-        allowed_modules = None if allow_all_modules else candidate_modules
-        preferred_tier: int | None = None
-        preferred_target: str | None = None
-
-        cfg = await self._load_routing_config(session_id)
-        cfg = await self._proactive_routing_adjust(session_id, message, chat_history, cfg)
-
-        # ── Deterministischer WebSearch → DataViz Fast-Path ─────────────────
-        msg_lower = message.lower()
-        web_terms = ("websuche", "web search", "searxng")
-        viz_terms = ("diagramm", "diagram", "chart", "dataviz", "plot")
-        if any(t in msg_lower for t in web_terms) and any(t in msg_lower for t in viz_terms):
-            logger.info("Fast-Path: web_search → dataviz Pipeline erkannt.")
-            steps = [
-                {
-                    "module": "web_search",
-                    "task": f"Führe eine Websuche für folgende Anfrage durch und gib strukturierte Daten zurück:\n{message}",
-                },
-                {
-                    "module": "dataviz",
-                    "task": (
-                        "Erstelle ein Diagramm aus den Web-Suchergebnissen. "
-                        "Nutze zuerst analyze_data_for_chart, dann create_line_chart oder create_bar_chart. "
-                        "Gib ein data:image/png;base64,... zurück."
-                    ),
-                },
-            ]
-            result = await run_pipeline.ainvoke({"steps": steps})
-            self._last_tier_used = 4
-            return str(result), None, False
-
-        # ── TaskSketch Routing Hints ─────────────────────────────────────────
-        if task_sketch.routing_hints.should_avoid_direct_answer:
-            if (
-                task_sketch.routing_hints.preferred_worker_type in ("planner", "workflow")
-                and len(candidate_modules) > 1
-            ):
-                preferred_tier = 4
-            elif candidate_modules:
-                preferred_tier = 2
-                preferred_target = candidate_modules[0]
-
-        tier, target_module, routing_confidence = self._classify_tier(message, chat_history, cfg)
-        if preferred_tier is not None:
-            tier = preferred_tier
-            if preferred_target:
-                target_module = preferred_target
-        if (
-            allowed_modules
-            and target_module
-            and target_module not in allowed_modules
-            and candidate_modules
-        ):
-            # Enforce TaskSketch candidate modules for routing.
-            tier = 2 if len(candidate_modules) == 1 else 4
-            target_module = candidate_modules[0] if tier == 2 else None
-        # ── Embedding-Tie-Breaker (R11) ───────────────────────────────────
-        if tier == 1 and routing_confidence is None and preferred_tier is None:
-            if self._routing_embedding_enabled:
-                routing_message_stripped = self._router.strip_bot_context(message)
-                candidate_scores = self._router.get_scores(routing_message_stripped)
-                if len(candidate_scores) >= 2:
-                    embed_result = await self._embedding_router.arank(
-                        message, list(candidate_scores.keys())
-                    )
-                    if embed_result is not None:
-                        target_module, routing_confidence = embed_result
-                        tier = 2
-                        logger.info(
-                            "Embedding-Tie-Breaker: %s (conf=%.2f) für: %s…",
-                            target_module,
-                            routing_confidence,
-                            message[:60],
-                        )
-
-        self._last_tier_used = tier
-        await self._update_session_stats(session_id, tier, target_module)
-        logger.info("Routing-Tier %d gewählt für: %s…", tier, message[:80])
-
-        # ── Tier 4: Multi-Modul-Pipeline-Planner ─────────────────────────
-        if tier == 4:
-            response, did_compact = await self._plan_and_execute_pipeline(
-                message=message,
-                chat_history=chat_history,
-                session_id=session_id,
-                confirmed=confirmed,
-                allowed_modules=allowed_modules,
-                task_sketch=task_sketch,
-                semantic_resolution=semantic_resolution,
-            )
-            self._last_routing_confidence = routing_confidence
-            return response, None, did_compact
-
-        # ── Tier 2: Keyword-Fast-Path direkt zum Modul-Agent ─────────────
-        if tier == 2 and target_module:
-            tier2_result = await self._route_tier2_module(
-                target_module,
+        # ── LLM-Native Function Calling Routing (primär) ────────────────────
+        function_calling_enabled, _ = await self._get_routing_mode()
+        if function_calling_enabled:
+            return await self._llm_route_with_function_calling(
                 message=message,
                 chat_history=chat_history,
                 session_id=session_id,
                 confirmed=confirmed,
             )
-            if tier2_result is not None:
-                response, module_used, did_compact = tier2_result
-                constellation = self._constellation_validator.validate(
-                    [],
-                    resolutions=semantic_resolution.resolutions,
-                )
-                self._last_evidence_trace = build_evidence_trace(
-                    session_id=session_id,
-                    turn_id="tier2",
-                    resolutions=semantic_resolution.resolutions,
-                    constellation=constellation,
-                    escalation_reason=semantic_resolution.escalation_reason,
-                )
-                _et = asyncio.create_task(persist_evidence_trace(self._last_evidence_trace))
-                _et.add_done_callback(_log_background_task_exception)
-                if self._should_show_user_evidence_trace(self._last_evidence_trace):
-                    response = f"{response}\n\n{self._last_evidence_trace.to_markdown()}"
-                self._last_routing_confidence = routing_confidence
-                return response, module_used, did_compact
-        # ── Tier 1: Orchestrator-ReAct-Loop ─────────────────────────────
-        # LLM entscheidet: call_module_agent, run_pipeline, create_custom_agent oder direkte Antwort.
-        logger.info("Tier 1: Orchestrator-ReAct-Loop für: %s…", message[:80])
-        response, did_compact = await self.invoke(
+
+        # ── Fallback: 4-Tier-Routing (Keyword + Embedding + ReAct) ──────────
+        return await self._route_legacy_tiered(
             message=message,
             chat_history=chat_history,
             session_id=session_id,
             confirmed=confirmed,
         )
-        constellation = self._constellation_validator.validate(
-            [],
-            resolutions=semantic_resolution.resolutions,
-        )
-        self._last_evidence_trace = build_evidence_trace(
+
+    async def _route_legacy_tiered(
+        self,
+        message: str,
+        chat_history: list[dict] | None,
+        session_id: str,
+        confirmed: bool,
+    ) -> tuple[str, str | None, bool]:
+        """Legacy-Fallback wenn Function Calling deaktiviert ist.
+
+        Die alten Evidence-/Prestructure-Komponenten wurden entfernt; der
+        verbleibende robuste Fallback ist die bestehende ReAct-Schleife.
+        """
+        return await self._fallback_to_react_loop(
+            message=message,
+            chat_history=chat_history,
             session_id=session_id,
-            turn_id="tier1",
-            resolutions=semantic_resolution.resolutions,
-            constellation=constellation,
-            escalation_reason=semantic_resolution.escalation_reason,
+            confirmed=confirmed,
         )
-        _et = asyncio.create_task(persist_evidence_trace(self._last_evidence_trace))
-        _et.add_done_callback(_log_background_task_exception)
-        if self._should_show_user_evidence_trace(self._last_evidence_trace):
-            response = f"{response}\n\n{self._last_evidence_trace.to_markdown()}"
-        self._last_routing_confidence = routing_confidence
-        return response, None, did_compact
 
 
 # ── Globaler Singleton (gesetzt von main.py) ─────────────────────────────────

@@ -25,7 +25,10 @@ async def check_confluence_health() -> dict:
 module_manifest = ModuleManifest(
     name="confluence",
     display_name="Confluence",
-    description="Atlassian Confluence Wiki – Spaces, Pages, Blog Posts, Labels und Suche.",
+    description=(
+        "Atlassian Confluence wiki: spaces, pages, blog posts, articles, "
+        "labels, documentation, full-text search."
+    ),
     version="1.0.1",
     author="Ninko Team",
     enabled_by_default=False,

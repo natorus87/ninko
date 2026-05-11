@@ -81,7 +81,10 @@ async def check_lenovo_xclarity_health() -> dict:
 module_manifest = ModuleManifest(
     name="lenovo_xclarity",
     display_name="Lenovo XClarity",
-    description="Lenovo XClarity Administrator – ThinkSystem/ThinkBlade Server Management, Monitoring, and Firmware Updates.",
+    description=(
+        "Lenovo XClarity Administrator: ThinkSystem and ThinkBlade server "
+        "management, BMC, monitoring, firmware updates."
+    ),
     version="1.0.1",
     author="Ninko",
     enabled_by_default=False,

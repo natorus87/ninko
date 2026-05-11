@@ -3525,7 +3525,7 @@ ${messagesHtml}
         document.getElementById(`settings-panel-${targetTab}`)?.classList.add('active');
 
         // Load content when switching tabs
-        if (targetTab === 'llm') { this.loadLlmSettings(); this.loadLlmProviders(); this.loadEmbedModel(); }
+        if (targetTab === 'llm') { this.loadLlmSettings(); this.loadLlmProviders(); this.loadEmbedModel(); this.loadRoutingMode(); }
         if (targetTab === 'modules') { this.loadModulesSettings(); this.loadMarketplaceConfig(); }
         if (targetTab === 'skills') { this.loadSettingsSkillsList(); }
         if (targetTab === 'system') this.loadBrandingForm();
@@ -7075,6 +7075,66 @@ ${messagesHtml}
         const backend = document.getElementById('embed-backend')?.value;
         const row = document.getElementById('embed-api-key-row');
         if (row) row.style.display = (backend === 'openai_compatible' || backend === 'litellm') ? '' : 'none';
+    },
+
+    async loadRoutingMode() {
+        try {
+            const res = await fetch('/api/settings/routing/mode');
+            if (!res.ok) return;
+            const data = await res.json();
+            const cb = document.getElementById('fn-call-enabled');
+            if (cb) cb.checked = data.function_calling_enabled;
+            const tcRow = document.getElementById('fn-call-tool-choice-row');
+            if (tcRow) tcRow.style.display = data.function_calling_enabled ? '' : 'none';
+            const tcEl = document.getElementById('fn-call-tool-choice');
+            if (tcEl && data.tool_choice) tcEl.value = data.tool_choice;
+        } catch { }
+    },
+
+    toggleFnCall() {
+        const cb = document.getElementById('fn-call-enabled');
+        const tcRow = document.getElementById('fn-call-tool-choice-row');
+        if (tcRow) tcRow.style.display = cb?.checked ? '' : 'none';
+    },
+
+    async testFnCall() {
+        const resultEl = document.getElementById('fn-call-test-result');
+        if (resultEl) resultEl.textContent = 'Teste…';
+        try {
+            const res = await fetch('/api/settings/routing/mode/smoke-test', { method: 'POST' });
+            const data = await res.json();
+            if (resultEl) {
+                if (data.supported) {
+                    resultEl.innerHTML = '<span style="color:var(--success-color,#22c55e)">✓ Function Calling wird unterstützt</span>';
+                } else {
+                    resultEl.innerHTML = `<span style="color:var(--error-color)">✗ Nicht unterstützt: ${this._escapeHtml(data.error || data.recommendation || 'Unbekannt')}</span>`;
+                }
+            }
+        } catch (e) {
+            if (resultEl) resultEl.textContent = 'Fehler: ' + e.message;
+        }
+    },
+
+    async saveRoutingMode() {
+        const statusEl = document.getElementById('fn-call-status');
+        const enabled = document.getElementById('fn-call-enabled')?.checked ?? true;
+        const toolChoice = document.getElementById('fn-call-tool-choice')?.value || 'auto';
+        if (statusEl) statusEl.textContent = 'Speichere…';
+        try {
+            const res = await fetch('/api/settings/routing/mode', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ function_calling_enabled: enabled, tool_choice: toolChoice }),
+            });
+            if (res.ok) {
+                if (statusEl) statusEl.textContent = 'Gespeichert';
+                showNotification('Routing-Modus gespeichert', 'success');
+            } else {
+                if (statusEl) statusEl.textContent = 'Fehler';
+            }
+        } catch {
+            if (statusEl) statusEl.textContent = 'Verbindungsfehler';
+        }
     },
 
     async saveEmbedProvider() {

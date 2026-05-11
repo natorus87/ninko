@@ -89,7 +89,10 @@ async def _get_token(tenant_id: str, client_id: str, client_secret: str) -> str:
 module_manifest = ModuleManifest(
     name="microsoft_intune",
     display_name="Microsoft Intune",
-    description="Microsoft Intune MDM – Mobile Device Management, Policies, Apps, and Compliance.",
+    description=(
+        "Microsoft Intune / MEM (Endpoint Manager): mobile device management (MDM), "
+        "policies, apps, compliance, device management for endpoints."
+    ),
     version="1.0.1",
     author="Ninko",
     enabled_by_default=False,
