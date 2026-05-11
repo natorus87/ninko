@@ -31,12 +31,15 @@ module_manifest = ModuleManifest(
     name="kubernetes",
     display_name="Kubernetes",
     description=(
-        "Kubernetes / k8s cluster management: pods, deployments, statefulsets, "
-        "services, ingress, configmaps, secrets, PVCs, volumes, namespaces, nodes, "
-        "helm releases. View logs, restart and scale workloads, diagnose "
-        "CrashLoopBackOff, evicted pods, and kube-system issues."
+        "Kubernetes / k8s cluster management: cluster-wide queries across all namespaces. "
+        "Workloads (Deployments, StatefulSets, DaemonSets, Jobs, CronJobs, ReplicaSets), "
+        "Pods (list, describe, logs, restart), Nodes (list, describe, top), "
+        "Services, Ingresses, Endpoints, NetworkPolicies, ConfigMaps, Secrets (metadata only), "
+        "PVCs, PersistentVolumes, StorageClasses, HPAs, Events. "
+        "Create/apply via YAML, patch deployments, scale, rollout restart. Metrics via metrics-server. "
+        "Diagnose CrashLoopBackOff, evicted pods, kube-system issues."
     ),
-    version="1.2.2",
+    version="1.3.0",
     author="Ninko Team",
     enabled_by_default=True,
     env_prefix="K8S_",
@@ -46,7 +49,9 @@ module_manifest = ModuleManifest(
         "pod",
         "pods",
         "deployment",
+        "deployments",
         "namespace",
+        "namespaces",
         "cluster",
         "kubectl",
         "neustart",
@@ -54,6 +59,7 @@ module_manifest = ModuleManifest(
         "replicas",
         "ingress",
         "service",
+        "services",
         "kubernetes",
         "k8s",
         "pod container",
@@ -61,14 +67,39 @@ module_manifest = ModuleManifest(
         "evicted",
         "logs",
         "log",
+        "node",
         "nodes",
         "configmap",
+        "configmaps",
         "secret",
+        "secrets",
         "volume",
+        "volumes",
         "pvc",
+        "pvcs",
+        "pv",
+        "persistentvolume",
+        "storageclass",
         "helm",
         "kube-system",
         "statefulset",
+        "statefulsets",
+        "daemonset",
+        "daemonsets",
+        "replicaset",
+        "replicasets",
+        "job",
+        "jobs",
+        "cronjob",
+        "cronjobs",
+        "hpa",
+        "autoscaler",
+        "endpoints",
+        "networkpolicy",
+        "events",
+        "describe",
+        "top",
+        "metrics",
     ],
     api_prefix="/api/k8s",
     dashboard_tab={
