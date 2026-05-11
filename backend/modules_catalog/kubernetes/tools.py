@@ -164,11 +164,15 @@ async def list_namespaces(connection_id: str = "") -> list[dict]:
 
 @tool
 async def get_all_pods(
-    namespace: str = "default", connection_id: str = ""
+    namespace: str = "", connection_id: str = ""
 ) -> list[dict]:
-    """Lists all pods in a namespace."""
+    """Lists pods. Empty namespace returns pods from ALL namespaces (cluster-wide)."""
     v1, _, _ = await _get_k8s_client(connection_id)
-    pods = v1.list_namespaced_pod(namespace=namespace)
+    pods = (
+        v1.list_pod_for_all_namespaces()
+        if not namespace
+        else v1.list_namespaced_pod(namespace=namespace)
+    )
 
     result = []
     for p in pods.items:
@@ -395,12 +399,16 @@ async def get_deployment_status(
 
 @tool
 async def get_recent_events(
-    namespace: str = "default", last_minutes: int = 30, connection_id: str = ""
+    namespace: str = "", last_minutes: int = 30, connection_id: str = ""
 ) -> list[dict]:
-    """Returns the recent Kubernetes events of a namespace."""
+    """Returns recent Kubernetes events. Empty namespace returns events from ALL namespaces."""
     v1, _, _ = await _get_k8s_client(connection_id)
 
-    events = v1.list_namespaced_event(namespace=namespace)
+    events = (
+        v1.list_event_for_all_namespaces()
+        if not namespace
+        else v1.list_namespaced_event(namespace=namespace)
+    )
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=last_minutes)
 
     recent = []
@@ -425,12 +433,16 @@ async def get_recent_events(
 
 @tool
 async def list_services(
-    namespace: str = "default", connection_id: str = ""
+    namespace: str = "", connection_id: str = ""
 ) -> list[dict]:
-    """Lists all services in a namespace."""
+    """Lists services. Empty namespace returns services from ALL namespaces."""
     v1, _, _ = await _get_k8s_client(connection_id)
 
-    services = v1.list_namespaced_service(namespace=namespace)
+    services = (
+        v1.list_service_for_all_namespaces()
+        if not namespace
+        else v1.list_namespaced_service(namespace=namespace)
+    )
     return [
         {
             "name": svc.metadata.name,
@@ -449,12 +461,16 @@ async def list_services(
 
 @tool
 async def list_ingresses(
-    namespace: str = "default", connection_id: str = ""
+    namespace: str = "", connection_id: str = ""
 ) -> list[dict]:
-    """Lists all ingresses in a namespace."""
+    """Lists ingresses. Empty namespace returns ingresses from ALL namespaces."""
     _, _, net_v1 = await _get_k8s_client(connection_id)
 
-    ingresses = net_v1.list_namespaced_ingress(namespace=namespace)
+    ingresses = (
+        net_v1.list_ingress_for_all_namespaces()
+        if not namespace
+        else net_v1.list_namespaced_ingress(namespace=namespace)
+    )
     return [
         {
             "name": ing.metadata.name,
@@ -467,11 +483,15 @@ async def list_ingresses(
 
 
 @tool
-async def list_pvcs(namespace: str = "default", connection_id: str = "") -> list[dict]:
-    """Lists all PersistentVolumeClaims in a namespace."""
+async def list_pvcs(namespace: str = "", connection_id: str = "") -> list[dict]:
+    """Lists PersistentVolumeClaims. Empty namespace returns PVCs from ALL namespaces."""
     v1, _, _ = await _get_k8s_client(connection_id)
 
-    pvcs = v1.list_namespaced_persistent_volume_claim(namespace=namespace)
+    pvcs = (
+        v1.list_persistent_volume_claim_for_all_namespaces()
+        if not namespace
+        else v1.list_namespaced_persistent_volume_claim(namespace=namespace)
+    )
     return [
         {
             "name": pvc.metadata.name,
@@ -488,11 +508,15 @@ async def list_pvcs(namespace: str = "default", connection_id: str = "") -> list
 
 @tool
 async def list_deployments(
-    namespace: str = "default", connection_id: str = ""
+    namespace: str = "", connection_id: str = ""
 ) -> list[dict]:
-    """Lists all Deployments in a namespace with replica counts and image info."""
+    """Lists Deployments. Empty namespace returns deployments from ALL namespaces."""
     _, apps_v1, _ = await _get_k8s_client(connection_id)
-    deps = apps_v1.list_namespaced_deployment(namespace=namespace)
+    deps = (
+        apps_v1.list_deployment_for_all_namespaces()
+        if not namespace
+        else apps_v1.list_namespaced_deployment(namespace=namespace)
+    )
     return [
         {
             "name": d.metadata.name,
@@ -917,3 +941,634 @@ async def create_configmap(
             "status": "error",
             "detail": f"{e.reason} ({e.status})",
         }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Nodes (cluster-scoped)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _node_roles(node) -> list[str]:
+    labels = node.metadata.labels or {}
+    roles = [
+        k.split("/", 1)[1]
+        for k in labels
+        if k.startswith("node-role.kubernetes.io/")
+    ]
+    return roles or ["<none>"]
+
+
+def _node_ready(node) -> str:
+    for cond in node.status.conditions or []:
+        if cond.type == "Ready":
+            return "Ready" if cond.status == "True" else f"NotReady ({cond.reason})"
+    return "Unknown"
+
+
+@tool
+async def list_nodes(connection_id: str = "") -> list[dict]:
+    """Lists all cluster nodes with status, roles, version and age."""
+    v1, _, _ = await _get_k8s_client(connection_id)
+    nodes = v1.list_node()
+    return [
+        {
+            "name": n.metadata.name,
+            "status": _node_ready(n),
+            "roles": _node_roles(n),
+            "version": (n.status.node_info.kubelet_version if n.status.node_info else ""),
+            "os_image": (n.status.node_info.os_image if n.status.node_info else ""),
+            "kernel": (n.status.node_info.kernel_version if n.status.node_info else ""),
+            "container_runtime": (
+                n.status.node_info.container_runtime_version
+                if n.status.node_info
+                else ""
+            ),
+            "internal_ip": next(
+                (
+                    a.address
+                    for a in (n.status.addresses or [])
+                    if a.type == "InternalIP"
+                ),
+                "",
+            ),
+            "age": _pod_age(n.metadata.creation_timestamp),
+        }
+        for n in nodes.items
+    ]
+
+
+@tool
+async def describe_node(name: str, connection_id: str = "") -> dict:
+    """Returns detailed node info: capacity, allocatable, conditions, taints, addresses."""
+    v1, _, _ = await _get_k8s_client(connection_id)
+    try:
+        n = v1.read_node(name=name)
+    except client.ApiException as e:
+        return {"name": name, "error": f"{e.reason} ({e.status})"}
+
+    return {
+        "name": n.metadata.name,
+        "status": _node_ready(n),
+        "roles": _node_roles(n),
+        "labels": dict(n.metadata.labels or {}),
+        "annotations": dict(n.metadata.annotations or {}),
+        "age": _pod_age(n.metadata.creation_timestamp),
+        "node_info": {
+            "kubelet_version": n.status.node_info.kubelet_version,
+            "os_image": n.status.node_info.os_image,
+            "kernel_version": n.status.node_info.kernel_version,
+            "container_runtime": n.status.node_info.container_runtime_version,
+            "architecture": n.status.node_info.architecture,
+        }
+        if n.status.node_info
+        else {},
+        "capacity": dict(n.status.capacity or {}),
+        "allocatable": dict(n.status.allocatable or {}),
+        "addresses": [
+            {"type": a.type, "address": a.address} for a in (n.status.addresses or [])
+        ],
+        "conditions": [
+            {
+                "type": c.type,
+                "status": c.status,
+                "reason": c.reason or "",
+                "message": c.message or "",
+            }
+            for c in (n.status.conditions or [])
+        ],
+        "taints": [
+            {"key": t.key, "value": t.value, "effect": t.effect}
+            for t in (n.spec.taints or [])
+        ],
+        "unschedulable": bool(n.spec.unschedulable),
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Describe Pod (detailed)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@tool
+async def describe_pod(
+    namespace: str, name: str, connection_id: str = ""
+) -> dict:
+    """Returns detailed pod info: containers, conditions, recent events, init containers."""
+    v1, _, _ = await _get_k8s_client(connection_id)
+    try:
+        p = v1.read_namespaced_pod(name=name, namespace=namespace)
+    except client.ApiException as e:
+        return {"name": name, "namespace": namespace, "error": f"{e.reason} ({e.status})"}
+
+    def _container_state(cs) -> dict:
+        if cs.state and cs.state.running:
+            return {"state": "running", "started_at": str(cs.state.running.started_at or "")}
+        if cs.state and cs.state.waiting:
+            return {
+                "state": "waiting",
+                "reason": cs.state.waiting.reason or "",
+                "message": cs.state.waiting.message or "",
+            }
+        if cs.state and cs.state.terminated:
+            return {
+                "state": "terminated",
+                "reason": cs.state.terminated.reason or "",
+                "exit_code": cs.state.terminated.exit_code,
+                "message": cs.state.terminated.message or "",
+            }
+        return {"state": "unknown"}
+
+    containers = []
+    for c in p.spec.containers or []:
+        cs = next(
+            (s for s in (p.status.container_statuses or []) if s.name == c.name),
+            None,
+        )
+        containers.append(
+            {
+                "name": c.name,
+                "image": c.image,
+                "ready": cs.ready if cs else False,
+                "restarts": cs.restart_count if cs else 0,
+                "state": _container_state(cs) if cs else {"state": "pending"},
+                "ports": [
+                    f"{port.container_port}/{port.protocol or 'TCP'}"
+                    for port in (c.ports or [])
+                ],
+                "env": [
+                    {"name": e.name, "value": e.value}
+                    for e in (c.env or [])
+                    if e.value is not None
+                ],
+                "resources": {
+                    "requests": dict(c.resources.requests or {})
+                    if c.resources
+                    else {},
+                    "limits": dict(c.resources.limits or {}) if c.resources else {},
+                },
+            }
+        )
+
+    # Recent events involving this pod
+    events_raw = v1.list_namespaced_event(
+        namespace=namespace,
+        field_selector=f"involvedObject.name={name},involvedObject.kind=Pod",
+    )
+    events = sorted(
+        [
+            {
+                "type": ev.type,
+                "reason": ev.reason,
+                "message": ev.message,
+                "timestamp": (
+                    ev.last_timestamp or ev.event_time or ev.metadata.creation_timestamp
+                ).isoformat()
+                if (ev.last_timestamp or ev.event_time or ev.metadata.creation_timestamp)
+                else "",
+            }
+            for ev in events_raw.items
+        ],
+        key=lambda x: x["timestamp"],
+        reverse=True,
+    )[:20]
+
+    return {
+        "name": p.metadata.name,
+        "namespace": p.metadata.namespace,
+        "node": p.spec.node_name or "",
+        "status": p.status.phase,
+        "pod_ip": p.status.pod_ip or "",
+        "host_ip": p.status.host_ip or "",
+        "age": _pod_age(p.metadata.creation_timestamp),
+        "service_account": p.spec.service_account_name or "",
+        "qos_class": p.status.qos_class or "",
+        "labels": dict(p.metadata.labels or {}),
+        "annotations": dict(p.metadata.annotations or {}),
+        "containers": containers,
+        "init_containers": [
+            {"name": c.name, "image": c.image} for c in (p.spec.init_containers or [])
+        ],
+        "conditions": [
+            {
+                "type": c.type,
+                "status": c.status,
+                "reason": c.reason or "",
+                "message": c.message or "",
+            }
+            for c in (p.status.conditions or [])
+        ],
+        "owner": [
+            {"kind": o.kind, "name": o.name}
+            for o in (p.metadata.owner_references or [])
+        ],
+        "events": events,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Additional workload types
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@tool
+async def list_statefulsets(
+    namespace: str = "", connection_id: str = ""
+) -> list[dict]:
+    """Lists StatefulSets. Empty namespace returns StatefulSets from ALL namespaces."""
+    _, apps_v1, _ = await _get_k8s_client(connection_id)
+    sts = (
+        apps_v1.list_stateful_set_for_all_namespaces()
+        if not namespace
+        else apps_v1.list_namespaced_stateful_set(namespace=namespace)
+    )
+    return [
+        {
+            "name": s.metadata.name,
+            "namespace": s.metadata.namespace,
+            "ready": f"{s.status.ready_replicas or 0}/{s.spec.replicas}",
+            "service_name": s.spec.service_name or "",
+            "image": s.spec.template.spec.containers[0].image
+            if s.spec.template.spec.containers
+            else "",
+            "age": _pod_age(s.metadata.creation_timestamp),
+        }
+        for s in sts.items
+    ]
+
+
+@tool
+async def list_daemonsets(
+    namespace: str = "", connection_id: str = ""
+) -> list[dict]:
+    """Lists DaemonSets. Empty namespace returns DaemonSets from ALL namespaces."""
+    _, apps_v1, _ = await _get_k8s_client(connection_id)
+    ds = (
+        apps_v1.list_daemon_set_for_all_namespaces()
+        if not namespace
+        else apps_v1.list_namespaced_daemon_set(namespace=namespace)
+    )
+    return [
+        {
+            "name": d.metadata.name,
+            "namespace": d.metadata.namespace,
+            "desired": d.status.desired_number_scheduled or 0,
+            "current": d.status.current_number_scheduled or 0,
+            "ready": d.status.number_ready or 0,
+            "up_to_date": d.status.updated_number_scheduled or 0,
+            "available": d.status.number_available or 0,
+            "image": d.spec.template.spec.containers[0].image
+            if d.spec.template.spec.containers
+            else "",
+            "age": _pod_age(d.metadata.creation_timestamp),
+        }
+        for d in ds.items
+    ]
+
+
+@tool
+async def list_replicasets(
+    namespace: str = "", connection_id: str = ""
+) -> list[dict]:
+    """Lists ReplicaSets. Empty namespace returns ReplicaSets from ALL namespaces."""
+    _, apps_v1, _ = await _get_k8s_client(connection_id)
+    rs = (
+        apps_v1.list_replica_set_for_all_namespaces()
+        if not namespace
+        else apps_v1.list_namespaced_replica_set(namespace=namespace)
+    )
+    return [
+        {
+            "name": r.metadata.name,
+            "namespace": r.metadata.namespace,
+            "desired": r.spec.replicas or 0,
+            "current": r.status.replicas or 0,
+            "ready": r.status.ready_replicas or 0,
+            "owner": (
+                f"{r.metadata.owner_references[0].kind}/{r.metadata.owner_references[0].name}"
+                if r.metadata.owner_references
+                else ""
+            ),
+            "age": _pod_age(r.metadata.creation_timestamp),
+        }
+        for r in rs.items
+    ]
+
+
+@tool
+async def list_jobs(namespace: str = "", connection_id: str = "") -> list[dict]:
+    """Lists Jobs. Empty namespace returns Jobs from ALL namespaces."""
+    await _get_k8s_client(connection_id)
+    batch_v1 = client.BatchV1Api()
+    jobs = (
+        batch_v1.list_job_for_all_namespaces()
+        if not namespace
+        else batch_v1.list_namespaced_job(namespace=namespace)
+    )
+    return [
+        {
+            "name": j.metadata.name,
+            "namespace": j.metadata.namespace,
+            "completions": f"{j.status.succeeded or 0}/{j.spec.completions or 1}",
+            "active": j.status.active or 0,
+            "failed": j.status.failed or 0,
+            "duration": _pod_age(j.status.start_time) if j.status.start_time else "",
+            "age": _pod_age(j.metadata.creation_timestamp),
+        }
+        for j in jobs.items
+    ]
+
+
+@tool
+async def list_cronjobs(namespace: str = "", connection_id: str = "") -> list[dict]:
+    """Lists CronJobs. Empty namespace returns CronJobs from ALL namespaces."""
+    await _get_k8s_client(connection_id)
+    batch_v1 = client.BatchV1Api()
+    cjs = (
+        batch_v1.list_cron_job_for_all_namespaces()
+        if not namespace
+        else batch_v1.list_namespaced_cron_job(namespace=namespace)
+    )
+    return [
+        {
+            "name": c.metadata.name,
+            "namespace": c.metadata.namespace,
+            "schedule": c.spec.schedule,
+            "suspend": bool(c.spec.suspend),
+            "active": len(c.status.active or []),
+            "last_schedule": c.status.last_schedule_time.isoformat()
+            if c.status.last_schedule_time
+            else "",
+            "age": _pod_age(c.metadata.creation_timestamp),
+        }
+        for c in cjs.items
+    ]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Config and Secrets (metadata only — secret values never returned)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@tool
+async def list_configmaps(
+    namespace: str = "", connection_id: str = ""
+) -> list[dict]:
+    """Lists ConfigMaps (names and key counts). Empty namespace returns ALL namespaces."""
+    v1, _, _ = await _get_k8s_client(connection_id)
+    cms = (
+        v1.list_config_map_for_all_namespaces()
+        if not namespace
+        else v1.list_namespaced_config_map(namespace=namespace)
+    )
+    return [
+        {
+            "name": cm.metadata.name,
+            "namespace": cm.metadata.namespace,
+            "data_keys": list((cm.data or {}).keys()),
+            "binary_keys": list((cm.binary_data or {}).keys()),
+            "age": _pod_age(cm.metadata.creation_timestamp),
+        }
+        for cm in cms.items
+    ]
+
+
+@tool
+async def list_secrets(
+    namespace: str = "", connection_id: str = ""
+) -> list[dict]:
+    """Lists Secrets (METADATA ONLY — secret values are never returned). Empty namespace = ALL."""
+    v1, _, _ = await _get_k8s_client(connection_id)
+    secs = (
+        v1.list_secret_for_all_namespaces()
+        if not namespace
+        else v1.list_namespaced_secret(namespace=namespace)
+    )
+    return [
+        {
+            "name": s.metadata.name,
+            "namespace": s.metadata.namespace,
+            "type": s.type or "",
+            "data_keys": list((s.data or {}).keys()),
+            "age": _pod_age(s.metadata.creation_timestamp),
+        }
+        for s in secs.items
+    ]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Cluster-scoped storage
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@tool
+async def list_persistent_volumes(connection_id: str = "") -> list[dict]:
+    """Lists all PersistentVolumes (cluster-scoped)."""
+    v1, _, _ = await _get_k8s_client(connection_id)
+    pvs = v1.list_persistent_volume()
+    return [
+        {
+            "name": pv.metadata.name,
+            "capacity": (pv.spec.capacity.get("storage") if pv.spec.capacity else ""),
+            "access_modes": pv.spec.access_modes or [],
+            "reclaim_policy": pv.spec.persistent_volume_reclaim_policy or "",
+            "status": pv.status.phase,
+            "claim": (
+                f"{pv.spec.claim_ref.namespace}/{pv.spec.claim_ref.name}"
+                if pv.spec.claim_ref
+                else ""
+            ),
+            "storage_class": pv.spec.storage_class_name or "",
+            "age": _pod_age(pv.metadata.creation_timestamp),
+        }
+        for pv in pvs.items
+    ]
+
+
+@tool
+async def list_storage_classes(connection_id: str = "") -> list[dict]:
+    """Lists all StorageClasses (cluster-scoped)."""
+    await _get_k8s_client(connection_id)
+    storage_v1 = client.StorageV1Api()
+    scs = storage_v1.list_storage_class()
+    return [
+        {
+            "name": sc.metadata.name,
+            "provisioner": sc.provisioner,
+            "reclaim_policy": sc.reclaim_policy or "",
+            "volume_binding_mode": sc.volume_binding_mode or "",
+            "default": (sc.metadata.annotations or {}).get(
+                "storageclass.kubernetes.io/is-default-class", "false"
+            )
+            == "true",
+            "age": _pod_age(sc.metadata.creation_timestamp),
+        }
+        for sc in scs.items
+    ]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Networking
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@tool
+async def list_endpoints(
+    namespace: str = "", connection_id: str = ""
+) -> list[dict]:
+    """Lists Endpoints. Empty namespace returns Endpoints from ALL namespaces."""
+    v1, _, _ = await _get_k8s_client(connection_id)
+    eps = (
+        v1.list_endpoints_for_all_namespaces()
+        if not namespace
+        else v1.list_namespaced_endpoints(namespace=namespace)
+    )
+    return [
+        {
+            "name": ep.metadata.name,
+            "namespace": ep.metadata.namespace,
+            "endpoints": [
+                f"{addr.ip}:{port.port}"
+                for subset in (ep.subsets or [])
+                for addr in (subset.addresses or [])
+                for port in (subset.ports or [])
+            ]
+            or ["<none>"],
+            "age": _pod_age(ep.metadata.creation_timestamp),
+        }
+        for ep in eps.items
+    ]
+
+
+@tool
+async def list_network_policies(
+    namespace: str = "", connection_id: str = ""
+) -> list[dict]:
+    """Lists NetworkPolicies. Empty namespace returns NetworkPolicies from ALL namespaces."""
+    _, _, net_v1 = await _get_k8s_client(connection_id)
+    nps = (
+        net_v1.list_network_policy_for_all_namespaces()
+        if not namespace
+        else net_v1.list_namespaced_network_policy(namespace=namespace)
+    )
+    return [
+        {
+            "name": np.metadata.name,
+            "namespace": np.metadata.namespace,
+            "pod_selector": dict(np.spec.pod_selector.match_labels or {})
+            if np.spec.pod_selector
+            else {},
+            "policy_types": list(np.spec.policy_types or []),
+            "ingress_rules": len(np.spec.ingress or []),
+            "egress_rules": len(np.spec.egress or []),
+            "age": _pod_age(np.metadata.creation_timestamp),
+        }
+        for np in nps.items
+    ]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Autoscaling
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@tool
+async def list_hpas(namespace: str = "", connection_id: str = "") -> list[dict]:
+    """Lists HorizontalPodAutoscalers. Empty namespace returns HPAs from ALL namespaces."""
+    await _get_k8s_client(connection_id)
+    autoscaling_v2 = client.AutoscalingV2Api()
+    hpas = (
+        autoscaling_v2.list_horizontal_pod_autoscaler_for_all_namespaces()
+        if not namespace
+        else autoscaling_v2.list_namespaced_horizontal_pod_autoscaler(namespace=namespace)
+    )
+    return [
+        {
+            "name": h.metadata.name,
+            "namespace": h.metadata.namespace,
+            "reference": f"{h.spec.scale_target_ref.kind}/{h.spec.scale_target_ref.name}",
+            "min_replicas": h.spec.min_replicas or 0,
+            "max_replicas": h.spec.max_replicas,
+            "current_replicas": h.status.current_replicas or 0,
+            "desired_replicas": h.status.desired_replicas or 0,
+            "age": _pod_age(h.metadata.creation_timestamp),
+        }
+        for h in hpas.items
+    ]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Metrics (requires metrics-server)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@tool
+async def get_top_nodes(connection_id: str = "") -> list[dict]:
+    """Returns CPU/memory usage per node (requires metrics-server installed in cluster)."""
+    await _get_k8s_client(connection_id)
+    custom = client.CustomObjectsApi()
+    try:
+        data = custom.list_cluster_custom_object(
+            group="metrics.k8s.io", version="v1beta1", plural="nodes"
+        )
+    except client.ApiException as e:
+        return [
+            {
+                "error": f"Metrics API unavailable: {e.reason} ({e.status}). "
+                "Install metrics-server: kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml"
+            }
+        ]
+    return [
+        {
+            "name": item.get("metadata", {}).get("name", ""),
+            "cpu": item.get("usage", {}).get("cpu", ""),
+            "memory": item.get("usage", {}).get("memory", ""),
+            "timestamp": item.get("timestamp", ""),
+            "window": item.get("window", ""),
+        }
+        for item in data.get("items", [])
+    ]
+
+
+@tool
+async def get_top_pods(
+    namespace: str = "", connection_id: str = ""
+) -> list[dict]:
+    """Returns CPU/memory usage per pod (requires metrics-server). Empty namespace = ALL."""
+    await _get_k8s_client(connection_id)
+    custom = client.CustomObjectsApi()
+    try:
+        if namespace:
+            data = custom.list_namespaced_custom_object(
+                group="metrics.k8s.io",
+                version="v1beta1",
+                namespace=namespace,
+                plural="pods",
+            )
+        else:
+            data = custom.list_cluster_custom_object(
+                group="metrics.k8s.io", version="v1beta1", plural="pods"
+            )
+    except client.ApiException as e:
+        return [
+            {
+                "error": f"Metrics API unavailable: {e.reason} ({e.status}). "
+                "Install metrics-server in the cluster."
+            }
+        ]
+    return [
+        {
+            "name": item.get("metadata", {}).get("name", ""),
+            "namespace": item.get("metadata", {}).get("namespace", ""),
+            "containers": [
+                {
+                    "name": c.get("name", ""),
+                    "cpu": c.get("usage", {}).get("cpu", ""),
+                    "memory": c.get("usage", {}).get("memory", ""),
+                }
+                for c in item.get("containers", [])
+            ],
+            "timestamp": item.get("timestamp", ""),
+            "window": item.get("window", ""),
+        }
+        for item in data.get("items", [])
+    ]
