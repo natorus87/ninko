@@ -9,6 +9,28 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Kubernetes module v1.3.0** (`backend/modules_catalog/kubernetes/`): 17 neue Tools für vollständige Cluster-Inspektion — `list_nodes`, `describe_node`, `describe_pod`, `list_statefulsets`, `list_daemonsets`, `list_replicasets`, `list_jobs`, `list_cronjobs`, `list_configmaps`, `list_secrets` (metadata only), `list_persistent_volumes`, `list_storage_classes`, `list_endpoints`, `list_network_policies`, `list_hpas`, `get_top_nodes`, `get_top_pods`. Routing-Keywords erweitert um Node/Daemonset/Cronjob/HPA/Metrics-Begriffe.
+- **`KeywordRouter` compat shim** (`backend/agents/orchestrator.py`): Minimaler Keyword-Router ersetzt das entfernte `core/router.py` für Legacy-Telemetrie (`classify_tier`), Force-/Fallback-Helper und Tests. Primäres Routing bleibt LLM-Native Function Calling.
+
+### Changed
+
+- **Routing-Architektur vereinfacht**: 4-Tier-Routing-Modul (`core/router.py`, 408 LOC) entfernt. Primäres Routing erfolgt jetzt ausschließlich über LLM-Native Function Calling auf manifest-generierten Tool-Definitionen. Tier-Klassifikation existiert nur noch als Telemetrie über den Compat-`KeywordRouter`.
+- **Kubernetes list-Tools cluster-weit per Default**: `get_all_pods`, `list_deployments`, `list_services`, `list_ingresses`, `list_pvcs`, `get_recent_events` liefern bei leerem `namespace`-Parameter Ergebnisse über alle Namespaces statt nur `default`. Behebt Agent-Antworten der Form "kann keine globale Liste abfragen".
+- **README & backend/README**: 4-Tier-Routing-Beschreibung durch Function-Calling-Beschreibung ersetzt; Architektur-ASCII-Diagramm aktualisiert.
+- **Kubernetes-Modul-README**: Veraltete Tool-Liste (5 Einträge mit falschen Namen) durch vollständige Tabelle aller 39 Tools ersetzt, inkl. Sicherheitshinweise zu Secrets und Server-Side-Apply.
+
+### Removed
+
+- **Evidence Layer** (`backend/core/evidence/`): Komplettes Subsystem entfernt (`confidence`, `constellation_validator`, `evidence_trace`, `glossary_store`, `module_semantic_index`, `schemas`, `semantic_resolver`).
+- **Prestructure Layer** (`backend/core/prestructure/`): Komplettes Subsystem entfernt (`entity_extractor`, `intent_detector`, `module_ranker`, `normalizer`, `risk_assessor`, `routing_hints`, `schemas`, `task_sketch_builder`).
+- **Core Router** (`backend/core/router.py`): Ersetzt durch Function-Calling-Routing + `KeywordRouter`-Shim im Orchestrator.
+
+### Fixed
+
+- **Pydantic v2 import** (`backend/api/routes_settings.py`): `Literal` wird jetzt aus `typing` statt aus `pydantic` importiert (Pydantic v2 entfernt das Re-Export).
+
 ## [1.3.5] – 2026-05-10
 
 ### Added
