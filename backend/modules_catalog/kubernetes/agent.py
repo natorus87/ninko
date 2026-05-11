@@ -28,21 +28,48 @@ from .tools import (
     patch_deployment,
     patch_configmap,
     create_configmap,
+    list_nodes,
+    describe_node,
+    describe_pod,
+    list_statefulsets,
+    list_daemonsets,
+    list_replicasets,
+    list_jobs,
+    list_cronjobs,
+    list_configmaps,
+    list_secrets,
+    list_persistent_volumes,
+    list_storage_classes,
+    list_endpoints,
+    list_network_policies,
+    list_hpas,
+    get_top_nodes,
+    get_top_pods,
 )
 
 K8S_SYSTEM_PROMPT = _t(
     de="""Du bist der Kubernetes-Spezialist von Ninko.
 
 Deine Fähigkeiten:
-- Cluster-Status und Health-Monitoring
-- Pod-Management: Auflisten, Logs abrufen, Neustarts, Erstellen
-- Deployment-Management: Status, Skalierung, Rollout-Restarts, Erstellen
+- Cluster-Status und Health-Monitoring (get_cluster_status, list_nodes, describe_node)
+- Pod-Management: Auflisten (get_all_pods), Details (describe_pod), Logs (get_pod_logs), Neustart (restart_pod), Erstellen
+- Workloads: Deployments, StatefulSets, DaemonSets, ReplicaSets, Jobs, CronJobs (jeweils list_*)
+- Deployment-Management: Status, Skalierung, Rollout-Restarts, Erstellen, Patchen
+- Config & Secrets: list_configmaps, list_secrets (nur Metadaten, niemals Werte)
+- Storage: list_pvcs, list_persistent_volumes, list_storage_classes
+- Networking: list_services, list_ingresses, list_endpoints, list_network_policies
+- Autoscaling: list_hpas
+- Metriken: get_top_nodes, get_top_pods (benötigt metrics-server)
 - Ressourcen erstellen und anwenden: apply_manifest (YAML-String → create or update)
 - Ressourcen löschen: delete_resource (beliebiger Kind/Name)
 - YAML-Manifeste abrufen: get_resource_yaml
 - Namespace erstellen: create_namespace
-- Service-, Ingress- und PVC-Übersicht
-- Event-Analyse und Fehlerdiagnose
+- Event-Analyse und Fehlerdiagnose (get_recent_events, get_failing_pods)
+
+WICHTIG - Cluster-weite Abfragen:
+- ALLE list_*-Tools akzeptieren namespace="" für cluster-weite Ergebnisse (über alle Namespaces hinweg)
+- Standardmäßig (kein namespace übergeben) liefern die Tools cluster-weit — nutze das für Übersichts-Fragen
+- Nur bei expliziter Namespace-Frage einen Namespace übergeben
 
 WICHTIG - Tool-Ausführung:
 - DU MUSST die verfügbaren Tools AUFRUFEN um Aktionen auszuführen
@@ -70,15 +97,25 @@ Bei Fehlern:
     en="""You are Ninko's Kubernetes specialist.
 
 Your capabilities:
-- Cluster status and health monitoring
-- Pod management: list, retrieve logs, restart, create
-- Deployment management: status, scaling, rollout restarts, create
+- Cluster status and health monitoring (get_cluster_status, list_nodes, describe_node)
+- Pod management: list (get_all_pods), describe (describe_pod), logs (get_pod_logs), restart, create
+- Workloads: Deployments, StatefulSets, DaemonSets, ReplicaSets, Jobs, CronJobs (each list_*)
+- Deployment management: status, scaling, rollout restarts, create, patch
+- Config & Secrets: list_configmaps, list_secrets (metadata only — never values)
+- Storage: list_pvcs, list_persistent_volumes, list_storage_classes
+- Networking: list_services, list_ingresses, list_endpoints, list_network_policies
+- Autoscaling: list_hpas
+- Metrics: get_top_nodes, get_top_pods (requires metrics-server)
 - Create and apply resources: apply_manifest (YAML string → create or update)
 - Delete resources: delete_resource (any kind/name)
 - Retrieve YAML manifests: get_resource_yaml
 - Create namespaces: create_namespace
-- Service, Ingress and PVC overview
-- Event analysis and error diagnostics
+- Event analysis and error diagnostics (get_recent_events, get_failing_pods)
+
+IMPORTANT - Cluster-wide queries:
+- ALL list_* tools accept namespace="" for cluster-wide results (across all namespaces)
+- Default (no namespace) returns cluster-wide — use this for overview questions
+- Only pass a namespace when the user explicitly asks for one
 
 Output Format for Overviews (ALWAYS):
 - For lists (Pods, Services, Deployments, Nodes): ALWAYS use Markdown tables
@@ -123,8 +160,16 @@ class KubernetesAgent(BaseAgent):
             tools=[
                 get_cluster_status,
                 list_namespaces,
+                list_nodes,
+                describe_node,
                 list_deployments,
+                list_statefulsets,
+                list_daemonsets,
+                list_replicasets,
+                list_jobs,
+                list_cronjobs,
                 get_all_pods,
+                describe_pod,
                 get_failing_pods,
                 restart_pod,
                 get_pod_logs,
@@ -134,7 +179,16 @@ class KubernetesAgent(BaseAgent):
                 get_recent_events,
                 list_services,
                 list_ingresses,
+                list_endpoints,
+                list_network_policies,
                 list_pvcs,
+                list_persistent_volumes,
+                list_storage_classes,
+                list_configmaps,
+                list_secrets,
+                list_hpas,
+                get_top_nodes,
+                get_top_pods,
                 apply_manifest,
                 delete_resource,
                 get_resource_yaml,
