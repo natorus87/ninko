@@ -29,7 +29,7 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 - **Module Updates** – Check for updates directly from the UI; one-click update button when new versions available
 - **8 core modules** always available: `web_search`, `image_gen`, `codelab`, `dataviz`, `knowledge_graph`, `message_hub`, `network_analysis`, `scripting`
 - **39 catalog modules** installable on demand: Kubernetes, Proxmox, Checkmk, Pi-hole, Home Assistant, GitHub, GitLab, Cisco, MikroTik, Netgear, Ubiquiti, and more
-- **4-tier orchestrator routing** – Direct / Module Agent / Dynamic Agent / Typed Pipeline Engine with deterministic planning, confidence scoring, semantic tie-breaking, and Redis checkpoints
+- **LLM Function Calling routing** – Orchestrator routes via native function-calling on tool definitions generated from module manifests. Direct answers, single-module calls, dynamic-agent dispatch, and multi-step pipelines all coexist as tool choices. Typed Pipeline Engine with per-step retry and Redis checkpoints handles sequential / parallel multi-module workflows.
 - **Long-term memory** – ChromaDB-backed semantic memory across all sessions
 - **Local LLMs** – Ollama, LM Studio, or any OpenAI-compatible API (no cloud required)
 - **Workflow engine** – Visual DAG editor with parallel branches, retries, sub-workflows, and versioning
@@ -128,9 +128,10 @@ On first start, configure your LLM backend under **Settings → LLM Provider** (
                        │
 ┌──────────────────────▼───────────────────────────────┐
 │         Orchestrator Agent + SafeGuard               │
-│  Tier 1: Direct │ Tier 2: Module │ Tier 3: Dynamic  │
-│  Tier 4: PipelineEngine (typed, deterministic,       │
-│          per-step retry, Redis checkpoints)          │
+│  LLM Native Function Calling on manifest tool defs:  │
+│   • Direct answer    • Module agent call             │
+│   • Dynamic agent    • Pipeline (typed, multi-step,  │
+│     per-step retry, Redis checkpoints)               │
 └──────────────────────┬───────────────────────────────┘
                        │
 ┌──────────────────────▼───────────────────────────────┐
