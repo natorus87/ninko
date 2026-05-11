@@ -717,6 +717,74 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
             readonly=True,
             required_bins=("kubectl",),
         ),
+        # Nodes
+        ToolMetadata(
+            "list_nodes", "kubernetes", readonly=True, required_bins=("kubectl",)
+        ),
+        ToolMetadata(
+            "describe_node", "kubernetes", readonly=True, required_bins=("kubectl",)
+        ),
+        # Pod details
+        ToolMetadata(
+            "describe_pod", "kubernetes", readonly=True, required_bins=("kubectl",)
+        ),
+        # Workloads
+        ToolMetadata(
+            "list_statefulsets", "kubernetes", readonly=True, required_bins=("kubectl",)
+        ),
+        ToolMetadata(
+            "list_daemonsets", "kubernetes", readonly=True, required_bins=("kubectl",)
+        ),
+        ToolMetadata(
+            "list_replicasets", "kubernetes", readonly=True, required_bins=("kubectl",)
+        ),
+        ToolMetadata(
+            "list_jobs", "kubernetes", readonly=True, required_bins=("kubectl",)
+        ),
+        ToolMetadata(
+            "list_cronjobs", "kubernetes", readonly=True, required_bins=("kubectl",)
+        ),
+        # Config (metadata only)
+        ToolMetadata(
+            "list_configmaps", "kubernetes", readonly=True, required_bins=("kubectl",)
+        ),
+        ToolMetadata(
+            "list_secrets", "kubernetes", readonly=True, required_bins=("kubectl",)
+        ),
+        # Cluster-scoped storage
+        ToolMetadata(
+            "list_persistent_volumes",
+            "kubernetes",
+            readonly=True,
+            required_bins=("kubectl",),
+        ),
+        ToolMetadata(
+            "list_storage_classes",
+            "kubernetes",
+            readonly=True,
+            required_bins=("kubectl",),
+        ),
+        # Networking
+        ToolMetadata(
+            "list_endpoints", "kubernetes", readonly=True, required_bins=("kubectl",)
+        ),
+        ToolMetadata(
+            "list_network_policies",
+            "kubernetes",
+            readonly=True,
+            required_bins=("kubectl",),
+        ),
+        # Autoscaling
+        ToolMetadata(
+            "list_hpas", "kubernetes", readonly=True, required_bins=("kubectl",)
+        ),
+        # Metrics (requires metrics-server)
+        ToolMetadata(
+            "get_top_nodes", "kubernetes", readonly=True, required_bins=("kubectl",)
+        ),
+        ToolMetadata(
+            "get_top_pods", "kubernetes", readonly=True, required_bins=("kubectl",)
+        ),
     ]
     registry.register_many(kubernetes_tools)
 
