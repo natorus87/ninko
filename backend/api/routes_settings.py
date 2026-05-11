@@ -11,9 +11,10 @@ import logging
 import os
 import uuid
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, Request, HTTPException, UploadFile, File
-from pydantic import BaseModel, Literal
+from pydantic import BaseModel
 
 from schemas.settings import (
     LlmSettings,
