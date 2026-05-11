@@ -188,6 +188,71 @@ ROUTING_PRESETS: dict[str, dict] = {
 }
 
 
+class KeywordRouter:
+    """Minimal compatibility router for legacy helper paths.
+
+    The primary router is Function Calling. These methods keep older telemetry,
+    force/fallback helpers and tests from depending on the removed core.router.
+    """
+
+    def __init__(self, routing_map: dict[str, str] | None = None) -> None:
+        self._routing_map = routing_map or {}
+
+    def update_routing_map(self, routing_map: dict[str, str]) -> None:
+        self._routing_map = routing_map or {}
+
+    @staticmethod
+    def strip_bot_context(message: str) -> str:
+        return message
+
+    def get_scores(self, text: str) -> dict[str, int]:
+        lowered = text.lower()
+        scores: dict[str, int] = {}
+        for keyword, module in self._routing_map.items():
+            if keyword and keyword.lower() in lowered:
+                scores[module] = scores.get(module, 0) + 1
+        return scores
+
+    @staticmethod
+    def has_confident_top_module(top_score: int, second_score: int) -> bool:
+        return top_score > 0 and top_score >= second_score + 2
+
+    def has_multistep_indicators(self, message: str, current_scores: dict[str, int]) -> bool:
+        lowered = message.lower()
+        return len(current_scores) > 1 or any(
+            marker in lowered for marker in (" und dann ", " danach ", " anschließend ", " then ")
+        )
+
+    def detect_module(
+        self,
+        message: str,
+        chat_history: list[dict] | None = None,
+    ) -> tuple[str | None, bool, float | None]:
+        scores = self.get_scores(message)
+        if not scores:
+            return None, False, None
+        ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)
+        top_module, top_score = ranked[0]
+        second_score = ranked[1][1] if len(ranked) > 1 else 0
+        is_compound = self.has_multistep_indicators(message, scores)
+        if self.has_confident_top_module(top_score, second_score) or len(ranked) == 1:
+            return top_module, is_compound, min(1.0, top_score / max(1, top_score + second_score))
+        return None, is_compound, None
+
+    def classify_tier(
+        self,
+        message: str,
+        chat_history: list[dict] | None,
+        cfg: RoutingConfig | None = None,
+    ) -> tuple[int, str | None, float | None]:
+        module, is_compound, confidence = self.detect_module(message, chat_history)
+        if is_compound and (cfg is None or cfg.tier4_enabled):
+            return 4, None, confidence
+        if module and (cfg is None or cfg.tier2_enabled):
+            return 2, module, confidence
+        return 1, None, confidence
+
+
 # ── Intent-Detection-Patterns (Tier-1/3, kein Routing-Concern) ───────────────
 async def generate_image(prompt: str, size: str = "1024x1024") -> str:
     """
