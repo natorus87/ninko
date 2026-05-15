@@ -1,75 +1,61 @@
-"""
-Nextcloud Module — BaseAgent implementation.
-"""
-
-from __future__ import annotations
-
-import logging
+"""Nextcloud module agent."""
 
 from agents.base_agent import BaseAgent
 
-logger = logging.getLogger("ninko.modules.nextcloud.agent")
+from . import tools
+
+NEXTCLOUD_SYSTEM_PROMPT = """You are Ninko's Nextcloud specialist.
+
+Capabilities:
+- Manage files, users, shares, and storage in Nextcloud.
+- List and search files, inspect users, list shares, and review storage usage.
+- Create folders, upload files, delete files, create shares, and create users.
+
+Tool execution rules:
+- Use the available Nextcloud tools for live instance data.
+- For file, share, storage, or user detail questions, inspect the relevant
+  resource before answering.
+
+Output format:
+- For lists (Files, Users, Shares): ALWAYS use Markdown tables.
+- Example: | Name | Type | Owner | Size |
+- NEVER return raw JSON or Python repr as the final answer unless the user explicitly asks for JSON.
+- Always include units for sizes and time values.
+- Color-code status when helpful.
+
+Safety and confirmation rules:
+- Ask for confirmation before deleting files or changing shares/users.
+- Treat share links and account data as sensitive.
+
+Error handling:
+- If a tool fails, explain the concrete Nextcloud API, permission, or object issue."""
 
 
 class NextcloudAgent(BaseAgent):
-    """Agent for Nextcloud management."""
+    """Nextcloud specialist agent."""
 
     name = "nextcloud"
-    description = "Manages files and users in Nextcloud."
-
-    system_prompt = """
-You are the Nextcloud agent. You can manage files, folders, shares, and users in Nextcloud.
-
-Capabilities:
-- List and search files
-- Create folders
-- Upload and delete files
-- Create shares
-- List and manage users
-- View storage usage
-
-Output Format for Overviews (ALWAYS):
-- For lists (Files, Users, Shares, Storage): ALWAYS use Markdown tables
-- Example: | Name | Size | Modified | Owner | |------|------|----------|-------|
-- NEVER use bullet lists, plain text, or JSON
-- Always include units for file sizes (KB, MB, GB)
-- Color-code share types when helpful
-
-Behavior rules:
-- For file/folder delete ALWAYS confirm first
-- For user delete ALWAYS confirm first
-- For share create with link: confirm access level
-- On errors: explain the problem and suggest solutions
-- Always respond in the user's language
-"""
+    description = "Manages files, users, shares, and storage in Nextcloud."
 
     def __init__(self) -> None:
-        super().__init__()
+        """Initialize the Nextcloud agent."""
+        super().__init__(
+            name="nextcloud",
+            system_prompt=NEXTCLOUD_SYSTEM_PROMPT,
+            tools=[
+                tools.list_nextcloud_files,
+                tools.search_nextcloud_files,
+                tools.list_nextcloud_users,
+                tools.get_nextcloud_user,
+                tools.list_nextcloud_shares,
+                tools.get_nextcloud_storage,
+                tools.create_nextcloud_folder,
+                tools.upload_nextcloud_file,
+                tools.delete_nextcloud_file,
+                tools.create_nextcloud_share,
+                tools.create_nextcloud_user,
+            ],
+        )
 
-
-from .tools import (
-    list_nextcloud_files,
-    search_nextcloud_files,
-    list_nextcloud_users,
-    get_nextcloud_user,
-    list_nextcloud_shares,
-    get_nextcloud_storage,
-    create_nextcloud_folder,
-    upload_nextcloud_file,
-    delete_nextcloud_file,
-    create_nextcloud_share,
-    create_nextcloud_user,
-)
 
 agent = NextcloudAgent()
-agent.register_tool(list_nextcloud_files)
-agent.register_tool(search_nextcloud_files)
-agent.register_tool(list_nextcloud_users)
-agent.register_tool(get_nextcloud_user)
-agent.register_tool(list_nextcloud_shares)
-agent.register_tool(get_nextcloud_storage)
-agent.register_tool(create_nextcloud_folder)
-agent.register_tool(upload_nextcloud_file)
-agent.register_tool(delete_nextcloud_file)
-agent.register_tool(create_nextcloud_share)
-agent.register_tool(create_nextcloud_user)

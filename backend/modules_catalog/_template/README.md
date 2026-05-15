@@ -391,21 +391,34 @@ All `<style>` rules in `tab.html` **must be scoped** to the tab's root ID to avo
 
 ## Multilingual Support
 
-**Default language is English.** German is the primary user-facing language, but all code-facing text (docstrings, log messages, error strings) must be in English. User-visible text uses `_t(de, en)`.
+**Default language is English.** System prompts, tool docstrings, log messages, and code-facing text must be English. The user's response language is injected centrally by `LanguageMiddleware`. User-visible static text such as tool errors can still use `_t(de, en)`.
 
 ### System prompts (`agent.py`)
 
 ```python
 from .tools import my_tool
-from agents.base_agent import BaseAgent, _t
+from agents.base_agent import BaseAgent
 
-SYSTEM_PROMPT = _t(
-    de="Du bist der Spezialist für My Module.",
-    en="You are the specialist for My Module.",
-)
+SYSTEM_PROMPT = """You are Ninko's My Module specialist.
+
+Capabilities:
+- Query and analyse My Module data through the available tools
+
+Tool execution rules:
+- Use tools for live My Module data before answering.
+
+Output format:
+- For lists: ALWAYS use Markdown tables.
+- NEVER return raw JSON or Python repr as the final answer.
+
+Safety and confirmation rules:
+- Do not perform destructive actions without explicit confirmation.
+
+Error handling:
+- If a tool fails, explain the concrete configuration or runtime issue."""
 ```
 
-Never write `"Antworte immer auf Deutsch"` — language injection is handled automatically by `base_agent.py`.
+Never write `"Antworte immer auf Deutsch"` or duplicate prompt variants with `_t()` — language injection is handled automatically by `LanguageMiddleware`.
 
 ### Tool docstrings — English only
 

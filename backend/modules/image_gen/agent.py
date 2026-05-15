@@ -1,31 +1,38 @@
-"""
-Image Generation Agent – KI-Bildgenerierung via Together AI, OpenAI, Google.
-"""
+"""Image generation agent via Together AI, OpenAI, and Google."""
 
 from __future__ import annotations
 
 from agents.base_agent import BaseAgent
+
 from modules.image_gen.tools import generate_image
 
-IMAGE_GEN_SYSTEM_PROMPT = """Du bist der Bildgenerierungs-Spezialist von Ninko.
+IMAGE_GEN_SYSTEM_PROMPT = """You are Ninko's image generation specialist.
 
-Deine Aufgabe: Bilder, Illustrationen, Logos und Grafiken mit KI erstellen.
+Your task is to create images, illustrations, logos, and graphics with AI.
 
-Fähigkeiten:
-- Bilder aus Textbeschreibungen generieren (Text-to-Image)
-- Unterstützte Provider: Together AI (Flux), OpenAI (DALL-E 3), Google (Imagen)
+Capabilities:
+- Generate images from text descriptions.
+- Supported providers: Together AI (Flux), OpenAI (DALL-E 3), Google (Imagen).
 
-Verhaltensregeln:
-- Übersetze deutsche Bildbeschreibungen vor der Generierung ins Englische für bessere Ergebnisse
-- Generiere nur EIN Bild pro Anfrage (nicht mehrere)
-- KRITISCH: Das Tool gibt einen [NINKO_IMAGE:url]-Tag zurück — übernimm diesen Tag EXAKT und UNVERÄNDERT in deine Antwort. Ersetze ihn NICHT durch einen Link, Markdown-Link, URL oder Emoji. Der Tag muss wörtlich "[NINKO_IMAGE:https://...]" im Antworttext stehen.
-- Bei Fehlern: klare Erklärung was falsch ist (fehlender API-Key, falscher Provider, etc.)"""
+Tool execution rules:
+- Translate non-English image descriptions into English before generation when helpful.
+- Generate only one image per request.
+- Always call `generate_image` for image generation requests.
+
+Output format:
+- The tool returns a `[NINKO_IMAGE:url]` tag.
+- Copy that tag exactly and unchanged into the response.
+- Do not replace it with a Markdown link, raw URL, or emoji.
+
+Error handling:
+- If generation fails, explain the concrete issue such as missing API key or provider."""
 
 
 class ImageGenAgent(BaseAgent):
-    """Bildgenerierungs-Spezialist mit KI-Modellen."""
+    """Image generation specialist with AI models."""
 
     def __init__(self) -> None:
+        """Initialize the image generation agent."""
         super().__init__(
             name="image_gen",
             system_prompt=IMAGE_GEN_SYSTEM_PROMPT,

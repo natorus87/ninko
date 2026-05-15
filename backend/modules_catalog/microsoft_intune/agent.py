@@ -1,81 +1,61 @@
-"""
-Microsoft Intune Module — BaseAgent implementation.
-"""
-
-from __future__ import annotations
-
-import logging
+"""Microsoft Intune module agent."""
 
 from agents.base_agent import BaseAgent
 
-logger = logging.getLogger("ninko.modules.microsoft_intune.agent")
+from . import tools
+
+MICROSOFT_INTUNE_SYSTEM_PROMPT = """You are Ninko's Microsoft Intune specialist.
+
+Capabilities:
+- Manage mobile devices via Microsoft Intune / Endpoint Manager.
+- List managed devices, policies, compliance policies, and managed applications.
+- Inspect device details, compliance status, and last sync state.
+- Trigger device sync, locate devices, retire devices, and wipe devices.
+
+Tool execution rules:
+- Use the available Intune tools for live tenant and device data.
+- For device detail or compliance questions, inspect the specific device before answering.
+
+Output format:
+- For lists (Devices, Policies, Applications): ALWAYS use Markdown tables.
+- Example: | Device Name | OS | Compliance | Last Sync |
+- NEVER return raw JSON or Python repr as the final answer unless the user explicitly asks for JSON.
+- Always include units for numbers.
+- Color-code compliance status when helpful.
+
+Safety and confirmation rules:
+- Ask for confirmation before wipe or retire operations.
+- Warn clearly about data loss before a device wipe.
+- Ask for confirmation before locating a device.
+
+Error handling:
+- If a tool fails, explain the concrete Intune API, permission, or device issue."""
 
 
 class MicrosoftIntuneAgent(BaseAgent):
-    """Agent for Microsoft Intune MDM management."""
+    """Microsoft Intune specialist agent."""
 
     name = "microsoft_intune"
     description = "Manages mobile devices via Microsoft Intune MDM."
 
-    system_prompt = """
-You are the Microsoft Intune agent. You can manage mobile devices via Microsoft Intune (Endpoint Manager).
-
-Capabilities:
-- List managed devices (iOS, Android, Windows, macOS)
-- Get device details and compliance status
-- List configuration policies
-- List compliance policies
-- List managed applications
-- Wipe devices (factory reset)
-- Retire devices (remove from management)
-- Sync devices (trigger check-in)
-- Locate devices
-
-Output Format for Overviews (ALWAYS):
-- For lists (Devices, Policies, Applications): ALWAYS use Markdown tables
-- Example: | Device Name | OS | Compliance | Last Sync | |-----------|-----|------------|-----------|
-- NEVER use bullet lists, plain text, or JSON
-- Always include units for numbers
-- Color-code compliance status when helpful
-
-Behavior rules:
-- For wipe/retire operations ALWAYS confirm first (destructive!)
-- For device locate operations confirm first
-- On errors: explain the problem and suggest solutions
-- Always respond in the user's language
-"""
-- Sync devices (trigger check-in)
-- Locate devices
-
-When asked to perform a destructive action (wipe), always confirm first and warn about data loss.
-When there is uncertainty, ask the user to confirm before proceeding.
-"""
-
     def __init__(self) -> None:
-        super().__init__()
+        """Initialize the Microsoft Intune agent."""
+        super().__init__(
+            name="microsoft_intune",
+            system_prompt=MICROSOFT_INTUNE_SYSTEM_PROMPT,
+            tools=[
+                tools.list_intune_devices,
+                tools.get_intune_device,
+                tools.list_intune_policies,
+                tools.list_intune_compliance_policies,
+                tools.list_intune_apps,
+                tools.get_intune_device_compliance,
+                tools.wipe_intune_device,
+                tools.retire_intune_device,
+                tools.sync_intune_device,
+                tools.locate_intune_device,
+            ],
+        )
 
-
-from .tools import (
-    list_intune_devices,
-    get_intune_device,
-    list_intune_policies,
-    list_intune_compliance_policies,
-    list_intune_apps,
-    get_intune_device_compliance,
-    wipe_intune_device,
-    retire_intune_device,
-    sync_intune_device,
-    locate_intune_device,
-)
 
 agent = MicrosoftIntuneAgent()
-agent.register_tool(list_intune_devices)
-agent.register_tool(get_intune_device)
-agent.register_tool(list_intune_policies)
-agent.register_tool(list_intune_compliance_policies)
-agent.register_tool(list_intune_apps)
-agent.register_tool(get_intune_device_compliance)
-agent.register_tool(wipe_intune_device)
-agent.register_tool(retire_intune_device)
-agent.register_tool(sync_intune_device)
-agent.register_tool(locate_intune_device)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agents.base_agent import BaseAgent, _t
+from agents.base_agent import BaseAgent
 
 from .tools import (
     call_mcp_server_tool,
@@ -13,51 +13,37 @@ from .tools import (
     validate_mcp_server_connection,
 )
 
-MCP_SERVER_SYSTEM_PROMPT = _t(
-    de="""Du bist Ninkos MCP-Server-Spezialist.
+MCP_SERVER_SYSTEM_PROMPT = """You are Ninko's MCP Server specialist.
 
-Deine Aufgaben:
-- Prüfe, ob eine MCP-Server-Verbindung korrekt konfiguriert ist
-- Liste MCP-Tools und MCP-Resources auf
-- Lies Resources gezielt aus
-- Rufe MCP-Tools mit klaren Argumenten auf
-
-Arbeitsweise:
-- Prüfe zuerst den Serverstatus, wenn die Verbindung unklar ist
-- Nutze validate_mcp_server_connection, wenn Konfigurationsfehler wahrscheinlich sind
-- Nutze list_mcp_server_tools vor call_mcp_server_tool, wenn Toolnamen noch nicht bekannt sind
-- Erkläre klar, wenn ein Transport im ersten Slice noch nicht vollständig unterstützt wird
-- Erfinde keine MCP-Toolnamen oder Resource-URIs
-
-Ausgabe-Format für Übersichten (IMMER):
-- Bei Listen (Tools, Resources): IMMER Markdown-Tabellen
-- Beispiel: | Name | Beschreibung | Input Schema | |------|-------------|---------------|
-- NICHT als Bullet-Liste, Fließtext oder JSON""",
-    en="""You are Ninko's MCP Server specialist.
-
-Your job:
+Capabilities:
 - Verify whether an MCP server connection is configured correctly
 - List MCP tools and MCP resources
 - Read resources on demand
 - Call MCP tools with clear arguments
 
-Output Format for Overviews (ALWAYS):
+Tool execution rules:
+- Check server status first when the connection is unclear
+- Use `validate_mcp_server_connection` when configuration errors are likely
+- Use `list_mcp_server_tools` before `call_mcp_server_tool` when tool names are unknown
+- Never invent MCP tool names or resource URIs
+
+Output format:
 - For lists (Tools, Resources): ALWAYS use Markdown tables
 - Example: | Name | Description | Input Schema | |------|-------------|---------------|
 - NEVER use bullet lists, plain text, or JSON
 
-Behavior:
-- Check server status first when the connection is unclear
-- Use list_mcp_server_tools before call_mcp_server_tool when tool names are unknown
-- Explain clearly when a transport is not fully supported in this first slice
-- Never invent MCP tool names or resource URIs""",
-)
+Safety and confirmation rules:
+- Only call tools with explicit, user-provided or tool-discovered arguments.
+
+Error handling:
+- Explain clearly when a transport is not fully supported in this first slice."""
 
 
 class MCPServerAgent(BaseAgent):
     """Specialist agent for generic MCP server integrations."""
 
     def __init__(self) -> None:
+        """Initialize the MCP server agent."""
         super().__init__(
             name="mcp_server",
             system_prompt=MCP_SERVER_SYSTEM_PROMPT,

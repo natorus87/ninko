@@ -1,5 +1,5 @@
-"""
-GLPI module — specialist agent.
+"""GLPI module specialist agent.
+
 Integrates with Kubernetes module via Redis PubSub events.
 """
 
@@ -9,73 +9,39 @@ import asyncio
 import json
 import logging
 import os
+from contextlib import suppress
 
-from agents.base_agent import BaseAgent, _t
+from agents.base_agent import BaseAgent
 from core.redis_client import get_redis
+
 from .tools import (
-    create_ticket,
-    get_ticket,
-    search_tickets,
-    update_ticket,
-    close_ticket,
     add_followup,
     add_solution,
     add_watcher,
     assign_ticket,
-    search_users,
-    list_groups,
-    list_categories,
-    get_ticket_stats,
+    close_ticket,
+    create_ticket,
+    get_ticket,
     get_ticket_attachments,
-    get_ticket_image_ocr,
     get_ticket_followups,
+    get_ticket_image_ocr,
     get_ticket_solutions,
+    get_ticket_stats,
+    list_categories,
+    list_groups,
+    search_tickets,
+    search_users,
+    update_ticket,
 )
 
 logger = logging.getLogger("ninko.modules.glpi.agent")
 
-# Konfigurierbarer Default-Watcher für neue Tickets (via Env-Var, default: "Sophy")
+# Configurable default watcher for new tickets (env var, default: "Sophy").
 _GLPI_DEFAULT_WATCHER = os.getenv("GLPI_DEFAULT_WATCHER", "Sophy")
 
-GLPI_SYSTEM_PROMPT_DE = f"""Du bist der GLPI Helpdesk-Spezialist von Ninko.
+GLPI_SYSTEM_PROMPT = f"""You are Ninko's GLPI Helpdesk specialist.
 
-Deine Fähigkeiten:
-- Ticket-Erstellung und -Verwaltung
-- Ticket-Suche nach Status, Priorität, Stichwort
-- Follow-ups, Lösungen und Anhänge abrufen
-- OCR auf Ticket-Bildern (Screenshot-/Foto-Analyse)
-- Tickets schließen mit Lösungsbeschreibung
-- Benutzer- und Gruppensuche
-- Ticket-Statistiken
-- Beobachter zu Tickets hinzufügen (add_watcher)
-- Tickets zuweisen (assign_ticket)
-
-WICHTIG - Bearbeitung neuer Tickets (Status=NEU):
-1. Suche zuerst Benutzer "{_GLPI_DEFAULT_WATCHER}" mit search_users("{_GLPI_DEFAULT_WATCHER}")
-2. Füge {_GLPI_DEFAULT_WATCHER} als Beobachter hinzu mit add_watcher(ticket_id, watcher_user_id)
-3. Schreibe eine hilfreiche Antwort/Followup mit add_followup()
-4. Setze Status auf "Wartend" (4) mit update_ticket(status=4)
-5. NICHT direkt schließen - erst auf User-Antwort warten!
-
-Verhaltensregeln:
-- Erstelle Tickets mit klaren, aussagekräftigen Titeln
-- IMMER das passende Tool direkt aufrufen – nicht beschreiben was du tun würdest
-- Wenn alle nötigen Infos vorhanden: sofort `create_ticket` aufrufen, nicht nochmal fragen
-- Falls Priorität/Kategorie fehlen: kurz nachfragen, dann SOFORT `create_ticket` aufrufen
-- Zeige Ticket-Details in übersichtlicher Form
-- Nutze Farb-Indikatoren für Prioritäten:
-  🔴 Sehr hoch/Kritisch, 🟠 Hoch, 🟡 Mittel, 🟢 Niedrig
-- Verlinke zu GLPI wenn möglich
-
-Prioritäten:
-1 = Sehr niedrig, 2 = Niedrig, 3 = Mittel, 4 = Hoch, 5 = Sehr hoch, 6 = Kritisch
-
-Status:
-1 = Neu, 2 = In Bearbeitung, 3 = Geplant, 4 = Wartend, 5 = Gelöst, 6 = Geschlossen"""
-
-GLPI_SYSTEM_PROMPT_EN = f"""You are the GLPI Helpdesk specialist of Ninko.
-
-Your capabilities:
+Capabilities:
 - Ticket creation and management
 - Ticket search by status, priority, keyword
 - Retrieve follow-ups, solutions, and attachments
@@ -86,10 +52,15 @@ Your capabilities:
 - Add watchers to tickets (add_watcher)
 - Assign tickets (assign_ticket)
 
-Output Format for Overviews (ALWAYS):
+Tool execution rules:
+- ALWAYS call the appropriate tool directly; do not describe what you would do.
+- If all required info is present, call `create_ticket` immediately.
+- If priority or category is missing, ask briefly, then call `create_ticket`.
+
+Output format:
 - For lists (Tickets, Computers, Users, Items): ALWAYS use Markdown tables
-- Example: | ID | Title | Status | Asignee | |-----|-------|--------|---------|
-- NEVER use bullet lists, plain text, or JSON
+- Example: | ID | Title | Status | Assignee |
+- NEVER return raw JSON or Python repr as the final answer
 - Always include units for numbers
 - Color-code status when helpful
 
@@ -114,16 +85,23 @@ Priorities:
 1 = Very low, 2 = Low, 3 = Medium, 4 = High, 5 = Very high, 6 = Critical
 
 Status:
-1 = New, 2 = In progress, 3 = Planned, 4 = Pending, 5 = Solved, 6 = Closed"""
+1 = New, 2 = In progress, 3 = Planned, 4 = Pending, 5 = Solved, 6 = Closed
+
+Safety and confirmation rules:
+- Do not close new tickets immediately; wait for the user's response first.
+
+Error handling:
+- If a tool fails, explain the concrete GLPI API, ticket, or permission issue."""
 
 
 class GlpiAgent(BaseAgent):
     """GLPI Helpdesk specialist with Redis PubSub event listener."""
 
     def __init__(self) -> None:
+        """Initialize the GLPI agent."""
         super().__init__(
             name="glpi",
-            system_prompt=_t(GLPI_SYSTEM_PROMPT_DE, GLPI_SYSTEM_PROMPT_EN),
+            system_prompt=GLPI_SYSTEM_PROMPT,
             tools=[
                 create_ticket,
                 get_ticket,
@@ -162,17 +140,15 @@ class GlpiAgent(BaseAgent):
         if hasattr(self, "_listener_task"):
             try:
                 await asyncio.wait_for(self._listener_task, timeout=2.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self._listener_task.cancel()
-                try:
+                with suppress(asyncio.CancelledError):
                     await self._listener_task
-                except asyncio.CancelledError:
-                    pass
         logger.info("GLPI event listener stopped.")
 
     async def _listen_for_incidents(self) -> None:
-        """
-        Listens for Redis PubSub events from other modules.
+        """Listen for Redis PubSub incident events.
+
         On incident_detected events: automatically creates a GLPI ticket.
         """
         redis = get_redis()
@@ -194,10 +170,8 @@ class GlpiAgent(BaseAgent):
                         pass
 
                 # Check stop event with timeout instead of sleep
-                try:
+                with suppress(TimeoutError):
                     await asyncio.wait_for(self._stop_event.wait(), timeout=0.5)
-                except asyncio.TimeoutError:
-                    pass
 
             except (
                 RuntimeError,
@@ -219,7 +193,8 @@ class GlpiAgent(BaseAgent):
             source = event.get("source_module", "unknown")
             data = event.get("data", {})
 
-            title = f"[Auto] {source.upper()} Incident: {data.get('error', data.get('namespace', 'Error detected'))}"
+            error = data.get("error", data.get("namespace", "Error detected"))
+            title = f"[Auto] {source.upper()} Incident: {error}"
             description = (
                 f"Automatically created ticket by Ninko.\n\n"
                 f"Source module: {source}\n"

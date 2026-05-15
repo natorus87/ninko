@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
+import zoneinfo
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
-
-import zoneinfo
 
 from .base import BaseMiddleware, MiddlewareContext, MiddlewareResult
 
@@ -16,18 +14,38 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_LANG_INSTRUCTIONS = {
-    "de": "Antworte ausschließlich auf Deutsch.",
-    "en": "Respond exclusively in English.",
-    "fr": "Réponds exclusivement en français.",
-    "es": "Responde exclusivamente en español.",
-    "it": "Rispondi esclusivamente in italiano.",
-    "pt": "Responda exclusivamente em português.",
-    "nl": "Antwoord uitsluitend in het Nederlands.",
-    "pl": "Odpowiadaj wyłącznie po polsku.",
-    "ru": "Отвечай исключительно на русском.",
-    "tr": "Sadece Türkçe yanıtla.",
+_LANGUAGE_NAMES = {
+    "de": "German",
+    "en": "English",
+    "fr": "French",
+    "es": "Spanish",
+    "it": "Italian",
+    "pt": "Portuguese",
+    "nl": "Dutch",
+    "pl": "Polish",
+    "ja": "Japanese",
+    "zh": "Chinese",
 }
+
+CANONICAL_LANGUAGE_RULE_TEMPLATE = (
+    "Response language:\n"
+    "- Answer in the user's configured language: {language}.\n"
+    "- Keep technical identifiers, resource names, commands, file paths, "
+    "and JSON keys unchanged."
+)
+
+
+def build_language_rule(lang: str) -> str | None:
+    """Return the canonical response-language rule for ``lang`` or ``None``.
+
+    The rule is intentionally English so it stays identical regardless of the
+    target language; only the embedded language name varies. Unknown language
+    codes return ``None`` so the middleware can skip injection silently.
+    """
+    name = _LANGUAGE_NAMES.get(lang)
+    if not name:
+        return None
+    return CANONICAL_LANGUAGE_RULE_TEMPLATE.format(language=name)
 
 _WEEKDAYS_DE = [
     "Montag",
@@ -52,13 +70,17 @@ _RECOVERABLE = (ImportError, AttributeError, TypeError, ValueError, RuntimeError
 
 
 class SoulInjectionMiddleware(BaseMiddleware):
+    """Inject agent soul/personality content into the system prompt."""
+
     name = "soul_injection"
     priority = 100
 
     def __init__(self, get_soul_manager: Any):
+        """Initialize with a soul manager factory."""
         self._get_soul_manager = get_soul_manager
 
     async def pre_process(self, ctx: MiddlewareContext) -> MiddlewareResult:
+        """Add soul content for the current agent when available."""
         try:
             soul = self._get_soul_manager().get_soul(ctx.agent_name)
             if soul:
@@ -70,31 +92,40 @@ class SoulInjectionMiddleware(BaseMiddleware):
 
 
 class LanguageMiddleware(BaseMiddleware):
+    """Inject the canonical response-language rule."""
+
     name = "language"
     priority = 110
 
     def __init__(self, get_language: Any):
+        """Initialize with a language provider."""
         self._get_language = get_language
 
     async def pre_process(self, ctx: MiddlewareContext) -> MiddlewareResult:
+        """Append the configured response-language rule to the prompt."""
         try:
             lang = self._get_language()
-            instruction = _LANG_INSTRUCTIONS.get(lang)
-            if instruction:
-                ctx.final_system_prompt += f"\n\n{instruction}"
+            rule = build_language_rule(lang)
+            if rule:
+                ctx.final_system_prompt += f"\n\n{rule}"
+                ctx.extra["language"] = lang
         except (ImportError, AttributeError, TypeError, ValueError):
             pass
         return MiddlewareResult()
 
 
 class DatetimeMiddleware(BaseMiddleware):
+    """Inject current date and time context."""
+
     name = "datetime"
     priority = 120
 
     def __init__(self, get_timezone: Any):
+        """Initialize with a timezone provider."""
         self._get_timezone = get_timezone
 
     async def pre_process(self, ctx: MiddlewareContext) -> MiddlewareResult:
+        """Append current localized date and time context."""
         try:
             tz_name = self._get_timezone()
             tz = zoneinfo.ZoneInfo(tz_name)
@@ -120,10 +151,13 @@ class DatetimeMiddleware(BaseMiddleware):
 
 
 class CompactionSummaryMiddleware(BaseMiddleware):
+    """Inject compacted system summaries from trimmed history."""
+
     name = "compaction_summary"
     priority = 130
 
     async def pre_process(self, ctx: MiddlewareContext) -> MiddlewareResult:
+        """Append unique system summary messages from trimmed history."""
         seen: set[str] = set()
         for msg in ctx.trimmed_history:
             if msg.get("role") in ("system", "system_compaction"):
@@ -135,14 +169,18 @@ class CompactionSummaryMiddleware(BaseMiddleware):
 
 
 class RAGMiddleware(BaseMiddleware):
+    """Inject relevant memory search results."""
+
     name = "rag"
     priority = 140
 
     def __init__(self, memory: Any):
+        """Initialize with a memory backend."""
         self._memory = memory
 
     async def pre_process(self, ctx: MiddlewareContext) -> MiddlewareResult:
-        _RECOVERABLE = (
+        """Append relevant memory snippets to the prompt."""
+        recoverable = (
             ImportError,
             AttributeError,
             TypeError,
@@ -164,16 +202,19 @@ class RAGMiddleware(BaseMiddleware):
                     )
                     + rag_ctx
                 )
-        except _RECOVERABLE as exc:
+        except recoverable as exc:
             logger.debug("Memory-Suche fehlgeschlagen: %s", exc)
         return MiddlewareResult()
 
 
 class KnowledgeGraphMiddleware(BaseMiddleware):
+    """Inject related entities and incidents from the knowledge graph."""
+
     name = "knowledge_graph"
     priority = 150
 
     async def pre_process(self, ctx: MiddlewareContext) -> MiddlewareResult:
+        """Append knowledge graph context for the current agent."""
         try:
             from core.knowledge_graph import get_knowledge_graph
 
@@ -211,13 +252,17 @@ class KnowledgeGraphMiddleware(BaseMiddleware):
 
 
 class SkillsMiddleware(BaseMiddleware):
+    """Inject matching skill instructions."""
+
     name = "skills"
     priority = 160
 
     def __init__(self, get_skills_manager: Any):
+        """Initialize with a skills manager factory."""
         self._get_skills_manager = get_skills_manager
 
     async def pre_process(self, ctx: MiddlewareContext) -> MiddlewareResult:
+        """Append matching skill instructions for the message and agent."""
         try:
             sm = self._get_skills_manager()
             matching = sm.find_matching_skills(ctx.message, ctx.agent_name)

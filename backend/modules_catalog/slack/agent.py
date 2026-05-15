@@ -1,73 +1,57 @@
-"""
-Slack Module — BaseAgent implementation.
-"""
-
-from __future__ import annotations
-
-import logging
+"""Slack module agent."""
 
 from agents.base_agent import BaseAgent
 
-logger = logging.getLogger("ninko.modules.slack.agent")
+from . import tools
+
+SLACK_SYSTEM_PROMPT = """You are Ninko's Slack specialist.
+
+Capabilities:
+- Manage Slack channels, users, messages, direct messages, and file uploads.
+- List channels and users, inspect channel history, and search messages.
+- Send channel messages, send direct messages, upload files, create channels, and invite users.
+
+Tool execution rules:
+- Use the available Slack tools for live workspace data.
+- For message history or search questions, query Slack before answering.
+
+Output format:
+- For lists (Channels, Users, Messages): ALWAYS use Markdown tables.
+- Example: | Channel | Members | Topic | Updated |
+- NEVER return raw JSON or Python repr as the final answer unless the user explicitly asks for JSON.
+- Always include units for counts and time values.
+
+Safety and confirmation rules:
+- Ask for confirmation before sending messages, direct messages, uploading files, or inviting users.
+- Treat private channel content and direct messages as sensitive.
+
+Error handling:
+- If a tool fails, explain the concrete Slack API, permission, channel, or user issue."""
 
 
 class SlackAgent(BaseAgent):
-    """Agent for Slack workspace management."""
+    """Slack specialist agent."""
 
     name = "slack"
-    description = "Manages Slack workspace via Slack API."
-
-    system_prompt = """
-You are the Slack agent. You can manage channels, messages, and users in a Slack workspace.
-
-Capabilities:
-- List channels
-- List users
-- Read channel message history
-- Search messages
-- Send messages to channels
-- Send direct messages
-- Upload files
-- Create channels
-- Invite users to channels
-
-Output Format for Overviews (ALWAYS):
-- For lists (Channels, Users, Messages): ALWAYS use Markdown tables
-- Example: | Channel | Members | Purpose | |-------|--------|--------|
-- NEVER use bullet lists, plain text, or JSON
-- Always include units for numbers
-- Color-code channel types (public/private) when helpful
-
-Behavior rules:
-- For channel delete ALWAYS confirm first
-- For user removal from channel ALWAYS confirm first
-- On errors: explain the problem and suggest solutions
-- Always respond in the user's language
-"""
+    description = "Manages Slack channels, users, messages, and files."
 
     def __init__(self) -> None:
-        super().__init__()
+        """Initialize the Slack agent."""
+        super().__init__(
+            name="slack",
+            system_prompt=SLACK_SYSTEM_PROMPT,
+            tools=[
+                tools.list_slack_channels,
+                tools.list_slack_users,
+                tools.get_slack_channel_history,
+                tools.search_slack_messages,
+                tools.send_slack_message,
+                tools.send_slack_dm,
+                tools.upload_slack_file,
+                tools.create_slack_channel,
+                tools.invite_user_to_channel,
+            ],
+        )
 
-
-from .tools import (
-    list_slack_channels,
-    list_slack_users,
-    get_slack_channel_history,
-    search_slack_messages,
-    send_slack_message,
-    send_slack_dm,
-    upload_slack_file,
-    create_slack_channel,
-    invite_user_to_channel,
-)
 
 agent = SlackAgent()
-agent.register_tool(list_slack_channels)
-agent.register_tool(list_slack_users)
-agent.register_tool(get_slack_channel_history)
-agent.register_tool(search_slack_messages)
-agent.register_tool(send_slack_message)
-agent.register_tool(send_slack_dm)
-agent.register_tool(upload_slack_file)
-agent.register_tool(create_slack_channel)
-agent.register_tool(invite_user_to_channel)

@@ -20,21 +20,41 @@ logger = logging.getLogger(__name__)
 _MEMORIZE_COOLDOWN_SECS = 120
 _MEMORIZE_MIN_LENGTH = 80
 
+# Modules whose AI answers are augmented with a structured Markdown table when
+# the model returns a short reply but tools delivered structured data. Keep in
+# sync with PLAN.md Phase 3/4 (migrated high-risk modules).
+_TABLE_AUGMENT_MODULES: frozenset[str] = frozenset(
+    {
+        "kubernetes",
+        "proxmox",
+        "docker",
+        "linux_server",
+        "checkmk",
+        "opnsense",
+        "zabbix",
+    }
+)
+
 
 class ResponseExtractionMiddleware(BaseMiddleware):
+    """Extract the final user-facing response from agent execution results."""
+
     name = "response_extraction"
     priority = 500
 
     async def pre_process(self, ctx: MiddlewareContext) -> MiddlewareResult:
+        """No-op pre-processing hook."""
         return MiddlewareResult()
 
     async def post_process(self, ctx: MiddlewareContext) -> None:
+        """Populate ``ctx.response`` from AI messages or tool fallbacks."""
         if not ctx.result:
             return
 
         all_msgs = ctx.result.get("messages", [])
         ai_msgs = [m for m in all_msgs if isinstance(m, AIMessage) and m.content]
         tool_msgs = [m for m in all_msgs if isinstance(m, ToolMessage) and m.content]
+        wants_json = _wants_json_response(ctx.message)
 
         # Prefer tool outputs that contain images (data URLs or markers)
         if tool_msgs:
@@ -60,17 +80,16 @@ class ResponseExtractionMiddleware(BaseMiddleware):
             response = _strip_thinking(raw)
             if response:
                 if (
-                    ctx.agent_name == "kubernetes"
+                    ctx.agent_name in _TABLE_AUGMENT_MODULES
                     and tool_msgs
                     and not _contains_markdown_table(response)
+                    and not wants_json
                 ):
-                    tool_text = _extract_text(tool_msgs[-1].content)
-                    tool_name = str(getattr(tool_msgs[-1], "name", "") or "")
-                    details = _format_kubernetes_tool_fallback(tool_text, tool_name=tool_name)
+                    details = _first_table_details(tool_msgs, agent_name=ctx.agent_name)
                     if details:
                         ctx.response = f"{response.rstrip()}\n\n{details}"
                         logger.debug(
-                            "Agent '%s': Kubernetes-Tooldetails als Markdown ergänzt.",
+                            "Agent '%s': Tool-Details als Markdown-Tabelle ergänzt.",
                             ctx.agent_name,
                         )
                         return
@@ -81,13 +100,20 @@ class ResponseExtractionMiddleware(BaseMiddleware):
         if tool_msgs:
             raw_tool = _extract_text(tool_msgs[-1].content)
             tool_name = str(getattr(tool_msgs[-1], "name", "") or "")
-            if ctx.agent_name == "kubernetes":
+            if ctx.agent_name == "kubernetes" and not wants_json:
                 ctx.response = (
                     _format_kubernetes_tool_fallback(raw_tool, tool_name=tool_name)
-                    or _format_tool_fallback(raw_tool)
+                    or _format_tool_fallback(
+                        raw_tool, tool_name=tool_name, agent_name=ctx.agent_name
+                    )
                 )
             else:
-                ctx.response = _format_tool_fallback(raw_tool)
+                ctx.response = _format_tool_fallback(
+                    raw_tool,
+                    tool_name=tool_name,
+                    agent_name=ctx.agent_name,
+                    prefer_json=wants_json,
+                )
             logger.debug(
                 "Agent '%s': kein AI-Text, nutze letztes Tool-Ergebnis als Antwort.",
                 ctx.agent_name,
@@ -97,6 +123,8 @@ class ResponseExtractionMiddleware(BaseMiddleware):
 
 
 class MemoryStorageMiddleware(BaseMiddleware):
+    """Persist sufficiently useful responses into long-term memory."""
+
     name = "memory_storage"
     priority = 510
 
@@ -107,6 +135,7 @@ class MemoryStorageMiddleware(BaseMiddleware):
         cooldowns: dict[tuple[str, str], float] | None = None,
         background_tasks: set[asyncio.Task] | None = None,
     ):
+        """Initialize memory storage dependencies and runtime state."""
         self._auto_memorize = auto_memorize_fn
         self._excluded = excluded_agents if excluded_agents is not None else set()
         self._cooldowns = cooldowns if cooldowns is not None else {}
@@ -115,9 +144,11 @@ class MemoryStorageMiddleware(BaseMiddleware):
         )
 
     async def pre_process(self, ctx: MiddlewareContext) -> MiddlewareResult:
+        """No-op pre-processing hook."""
         return MiddlewareResult()
 
     async def post_process(self, ctx: MiddlewareContext) -> None:
+        """Schedule memory extraction for long enough final responses."""
         if (
             not ctx.response
             or len(ctx.response) < _MEMORIZE_MIN_LENGTH
@@ -167,36 +198,80 @@ def _strip_thinking(text: str) -> str:
 
 def _looks_like_python_struct(text: str) -> bool:
     s = text.lstrip()
+    if s in ("[]", "{}"):
+        return True
     return s.startswith(("[{", "[(", "{'", "{\"", "[{'", "[{\"")) or (
         s.startswith("[") and "'" in s[:50]
     )
 
 
-def _format_tool_fallback(raw: str) -> str:
+def _format_tool_fallback(
+    raw: str,
+    tool_name: str = "",
+    agent_name: str = "",
+    prefer_json: bool = False,
+) -> str:
     """Wandelt rohen Tool-Output (oft Python-Repr) in lesbares Markdown.
 
-    LangGraph serialisiert list/dict-Returns via str() — das ergibt Python-Repr
-    mit single-quotes, was im Chat haesslich ist. Wir versuchen das als Python-
-    Literal zu parsen und als JSON in einen Code-Block zu rendern. Bei Fehlern
-    geben wir den Rohtext in einem generischen Code-Block zurueck.
+    Strategie:
+    1. Strukturiertes ``list[dict]`` / ``dict`` → Markdown-Tabelle (PLAN Phase 5).
+    2. Schon Markdown im Rohtext → unveraendert durchreichen.
+    3. Parseable Struktur ohne Tabellen-Form → JSON-Code-Block als letzter Ausweg.
+    4. Plain Text → generischer Code-Block.
     """
     raw = raw.strip()
     if not raw:
         return "Keine Antwort generiert."
 
-    if _looks_like_python_struct(raw):
+    data = _parse_structured_tool_output(raw) if _looks_like_python_struct(raw) else None
+    if data is not None:
+        if prefer_json:
+            return _format_json_block(data)
+        table = _format_structured_as_table(
+            data,
+            tool_name=tool_name,
+            agent_name=agent_name,
+        )
+        if table:
+            return table
         try:
-            data = ast.literal_eval(raw)
-            pretty = json.dumps(data, indent=2, ensure_ascii=False, default=str)
-            return f"```json\n{pretty}\n```"
-        except (ValueError, SyntaxError, MemoryError, RecursionError):
+            return _format_json_block(data)
+        except (TypeError, ValueError):
             pass
 
-    # Schon Markdown / Text? Heuristik: enthaelt newline oder typisches MD-Zeichen
     if any(token in raw for token in ("\n", "**", "##", "- ", "| ", "```")):
         return raw
 
     return f"```\n{raw}\n```"
+
+
+def _wants_json_response(message: str) -> bool:
+    """Detect explicit user requests for JSON output."""
+    text = message.casefold()
+    if "json" not in text:
+        return False
+    indicators = (
+        "json",
+        "als json",
+        "in json",
+        "im json",
+        "json format",
+        "json-format",
+        "json output",
+        "raw json",
+        "return json",
+        "give me json",
+        "gib mir json",
+        "zeige json",
+        "liefere json",
+    )
+    return any(indicator in text for indicator in indicators)
+
+
+def _format_json_block(data: Any) -> str:
+    """Render parsed structured data as a JSON code block."""
+    pretty = json.dumps(data, indent=2, ensure_ascii=False, default=str)
+    return f"```json\n{pretty}\n```"
 
 
 def _contains_markdown_table(text: str) -> bool:
@@ -232,22 +307,112 @@ def _parse_structured_tool_output(raw: str) -> Any:
         return None
 
 
+# Modul-qualifizierte Spalten-Hints. Tool-Namen sind moduluebergreifend nicht
+# eindeutig (z.B. ``list_services`` existiert in Kubernetes UND Linux Server) —
+# deshalb wird zusaetzlich nach Agent-Name geschluesselt.
+_PREFERRED_COLUMNS_BY_AGENT_TOOL: dict[str, dict[str, list[str]]] = {
+    "kubernetes": {
+        "list_nodes": ["name", "status", "roles", "version", "internal_ip", "os_image", "age"],
+        "get_all_pods": ["namespace", "name", "ready", "status", "restarts", "age", "node"],
+        "get_failing_pods": ["namespace", "name", "ready", "status", "restarts", "issues", "age"],
+        "list_namespaces": ["name", "status", "labels"],
+        "list_deployments": ["namespace", "name", "ready", "up_to_date", "available", "age"],
+        "list_services": ["namespace", "name", "type", "cluster_ip", "external_ip", "ports", "age"],
+        "list_ingresses": ["namespace", "name", "hosts", "address", "ports", "age"],
+        "list_pvcs": ["namespace", "name", "status", "volume", "capacity", "storage_class", "age"],
+        "list_hpas": [
+            "namespace",
+            "name",
+            "reference",
+            "targets",
+            "min_pods",
+            "max_pods",
+            "replicas",
+        ],
+    },
+    "docker": {
+        "list_containers": ["name", "image", "status", "ports", "created"],
+        "list_images": ["repository", "tag", "image_id", "created", "size"],
+        "list_volumes": ["name", "driver", "mountpoint", "size"],
+    },
+    "proxmox": {
+        "list_all_vms": ["vmid", "name", "status", "node", "cpu", "mem", "uptime"],
+        "list_vms": ["vmid", "name", "status", "node", "cpu", "mem", "uptime"],
+        "list_containers_lxc": ["vmid", "name", "status", "node", "cpu", "mem"],
+        "get_nodes": ["node", "status", "cpu", "mem", "uptime"],
+    },
+    "linux_server": {
+        "get_top_processes": ["pid", "user", "cpu", "memory", "command"],
+        "list_services": ["name", "load", "active", "sub", "description"],
+        "get_disk_usage": ["filesystem", "size", "used", "available", "use_percent", "mountpoint"],
+    },
+    "opnsense": {
+        "get_opnsense_interfaces": ["name", "device", "status", "ipv4", "ipv6"],
+        "get_opnsense_firewall_rules": [
+            "sequence", "interface", "action", "source", "destination", "description",
+        ],
+        "get_opnsense_dhcp_leases": ["address", "hwaddr", "hostname", "starts", "ends"],
+    },
+    "checkmk": {
+        "checkmk_get_hosts": ["host_name", "state", "num_services", "address"],
+        "checkmk_get_services": ["host_name", "service_description", "state", "plugin_output"],
+        "checkmk_get_alerts": ["host", "service", "state", "summary", "time"],
+    },
+}
+
+
+def _preferred_columns_for(agent_name: str, tool_name: str) -> list[str]:
+    """Lookup module-qualified column hints; empty list when none configured."""
+    if not tool_name:
+        return []
+    agent_map = _PREFERRED_COLUMNS_BY_AGENT_TOOL.get(agent_name, {})
+    return agent_map.get(tool_name, [])
+
+
+def _build_table_details(raw: str, tool_name: str, agent_name: str) -> str:
+    """Render tool output as a Markdown table for AI-augmentation flows.
+
+    Kubernetes keeps its bespoke summary card via ``_format_kubernetes_tool_fallback``;
+    all other migrated high-risk modules use the generic structured renderer.
+    Returns an empty string when nothing tabular can be produced.
+    """
+    if agent_name == "kubernetes":
+        return _format_kubernetes_tool_fallback(raw, tool_name=tool_name)
+    data = _parse_structured_tool_output(raw)
+    if data is None:
+        return ""
+    return _format_structured_as_table(data, tool_name=tool_name, agent_name=agent_name)
+
+
+def _first_table_details(tool_msgs: list[ToolMessage], agent_name: str) -> str:
+    """Return the latest tabular tool details, skipping non-tabular outputs."""
+    for msg in reversed(tool_msgs):
+        tool_text = _extract_text(msg.content)
+        tool_name = str(getattr(msg, "name", "") or "")
+        details = _build_table_details(
+            tool_text,
+            tool_name=tool_name,
+            agent_name=agent_name,
+        )
+        if details and "|" in details:
+            return details
+    return ""
+
+
 def _format_kubernetes_tool_fallback(raw: str, tool_name: str = "") -> str:
+    """Kubernetes-specific fallback.
+
+    Falls back to the generic table for the common cases; only the
+    ``get_cluster_status`` summary card stays bespoke.
+    """
     data = _parse_structured_tool_output(raw)
     if data is None:
         return ""
 
-    if isinstance(data, dict):
-        return _format_kubernetes_dict(data, tool_name=tool_name)
-
-    if isinstance(data, list):
-        return _format_kubernetes_list(data, tool_name=tool_name)
-
-    return ""
-
-
-def _format_kubernetes_dict(data: dict, tool_name: str = "") -> str:
-    if tool_name == "get_cluster_status" or {"nodes", "namespaces", "total_pods"}.issubset(data):
+    if isinstance(data, dict) and (
+        tool_name == "get_cluster_status"
+        or {"nodes", "namespaces", "total_pods"}.issubset(data)
+    ):
         failing = int(data.get("failing_pods") or 0)
         status = "✅ Gesund" if failing == 0 else "⚠️ Prüfen"
         rows = [
@@ -261,66 +426,74 @@ def _format_kubernetes_dict(data: dict, tool_name: str = "") -> str:
         ]
         return _markdown_table(["Metrik", "Wert"], rows)
 
-    rows = [(str(key), _format_cell(value)) for key, value in data.items()]
-    return _markdown_table(["Feld", "Wert"], rows)
+    return _format_structured_as_table(data, tool_name=tool_name, agent_name="kubernetes")
 
 
-def _format_kubernetes_list(data: list, tool_name: str = "") -> str:
-    if not data:
-        return "Keine Ressourcen gefunden."
+def _format_structured_as_table(data: Any, tool_name: str = "", agent_name: str = "") -> str:
+    """Render a parsed list/dict tool output as a Markdown table.
 
-    if not all(isinstance(item, dict) for item in data):
-        return ""
+    Returns an empty string when the structure cannot be rendered (e.g.
+    primitive scalar, mixed-shape lists). Callers then fall back to a JSON
+    code block.
+    """
+    if isinstance(data, dict):
+        if not data:
+            return ""
+        rows = [(str(key), _format_cell(value)) for key, value in data.items()]
+        return _markdown_table(["Feld", "Wert"], rows)
 
-    columns_by_tool = {
-        "list_nodes": ["name", "status", "roles", "version", "internal_ip", "os_image", "age"],
-        "get_all_pods": ["namespace", "name", "ready", "status", "restarts", "age", "node"],
-        "get_failing_pods": ["namespace", "name", "ready", "status", "restarts", "issues", "age"],
-        "list_namespaces": ["name", "status", "labels"],
-        "list_deployments": ["namespace", "name", "ready", "up_to_date", "available", "age"],
-        "list_services": ["namespace", "name", "type", "cluster_ip", "external_ip", "ports", "age"],
-        "list_ingresses": ["namespace", "name", "hosts", "address", "ports", "age"],
-        "list_pvcs": ["namespace", "name", "status", "volume", "capacity", "storage_class", "age"],
-        "list_hpas": ["namespace", "name", "reference", "targets", "min_pods", "max_pods", "replicas"],
-    }
-    columns = [col for col in columns_by_tool.get(tool_name, []) if any(col in item for item in data)]
-    if not columns:
-        columns = _derive_columns(data)
+    if isinstance(data, list):
+        if not data:
+            return "Keine Einträge gefunden."
+        if not all(isinstance(item, dict) for item in data):
+            return ""
+        preferred = _preferred_columns_for(agent_name, tool_name)
+        columns = [col for col in preferred if any(col in item for item in data)]
+        if not columns:
+            columns = _derive_columns(data)
+        if not columns:
+            return ""
+        rows = [[_format_cell(item.get(col, "")) for col in columns] for item in data]
+        headers = [_humanize_header(col) for col in columns]
+        return _markdown_table(headers, rows)
 
-    rows = [[_format_cell(item.get(col, "")) for col in columns] for item in data]
-    headers = [_humanize_header(col) for col in columns]
-    return _markdown_table(headers, rows)
+    return ""
 
 
 def _derive_columns(items: list[dict]) -> list[str]:
+    """Derive column order from list-of-dict items.
+
+    Order: well-known columns first (in a sensible reading order), then any
+    remaining keys in insertion order. Returns up to 8 columns. The preferred
+    list is only a *hint* for ordering — every column actually present is
+    surfaced.
+    """
     preferred = [
         "namespace",
         "name",
         "status",
         "ready",
+        "state",
+        "type",
+        "version",
+        "address",
+        "internal_ip",
+        "ports",
         "restarts",
         "age",
         "node",
-        "version",
-        "internal_ip",
-        "type",
     ]
-    present = []
+    seen: list[str] = []
     for col in preferred:
-        if any(col in item for item in items):
-            present.append(col)
-
-    if present:
-        return present[:8]
-
-    keys: list[str] = []
+        if col not in seen and any(col in item for item in items):
+            seen.append(col)
     for item in items:
         for key in item:
-            if key not in keys:
-                keys.append(key)
-            if len(keys) >= 8:
-                return keys
-    return keys
+            if key not in seen:
+                seen.append(key)
+            if len(seen) >= 8:
+                return seen[:8]
+    return seen[:8]
 
 
 def _humanize_header(key: str) -> str:

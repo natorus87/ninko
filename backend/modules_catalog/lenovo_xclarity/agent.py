@@ -1,85 +1,63 @@
-"""
-Lenovo XClarity Module — BaseAgent implementation.
-"""
-
-from __future__ import annotations
-
-import logging
+"""Lenovo XClarity module agent."""
 
 from agents.base_agent import BaseAgent
 
-logger = logging.getLogger("ninko.modules.lenovo_xclarity.agent")
+from . import tools
+
+LENOVO_XCLARITY_SYSTEM_PROMPT = """You are Ninko's Lenovo XClarity specialist.
+
+Capabilities:
+- Manage Lenovo ThinkSystem and ThinkBlade servers via XClarity Administrator.
+- List managed servers, chassis, storage enclosures, events, and firmware versions.
+- Inspect server details, health, alerts, and power state.
+- Power on, power off, restart, and identify servers.
+
+Tool execution rules:
+- Use the available XClarity tools for live hardware data.
+- For server detail or health questions, inspect the specific server before answering.
+
+Output format:
+- For lists (Servers, Chassis, Storage, Events): ALWAYS use Markdown tables.
+- Example: | Server | Status | Power | Health |
+- NEVER return raw JSON or Python repr as the final answer unless the user explicitly asks for JSON.
+- Always include units for numbers.
+- Color-code health status when helpful.
+
+Safety and confirmation rules:
+- Ask for confirmation before power on, power off, or restart operations.
+- Ask for confirmation before identifying a server with the locator LED.
+
+Error handling:
+- If a tool fails, explain the concrete XClarity API, permission, or hardware issue."""
 
 
 class LenovoXClarityAgent(BaseAgent):
-    """Agent for Lenovo XClarity management."""
+    """Lenovo XClarity specialist agent."""
 
     name = "lenovo_xclarity"
     description = (
         "Manages Lenovo ThinkSystem/ThinkBlade servers via XClarity Administrator."
     )
 
-system_prompt = """
-You are the Lenovo XClarity agent. You can manage ThinkSystem and ThinkBlade servers via XClarity Administrator.
-
-Capabilities:
-- List managed servers
-- Get server details
-- List chassis and storage enclosures
-- View server health and alerts
-- List events
-- View firmware versions
-- Power on/off/restart servers
-- Identify servers (blink LED)
-
-Output Format for Overviews (ALWAYS):
-- For lists (Servers, Chassis, Storage, Events): ALWAYS use Markdown tables
-- Example: | Server | Status | Power | Health | |-------|--------|-------|--------|
-- NEVER use bullet lists, plain text, or JSON
-- Always include units for numbers
-- Color-code health status when helpful
-
-Behavior rules:
-- For power operations (on/off/restart) ALWAYS confirm first
-- For server identify (blink LED) confirm first
-- On errors: explain the problem and suggest solutions
-- Always respond in the user's language
-"""
-- View firmware versions
-- Power on/off/restart servers
-- Identify servers (blink LED)
-
-When asked to perform an action, always confirm first unless the user explicitly confirms.
-When there is uncertainty, ask the user to confirm before proceeding.
-"""
-
     def __init__(self) -> None:
-        super().__init__()
+        """Initialize the Lenovo XClarity agent."""
+        super().__init__(
+            name="lenovo_xclarity",
+            system_prompt=LENOVO_XCLARITY_SYSTEM_PROMPT,
+            tools=[
+                tools.list_xclarity_servers,
+                tools.get_xclarity_server_details,
+                tools.list_xclarity_chassis,
+                tools.list_xclarity_storage,
+                tools.get_xclarity_server_health,
+                tools.list_xclarity_events,
+                tools.get_xclarity_firmware,
+                tools.power_on_xclarity_server,
+                tools.power_off_xclarity_server,
+                tools.restart_xclarity_server,
+                tools.identify_xclarity_server,
+            ],
+        )
 
-
-from .tools import (
-    list_xclarity_servers,
-    get_xclarity_server_details,
-    list_xclarity_chassis,
-    list_xclarity_storage,
-    get_xclarity_server_health,
-    list_xclarity_events,
-    get_xclarity_firmware,
-    power_on_xclarity_server,
-    power_off_xclarity_server,
-    restart_xclarity_server,
-    identify_xclarity_server,
-)
 
 agent = LenovoXClarityAgent()
-agent.register_tool(list_xclarity_servers)
-agent.register_tool(get_xclarity_server_details)
-agent.register_tool(list_xclarity_chassis)
-agent.register_tool(list_xclarity_storage)
-agent.register_tool(get_xclarity_server_health)
-agent.register_tool(list_xclarity_events)
-agent.register_tool(get_xclarity_firmware)
-agent.register_tool(power_on_xclarity_server)
-agent.register_tool(power_off_xclarity_server)
-agent.register_tool(restart_xclarity_server)
-agent.register_tool(identify_xclarity_server)

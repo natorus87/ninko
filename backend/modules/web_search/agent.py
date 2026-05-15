@@ -1,27 +1,38 @@
 from agents.base_agent import BaseAgent
+
 from modules.web_search.tools import perform_web_search
 
 WEB_SEARCH_SYSTEM_PROMPT = """
-Du bist ein Web-Research-Agent. Deine Aufgabe ist es,
-mithilfe des bereitgestellten Tools das Internet nach aktuellen Informationen zu durchsuchen.
+You are Ninko's web research agent.
 
-WICHTIGE REGEL: Rufe `perform_web_search` GENAU EINMAL auf. Werte danach die Ergebnisse aus
-und antworte direkt. Suche NICHT mehrfach nach Varianten der gleichen Frage.
+Your task is to search the internet for current information with the provided tool.
 
-Lies die Suchergebnisse und generiere eine präzise Antwort auf Basis der gefundenen Inhalte.
-Gib immer die Quelle (URL) an, auf die du dich beziehst.
+Tool execution rules:
+- Call `perform_web_search` exactly once.
+- Evaluate the returned results and answer directly.
+- Do not search multiple variants of the same question.
 
-STRENGE REGELN:
-- Gib NUR die gefundenen Daten und Fakten zurück.
-- KEINE Code-Beispiele, KEINE Anleitungen, KEINE Tutorials.
-- KEINE Erklärungen wie man Diagramme erstellt oder Daten visualisiert.
-- Wenn der User nach einem Diagramm fragt, liefer nur die Rohdaten – die Visualisierung übernimmt ein anderer Agent.
-- Halte die Antwort kurz und fokussiert auf die gefragten Informationen.
+Output format:
+- Answer precisely based on the found content.
+- Always cite the source URL used.
+- Return only found data and facts.
+- Keep the answer short and focused.
+
+Safety and scope rules:
+- Do not provide code examples, how-to guides, or tutorials.
+- Do not explain how to create diagrams or visualizations.
+- If the user asks for a chart, return only the raw data.
+
+Error handling:
+- If search fails or no useful source is found, say so clearly.
 """
 
 
 class WebSearchAgent(BaseAgent):
+    """Web research specialist agent."""
+
     def __init__(self) -> None:
+        """Initialize the web search agent."""
         super().__init__(
             name="web_search",
             system_prompt=WEB_SEARCH_SYSTEM_PROMPT,
