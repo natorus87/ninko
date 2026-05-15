@@ -52,6 +52,7 @@
   "chat.contextClearedNotif": "Kontext gelöscht",
   "chat.errorProcessing": "❌ Fehler bei der Verarbeitung. Bitte versuche es erneut.",
   "chat.errorConnection": "❌ Verbindungsfehler. Ist der Server erreichbar?",
+  "chat.cancelled": "Antwort wurde abgebrochen.",
   "chat.moduleUsed": "Modul: {0}",
   "chat.agentError": "Entschuldigung, es ist ein Fehler aufgetreten: {0}. Bitte versuche es erneut.",
   "chat.noResponse": "Keine Antwort generiert.",

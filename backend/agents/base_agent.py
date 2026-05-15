@@ -780,6 +780,9 @@ class BaseAgent:
         chat_history: list[dict] | None = None,
         session_id: str = "",
         confirmed: bool = False,
+        wants_stream: bool = False,
+        token_callback: Any = None,
+        cancellation_check: Any = None,
     ) -> tuple[str, bool]:
         history = chat_history or []
 
@@ -834,6 +837,9 @@ class BaseAgent:
             agent=self._agent,
             jit_agent=jit_agent,
             extra={"language": _get_language()},
+            wants_stream=wants_stream,
+            token_callback=token_callback,
+            cancellation_check=cancellation_check,
         )
 
         # Pre-Processing Pipeline

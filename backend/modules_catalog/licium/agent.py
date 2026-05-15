@@ -159,6 +159,7 @@ Output Format for Overviews (ALWAYS):
 - NEVER use bullet lists, plain text, or JSON
 - Always include units for numbers
 - Color-code page types when helpful
+"""
 
 
 class LiciumAgent(BaseAgent):
@@ -189,6 +190,9 @@ class LiciumAgent(BaseAgent):
         chat_history: list[dict] | None = None,
         session_id: str = "",
         confirmed: bool = False,
+        wants_stream: bool = False,
+        token_callback=None,
+        cancellation_check=None,
     ) -> tuple[str, bool]:
         """Deterministic fast path for existing-note batch ingest."""
         msg = (message or "").casefold()
@@ -212,6 +216,9 @@ class LiciumAgent(BaseAgent):
             chat_history=chat_history,
             session_id=session_id,
             confirmed=confirmed,
+            wants_stream=wants_stream,
+            token_callback=token_callback,
+            cancellation_check=cancellation_check,
         )
 
 

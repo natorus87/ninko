@@ -621,6 +621,9 @@ class OrchestratorAgent(BaseAgent):
         chat_history: list[dict] | None,
         session_id: str,
         confirmed: bool,
+        wants_stream: bool = False,
+        token_callback: Any = None,
+        cancellation_check: Any = None,
     ) -> tuple[str, str | None, bool]:
         """Führt einen einzelnen tool_call aus."""
         tool_name = tool_call.get("name", "")
@@ -638,6 +641,9 @@ class OrchestratorAgent(BaseAgent):
                 en=f"Executing module '{tool_name}'…",
             ),
             log_prefix="FunctionCalling",
+            wants_stream=wants_stream,
+            token_callback=token_callback,
+            cancellation_check=cancellation_check,
         )
         return result
 
@@ -648,10 +654,22 @@ class OrchestratorAgent(BaseAgent):
         chat_history: list[dict] | None,
         session_id: str,
         confirmed: bool,
+        wants_stream: bool = False,
+        token_callback: Any = None,
+        cancellation_check: Any = None,
     ) -> tuple[str, str | None, bool]:
         """Führt mehrere tool_calls sequenziell aus (Pipeline-Sequenz)."""
         if len(tool_calls) == 1:
-            return await self._dispatch_tool_call(tool_calls[0], message, chat_history, session_id, confirmed)
+            return await self._dispatch_tool_call(
+                tool_calls[0],
+                message,
+                chat_history,
+                session_id,
+                confirmed,
+                wants_stream,
+                token_callback,
+                cancellation_check,
+            )
 
         steps = []
         for tc in tool_calls:
@@ -691,11 +709,16 @@ class OrchestratorAgent(BaseAgent):
         chat_history: list[dict] | None,
         session_id: str,
         confirmed: bool,
+        wants_stream: bool = False,
+        token_callback: Any = None,
+        cancellation_check: Any = None,
     ) -> tuple[str, str | None, bool]:
         """Führt LLM-Native Function Calling Routing durch."""
         function_calling_enabled, tool_choice = await self._get_routing_mode()
         if not function_calling_enabled or tool_choice == "none":
-            return await self._fallback_to_react_loop(message, chat_history, session_id, confirmed)
+            return await self._fallback_to_react_loop(
+                message, chat_history, session_id, confirmed, wants_stream, token_callback, cancellation_check
+            )
 
         await status_bus.emit(
             session_id,
@@ -706,13 +729,19 @@ class OrchestratorAgent(BaseAgent):
         cache_text = f"{routing_context}\nCURRENT: {message}" if routing_context else message
 
         if hit := await self._route_cache_exact_get(cache_text):
-            return await self._dispatch_tool_calls(hit, message, chat_history, session_id, confirmed)
+            return await self._dispatch_tool_calls(
+                hit, message, chat_history, session_id, confirmed, wants_stream, token_callback, cancellation_check
+            )
         if hit := await self._route_cache_semantic_get(cache_text):
-            return await self._dispatch_tool_calls(hit, message, chat_history, session_id, confirmed)
+            return await self._dispatch_tool_calls(
+                hit, message, chat_history, session_id, confirmed, wants_stream, token_callback, cancellation_check
+            )
 
         tools = self._build_module_tools_schema()
         if not tools:
-            return await self._fallback_to_react_loop(message, chat_history, session_id, confirmed)
+            return await self._fallback_to_react_loop(
+                message, chat_history, session_id, confirmed, wants_stream, token_callback, cancellation_check
+            )
 
         llm = get_llm()
         system_msg = SystemMessage(
@@ -740,7 +769,9 @@ class OrchestratorAgent(BaseAgent):
             )
         except Exception as exc:
             logger.warning("Function Calling LLM call failed: %s — falling back to ReAct", exc)
-            return await self._fallback_to_react_loop(message, chat_history, session_id, confirmed)
+            return await self._fallback_to_react_loop(
+                message, chat_history, session_id, confirmed, wants_stream, token_callback, cancellation_check
+            )
 
         tool_calls = self._extract_tool_calls(response)
         if not tool_calls:
@@ -750,7 +781,9 @@ class OrchestratorAgent(BaseAgent):
         await self._route_cache_exact_set(cache_text, tool_calls)
         await self._route_cache_semantic_set(cache_text, tool_calls)
 
-        return await self._dispatch_tool_calls(tool_calls, message, chat_history, session_id, confirmed)
+        return await self._dispatch_tool_calls(
+            tool_calls, message, chat_history, session_id, confirmed, wants_stream, token_callback, cancellation_check
+        )
 
     async def _smoke_test_function_calling(self) -> dict:
         """Testet ob das aktuelle LLM Function Calling unterstützt."""
@@ -802,6 +835,9 @@ class OrchestratorAgent(BaseAgent):
         chat_history: list[dict] | None,
         session_id: str,
         confirmed: bool,
+        wants_stream: bool = False,
+        token_callback: Any = None,
+        cancellation_check: Any = None,
     ) -> tuple[str, str | None, bool]:
         """Fallback auf ReAct-Loop wenn Function Calling deaktiviert oder fehlschlägt."""
         response, did_compact = await self.invoke(
@@ -809,6 +845,9 @@ class OrchestratorAgent(BaseAgent):
             chat_history=chat_history,
             session_id=session_id,
             confirmed=confirmed,
+            wants_stream=wants_stream,
+            token_callback=token_callback,
+            cancellation_check=cancellation_check,
         )
         return response, None, did_compact
 
@@ -1768,6 +1807,9 @@ JSON-SCHEMA:
         allowed_modules: list[str] | None = None,
         task_sketch: Any = None,
         semantic_resolution: Any = None,
+        wants_stream: bool = False,
+        token_callback: Any = None,
+        cancellation_check: Any = None,
     ) -> tuple[str, bool]:
         """Tier-4-Pipeline: Deterministischer Plan → optionaler LLM-Refinement → PipelineEngine.
 
@@ -2012,6 +2054,9 @@ JSON-SCHEMA:
                 chat_history=chat_history,
                 session_id=session_id,
                 confirmed=confirmed,
+                wants_stream=wants_stream,
+                token_callback=token_callback,
+                cancellation_check=cancellation_check,
             )
 
         logger.info(
@@ -2149,6 +2194,9 @@ JSON-SCHEMA:
         confirmed: bool,
         status_message: str,
         log_prefix: str,
+        wants_stream: bool = False,
+        token_callback: Any = None,
+        cancellation_check: Any = None,
     ) -> tuple[str, str | None, bool]:
         """Führt einen Modul-Agenten mit einheitlichem Status-/Fehlerhandling aus."""
         agent = self.registry.get_agent(module_name)
@@ -2178,6 +2226,9 @@ JSON-SCHEMA:
                 chat_history=chat_history,
                 session_id=session_id,
                 confirmed=confirmed,
+                wants_stream=wants_stream,
+                token_callback=token_callback,
+                cancellation_check=cancellation_check,
             )
             if did_compact and hasattr(agent, "get_last_compaction_summary"):
                 self._last_compaction_summary = agent.get_last_compaction_summary()
@@ -2215,6 +2266,9 @@ JSON-SCHEMA:
         chat_history: list[dict] | None,
         session_id: str,
         confirmed: bool,
+        wants_stream: bool = False,
+        token_callback: Any = None,
+        cancellation_check: Any = None,
     ) -> tuple[str, str | None, bool]:
         """Direktes Routing an Modul oder Custom-Agent anhand force_module."""
         # Special-case: orchestrator ist kein Modul im Registry-Sinne.
@@ -2278,6 +2332,9 @@ JSON-SCHEMA:
                 chat_history=chat_history,
                 session_id=session_id,
                 confirmed=confirmed,
+                wants_stream=wants_stream,
+                token_callback=token_callback,
+                cancellation_check=cancellation_check,
             )
             return response, "orchestrator", did_compact
 
@@ -2316,6 +2373,9 @@ JSON-SCHEMA:
                             chat_history=chat_history,
                             session_id=session_id,
                             confirmed=confirmed,
+                            wants_stream=wants_stream,
+                            token_callback=token_callback,
+                            cancellation_check=cancellation_check,
                         )
                         return response, force_module, did_compact
                     except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
@@ -2360,6 +2420,9 @@ JSON-SCHEMA:
                 zh=f"正在直接调用 {display}…",
             ),
             log_prefix="Direktes Routing an Modul",
+            wants_stream=wants_stream,
+            token_callback=token_callback,
+            cancellation_check=cancellation_check,
         )
 
     @staticmethod
@@ -2384,6 +2447,9 @@ JSON-SCHEMA:
         chat_history: list[dict] | None,
         session_id: str,
         confirmed: bool,
+        wants_stream: bool = False,
+        token_callback: Any = None,
+        cancellation_check: Any = None,
     ) -> tuple[str, str | None, bool] | None:
         """Tier-2 Fast-Path: direktes Modulrouting inkl. Readonly-Subagent-Fallback."""
         agent = self.registry.get_agent(target_module)
@@ -2456,6 +2522,9 @@ JSON-SCHEMA:
                 zh=f"正在调用 {display}…",
             ),
             log_prefix="Tier 2: Routing an Modul",
+            wants_stream=wants_stream,
+            token_callback=token_callback,
+            cancellation_check=cancellation_check,
         )
 
     async def route(
@@ -2465,6 +2534,9 @@ JSON-SCHEMA:
         session_id: str = "",
         confirmed: bool = False,
         force_module: str | None = None,
+        wants_stream: bool = False,
+        token_callback: Any = None,
+        cancellation_check: Any = None,
     ) -> tuple[str, str | None, bool]:
         """
         LLM-Native Function Calling Routing (primär) mit 4-Tier-Fallback.
@@ -2497,6 +2569,9 @@ JSON-SCHEMA:
                 chat_history=chat_history,
                 session_id=session_id,
                 confirmed=confirmed,
+                wants_stream=wants_stream,
+                token_callback=token_callback,
+                cancellation_check=cancellation_check,
             )
 
         if self._wants_agent_creation(message):
@@ -2519,14 +2594,20 @@ JSON-SCHEMA:
                 chat_history=chat_history,
                 session_id=session_id,
                 confirmed=confirmed,
+                wants_stream=wants_stream,
+                token_callback=token_callback,
+                cancellation_check=cancellation_check,
             )
 
-        # ── Fallback: 4-Tier-Routing (Keyword + Embedding + ReAct) ──────────
+        # ── Fallback: 4-Tier-Routing (Keyword + Embedding + ReAct) ────────────
         return await self._route_legacy_tiered(
             message=message,
             chat_history=chat_history,
             session_id=session_id,
             confirmed=confirmed,
+            wants_stream=wants_stream,
+            token_callback=token_callback,
+            cancellation_check=cancellation_check,
         )
 
     async def _route_legacy_tiered(
@@ -2535,6 +2616,9 @@ JSON-SCHEMA:
         chat_history: list[dict] | None,
         session_id: str,
         confirmed: bool,
+        wants_stream: bool = False,
+        token_callback: Any = None,
+        cancellation_check: Any = None,
     ) -> tuple[str, str | None, bool]:
         """Legacy-Fallback wenn Function Calling deaktiviert ist.
 
@@ -2546,6 +2630,9 @@ JSON-SCHEMA:
             chat_history=chat_history,
             session_id=session_id,
             confirmed=confirmed,
+            wants_stream=wants_stream,
+            token_callback=token_callback,
+            cancellation_check=cancellation_check,
         )
 
 

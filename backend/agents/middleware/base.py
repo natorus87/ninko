@@ -69,8 +69,15 @@ class MiddlewareContext:
     early_return: bool = False
     early_return_response: str = ""
 
-    # --- Scratch space for middleware-specific data ---
     extra: dict[str, Any] = field(default_factory=dict)
+
+    stream_generator: Any = None
+
+    wants_stream: bool = False
+
+    cancellation_check: Any = None
+
+    token_callback: Any = None
 
 
 @dataclass

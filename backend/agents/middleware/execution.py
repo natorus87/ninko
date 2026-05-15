@@ -6,7 +6,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
-from langchain_core.messages import AIMessage, ToolMessage
+from core.streaming import SSEStreamGenerator
 
 from .base import BaseMiddleware, MiddlewareContext, MiddlewareResult
 
@@ -27,6 +27,37 @@ def _get_timeout() -> int:
         return timeout if timeout > 0 else _DEFAULT_AGENT_TIMEOUT_SECS
     except (ImportError, AttributeError, TypeError, ValueError):
         return _DEFAULT_AGENT_TIMEOUT_SECS
+
+
+async def _stream_and_accumulate(
+    agent,
+    input_data: dict,
+    config: dict,
+    cancellation_check: Any,
+    token_callback: Any = None,
+) -> tuple[list[str], dict]:
+    """Runs astream_events, accumulates tokens and returns (tokens, final_result)."""
+    tokens: list[str] = []
+    result = {}
+    try:
+        streamer = SSEStreamGenerator(
+            agent,
+            input_data,
+            config=config,
+            cancellation_check=cancellation_check,
+        )
+        async for token in streamer.stream():
+            tokens.append(token)
+            if token_callback:
+                await token_callback(token)
+
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        logger.warning("stream_and_accumulate error: %s", exc, exc_info=True)
+        raise
+
+    return tokens, result
 
 
 class AgentExecutionMiddleware(BaseMiddleware):
@@ -123,23 +154,39 @@ class AgentExecutionMiddleware(BaseMiddleware):
                     return
                 ctx.result = raw_result
             else:
-                logger.debug(
-                    "AgentExecutionMiddleware: ainvoke start agent=%s session=%s tools=%d safeguard=%s",
-                    ctx.agent_name,
-                    ctx.session_id,
-                    len(ctx.active_tools),
-                    ctx.use_safeguard,
-                )
-                ctx.result = await asyncio.wait_for(
-                    jit_agent.ainvoke({"messages": ctx.messages}, config=run_config),
-                    timeout=timeout,
-                )
-                logger.debug(
-                    "AgentExecutionMiddleware: ainvoke end agent=%s session=%s result_type=%s",
-                    ctx.agent_name,
-                    ctx.session_id,
-                    type(ctx.result).__name__,
-                )
+                if ctx.wants_stream and not ctx.active_tools:
+                    logger.debug(
+                        "AgentExecutionMiddleware: streaming mode agent=%s session=%s",
+                        ctx.agent_name,
+                        ctx.session_id,
+                    )
+                    tokens, _ = await _stream_and_accumulate(
+                        jit_agent,
+                        {"messages": ctx.messages},
+                        run_config,
+                        ctx.cancellation_check,
+                        ctx.token_callback,
+                    )
+                    ctx.response = "".join(tokens)
+                    ctx.stream_generator = None
+                else:
+                    logger.debug(
+                        "AgentExecutionMiddleware: ainvoke start agent=%s session=%s tools=%d safeguard=%s",
+                        ctx.agent_name,
+                        ctx.session_id,
+                        len(ctx.active_tools),
+                        ctx.use_safeguard,
+                    )
+                    ctx.result = await asyncio.wait_for(
+                        jit_agent.ainvoke({"messages": ctx.messages}, config=run_config),
+                        timeout=timeout,
+                    )
+                    logger.debug(
+                        "AgentExecutionMiddleware: ainvoke end agent=%s session=%s result_type=%s",
+                        ctx.agent_name,
+                        ctx.session_id,
+                        type(ctx.result).__name__,
+                    )
         except asyncio.TimeoutError:
             logger.warning("Agent '%s' Timeout nach %ds.", ctx.agent_name, timeout)
             ctx.response = (

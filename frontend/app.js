@@ -1320,6 +1320,8 @@ const Ninko = {
         }
         this._ensureHistoryEntry(text);
 
+        const useStreaming = localStorage.getItem('ninko_streaming') === 'true';
+
         // SSE-Stream für Live-Status öffnen (vor dem POST)
         let evtSource = null;
         try {
@@ -1350,15 +1352,20 @@ const Ninko = {
 
             const res = await fetch('/api/chat/', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    message: text,
-                    session_id: this.sessionId,
-                    confirmed: confirmedNow,
-                    ...(this._forcedModule ? { force_module: this._forcedModule } : {}),
-                }),
+                headers: { 'Content-Type': 'application/json', Accept: useStreaming ? 'text/event-stream' : 'application/json' },
+                body: JSON.stringify({ message: text, session_id: this.sessionId, confirmed: confirmedNow, ...(this._forcedModule ? { force_module: this._forcedModule } : {}) }),
                 signal: this._abortController.signal,
             });
+
+            if (useStreaming && res.ok && res.headers.get('content-type')?.includes('text/event-stream')) {
+                // Status-SSE und Typing-Bubble bleiben absichtlich offen — der
+                // Streaming-Pfad schliesst sie via finalizeBubble() am Ende.
+                await this._streamResponse(text, res);
+                evtSource?.close();
+                this._abortController = null;
+                this._setChatBusy(false);
+                return;
+            }
 
             evtSource?.close();
             this.hideTyping();
@@ -2011,6 +2018,7 @@ ${messagesHtml}
 
         container.appendChild(div);
         container.scrollTop = container.scrollHeight;
+        return div;
     },
 
     addChatMeta(text) {
@@ -3057,6 +3065,169 @@ ${messagesHtml}
                     preview: evt.preview || '',
                 });
             }
+        }
+    },
+
+    _closeOpenMarkdownFence(text) {
+        const lines = String(text || '').split('\n');
+        let openFence = null;
+
+        for (const line of lines) {
+            const match = line.match(/^ {0,3}(`{3,}|~{3,})/);
+            if (!match) continue;
+
+            const marker = match[1];
+            const markerChar = marker[0];
+            if (!openFence) {
+                openFence = { markerChar, length: marker.length };
+            } else if (markerChar === openFence.markerChar && marker.length >= openFence.length) {
+                openFence = null;
+            }
+        }
+
+        if (!openFence) return text;
+        const closingFence = openFence.markerChar.repeat(openFence.length);
+        return text.endsWith('\n') ? `${text}${closingFence}` : `${text}\n${closingFence}`;
+    },
+
+    _renderMarkdownSafe(buffer, { final }) {
+        if (!buffer) return '';
+        if (final) return this.formatText(buffer);
+        let preview = this._closeOpenMarkdownFence(buffer);
+        const ls = preview.split('\n');
+        const tl = ls.filter(l => /^\|.*\|/.test(l.trim()));
+        if (tl.length >= 3) {
+            const [h, s] = [tl[0], tl[1]];
+            const stable = /^\|?[\s\-:|]+\|?$/.test(s) && s.includes('---');
+            const hasData = /^\|.*\|/.test(tl[tl.length - 1]);
+            if (!stable || !hasData) {
+                const fp = preview.indexOf('|');
+                const ln = preview.lastIndexOf('\n', fp);
+                preview = ln > 0 ? preview.slice(0, ln) : preview.slice(0, fp > 0 ? fp : preview.length);
+            }
+        }
+        preview = preview.replace(/\[([^\]]*?)$/, '&#91;$1');
+        let html;
+        if (typeof marked !== 'undefined') {
+            html = marked.parse(preview, { breaks: true, gfm: true });
+        } else {
+            html = this._escapeHtml(preview).replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>').replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>').replace(/\n/g, '<br>');
+        }
+        const sanitized = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(html, { ADD_ATTR: ['target', 'rel'], FORBID_TAGS: ['script', 'style', 'iframe', 'form', 'input'], ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|\/api\/images\/|data:image\/(?:png|jpeg|jpg|webp);base64,)/i }) : html;
+        return sanitized.replace(/<a /g, '<a target="_blank" rel="noopener noreferrer" ');
+    },
+
+    async _streamResponse(text, res) {
+        let aiBubble = null, aiTextEl = null, buffer = '', msgId = null, meta = null, done = false;
+        let lastRender = 0;
+        const COOLDOWN = 40;
+        let pending = false;
+        let pendingTimeout = null;
+        // Typing-Bubble (mit Denkschritten) bleibt sichtbar, BIS final-Frame kommt.
+        // Tokens streamen daneben in eine eigene AI-Bubble, die beim ersten Token
+        // angelegt wird (typing-Bubble bleibt im Hintergrund sichtbar).
+        const ensureBubble = () => {
+            if (aiBubble) return;
+            aiBubble = this.addChatMessage('ai', '');
+            if (aiBubble && msgId) aiBubble.dataset.serverMsgId = msgId;
+            aiTextEl = aiBubble?.querySelector('.chat-bubble-text') || aiBubble?.querySelector('.message-text') || null;
+        };
+        // Beim Abschluss: Typing-Bubble in Denkschritte-Wrapper umwandeln und in
+        // die AI-Bubble einbetten (preserveSteps).
+        const finalizeBubble = () => {
+            this.hideTyping();
+            if (!aiBubble || !this._savedSteps) return;
+            const hasSteps = this._savedSteps.querySelector('.typing-step');
+            if (!hasSteps) { this._savedSteps = null; return; }
+            const bubble = aiBubble.querySelector('.chat-bubble');
+            const textEl = bubble?.querySelector('.chat-bubble-text');
+            if (bubble && textEl && !bubble.querySelector('.typing-steps-preserved')) {
+                this._savedSteps.classList.add('typing-steps-preserved');
+                bubble.insertBefore(this._savedSteps, textEl);
+            }
+            this._savedSteps = null;
+        };
+        const update = (txt, final) => {
+            ensureBubble();
+            if (!aiTextEl) return;
+            if (final && pendingTimeout) { clearTimeout(pendingTimeout); pendingTimeout = null; pending = false; }
+            const now = Date.now();
+            if (!final && now - lastRender < COOLDOWN && !pending) {
+                pending = true;
+                pendingTimeout = setTimeout(() => {
+                    pendingTimeout = null;
+                    pending = false;
+                    if (!aiTextEl) return;
+                    aiTextEl.innerHTML = this._renderMarkdownSafe(txt, { final: false });
+                    lastRender = Date.now();
+                }, COOLDOWN - (now - lastRender));
+                return;
+            }
+            lastRender = now;
+            aiTextEl.innerHTML = this._renderMarkdownSafe(txt, { final });
+            if (aiBubble?.dataset?.msgId) { const tr = this._chatMessages.find(m => m.id === aiBubble.dataset.msgId); if (tr) tr.text = txt; }
+            if (final) document.getElementById('chat-messages')?.scrollTo(0, document.getElementById('chat-messages').scrollHeight);
+        };
+        let reader = null;
+        try {
+            reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let remainder = '';
+            while (!done) {
+                const { done: rd, value } = await reader.read();
+                if (rd) break;
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = (remainder + chunk).split('\n');
+                remainder = lines.pop() || '';
+                for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+                    const jsonStr = line.slice(6);
+                    if (!jsonStr.trim()) continue;
+                    let frame;
+                    try { frame = JSON.parse(jsonStr); } catch (_) { continue; }
+                    switch (frame.type) {
+                        case 'start':
+                            // Typing-Bubble bleibt absichtlich sichtbar — Denkschritte
+                            // werden erst beim ersten echten Token oder beim final-Frame
+                            // ersetzt (lazy via ensureBubble()).
+                            msgId = frame.message_id;
+                            break;
+                        case 'token':
+                            buffer += frame.text;
+                            update(buffer);
+                            break;
+                        case 'final':
+                            done = true;
+                            meta = frame.meta || {};
+                            if (frame.response || buffer) update(frame.response || buffer, true);
+                            finalizeBubble();
+                            if (meta.confirmation_required && meta.safeguard) { this._safeguardPendingMessage = text; this._showSafeguardConfirmPrompt(meta.safeguard); }
+                            if (meta.safeguard?.auto_decided && meta.safeguard?.auto_decision === 'allow') this.addChatMeta(`⚡ ${t('safeguard.autoAllowed')}`);
+                            if (meta.compacted) { this.addCompactionNotice(); const ctxEl = document.getElementById('ctx-indicator'); if (ctxEl) { ctxEl.classList.remove('ctx-flash'); void ctxEl.offsetWidth; ctxEl.classList.add('ctx-flash'); setTimeout(() => ctxEl.classList.remove('ctx-flash'), 1000); } }
+                            if (meta.context_budget) this._updateCtxIndicator(meta.context_budget);
+                            if (meta.routing_confidence !== null && meta.routing_confidence < 0.7) this.addChatMeta(`⚠️ Unsicheres Routing (${Math.round(meta.routing_confidence * 100)} % Konfidenz) – Modul-Zuweisung könnte ungenau sein.`);
+                            if (frame.response || buffer) this._saveToHistory(text, frame.response || buffer);
+                            break;
+                        case 'cancelled':
+                            done = true;
+                            update(frame.partial_response || buffer, true);
+                            finalizeBubble();
+                            this.addChatMeta(tf('chat.cancelled', 'Antwort wurde abgebrochen.'));
+                            break;
+                        case 'error':
+                            done = true;
+                            update(buffer || frame.message || t('chat.errorProcessing'), true);
+                            finalizeBubble();
+                            break;
+                    }
+                }
+            }
+        } catch (err) {
+            this.hideTyping();
+            if (err.name !== 'AbortError') this.addChatMessage('ai', t('chat.errorConnection'));
+        } finally {
+            if (pendingTimeout) { clearTimeout(pendingTimeout); pendingTimeout = null; }
+            if (reader) { try { await reader.cancel(); } catch (_) { /* already closed */ } }
         }
     },
 
