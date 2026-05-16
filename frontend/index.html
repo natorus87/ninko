@@ -1155,7 +1155,22 @@ print('Hello, World!')"></textarea>
                                 </div>
                             </div>
 
-                            <h3 class="settings-section-title">Installierte Module</h3>
+                            <div class="settings-section-title-row">
+                                <h3 class="settings-section-title" data-i18n="settings.installedModules">Installierte Module</h3>
+                                <button id="btn-update-all-modules"
+                                    class="btn btn-primary btn-sm"
+                                    style="display:none;"
+                                    data-action="updateAllPlugins"
+                                    data-i18n-title="marketplace.updateAllTooltip"
+                                    title="Alle Module mit verfügbaren Updates nacheinander aktualisieren">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;vertical-align:middle;">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="7 10 12 15 17 10"></polyline>
+                                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                                    </svg>
+                                    <span id="btn-update-all-modules-label" data-i18n="marketplace.updateAll">Alle aktualisieren</span>
+                                </button>
+                            </div>
                             <div id="settings-modules-list" class="modules-grid">
                                 <p class="text-muted">Lade Module…</p>
                             </div>
