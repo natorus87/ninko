@@ -38,7 +38,7 @@ module_manifest = ModuleManifest(
         "downtime, uptime and availability tracking. Critical, warning, ok, "
         "and pending states."
     ),
-    version="1.1.1",
+    version="1.1.2",
     author="Ninko Team",
     enabled_by_default=False,
     env_prefix="CHECKMK_",

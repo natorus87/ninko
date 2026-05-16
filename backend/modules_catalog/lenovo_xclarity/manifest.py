@@ -85,7 +85,7 @@ module_manifest = ModuleManifest(
         "Lenovo XClarity Administrator: ThinkSystem and ThinkBlade server "
         "management, BMC, monitoring, firmware updates."
     ),
-    version="1.0.1",
+    version="1.0.2",
     author="Ninko",
     enabled_by_default=False,
     env_prefix="XCLARITY_",

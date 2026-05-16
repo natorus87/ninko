@@ -61,7 +61,7 @@ module_manifest = ModuleManifest(
         "content as an LLM-managed wiki. Second-brain ingest, query, lint pattern; "
         "articles and wiki pages."
     ),
-    version="1.0.3",
+    version="1.0.4",
     author="Ninko Team",
     enabled_by_default=False,
     env_prefix="LICIUM_",

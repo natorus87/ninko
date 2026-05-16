@@ -58,7 +58,7 @@ module_manifest = ModuleManifest(
         "external IP, internet connection, router client list, connected network "
         "devices, WLAN/LAN clients and device counts."
     ),
-    version="1.1.3",
+    version="1.1.4",
     author="Ninko",
     enabled_by_default=False,
     env_prefix="FRITZBOX_",

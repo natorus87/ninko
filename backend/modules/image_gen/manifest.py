@@ -31,7 +31,7 @@ module_manifest = ModuleManifest(
         "AI image generation / image-gen: create images, illustrations, logos, "
         "graphics, photos, posters using Flux, DALL-E, or Imagen."
     ),
-    version="1.0.0",
+    version="1.0.1",
     author="Ninko Team",
     enabled_by_default=True,
     env_prefix="IMAGE_GEN_",

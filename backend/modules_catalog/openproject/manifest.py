@@ -84,7 +84,7 @@ module_manifest = ModuleManifest(
         "OpenProject enterprise: project and task management, ticketing, "
         "time tracking, team collaboration."
     ),
-    version="1.0.4",
+    version="1.0.5",
     author="Ninko",
     enabled_by_default=False,
     env_prefix="OPENPROJECT_",

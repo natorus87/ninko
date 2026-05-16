@@ -93,7 +93,7 @@ module_manifest = ModuleManifest(
         "Microsoft Intune / MEM (Endpoint Manager): mobile device management (MDM), "
         "policies, apps, compliance, device management for endpoints."
     ),
-    version="1.0.1",
+    version="1.0.2",
     author="Ninko",
     enabled_by_default=False,
     env_prefix="INTUNE_",

@@ -38,7 +38,7 @@ module_manifest = ModuleManifest(
         "Web search / websearch: search the internet via local SearXNG. "
         "Find news, current prices, articles, websites, and live information."
     ),
-    version="1.0.0",
+    version="1.0.1",
     author="Ninko Team",
     enabled_by_default=True,
     env_prefix="NINKO_MODULE_WEB_SEARCH", 

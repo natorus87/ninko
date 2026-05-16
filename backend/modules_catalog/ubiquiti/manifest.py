@@ -83,7 +83,7 @@ module_manifest = ModuleManifest(
         "Ubiquiti UniFi / EdgeRouter / EdgeSwitch / AirMax: switches, routers, "
         "access points. Device status, clients, traffic, WLAN management."
     ),
-    version="1.0.1",
+    version="1.0.2",
     author="Ninko",
     enabled_by_default=False,
     env_prefix="UNIFI_",

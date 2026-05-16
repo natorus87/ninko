@@ -27,7 +27,7 @@ module_manifest = ModuleManifest(
         "WordPress / WP CMS: manage plugins, themes, pages, posts, blog, users, "
         "WooCommerce, wp-cli, permalinks, settings."
     ),
-    version="1.1.2",
+    version="1.1.3",
     author="Ninko Team",
     enabled_by_default=True,
     env_prefix="WORDPRESS_",

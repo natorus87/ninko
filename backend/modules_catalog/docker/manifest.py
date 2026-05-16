@@ -45,7 +45,7 @@ module_manifest = ModuleManifest(
         "Docker host management: containers, images, volumes, compose stacks. "
         "Pull, build, push to dockerhub or private registry; system info."
     ),
-    version="1.1.2",
+    version="1.1.3",
     author="Ninko Team",
     enabled_by_default=False,
     env_prefix="DOCKER_",

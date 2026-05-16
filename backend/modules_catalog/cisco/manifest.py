@@ -80,7 +80,7 @@ module_manifest = ModuleManifest(
         "Cisco network devices: IOS / Nexus / Catalyst switches and routers. "
         "Interface status, VLANs, routing, port management."
     ),
-    version="1.0.1",
+    version="1.0.2",
     author="Ninko",
     enabled_by_default=False,
     env_prefix="CISCO_",

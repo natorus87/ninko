@@ -37,7 +37,7 @@ module_manifest = ModuleManifest(
         "IONOS DNS: manage DNS zones and records (A, CNAME, TXT, etc.) "
         "via IONOS API."
     ),
-    version="1.1.2",
+    version="1.1.3",
     author="Ninko",
     enabled_by_default=True,
     env_prefix="IONOS_",

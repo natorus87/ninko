@@ -23,7 +23,7 @@ module_manifest = ModuleManifest(
         "Network analysis: DNS lookup, WHOIS, traceroute, IP and host analysis, "
         "port scan, ping, server and website analysis, network info."
     ),
-    version="1.0.0",
+    version="1.0.1",
     author="Ninko Team",
     enabled_by_default=True,
     env_prefix="NINKO_MODULE_NETWORK_ANALYSIS",

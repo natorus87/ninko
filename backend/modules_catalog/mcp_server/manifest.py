@@ -33,7 +33,7 @@ module_manifest = ModuleManifest(
         "Generic Model Context Protocol (MCP) integration: connect to arbitrary "
         "MCP servers, expose tools and resources via stdio."
     ),
-    version="1.0.1",
+    version="1.0.2",
     author="Ninko Team",
     enabled_by_default=False,
     env_prefix="MCP_SERVER_",

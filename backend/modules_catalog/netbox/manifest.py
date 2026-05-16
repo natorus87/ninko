@@ -23,7 +23,7 @@ module_manifest = ModuleManifest(
         "NetBox DCIM & IPAM: data center inventory and IP address management. "
         "Devices, racks, circuits, IP addresses, VLANs."
     ),
-    version="1.0.1",
+    version="1.0.2",
     author="Ninko",
     enabled_by_default=False,
     env_prefix="NETBOX_",

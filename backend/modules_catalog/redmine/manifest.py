@@ -31,7 +31,7 @@ module_manifest = ModuleManifest(
         "milestones, workflows. Time tracking, HRM, resource planning, attendance, "
         "leave management, reporting (alphanodes plugins)."
     ),
-    version="1.1.1",
+    version="1.1.2",
     author="Ninko Team",
     enabled_by_default=False,
     env_prefix="REDMINE_",

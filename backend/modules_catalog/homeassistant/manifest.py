@@ -24,7 +24,7 @@ module_manifest = ModuleManifest(
         "heating, outlets, sensors, lamps, and HA entities. Turn on/off, adjust, "
         "automate. Not for router status, FritzBox status, or WLAN/LAN client counts."
     ),
-    version="1.1.2",
+    version="1.1.3",
     author="Ninko",
     enabled_by_default=False,
     env_prefix="HOMEASSISTANT_",

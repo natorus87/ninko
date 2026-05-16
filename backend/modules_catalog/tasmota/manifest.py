@@ -44,7 +44,7 @@ module_manifest = ModuleManifest(
         "switches, plugs, relays, sensors. Read temperature, humidity, power "
         "and energy consumption; MQTT, smart meters."
     ),
-    version="1.1.2",
+    version="1.1.3",
     author="Ninko",
     enabled_by_default=False,
     env_prefix="TASMOTA_",

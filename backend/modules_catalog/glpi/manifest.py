@@ -88,7 +88,7 @@ module_manifest = ModuleManifest(
         "GLPI helpdesk: tickets, incidents, support requests, SLA tracking, "
         "follow-ups. Open, assign, close, or escalate tickets."
     ),
-    version="1.1.6",
+    version="1.1.7",
     author="Ninko Team",
     enabled_by_default=True,
     env_prefix="GLPI_",

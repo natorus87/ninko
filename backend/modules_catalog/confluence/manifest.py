@@ -29,7 +29,7 @@ module_manifest = ModuleManifest(
         "Atlassian Confluence wiki: spaces, pages, blog posts, articles, "
         "labels, documentation, full-text search."
     ),
-    version="1.0.1",
+    version="1.0.2",
     author="Ninko Team",
     enabled_by_default=False,
     env_prefix="CONFLUENCE_",

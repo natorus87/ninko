@@ -11,7 +11,7 @@ module_manifest = ModuleManifest(
         "Email client: send mail via SMTP and read/manage via IMAP. "
         "Inbox, folders, mailbox; supports Basic Auth and MSAL (Microsoft 365 OAuth2)."
     ),
-    version="1.1.2",
+    version="1.1.3",
     author="Ninko",
     enabled_by_default=True,
     env_prefix="EMAIL_",

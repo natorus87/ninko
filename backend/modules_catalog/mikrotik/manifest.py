@@ -83,7 +83,7 @@ module_manifest = ModuleManifest(
         "MikroTik RouterOS / RouterBoard: switches, routers, wireless. "
         "Interface status, routing, firewall, queues, WireGuard, CAPsMAN."
     ),
-    version="1.0.1",
+    version="1.0.2",
     author="Ninko",
     enabled_by_default=False,
     env_prefix="MIKROTIK_",

@@ -21,7 +21,7 @@ module_manifest = ModuleManifest(
         "find bugs, suggest fixes, write unit tests, regex, algorithms. Improve "
         "text, spelling, formulation."
     ),
-    version="1.0.0",
+    version="1.0.1",
     author="Ninko Team",
     enabled_by_default=True,
     env_prefix="CODELAB_",

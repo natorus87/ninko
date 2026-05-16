@@ -23,7 +23,7 @@ module_manifest = ModuleManifest(
         "GitHub: repositories, Actions workflows, pull requests, issues, "
         "releases, and workflow runs."
     ),
-    version="1.0.1",
+    version="1.0.2",
     author="Ninko",
     enabled_by_default=False,
     env_prefix="GITHUB_",

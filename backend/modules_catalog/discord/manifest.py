@@ -11,7 +11,7 @@ module_manifest = ModuleManifest(
     description=(
         "Discord bot: manage Discord servers, channels, members, and messages."
     ),
-    version="1.1.1",
+    version="1.1.2",
     author="Ninko",
     enabled_by_default=False,
     env_prefix="DISCORD_",

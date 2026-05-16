@@ -36,7 +36,7 @@ module_manifest = ModuleManifest(
         "packet filter, interfaces, gateways, DHCP, DNS, VPN (IPsec, OpenVPN, "
         "WireGuard), firewall logs. Create, modify, allow, block, or delete rules."
     ),
-    version="1.2.1",
+    version="1.2.2",
     author="Ninko",
     enabled_by_default=False,
     env_prefix="OPNSENSE_",

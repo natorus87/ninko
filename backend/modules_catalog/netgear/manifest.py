@@ -82,7 +82,7 @@ module_manifest = ModuleManifest(
         "Netgear network devices: ProSafe switches (GS108, GS110, GS116), "
         "routers, access points. Port status, VLANs, traffic management."
     ),
-    version="1.0.1",
+    version="1.0.2",
     author="Ninko",
     enabled_by_default=False,
     env_prefix="NETGEAR_",

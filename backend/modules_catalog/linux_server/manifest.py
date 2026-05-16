@@ -28,7 +28,7 @@ module_manifest = ModuleManifest(
         "apt, journalctl, df, top, reboot, hostname, users, iptables. "
         "Manage apache, nginx, mysql, postgres, samba."
     ),
-    version="1.1.2",
+    version="1.1.3",
     author="Ninko Team",
     enabled_by_default=False,
     env_prefix="LINUX_SERVER_",

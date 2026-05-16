@@ -100,7 +100,7 @@ module_manifest = ModuleManifest(
         "Microsoft Entra ID (formerly Azure AD) / O365 / M365: users, groups, "
         "applications, identity management for Microsoft cloud."
     ),
-    version="1.0.1",
+    version="1.0.2",
     author="Ninko",
     enabled_by_default=False,
     env_prefix="ENTRA_",

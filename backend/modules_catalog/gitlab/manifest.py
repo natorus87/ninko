@@ -23,7 +23,7 @@ module_manifest = ModuleManifest(
         "GitLab CI/CD: repositories, pipelines, jobs, merge requests, "
         "releases, commits."
     ),
-    version="1.0.1",
+    version="1.0.2",
     author="Ninko",
     enabled_by_default=False,
     env_prefix="GITLAB_",

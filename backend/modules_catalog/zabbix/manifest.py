@@ -22,7 +22,7 @@ module_manifest = ModuleManifest(
     description=(
         "Zabbix monitoring: hosts, items, triggers, graphs, alerts, host metrics."
     ),
-    version="1.0.1",
+    version="1.0.2",
     author="Ninko",
     enabled_by_default=False,
     env_prefix="ZABBIX_",

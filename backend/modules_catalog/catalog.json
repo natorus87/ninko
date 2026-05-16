@@ -4,245 +4,245 @@
       "name": "checkmk",
       "display_name": "Checkmk",
       "description": "Checkmk Monitoring – Hosts, Services, Status, Alerts und Probleme.",
-      "version": "1.0.0",
+      "version": "1.1.2",
       "author": "Ninko Team"
     },
     {
       "name": "cisco",
       "display_name": "Cisco",
       "description": "Cisco Network Devices – Switches, Routers, Nexus – Interface Status, VLANs, Routing.",
-      "version": "1.0.0",
+      "version": "1.0.2",
       "author": "Ninko"
     },
     {
       "name": "confluence",
       "display_name": "Confluence",
       "description": "Atlassian Confluence Wiki – Spaces, Pages, Blog Posts und Suche.",
-      "version": "1.0.0",
+      "version": "1.0.2",
       "author": "Ninko Team"
     },
     {
       "name": "docker",
       "display_name": "Docker",
       "description": "Docker Host Management – Container, Images, Volumes, System-Info",
-      "version": "1.0.0",
+      "version": "1.1.3",
       "author": "Ninko Team"
     },
     {
       "name": "email",
       "display_name": "Email (SMTP/IMAP)",
       "description": "E-Mail Client für Ninko. Senden via SMTP und Lesen/Verwalten via IMAP. Unterstützt Basic Auth und MSAL (Microsoft 365 OAuth2).",
-      "version": "1.0.0",
+      "version": "1.1.3",
       "author": "Ninko"
     },
     {
       "name": "fritzbox",
       "display_name": "FritzBox",
       "description": "Integration und Steuerung von AVM FritzBox Routern via TR-064 und AHA",
-      "version": "1.0.0",
+      "version": "1.1.4",
       "author": "Ninko"
     },
     {
       "name": "glpi",
       "display_name": "GLPI Helpdesk",
       "description": "GLPI Helpdesk Integration – Tickets, Incidents, SLA-Tracking",
-      "version": "1.0.0",
+      "version": "1.1.7",
       "author": "Ninko Team"
     },
     {
       "name": "homeassistant",
       "display_name": "Home Assistant",
       "description": "Steuerung und Abfrage von Smart Home Geräten in Home Assistant.",
-      "version": "1.0.0",
+      "version": "1.1.3",
       "author": "Ninko"
     },
     {
       "name": "hpe_ilo",
       "display_name": "HPE iLO",
       "description": "HPE Integrated Lights-Out (iLO4/iLO5) Server Management via REST API.",
-      "version": "1.0.0",
+      "version": "1.0.2",
       "author": "Ninko"
     },
     {
       "name": "ionos",
       "display_name": "IONOS DNS",
       "description": "IONOS DNS Zonen und Records Management.",
-      "version": "1.0.0",
+      "version": "1.1.3",
       "author": "Ninko"
     },
     {
       "name": "jira",
       "display_name": "Jira",
       "description": "Atlassian Jira Issue Tracking – Issues, Projekte, Sprints und Boards.",
-      "version": "1.0.0",
+      "version": "1.0.2",
       "author": "Ninko Team"
     },
     {
       "name": "kubernetes",
       "display_name": "Kubernetes",
       "description": "Kubernetes Cluster Management – Pods, Deployments, Services, Health-Monitoring",
-      "version": "1.0.0",
+      "version": "1.3.1",
       "author": "Ninko Team"
     },
     {
       "name": "licium",
       "display_name": "Licium Wiki",
       "description": "Licium Wissensdatenbank – Notizen erstellen, semantisch suchen, Inhalte strukturieren und als LLM-Wiki verwalten (Karpathy-Pattern: Ingest, Query, Lint).",
-      "version": "1.0.0",
+      "version": "1.0.4",
       "author": "Ninko Team"
     },
     {
       "name": "linux_server",
       "display_name": "Linux Server",
       "description": "Linux Server Management über SSH – Befehle, Services, Monitoring, Dateien",
-      "version": "1.0.0",
+      "version": "1.1.3",
       "author": "Ninko Team"
     },
     {
       "name": "mikrotik",
       "display_name": "MikroTik",
       "description": "MikroTik RouterOS – Switches, Routers, Wireless – Interface Status, Routing, Firewall.",
-      "version": "1.0.0",
+      "version": "1.0.2",
       "author": "Ninko"
     },
     {
       "name": "nextcloud",
       "display_name": "Nextcloud",
       "description": "Nextcloud File Sync and Share – Files, Folders, Shares, Users.",
-      "version": "1.0.0",
+      "version": "1.0.2",
       "author": "Ninko"
     },
     {
       "name": "netgear",
       "display_name": "Netgear",
       "description": "Netgear Network Devices – Switches, Routers, APs – Port Status, VLANs.",
-      "version": "1.0.0",
+      "version": "1.0.2",
       "author": "Ninko"
     },
     {
       "name": "opnsense",
       "display_name": "OPNsense",
       "description": "Management und Monitoring einer OPNsense Firewall via REST API.",
-      "version": "1.2.0",
+      "version": "1.2.2",
       "author": "Ninko"
     },
     {
       "name": "openproject",
       "display_name": "OpenProject",
       "description": "OpenProject Enterprise – Project Management, Tasks, Time Tracking.",
-      "version": "1.0.3",
+      "version": "1.0.5",
       "author": "Ninko"
     },
     {
       "name": "pihole",
       "display_name": "Pi-hole",
       "description": "Pi-hole DNS-Server Management – Blocking, Queries, Domains, Statistiken",
-      "version": "1.0.0",
+      "version": "1.1.3",
       "author": "Ninko Team"
     },
     {
       "name": "slack",
       "display_name": "Slack",
       "description": "Slack Team Communication – Channels, Messages, Users, and Notifications.",
-      "version": "1.0.0",
+      "version": "1.0.2",
       "author": "Ninko"
     },
     {
       "name": "proxmox",
       "display_name": "Proxmox",
       "description": "Proxmox VE Management – VMs, Container, Nodes, Snapshots",
-      "version": "1.0.0",
+      "version": "1.1.3",
       "author": "Ninko Team"
     },
     {
       "name": "qdrant",
       "display_name": "Qdrant Knowledge Bank",
       "description": "",
-      "version": "1.0.0",
+      "version": "1.1.3",
       "author": "Ninko Team"
     },
     {
       "name": "redmine",
       "display_name": "Redmine",
       "description": "Redmine Projektmanagement – Tickets, Projekte, Time Entries und Benutzer.",
-      "version": "1.0.0",
+      "version": "1.1.2",
       "author": "Ninko Team"
     },
     {
       "name": "synology",
       "display_name": "Synology NAS",
       "description": "Synology NAS Management – System-Status, Storage, Packages, Services, Tasks",
-      "version": "1.0.0",
+      "version": "1.0.2",
       "author": "Ninko Team"
     },
     {
       "name": "telegram",
       "display_name": "Telegram",
       "description": "Telegram Bot – Chatten mit Ninko über Messenger, Voice Messages, persistentes Chat-Memory.",
-      "version": "1.1.4",
+      "version": "1.2.1",
       "author": "Ninko Team"
     },
     {
       "name": "tasmota",
       "display_name": "Tasmota",
       "description": "Steuerung und Monitoring von Tasmota-Geräten (ESP8266/ESP32) via HTTP REST API.",
-      "version": "1.0.0",
+      "version": "1.1.3",
       "author": "Ninko"
     },
     {
       "name": "ubiquiti",
       "display_name": "Ubiquiti",
       "description": "Ubiquiti UniFi – Switches, Routers, APs – Device Status, Clients, Traffic.",
-      "version": "1.0.0",
+      "version": "1.0.2",
       "author": "Ninko"
     },
     {
       "name": "discord",
       "display_name": "Discord",
       "description": "Discord Bot – Server, Channels, Members, Messages – Send and manage Discord content.",
-      "version": "1.0.0",
+      "version": "1.1.2",
       "author": "Ninko"
     },
     {
       "name": "zabbix",
       "display_name": "Zabbix",
       "description": "Zabbix Enterprise Monitoring – Hosts, Items, Triggers, Graphs und Alerts.",
-      "version": "1.0.0",
+      "version": "1.0.2",
       "author": "Ninko"
     },
     {
       "name": "netbox",
       "display_name": "NetBox",
       "description": "NetBox DCIM & IPAM – Devices, Circuits, IP-Adresses, VLANs, Rack-Management.",
-      "version": "1.0.0",
+      "version": "1.0.2",
       "author": "Ninko"
     },
     {
       "name": "gitlab",
       "display_name": "GitLab",
       "description": "GitLab CI/CD – Repositories, Pipelines, Jobs, Merge Requests und Releases.",
-      "version": "1.0.0",
+      "version": "1.0.2",
       "author": "Ninko"
     },
     {
       "name": "mcp_server",
       "display_name": "MCP Server",
       "description": "Generic Model Context Protocol integration for arbitrary MCP servers.",
-      "version": "1.0.0",
+      "version": "1.0.2",
       "author": "Ninko Team"
     },
     {
       "name": "github",
       "display_name": "GitHub",
       "description": "GitHub – Repositories, Actions, Pull Requests, Issues und Releases.",
-      "version": "1.0.0",
+      "version": "1.0.2",
       "author": "Ninko"
     },
     {
       "name": "wordpress",
       "display_name": "WordPress",
       "description": "WordPress-Verwaltung – Plugins, Seiten, Beiträge, Benutzer, Einstellungen",
-      "version": "1.0.0",
+      "version": "1.1.3",
       "author": "Ninko Team"
     }
   ]

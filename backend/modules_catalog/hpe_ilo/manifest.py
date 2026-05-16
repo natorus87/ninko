@@ -88,7 +88,7 @@ module_manifest = ModuleManifest(
         "HPE Integrated Lights-Out (iLO4 / iLO5): server management, "
         "BMC, IPMI for HPE servers via REST API."
     ),
-    version="1.0.1",
+    version="1.0.2",
     author="Ninko",
     enabled_by_default=False,
     env_prefix="ILO_",

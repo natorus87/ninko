@@ -39,7 +39,7 @@ module_manifest = ModuleManifest(
         "Create/apply via YAML, patch deployments, scale, rollout restart. Metrics via metrics-server. "
         "Diagnose CrashLoopBackOff, evicted pods, kube-system issues."
     ),
-    version="1.3.0",
+    version="1.3.1",
     author="Ninko Team",
     enabled_by_default=True,
     env_prefix="K8S_",

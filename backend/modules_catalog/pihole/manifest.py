@@ -61,7 +61,7 @@ module_manifest = ModuleManifest(
         "statistics, custom DNS records (A, CNAME, local DNS), DHCP leases, "
         "cache flush, network table, system messages and warnings."
     ),
-    version="1.1.2",
+    version="1.1.3",
     author="Ninko Team",
     enabled_by_default=True,
     env_prefix="PIHOLE_",

@@ -48,7 +48,7 @@ module_manifest = ModuleManifest(
         "runbooks, and reference content. Semantic vector search with payload "
         "filtering by category and tags."
     ),
-    version="1.1.2",
+    version="1.1.3",
     author="Ninko Team",
     enabled_by_default=False,
     env_prefix="NINKO_MODULE_QDRANT",

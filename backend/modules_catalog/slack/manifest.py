@@ -84,7 +84,7 @@ module_manifest = ModuleManifest(
         "Slack team communication: channels, messages, users, bot interactions, "
         "webhooks, notifications."
     ),
-    version="1.0.1",
+    version="1.0.2",
     author="Ninko",
     enabled_by_default=False,
     env_prefix="SLACK_",
