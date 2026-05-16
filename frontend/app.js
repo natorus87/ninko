@@ -56,7 +56,12 @@ const I18n = {
         // HTML-Lang-Attribut
         document.documentElement.lang = this._lang;
         // Safeguard-Button-Titel nach Sprachwechsel aktualisieren
-        if (typeof Ninko !== 'undefined') Ninko._updateSafeguardBtn?.();
+        if (typeof Ninko !== 'undefined') {
+            Ninko._updateSafeguardBtn?.();
+            // Re-render the bulk-update button so the count placeholder
+            // ({0}) survives a live language switch.
+            Ninko._updateBulkUpdateButton?.();
+        }
     },
 };
 
@@ -210,6 +215,10 @@ const Ninko = {
                 this._hideConfirm();
             });
             await this.loadModules();
+            // After modules are loaded, try to restore the last route the user
+            // was on before a reload (e.g. after a plugin update). Falls back
+            // silently to the chat tab if nothing is stored.
+            try { this._restoreRoute(); } catch (e) { console.warn('Route restore failed:', e); }
             this.connectWebSocket();
             this.autoResizeTextarea();
             this.initResizers();
@@ -459,15 +468,26 @@ const Ninko = {
         this.switchSettingsTab('language');
     },
 
-    /** Custom Confirm Promise */
-    confirm(message, title = 'Bestätigung') {
+    /**
+     * Custom Confirm Promise.
+     * @param {object} [opts] - Optional {okLabel, okVariant: 'danger'|'primary'}.
+     *                          Defaults preserve the historical delete dialog.
+     */
+    confirm(message, title = 'Bestätigung', opts = {}) {
         return new Promise((resolve) => {
             const modal = document.getElementById('ninko-confirm-modal');
             const msgEl = document.getElementById('ninko-confirm-message');
             const titleEl = document.getElementById('ninko-confirm-title');
+            const okBtn = document.getElementById('ninko-confirm-ok');
 
             if (msgEl) msgEl.innerText = message;
             if (titleEl) titleEl.innerText = title;
+            if (okBtn) {
+                okBtn.textContent = opts.okLabel || 'Löschen';
+                const variant = opts.okVariant === 'primary' ? 'btn-primary' : 'btn-danger';
+                okBtn.classList.remove('btn-primary', 'btn-danger');
+                okBtn.classList.add(variant);
+            }
             if (modal) {
                 modal.style.display = 'flex';
                 // Trigger animation
@@ -842,6 +862,74 @@ const Ninko = {
     },
 
 
+    // --- Route Persistence ---
+    // Saves the current view (main tab + sub-tab) to sessionStorage so a
+    // page reload (e.g. after a plugin update) can restore it instead of
+    // dropping the user back on the dashboard.
+    _ROUTE_STORAGE_KEY: 'ninko_last_route',
+
+    _persistRoute() {
+        try {
+            const route = {
+                tab: this.activeTab || null,
+                settingsTab: document.querySelector('#subnav-settings .settings-tab.active[data-settings-tab]')?.dataset.settingsTab || null,
+                moduleTab: this._activeModuleTab || null,
+                autoTab: this._activeAutoTab || null,
+            };
+            sessionStorage.setItem(this._ROUTE_STORAGE_KEY, JSON.stringify(route));
+        } catch (_) {
+            // sessionStorage may be unavailable (private mode, etc.) — ignore.
+        }
+    },
+
+    _readPersistedRoute() {
+        try {
+            const raw = sessionStorage.getItem(this._ROUTE_STORAGE_KEY);
+            if (!raw) return null;
+            return JSON.parse(raw);
+        } catch (_) {
+            return null;
+        }
+    },
+
+    _isValidRouteId(value) {
+        // Tab IDs are simple slugs (a-z, 0-9, dash, underscore). Reject anything
+        // else to prevent tampered sessionStorage values from breaking CSS
+        // selectors downstream (`[data-tab="..."]`).
+        return typeof value === 'string' && value.length > 0 && value.length <= 64 && /^[a-zA-Z0-9_-]+$/.test(value);
+    },
+
+    _domHasTab(tabId) {
+        return !!document.getElementById(`tab-${tabId}`);
+    },
+
+    _domHasSettingsTab(tabId) {
+        return !!document.querySelector(`#subnav-settings .settings-tab[data-settings-tab="${tabId}"]`);
+    },
+
+    _restoreRoute() {
+        const route = this._readPersistedRoute();
+        if (!route || !this._isValidRouteId(route.tab) || route.tab === 'chat') return false;
+
+        if (!this._domHasTab(route.tab)) {
+            sessionStorage.removeItem(this._ROUTE_STORAGE_KEY);
+            return false;
+        }
+
+        this.switchTab(route.tab);
+
+        if (route.tab === 'settings' && this._isValidRouteId(route.settingsTab) && this._domHasSettingsTab(route.settingsTab)) {
+            this.switchSettingsTab(route.settingsTab);
+        }
+        if (route.tab === 'modules' && this._isValidRouteId(route.moduleTab) && this._domHasTab(route.moduleTab)) {
+            this.switchModuleTab(route.moduleTab);
+        }
+        if (route.tab === 'automatisierung' && this._isValidRouteId(route.autoTab) && this._domHasTab(route.autoTab)) {
+            this.switchAutoTab(route.autoTab);
+        }
+        return true;
+    },
+
     // --- Tab Switching ---
     switchTab(tabId) {
         // Redirect tasks/agents/workflows through the automatisierung tab
@@ -953,6 +1041,7 @@ const Ninko = {
         }
         this._updateMobileNav();
         this._updateBreadcrumb();
+        this._persistRoute();
     },
 
     // --- Automatisierung Sub-Tab Switching ---
@@ -1001,6 +1090,7 @@ const Ninko = {
         if (tabId === 'agents') this.loadAgents();
         if (tabId === 'workflows') this.loadWorkflows();
         this._updateBreadcrumb();
+        this._persistRoute();
     },
 
     _setAutomationSubnavActive(tabId) {
@@ -1050,6 +1140,7 @@ const Ninko = {
             }
         });
         this._updateBreadcrumb();
+        this._persistRoute();
     },
 
     _normalizeConnectionModuleName(tabId) {
@@ -3710,6 +3801,7 @@ ${messagesHtml}
         if (targetTab === 'logs') this.startLogPolling();
         if (targetTab === 'alerts') this.loadAlerts();
         this._updateBreadcrumb();
+        this._persistRoute();
     },
 
     // --- Language ---
@@ -5434,6 +5526,11 @@ ${messagesHtml}
     },
 
     async loadModulesSettings() {
+        // Don't repaint the module list while a bulk update is iterating over
+        // the same DOM nodes — it would clobber per-card highlighting and the
+        // pending-updates cache.
+        if (this._bulkUpdating) return;
+
         const container = document.getElementById('settings-modules-list');
         try {
             const res = await fetch('/api/settings/modules');
@@ -5446,6 +5543,12 @@ ${messagesHtml}
             for (const p of (updatesData.plugins || [])) {
                 updatesMap[p.name] = p;
             }
+
+            // Cache names with available updates for the bulk-update button
+            this._pendingPluginUpdates = (updatesData.plugins || [])
+                .filter(p => p.update_available)
+                .map(p => p.name);
+            this._updateBulkUpdateButton();
 
             if (!modules.length) {
                 container.innerHTML = '<p class="empty-state">Keine Module gefunden.</p>';
@@ -5468,7 +5571,7 @@ ${messagesHtml}
                             <span class="module-config-version">v${safeVersion}${hasUpdate ? ' <span class="version-update-indicator">→ ' + safeRepoVersion + '</span>' : ''}</span>
                         </div>
                         <div style="display: flex; gap: 0.5rem; align-items: center; flex-shrink: 0;">
-                            ${hasUpdate ? `<button class="btn-primary btn-sm btn-update" data-action="updatePlugin" data-args="${JSON.stringify([safeName]).replace(/\"/g, '&quot;')}" title="Auf Version ${safeRepoVersion} aktualisieren"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: middle;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Update</button>` : ''}
+                            ${hasUpdate ? `<button class="btn-primary btn-sm btn-update" data-action="updatePlugin" data-args="${JSON.stringify([safeName]).replace(/\"/g, '&quot;')}" data-self="true" title="Auf Version ${safeRepoVersion} aktualisieren"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: middle;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Update</button>` : ''}
                             <label class="toggle-switch" title="Aktivieren/Deaktivieren">
                                 <input type="checkbox" ${mod.enabled ? 'checked' : ''}
                                     id="mod-toggle-${safeName}"
@@ -6535,14 +6638,22 @@ ${messagesHtml}
         }
     },
 
-    async updatePlugin(name) {
-        const btn = event.target;
-        const originalText = btn.textContent;
-        btn.disabled = true;
-        btn.textContent = 'Update...';
+    async updatePlugin(name, btnEl) {
+        if (this._bulkUpdating) {
+            showNotification(t('marketplace.bulkRunning'), 'info');
+            return;
+        }
+        // btnEl is provided by the dispatcher (data-self="true"); fall back to
+        // a DOM lookup for legacy/keyboard activation paths.
+        const btn = btnEl || document.querySelector(`.btn-update[data-args*="${name}"]`);
+        const originalText = btn?.textContent;
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Update...';
+        }
 
         try {
-            const res = await fetch(`/api/plugins/reinstall/${name}`, { 
+            const res = await fetch(`/api/plugins/reinstall/${encodeURIComponent(name)}`, {
                 method: 'POST',
                 credentials: 'include',
                 headers: { 'Content-Type': 'application/json' }
@@ -6550,17 +6661,131 @@ ${messagesHtml}
             if (res.ok) {
                 const data = await res.json();
                 showNotification(data.message || `Plugin '${name}' wurde aktualisiert.`, 'success');
+                // Keep the pending-updates cache consistent for the moment
+                // before reload — relevant if the reload is ever cancelled.
+                if (Array.isArray(this._pendingPluginUpdates)) {
+                    this._pendingPluginUpdates = this._pendingPluginUpdates.filter(n => n !== name);
+                    this._updateBulkUpdateButton();
+                }
                 setTimeout(() => window.location.reload(), 1500);
             } else {
                 const err = await res.json().catch(() => ({ detail: 'Unknown error' }));
                 showNotification(`Update-Fehler: ${err.detail || 'HTTP ' + res.status}`, 'error');
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                }
             }
         } catch (e) {
             console.error('Plugin Update Error:', e);
             showNotification('Netzwerkfehler beim Aktualisieren: ' + e.message, 'error');
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+        }
+    },
+
+    _updateBulkUpdateButton() {
+        const btn = document.getElementById('btn-update-all-modules');
+        if (!btn) return;
+        const count = (this._pendingPluginUpdates || []).length;
+        btn.style.display = count > 0 ? '' : 'none';
+        const label = document.getElementById('btn-update-all-modules-label');
+        if (label) {
+            label.textContent = count > 1
+                ? t('marketplace.updateAllWithCount', count)
+                : t('marketplace.updateAll');
+        }
+    },
+
+    async updateAllPlugins() {
+        if (this._bulkUpdating) {
+            showNotification(t('marketplace.bulkAlreadyRunning'), 'info');
+            return;
+        }
+        const names = [...(this._pendingPluginUpdates || [])];
+        if (!names.length) {
+            showNotification(t('marketplace.noUpdates'), 'info');
+            return;
+        }
+
+        if (!await this.confirm(t('marketplace.bulkConfirm', names.length), undefined, {
+            okLabel: t('marketplace.update'),
+            okVariant: 'primary',
+        })) {
+            return;
+        }
+
+        const btn = document.getElementById('btn-update-all-modules');
+        const label = document.getElementById('btn-update-all-modules-label');
+        const originalLabel = label?.textContent || t('marketplace.updateAll');
+        if (btn) btn.disabled = true;
+
+        // Disable individual update buttons to prevent concurrent reinstalls.
+        document.querySelectorAll('.btn-update').forEach(b => { b.disabled = true; });
+
+        this._bulkUpdating = true;
+        const results = { ok: [], failed: [] };
+
+        try {
+            for (let i = 0; i < names.length; i++) {
+                const name = names[i];
+                if (label) label.textContent = t('marketplace.bulkProgress', i + 1, names.length, name);
+
+                const card = document.getElementById(`module-card-${name}`);
+                card?.classList.add('module-card-updating');
+
+                try {
+                    const res = await fetch(`/api/plugins/reinstall/${encodeURIComponent(name)}`, {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: { 'Content-Type': 'application/json' },
+                    });
+                    if (res.ok) {
+                        results.ok.push(name);
+                    } else {
+                        const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+                        results.failed.push({ name, error: err.detail || `HTTP ${res.status}` });
+                    }
+                } catch (e) {
+                    console.error(`Bulk update failed for ${name}:`, e);
+                    results.failed.push({ name, error: e.message || 'Netzwerkfehler' });
+                } finally {
+                    card?.classList.remove('module-card-updating');
+                }
+            }
         } finally {
-            btn.disabled = false;
-            btn.textContent = originalText;
+            this._bulkUpdating = false;
+        }
+
+        // Summary
+        if (results.failed.length === 0) {
+            showNotification(t('marketplace.bulkSuccess', results.ok.length), 'success');
+        } else if (results.ok.length === 0) {
+            showNotification(t('marketplace.bulkAllFailed', results.failed.length), 'error');
+            console.warn('Bulk update failures:', results.failed);
+        } else {
+            showNotification(
+                t('marketplace.bulkPartial', results.ok.length, results.failed.length),
+                'warning',
+            );
+            console.warn('Bulk update failures:', results.failed);
+        }
+
+        if (label) label.textContent = originalLabel;
+        if (btn) btn.disabled = false;
+
+        // Only reload if at least one update succeeded — otherwise nothing
+        // changed on disk and a reload would just be noise. The route is
+        // persisted in sessionStorage, so the user lands back on this tab.
+        if (results.ok.length > 0) {
+            // Keep update buttons disabled until the reload kicks in to avoid
+            // a brief window where the user could trigger another reinstall.
+            setTimeout(() => window.location.reload(), 1500);
+        } else {
+            // Re-query buttons fresh — the DOM may have been re-rendered.
+            document.querySelectorAll('.btn-update').forEach(b => { b.disabled = false; });
         }
     },
 
