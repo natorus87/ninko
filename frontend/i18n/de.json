@@ -325,6 +325,17 @@
   "marketplace.noRepos": "Keine Repos konfiguriert.",
   "marketplace.installFailed": "Installation fehlgeschlagen.",
   "marketplace.networkError": "Netzwerkfehler.",
+  "marketplace.updateAll": "Alle aktualisieren",
+  "marketplace.updateAllWithCount": "Alle aktualisieren ({0})",
+  "marketplace.updateAllTooltip": "Alle Module mit verfügbaren Updates nacheinander aktualisieren",
+  "marketplace.bulkConfirm": "Möchtest du {0} Module nacheinander aktualisieren?\n\nDie Seite wird einmal am Ende neu geladen.",
+  "marketplace.bulkProgress": "Aktualisiere {0}/{1}: {2}…",
+  "marketplace.bulkRunning": "Bulk-Update läuft — bitte warten.",
+  "marketplace.bulkAlreadyRunning": "Bulk-Update läuft bereits.",
+  "marketplace.noUpdates": "Keine Updates verfügbar.",
+  "marketplace.bulkSuccess": "{0} Module erfolgreich aktualisiert. Lade neu…",
+  "marketplace.bulkAllFailed": "Alle {0} Updates fehlgeschlagen.",
+  "marketplace.bulkPartial": "{0} aktualisiert, {1} fehlgeschlagen. Details in der Konsole.",
   "modules": {
     "hpe_ilo": {
       "noData": "Keine Daten verfügbar.",
