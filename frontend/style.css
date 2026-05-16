@@ -4165,6 +4165,24 @@ select {
     color: var(--text-primary);
 }
 
+.settings-section-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: 0 0 1rem;
+}
+.settings-section-title-row .settings-section-title {
+    margin: 0;
+}
+
+.module-card-updating {
+    outline: 2px solid var(--accent-color, #6c5ce7);
+    outline-offset: 2px;
+    opacity: 0.85;
+    transition: outline 120ms ease, opacity 120ms ease;
+}
+
 /* Logs panel in settings: negate padding, fill height */
 #tab-settings:has(#settings-panel-logs.active) .settings-main {
     padding: 0;
