@@ -9,10 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.3.6] – 2026-05-16
+
 ### Added
 
 - **Kubernetes module v1.3.0** (`backend/modules_catalog/kubernetes/`): 17 neue Tools für vollständige Cluster-Inspektion — `list_nodes`, `describe_node`, `describe_pod`, `list_statefulsets`, `list_daemonsets`, `list_replicasets`, `list_jobs`, `list_cronjobs`, `list_configmaps`, `list_secrets` (metadata only), `list_persistent_volumes`, `list_storage_classes`, `list_endpoints`, `list_network_policies`, `list_hpas`, `get_top_nodes`, `get_top_pods`. Routing-Keywords erweitert um Node/Daemonset/Cronjob/HPA/Metrics-Begriffe.
 - **`KeywordRouter` compat shim** (`backend/agents/orchestrator.py`): Minimaler Keyword-Router ersetzt das entfernte `core/router.py` für Legacy-Telemetrie (`classify_tier`), Force-/Fallback-Helper und Tests. Primäres Routing bleibt LLM-Native Function Calling.
+- **Response formatting regression tests**: Added focused coverage for language middleware, module table rendering, explicit JSON requests, module-qualified preferred columns, and short AI-answer augmentation.
 
 ### Changed
 
@@ -20,6 +23,9 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **Kubernetes list-Tools cluster-weit per Default**: `get_all_pods`, `list_deployments`, `list_services`, `list_ingresses`, `list_pvcs`, `get_recent_events` liefern bei leerem `namespace`-Parameter Ergebnisse über alle Namespaces statt nur `default`. Behebt Agent-Antworten der Form "kann keine globale Liste abfragen".
 - **README & backend/README**: 4-Tier-Routing-Beschreibung durch Function-Calling-Beschreibung ersetzt; Architektur-ASCII-Diagramm aktualisiert.
 - **Kubernetes-Modul-README**: Veraltete Tool-Liste (5 Einträge mit falschen Namen) durch vollständige Tabelle aller 39 Tools ersetzt, inkl. Sicherheitshinweise zu Secrets und Server-Side-Apply.
+- **Canonical English module prompts**: Migrated high-risk, catalog, template, and core module system prompts to English canonical prompts while keeping response language centralized in middleware.
+- **Module marketplace versions**: Bumped affected module manifest versions and synchronized `backend/modules_catalog/catalog.json`.
+- **Release metadata**: README, VERSION, Helm chart `appVersion`, chart version, and default Helm image tag updated for v1.3.6.
 
 ### Removed
 
@@ -30,6 +36,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - **Pydantic v2 import** (`backend/api/routes_settings.py`): `Literal` wird jetzt aus `typing` statt aus `pydantic` importiert (Pydantic v2 entfernt das Re-Export).
+- **Structured module response rendering**: Tool results for Kubernetes, Proxmox, Docker, Linux Server, Checkmk, OPNsense, and Zabbix now render as Markdown tables for normal answers and JSON code blocks when explicitly requested.
+- **Preferred table column collisions**: Preferred columns are now module-qualified so same-named tools such as `list_services` no longer reuse the wrong table schema.
+- **Short AI responses**: Concise module summaries now append structured tool details when needed and avoid duplicating existing Markdown tables.
+- **Zabbix agent initialization**: Fixed the Zabbix `BaseAgent` constructor usage and removed the obsolete `_register_tools` path.
 
 ## [1.3.5] – 2026-05-10
 
