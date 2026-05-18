@@ -48,13 +48,32 @@ _REQUIRED_TOOL_RULES: tuple[RequiredToolRule, ...] = (
 )
 
 _FUTURE_COMMITMENT_PATTERNS: tuple[re.Pattern[str], ...] = (
-    _rx(r"\bich\s+(erstelle|richte|lege|importiere|ingestiere|aktualisiere|schreibe)\s+jetzt\b"),
+    _rx(
+        r"\bich\s+"
+        r"(erstelle|richte|lege|importiere|ingestiere|aktualisiere|schreibe)"
+        r"\s+jetzt\b"
+    ),
     _rx(
         r"\bich\s+werde\s+(jetzt\s+)?(?:.{0,50}\s+)?"
         r"(erstellen|einrichten|anlegen|importieren|ingestieren|aktualisieren)\b"
     ),
-    _rx(r"\bals\s+n[äa]chstes\s+(erstelle|richte|lege|importiere|ingestiere|aktualisiere)\b"),
+    _rx(
+        r"\bals\s+n[äa]chstes\s+"
+        r"(erstelle|richte|lege|importiere|ingestiere|aktualisiere)\b"
+    ),
     _rx(r"\bi\s+will\s+(now\s+)?(create|set up|import|ingest|update|write)\b"),
+)
+
+_MUTATING_REQUEST_PATTERNS: tuple[re.Pattern[str], ...] = (
+    _rx(
+        r"\b(erstelle|erstell|richte|lege|leg|importiere|ingestiere|aktualisiere|"
+        r"schreibe|ändere|aendere|lösche|loesche|starte|stoppe|restart|deploye|"
+        r"installiere|konfiguriere)\b"
+    ),
+    _rx(
+        r"\b(create|set up|setup|import|ingest|update|write|change|delete|remove|"
+        r"start|stop|restart|deploy|install|configure)\b"
+    ),
 )
 
 _WRITE_TOOL_PREFIXES = (
@@ -95,8 +114,14 @@ class ToolCompletionValidationMiddleware(BaseMiddleware):
             )
             return
 
-        if self._looks_like_unexecuted_commitment(ctx.response) and self._had_tool_activity(ctx):
-            write_tools = {tool for tool in executed_tools if tool.startswith(_WRITE_TOOL_PREFIXES)}
+        if (
+            self._looks_like_unexecuted_commitment(ctx.response)
+            and self._had_tool_activity(ctx)
+            and self._request_expected_write(ctx.message)
+        ):
+            write_tools = {
+                tool for tool in executed_tools if tool.startswith(_WRITE_TOOL_PREFIXES)
+            }
             if not write_tools:
                 ctx.response = (
                     "Die Ausführung wurde nicht als abgeschlossen gewertet: Der Agent hat einen "
@@ -157,7 +182,14 @@ class ToolCompletionValidationMiddleware(BaseMiddleware):
     def _looks_like_unexecuted_commitment(self, response: str) -> bool:
         return any(pattern.search(response) for pattern in _FUTURE_COMMITMENT_PATTERNS)
 
-    def _blocked_response(self, missing_reasons: list[str], executed_tools: set[str]) -> str:
+    def _request_expected_write(self, message: str) -> bool:
+        return any(pattern.search(message) for pattern in _MUTATING_REQUEST_PATTERNS)
+
+    def _blocked_response(
+        self,
+        missing_reasons: list[str],
+        executed_tools: set[str],
+    ) -> str:
         lines = [
             "Die Aufgabe wurde nicht als abgeschlossen gewertet.",
             "",

@@ -28,6 +28,7 @@ from schemas.settings import (
     K8sClusterListResponse,
     BrandingSettings,
     BrandingSettingsResponse,
+    normalize_llm_backend,
 )
 from core.config import get_settings
 from core.redis_client import get_redis
@@ -75,6 +76,7 @@ _BRANDING_ALLOWED_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"}
 def _sanitize_llm_payload(data: dict, source: str) -> LlmSettingsResponse:
     """Entfernt Secrets aus LLM-Responses und liefert *_set Flag."""
     clean = dict(data or {})
+    clean["backend"] = normalize_llm_backend(clean.get("backend", "ollama"))
     secret = (clean.get("api_key") or "").strip()
     clean["api_key"] = ""
     clean["api_key_set"] = bool(secret)
@@ -85,6 +87,7 @@ def _sanitize_llm_payload(data: dict, source: str) -> LlmSettingsResponse:
 def _sanitize_provider(provider: dict) -> dict:
     """Entfernt Provider-Secrets aus Read-Responses."""
     clean = dict(provider)
+    clean["backend"] = normalize_llm_backend(clean.get("backend", "ollama"))
     secret = (clean.get("api_key") or "").strip()
     clean["api_key"] = ""
     clean["api_key_set"] = bool(secret)
@@ -115,6 +118,9 @@ async def get_llm_settings() -> LlmSettingsResponse:
     if cfg.LLM_BACKEND == "ollama":
         base_url = cfg.OLLAMA_BASE_URL
         model = cfg.OLLAMA_MODEL
+    elif cfg.LLM_BACKEND == "mlx_server":
+        base_url = cfg.MLX_BASE_URL
+        model = cfg.MLX_MODEL
     elif cfg.LLM_BACKEND == "openai_compatible":
         base_url = cfg.OPENAI_BASE_URL
         model = cfg.OPENAI_MODEL
@@ -132,7 +138,11 @@ async def get_llm_settings() -> LlmSettingsResponse:
             "api_key": (
                 cfg.OPENAI_API_KEY
                 if cfg.LLM_BACKEND == "openai_compatible"
-                else (cfg.LITELLM_API_KEY if cfg.LLM_BACKEND == "litellm" else "")
+                else (
+                    cfg.LITELLM_API_KEY
+                    if cfg.LLM_BACKEND == "litellm"
+                    else (cfg.MLX_API_KEY if cfg.LLM_BACKEND == "mlx_server" else "")
+                )
             ),
         },
         source="default",
@@ -325,6 +335,11 @@ def _reconfigure_llm(settings: LlmSettings) -> None:
     if settings.backend == "ollama":
         os.environ["OLLAMA_BASE_URL"] = settings.base_url
         os.environ["OLLAMA_MODEL"] = settings.model
+    elif settings.backend == "mlx_server":
+        os.environ["MLX_BASE_URL"] = settings.base_url
+        os.environ["MLX_MODEL"] = settings.model
+        if settings.api_key:
+            os.environ["MLX_API_KEY"] = settings.api_key
     elif settings.backend == "openai_compatible":
         os.environ["OPENAI_BASE_URL"] = settings.base_url
         os.environ["OPENAI_MODEL"] = settings.model
@@ -887,7 +902,10 @@ def _apply_module_connection(module_name: str, connection: dict) -> None:
 
 async def _load_providers(redis) -> list[dict]:
     raw = await redis.connection.get(REDIS_KEY_LLM_PROVIDERS)
-    return json.loads(raw) if raw else []
+    providers = json.loads(raw) if raw else []
+    for provider in providers:
+        provider["backend"] = normalize_llm_backend(provider.get("backend", "ollama"))
+    return providers
 
 
 async def _save_providers(redis, providers: list[dict]) -> None:
@@ -1095,7 +1113,7 @@ async def test_llm_provider(provider_id: str) -> dict:
         test_url = base_url_clean + "/v1/models"
 
     headers = {}
-    if backend in ("openai_compatible", "litellm") and api_key:
+    if backend in ("mlx_server", "openai_compatible", "litellm") and api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
     verify_ssl = bool(provider.get("verify_ssl", True))

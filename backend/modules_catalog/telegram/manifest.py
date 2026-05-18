@@ -80,7 +80,7 @@ module_manifest = ModuleManifest(
         "Telegram chat: chat with the Ninko orchestrator via Telegram messages, "
         "groups, or channels."
     ),
-    version="1.2.1",
+    version="1.2.2",
     author="Ninko Team",
     enabled_by_default=True,
     env_prefix="TELEGRAM_",

@@ -9,6 +9,7 @@ in the connection config, the bot replies with a voice message (OGG/Opus).
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
 import os
 import re
@@ -724,6 +725,123 @@ class TelegramBot:
             logger.debug("Edit message failed: %s", exc)
         return False
 
+    async def _route_with_live_preview(
+        self,
+        orchestrator: Any,
+        token: str,
+        chat_id: int,
+        message_id: int | None,
+        contextualized_text: str,
+        history: list[dict[str, Any]],
+        session_id: str,
+        confirmed: bool = False,
+    ) -> tuple[str, str | None, bool, int | None]:
+        """Run the orchestrator and edit a Telegram preview with streamed tokens."""
+        preview_msg_id = await self._send_preview_message(
+            token,
+            chat_id,
+            reply_to_message_id=message_id,
+        )
+        if not preview_msg_id:
+            response_text, module_used, did_compact = await orchestrator.route(
+                message=contextualized_text,
+                chat_history=history,
+                session_id=session_id,
+                confirmed=confirmed,
+                wants_stream=True,
+            )
+            return response_text, module_used, did_compact, None
+
+        token_queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=500)
+        from core import status_bus
+
+        status_queue = status_bus.get_queue(session_id)
+        while not status_queue.empty():
+            try:
+                status_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+
+        async def _token_callback(chunk: str) -> None:
+            try:
+                token_queue.put_nowait(chunk)
+            except asyncio.QueueFull:
+                pass
+
+        route_task = asyncio.create_task(
+            orchestrator.route(
+                message=contextualized_text,
+                chat_history=history,
+                session_id=session_id,
+                confirmed=confirmed,
+                wants_stream=True,
+                token_callback=_token_callback,
+            )
+        )
+
+        buffer = ""
+        latest_status = ""
+        last_sent_preview = ""
+        last_edit_at = 0.0
+        last_sent_len = 0
+
+        try:
+            while not route_task.done() or not token_queue.empty():
+                try:
+                    chunk = await asyncio.wait_for(token_queue.get(), timeout=0.25)
+                except asyncio.TimeoutError:
+                    chunk = None
+
+                if chunk:
+                    buffer += chunk
+
+                while not status_queue.empty():
+                    try:
+                        event = status_queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+                    if not isinstance(event, dict):
+                        continue
+                    if event.get("type") == "status":
+                        latest_status = str(event.get("text") or "").strip()
+
+                now = asyncio.get_running_loop().time()
+                enough_text = len(buffer) - last_sent_len >= 24
+                enough_time = now - last_edit_at >= 1.2
+                route_finished = route_task.done() and token_queue.empty()
+                if buffer:
+                    preview = buffer[-3900:]
+                    if not route_finished:
+                        preview = f"{preview} ..."
+                elif latest_status:
+                    preview = f"⏳ {latest_status}"
+                else:
+                    preview = ""
+
+                status_changed = bool(preview and preview != last_sent_preview)
+                if preview and (
+                    route_finished
+                    or (buffer and enough_text and enough_time)
+                    or (not buffer and status_changed and enough_time)
+                ):
+                    await self._edit_message(
+                        token,
+                        chat_id,
+                        preview_msg_id,
+                        preview,
+                    )
+                    last_edit_at = now
+                    last_sent_len = len(buffer)
+                    last_sent_preview = preview
+
+            response_text, module_used, did_compact = await route_task
+            status_bus.cleanup(session_id)
+            return response_text, module_used, did_compact, preview_msg_id
+        except Exception:
+            route_task.cancel()
+            status_bus.cleanup(session_id)
+            raise
+
     async def _handle_callback_query(
         self, callback_query: dict[str, Any], token: str
     ) -> None:
@@ -1147,6 +1265,9 @@ class TelegramBot:
                     return
 
             history = await redis.get_chat_history(session_id)
+            streaming_enabled = str(
+                conn.config.get("streaming", "false") if conn else "false"
+            ).lower() in ("true", "1", "yes")
 
             # Chat-ID + detected language as context hint
             lang_hint = ""
@@ -1158,11 +1279,28 @@ class TelegramBot:
                 lang_hint = f"[Erkannte Sprache: {detected_lang}] "
             contextualized_text = f"[Telegram Chat-ID: {chat_id}]\n{lang_hint}{text}"
 
-            response_text, module_used, did_compact = await orchestrator.route(
-                message=contextualized_text,
-                chat_history=history,
-                session_id=session_id,
-            )
+            preview_msg_id: int | None = None
+            if streaming_enabled and not is_voice:
+                (
+                    response_text,
+                    module_used,
+                    did_compact,
+                    preview_msg_id,
+                ) = await self._route_with_live_preview(
+                    orchestrator=orchestrator,
+                    token=token,
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    contextualized_text=contextualized_text,
+                    history=history,
+                    session_id=session_id,
+                )
+            else:
+                response_text, module_used, did_compact = await orchestrator.route(
+                    message=contextualized_text,
+                    chat_history=history,
+                    session_id=session_id,
+                )
 
             # Save history — skip if session was cleared in the meantime
             if session_id in self._cleared_sessions:
@@ -1317,7 +1455,7 @@ class TelegramBot:
                     asyncio.TimeoutError,
                 ) as exc:
                     logger.warning(
-                        "Image send failed, falling back to text: %s", img_err
+                        "Image send failed, falling back to text: %s", exc
                     )
                     fallback = format_for_telegram(final_text)
                     await self._send(
@@ -1364,29 +1502,10 @@ class TelegramBot:
 
             final_text = format_for_telegram(final_text)
 
-            # Check if streaming is enabled (OpenClaw-style)
-            streaming_enabled = str(
-                conn.config.get("streaming", "false") if conn else "false"
-            ).lower() in ("true", "1", "yes")
-
-            if streaming_enabled and len(final_text) <= 4000:
-                # Send preview then edit with final response
-                preview_msg_id = await self._send_preview_message(
-                    token, chat_id, reply_to_message_id=message_id
+            if preview_msg_id and len(final_text) <= 4000:
+                await self._edit_message(
+                    token, chat_id, preview_msg_id, final_text, parse_mode="HTML"
                 )
-                if preview_msg_id:
-                    await self._edit_message(
-                        token, chat_id, preview_msg_id, final_text, parse_mode="HTML"
-                    )
-                else:
-                    # Fallback to normal send
-                    await self._send(
-                        token,
-                        chat_id,
-                        final_text,
-                        parse_mode="HTML",
-                        reply_to_message_id=message_id,
-                    )
             else:
                 # Send response in chunks (Telegram limit: 4096 characters)
                 chunks = [
@@ -1394,13 +1513,22 @@ class TelegramBot:
                     for i in range(0, len(final_text), _MAX_MSG_LEN)
                 ]
                 for idx, chunk in enumerate(chunks):
-                    await self._send(
-                        token,
-                        chat_id,
-                        chunk,
-                        parse_mode="HTML",
-                        reply_to_message_id=message_id if idx == 0 else None,
-                    )
+                    if idx == 0 and preview_msg_id:
+                        await self._edit_message(
+                            token,
+                            chat_id,
+                            preview_msg_id,
+                            chunk,
+                            parse_mode="HTML",
+                        )
+                    else:
+                        await self._send(
+                            token,
+                            chat_id,
+                            chunk,
+                            parse_mode="HTML",
+                            reply_to_message_id=message_id if idx == 0 else None,
+                        )
 
         except (
             RuntimeError,

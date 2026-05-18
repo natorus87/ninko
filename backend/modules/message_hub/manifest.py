@@ -36,7 +36,7 @@ module_manifest = ModuleManifest(
         "Discord, and Telegram. Maps external channel IDs to Ninko sessions; "
         "manage incoming messages, hub status, and routing rules."
     ),
-    version="1.0.0",
+    version="1.0.1",
     author="Ninko",
     enabled_by_default=True,
     env_prefix="MESSAGE_HUB_",

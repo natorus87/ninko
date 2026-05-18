@@ -209,8 +209,10 @@ async def get_model_context_window() -> int:
             _cached_context_window = _DEFAULT_CONTEXT_WINDOW
             return _cached_context_window
 
-        # LM Studio, OpenAI-kompatibel oder LiteLLM – /v1/models Endpoint
-        if settings.LLM_BACKEND == "openai_compatible":
+        # LM Studio, MLX Server, OpenAI-kompatibel oder LiteLLM – /v1/models Endpoint
+        if settings.LLM_BACKEND == "mlx_server":
+            base_url = settings.MLX_BASE_URL.rstrip("/")
+        elif settings.LLM_BACKEND == "openai_compatible":
             base_url = settings.OPENAI_BASE_URL.rstrip("/")
         elif settings.LLM_BACKEND == "litellm":
             base_url = settings.LITELLM_BASE_URL.rstrip("/")
@@ -220,7 +222,9 @@ async def get_model_context_window() -> int:
             base_url = base_url + "/v1"
 
         headers = {}
-        if settings.LLM_BACKEND == "openai_compatible" and settings.OPENAI_API_KEY:
+        if settings.LLM_BACKEND == "mlx_server" and settings.MLX_API_KEY:
+            headers["Authorization"] = f"Bearer {settings.MLX_API_KEY}"
+        elif settings.LLM_BACKEND == "openai_compatible" and settings.OPENAI_API_KEY:
             headers["Authorization"] = f"Bearer {settings.OPENAI_API_KEY}"
         elif settings.LLM_BACKEND == "litellm" and settings.LITELLM_API_KEY:
             headers["Authorization"] = f"Bearer {settings.LITELLM_API_KEY}"
@@ -274,7 +278,7 @@ def _get_lmstudio_base_url(raw_url: str) -> str:
 def get_llm() -> BaseChatModel:
     """
     Gibt je nach LLM_BACKEND das passende Chat-Modell zurück.
-    Unterstützte Backends: 'ollama', 'lmstudio' (OpenAI-kompatibel), 'openai_compatible' (mit API-Key).
+    Unterstützte Backends: 'ollama', 'lmstudio', 'mlx_server', 'openai_compatible', 'litellm'.
     """
     settings = get_settings()
 
@@ -294,6 +298,26 @@ def get_llm() -> BaseChatModel:
             base_url=settings.OLLAMA_BASE_URL,
             temperature=settings.LLM_TEMPERATURE,
             num_predict=settings.MAX_OUTPUT_TOKENS,
+        )
+
+    elif settings.LLM_BACKEND == "mlx_server":
+        base_url = _get_lmstudio_base_url(settings.MLX_BASE_URL)
+        api_key = settings.MLX_API_KEY or "mlx-server"
+        verify_ssl = settings.LLM_VERIFY_SSL
+        logger.info(
+            "LLM-Backend: MLX Server – URL=%s, Modell=%s, verify_ssl=%s",
+            base_url, settings.MLX_MODEL, verify_ssl,
+        )
+        http_client = httpx.Client(verify=verify_ssl)
+        http_async_client = httpx.AsyncClient(verify=verify_ssl)
+        return _NormalizingChatOpenAI(
+            base_url=base_url,
+            api_key=api_key,
+            model=settings.MLX_MODEL,
+            temperature=settings.LLM_TEMPERATURE,
+            max_tokens=settings.MAX_OUTPUT_TOKENS,
+            http_client=http_client,
+            http_async_client=http_async_client,
         )
 
     elif settings.LLM_BACKEND == "openai_compatible":
@@ -392,9 +416,14 @@ def get_embeddings() -> Embeddings:
                 base_url=embed_base_url or "http://ollama:11434",
             )
         else:
-            # lmstudio, openai_compatible, litellm → alle nutzen OpenAI-kompatiblen Endpoint
+            # lmstudio, mlx_server, openai_compatible, litellm → OpenAI-kompatibler Endpoint
             base_url = _get_lmstudio_base_url(embed_base_url) if embed_base_url else ""
-            api_key = embed_api_key or ("lm-studio" if embed_backend == "lmstudio" else "sk-placeholder")
+            if embed_backend == "lmstudio":
+                api_key = embed_api_key or "lm-studio"
+            elif embed_backend == "mlx_server":
+                api_key = embed_api_key or "mlx-server"
+            else:
+                api_key = embed_api_key or "sk-placeholder"
             logger.info(
                 "Embedding-Backend: %s (eigener Provider) – Modell=%s, URL=%s",
                 embed_backend, embed_model, base_url,
@@ -419,6 +448,20 @@ def get_embeddings() -> Embeddings:
         return OllamaEmbeddings(
             model=embed_model,
             base_url=settings.OLLAMA_BASE_URL,
+        )
+
+    elif settings.LLM_BACKEND == "mlx_server":
+        base_url = _get_lmstudio_base_url(settings.MLX_BASE_URL)
+        api_key = settings.MLX_API_KEY or "mlx-server"
+        logger.info(
+            "Embedding-Backend: MLX Server (LLM-Fallback) – Modell=%s, URL=%s",
+            embed_model, base_url,
+        )
+        return OpenAIEmbeddings(
+            base_url=base_url,
+            api_key=api_key,
+            model=embed_model,
+            check_embedding_ctx_length=False,
         )
 
     elif settings.LLM_BACKEND == "openai_compatible":
@@ -459,7 +502,11 @@ def get_safeguard_openai_client() -> tuple[Any, str]:
 
     settings = get_settings()
 
-    if settings.LLM_BACKEND == "openai_compatible":
+    if settings.LLM_BACKEND == "mlx_server":
+        base_url = _get_lmstudio_base_url(settings.MLX_BASE_URL)
+        api_key = settings.MLX_API_KEY or "mlx-server"
+        model = settings.MLX_MODEL
+    elif settings.LLM_BACKEND == "openai_compatible":
         base_url = _get_lmstudio_base_url(settings.OPENAI_BASE_URL)
         api_key = settings.OPENAI_API_KEY or "sk-placeholder"
         model = settings.OPENAI_MODEL

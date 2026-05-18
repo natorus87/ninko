@@ -120,7 +120,6 @@ class TelegramWorker(ChannelWorker):
                     json={
                         "chat_id": int(chat_id),
                         "text": response_text,
-                        "parse_mode": "Markdown",
                     },
                 )
             except Exception as exc:

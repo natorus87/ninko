@@ -492,6 +492,29 @@ async def test_non_migrated_module_does_not_get_table_appended() -> None:
     assert ctx.response == "All good."
 
 
+async def test_web_search_unhelpful_ai_response_uses_tool_results() -> None:
+    middleware = ResponseExtractionMiddleware()
+    raw = (
+        "[{'title': 'Example News', 'url': 'https://example.test/news', "
+        "'content': 'A concise result snippet.'}]"
+    )
+    ctx = MiddlewareContext(
+        agent_name="web_search",
+        result={
+            "messages": [
+                ToolMessage(content=raw, tool_call_id="c1", name="perform_web_search"),
+                AIMessage(content="Ich werde jetzt die aktuellen Nachrichten suchen."),
+            ]
+        },
+    )
+
+    await middleware.post_process(ctx)
+
+    assert "**Example News**" in ctx.response
+    assert "https://example.test/news" in ctx.response
+    assert "Ich werde jetzt" not in ctx.response
+
+
 # --- Zabbix agent constructor (Finding 3) -----------------------------------
 
 

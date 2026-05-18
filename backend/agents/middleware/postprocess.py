@@ -79,6 +79,18 @@ class ResponseExtractionMiddleware(BaseMiddleware):
             raw = _extract_text(ai_msgs[-1].content)
             response = _strip_thinking(raw)
             if response:
+                if ctx.agent_name == "web_search" and tool_msgs:
+                    web_details = _format_web_search_tool_fallback(
+                        _extract_text(tool_msgs[-1].content)
+                    )
+                    if web_details and _is_unhelpful_web_search_response(response):
+                        ctx.response = web_details
+                        logger.debug(
+                            "Agent '%s': replacing unhelpful AI text with web search "
+                            "results.",
+                            ctx.agent_name,
+                        )
+                        return
                 if (
                     ctx.agent_name in _TABLE_AUGMENT_MODULES
                     and tool_msgs
@@ -100,7 +112,9 @@ class ResponseExtractionMiddleware(BaseMiddleware):
         if tool_msgs:
             raw_tool = _extract_text(tool_msgs[-1].content)
             tool_name = str(getattr(tool_msgs[-1], "name", "") or "")
-            if ctx.agent_name == "kubernetes" and not wants_json:
+            if ctx.agent_name == "web_search":
+                ctx.response = _format_web_search_tool_fallback(raw_tool) or raw_tool
+            elif ctx.agent_name == "kubernetes" and not wants_json:
                 ctx.response = (
                     _format_kubernetes_tool_fallback(raw_tool, tool_name=tool_name)
                     or _format_tool_fallback(
@@ -196,6 +210,20 @@ def _strip_thinking(text: str) -> str:
     return cleaned
 
 
+def _is_unhelpful_web_search_response(response: str) -> bool:
+    text = response.casefold().strip()
+    patterns = (
+        "ich suche",
+        "ich werde jetzt",
+        "ich recherchiere",
+        "i will search",
+        "i'll search",
+        "i am searching",
+        "let me search",
+    )
+    return any(pattern in text for pattern in patterns)
+
+
 def _looks_like_python_struct(text: str) -> bool:
     s = text.lstrip()
     if s in ("[]", "{}"):
@@ -272,6 +300,37 @@ def _format_json_block(data: Any) -> str:
     """Render parsed structured data as a JSON code block."""
     pretty = json.dumps(data, indent=2, ensure_ascii=False, default=str)
     return f"```json\n{pretty}\n```"
+
+
+def _format_web_search_tool_fallback(raw: str) -> str:
+    """Render web search tool output as concise Markdown with source URLs."""
+    data = _parse_structured_tool_output(raw)
+    if not isinstance(data, list):
+        return ""
+
+    entries = [item for item in data if isinstance(item, dict)]
+    if not entries:
+        return ""
+
+    lines: list[str] = []
+    for item in entries[:5]:
+        title = str(item.get("title") or "Quelle").strip()
+        url = str(item.get("url") or "").strip()
+        content = str(item.get("content") or "").strip()
+
+        if title.casefold() == "error":
+            return content or "Websuche fehlgeschlagen."
+        if title.casefold() == "web search" and not url:
+            return content or "Keine Ergebnisse gefunden."
+
+        headline = f"- **{title}**"
+        if url:
+            headline += f" — {url}"
+        lines.append(headline)
+        if content:
+            lines.append(f"  {content}")
+
+    return "\n".join(lines).strip()
 
 
 def _contains_markdown_table(text: str) -> bool:

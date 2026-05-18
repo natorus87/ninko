@@ -673,6 +673,75 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
     ]
     registry.register_many(web_search_tools)
 
+    # ── Agent Browser (requires agent-browser CLI + chromium) ──────────────
+    agent_browser_tools = [
+        # READONLY — reine Lese-/Inspektionsoperationen (öffnen+schließen
+        # zählt hier als read-only, weil ephemeral und ohne Form-Submit).
+        ToolMetadata(
+            "check_website",
+            "agent_browser",
+            readonly=True,
+            required_bins=("agent-browser",),
+        ),
+        ToolMetadata(
+            "take_snapshot",
+            "agent_browser",
+            readonly=True,
+            required_bins=("agent-browser",),
+        ),
+        ToolMetadata(
+            "get_element_text",
+            "agent_browser",
+            readonly=True,
+            required_bins=("agent-browser",),
+        ),
+        ToolMetadata(
+            "take_screenshot",
+            "agent_browser",
+            readonly=True,
+            required_bins=("agent-browser",),
+        ),
+        ToolMetadata(
+            "list_browser_sessions",
+            "agent_browser",
+            readonly=True,
+            required_bins=("agent-browser",),
+        ),
+        ToolMetadata(
+            "wait_for_element",
+            "agent_browser",
+            readonly=True,
+            required_bins=("agent-browser",),
+        ),
+        # WRITE_SYSTEM — verändert Browser-/Remote-Zustand (Sessions, Klicks
+        # auf fremde UIs können Daten ändern).
+        ToolMetadata(
+            "open_browser_session",
+            "agent_browser",
+            tier=ToolTier.WRITE_SYSTEM,
+            required_bins=("agent-browser",),
+        ),
+        ToolMetadata(
+            "click_element",
+            "agent_browser",
+            tier=ToolTier.WRITE_SYSTEM,
+            required_bins=("agent-browser",),
+        ),
+        ToolMetadata(
+            "type_text",
+            "agent_browser",
+            tier=ToolTier.WRITE_SYSTEM,
+            required_bins=("agent-browser",),
+        ),
+        ToolMetadata(
+            "close_browser_session",
+            "agent_browser",
+            tier=ToolTier.WRITE_SYSTEM,
+            required_bins=("agent-browser",),
+        ),
+    ]
+    registry.register_many(agent_browser_tools)
+
     # ── Kubernetes (requires kubectl) ──────────────────────────────────────
     kubernetes_tools = [
         ToolMetadata(

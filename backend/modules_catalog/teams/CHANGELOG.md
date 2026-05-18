@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Microsoft Graph API integration
 - Dashboard integration with SVG icon
 
+## [1.1.4] - 2026-05-18
+
+### Fixed
+- Markdown-Tabellen werden vor der Teams-Codeblock-Ausgabe bereinigt, damit
+  Inline-Markdown wie `**bold**` oder Backticks nicht in ASCII-Tabellen
+  sichtbar bleibt.
+
 ## Module Information
 
 - **Name**: teams

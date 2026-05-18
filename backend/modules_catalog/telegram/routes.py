@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from .bot import get_telegram_bot
+from .formatter import format_for_telegram
 from schemas.connection import ConnectionUpdate
 
 router = APIRouter()
@@ -279,7 +280,12 @@ async def send_message(body: SendMessageRequest, request: Request) -> dict[str, 
             detail="No chat ID provided and no default chat ID configured.",
         )
 
-    ok = await bot._send(token, int(chat_id), body.message, parse_mode="Markdown")
+    ok = await bot._send(
+        token,
+        int(chat_id),
+        format_for_telegram(body.message),
+        parse_mode="HTML",
+    )
     if ok:
         return {"ok": True}
     raise HTTPException(status_code=500, detail="Message could not be sent.")

@@ -6,17 +6,31 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+LLMBackend = Literal["ollama", "lmstudio", "mlx_server", "openai_compatible", "litellm"]
+
+
+def normalize_llm_backend(value: str) -> str:
+    """Normalize persisted/UI backend aliases before Pydantic Literal validation."""
+    normalized = str(value or "").strip().lower().replace("-", "_")
+    return "mlx_server" if normalized == "mlx" else normalized
 
 
 # ── LLM Settings (Legacy – Einzelprovider) ───────────
 
 class LlmSettings(BaseModel):
     """LLM/AI Provider Konfiguration (Legacy Single-Provider)."""
-    backend: Literal["ollama", "lmstudio", "openai_compatible", "litellm"] = "ollama"
+    backend: LLMBackend = "ollama"
     base_url: str = "http://ollama:11434"
     model: str = "llama3.2:3b"
     api_key: str = ""
+
+    @field_validator("backend", mode="before")
+    @classmethod
+    def _normalize_backend(cls, value: str) -> str:
+        return normalize_llm_backend(value)
 
 
 class LlmSettingsResponse(LlmSettings):
@@ -31,7 +45,7 @@ class LLMProvider(BaseModel):
     """Ein konfigurierbarer LLM-Provider."""
     id: str = ""
     name: str
-    backend: Literal["ollama", "lmstudio", "openai_compatible", "litellm"] = "ollama"
+    backend: LLMBackend = "ollama"
     base_url: str = "http://ollama:11434"
     model: str = "llama3.2:3b"
     api_key: str = ""
@@ -43,11 +57,16 @@ class LLMProvider(BaseModel):
     # SSL-Zertifikat-Verifizierung (False = self-signed Certs erlauben)
     verify_ssl: bool = True
 
+    @field_validator("backend", mode="before")
+    @classmethod
+    def _normalize_backend(cls, value: str) -> str:
+        return normalize_llm_backend(value)
+
 
 class LLMProviderCreate(BaseModel):
     """Payload zum Erstellen/Ändern eines Providers."""
     name: str = Field(..., min_length=1, max_length=128)
-    backend: Literal["ollama", "lmstudio", "openai_compatible", "litellm"] = "ollama"
+    backend: LLMBackend = "ollama"
     base_url: str = "http://ollama:11434"
     model: str = "llama3.2:3b"
     api_key: str = ""
@@ -56,6 +75,11 @@ class LLMProviderCreate(BaseModel):
     context_window: int = 0
     # SSL-Zertifikat-Verifizierung (False = self-signed Certs erlauben)
     verify_ssl: bool = True
+
+    @field_validator("backend", mode="before")
+    @classmethod
+    def _normalize_backend(cls, value: str) -> str:
+        return normalize_llm_backend(value)
 
 
 # ── Module Settings ──────────────────────────────────

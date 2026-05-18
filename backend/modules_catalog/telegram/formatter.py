@@ -34,7 +34,7 @@ def _ascii_table(md_table: str) -> str:
         # Separator-Zeile überspringen (z.B. |---|:---:|---:|)
         if re.match(r'^\|?[\s:\-\|]+$', line):
             continue
-        cells = [c.strip() for c in line.strip("|").split("|")]
+        cells = [_clean_table_cell(c.strip()) for c in line.strip("|").split("|")]
         rows.append(cells)
 
     if not rows:
@@ -70,6 +70,16 @@ def _ascii_table(md_table: str) -> str:
 def _escape_html(text: str) -> str:
     """Escapt HTML-Sonderzeichen für Telegram."""
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _clean_table_cell(cell: str) -> str:
+    """Remove inline Markdown markers before rendering cells in <pre> blocks."""
+    cell = re.sub(r"`([^`\n]+)`", r"\1", cell)
+    cell = re.sub(r"\*\*(.+?)\*\*", r"\1", cell)
+    cell = re.sub(r"__(.+?)__", r"\1", cell)
+    cell = re.sub(r"\*([^*\n]+)\*", r"\1", cell)
+    cell = re.sub(r"(?<!\w)_([^_\n]+)_(?!\w)", r"\1", cell)
+    return cell
 
 
 def format_for_telegram(text: str) -> str:

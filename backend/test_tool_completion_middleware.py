@@ -117,6 +117,28 @@ class TestToolCompletionValidationMiddleware(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("nächsten Schritt angekündigt", ctx.response)
 
+    async def test_allows_future_wording_for_read_only_search_request(self):
+        middleware = ToolCompletionValidationMiddleware()
+        ctx = MiddlewareContext(
+            message="Was gibt es heute so in den Nachrichten?",
+            agent_name="web_search",
+            response="Ich werde jetzt die Nachrichten zusammenfassen.",
+            result={
+                "messages": [
+                    ToolMessage(
+                        content="[{'title': 'News', 'url': 'https://example.test'}]",
+                        tool_call_id="call_1",
+                        name="perform_web_search",
+                    ),
+                    AIMessage(content="Ich werde jetzt die Nachrichten zusammenfassen."),
+                ]
+            },
+        )
+
+        await middleware.post_process(ctx)
+
+        self.assertEqual(ctx.response, "Ich werde jetzt die Nachrichten zusammenfassen.")
+
 
 if __name__ == "__main__":
     unittest.main()

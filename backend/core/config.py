@@ -22,10 +22,14 @@ class CoreSettings(BaseSettings):
     )
 
     # ── LLM Backend ────────────────────────────────────
-    LLM_BACKEND: Literal["ollama", "lmstudio", "openai_compatible", "litellm"] = "lmstudio"
+    LLM_BACKEND: Literal["ollama", "lmstudio", "mlx_server", "openai_compatible", "litellm"] = "lmstudio"
     # LM Studio / OpenAI-kompatibler Provider (Standard)
     LMSTUDIO_BASE_URL: str = "http://192.168.1.100:1234/v1"
     LMSTUDIO_MODEL: str = "local-model"
+    # MLX Server – lokaler OpenAI-kompatibler Endpoint ohne Pflicht-API-Key
+    MLX_BASE_URL: str = "http://mlx-server:8080/v1"
+    MLX_MODEL: str = "local-model"
+    MLX_API_KEY: str = ""
     # Ollama – nur noch als Legacy-Fallback für lokale Entwicklung
     OLLAMA_BASE_URL: str = "http://ollama:11434"
     OLLAMA_MODEL: str = "qwen2.5:4b"
@@ -40,7 +44,7 @@ class CoreSettings(BaseSettings):
     # Globales Embedding-Modell (einheitlich für ChromaDB)
     EMBED_MODEL: str = "nomic-ai/nomic-embed-text-v1.5-GGUF"
     # Eigener Embedding-Provider (leer = Fallback auf aktiven LLM-Provider)
-    EMBED_BACKEND: str = ""  # ollama | lmstudio | openai_compatible | litellm
+    EMBED_BACKEND: str = ""  # ollama | lmstudio | mlx_server | openai_compatible | litellm
     EMBED_BASE_URL: str = ""
     EMBED_API_KEY: str = ""
 
@@ -176,6 +180,12 @@ class CoreSettings(BaseSettings):
     )
 
     SCRIPT_TOOLS_ENABLED: bool = True
+
+    @field_validator("LLM_BACKEND", mode="before")
+    @classmethod
+    def _normalize_llm_backend(cls, value: str) -> str:
+        normalized = str(value or "").strip().lower().replace("-", "_")
+        return "mlx_server" if normalized == "mlx" else normalized
 
     @model_validator(mode="after")
     def _validate_secrets(self) -> "CoreSettings":

@@ -10,8 +10,42 @@ WORKDIR /app
 # espeak-ng is required by Piper TTS at runtime
 # libpango* is required by weasyprint for PDF generation
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl build-essential g++ ffmpeg espeak-ng libespeak-ng1 nodejs tesseract-ocr tesseract-ocr-deu libpango-1.0-0 libpangoft2-1.0-0 iputils-ping traceroute && \
+    apt-get install -y --no-install-recommends curl build-essential g++ ffmpeg espeak-ng libespeak-ng1 nodejs npm tesseract-ocr tesseract-ocr-deu libpango-1.0-0 libpangoft2-1.0-0 iputils-ping traceroute && \
     rm -rf /var/lib/apt/lists/*
+
+# Install Agent Browser CLI + Chromium (optional – needed for the
+# `agent_browser` module which tests websites via headless browser).
+# Adds ~300 MB to the image; opt in with --build-arg INSTALL_AGENT_BROWSER=true.
+#
+# AGENT_BROWSER_VERSION is PINNED. Bump only after reviewing the upstream
+# release on https://www.npmjs.com/package/agent-browser — never use "latest"
+# in production (supply-chain risk: a compromised npm release would run inside
+# the backend pod). Override at build time:
+#   docker build --build-arg INSTALL_AGENT_BROWSER=true \
+#                --build-arg AGENT_BROWSER_VERSION=0.27.0 …
+#
+# Chromium sandbox note: the binary runs as the unprivileged `ninko` user.
+# For the sandbox to work the host must allow unprivileged user namespaces
+# (`sysctl kernel.unprivileged_userns_clone=1`) OR the pod must run with
+# `CAP_SYS_ADMIN` / a permissive seccomp profile. Do NOT add `--no-sandbox`
+# to work around launch failures — fix the sandbox setup instead.
+ARG INSTALL_AGENT_BROWSER=false
+ARG AGENT_BROWSER_VERSION=0.27.0
+RUN if [ "$INSTALL_AGENT_BROWSER" = "true" ]; then \
+      echo "Installing Chromium + agent-browser@${AGENT_BROWSER_VERSION}…" && \
+      if [ "$AGENT_BROWSER_VERSION" = "latest" ]; then \
+        echo "ERROR: AGENT_BROWSER_VERSION must be pinned, not 'latest'." >&2 && exit 1; \
+      fi && \
+      apt-get update && \
+      apt-get install -y --no-install-recommends chromium fonts-liberation libnss3 libatk-bridge2.0-0 libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libasound2 && \
+      rm -rf /var/lib/apt/lists/* && \
+      npm install -g "agent-browser@${AGENT_BROWSER_VERSION}" && \
+      agent-browser --version && \
+      echo "Agent Browser installed."; \
+    else \
+      echo "agent-browser not installed (INSTALL_AGENT_BROWSER=false). For browser-test module: docker build --build-arg INSTALL_AGENT_BROWSER=true …"; \
+    fi
+ENV NINKO_AGENT_BROWSER_CHROMIUM=/usr/bin/chromium
 
 # Install Piper TTS binary (optional – only needed when TTS_ENABLED=true)
 # Piper ships its own espeak-ng + libonnxruntime + libpiper_phonemize.

@@ -33,7 +33,7 @@ module_manifest = ModuleManifest(
         "Microsoft Teams chat: chat with the Ninko orchestrator via "
         "Microsoft Teams (botframework)."
     ),
-    version="1.1.3",
+    version="1.1.4",
     author="Ninko Team",
     enabled_by_default=True,
     env_prefix="TEAMS_",

@@ -52,7 +52,7 @@ def _get_provider_costs() -> LLMProviderCosts:
         backend = getattr(settings, "LLM_BACKEND", "ollama").lower()
 
         # Lokale Provider haben keine Kosten
-        if backend in ("ollama", "lmstudio", "local"):
+        if backend in ("ollama", "lmstudio", "mlx_server", "local"):
             return LLMProviderCosts(is_cloud_provider=False)
 
         # Cloud-Provider: Kosten aus Settings laden (falls konfiguriert)

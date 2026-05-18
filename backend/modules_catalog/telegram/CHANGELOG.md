@@ -44,6 +44,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   entfernt, die das Tier-2-Routing in Status- und Inhaltsfragen
   fehlleiteten.
 
+## [1.2.2] - 2026-05-18
+
+### Fixed
+- Telegram-Streaming startet die Preview jetzt vor dem Orchestrator-Lauf und
+  aktualisiert sie live über Token-Callbacks und Status-Bus-Events.
+- Markdown-Tabellen werden für Telegram-HTML bereinigt, damit Inline-Markdown
+  nicht in `<pre>`-Tabellen sichtbar bleibt.
+- Testnachrichten nutzen denselben Telegram-HTML-Formatter wie der Bot.
+
 ## Module Information
 
 - **Name**: telegram
