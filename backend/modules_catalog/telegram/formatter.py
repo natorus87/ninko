@@ -122,7 +122,7 @@ def format_for_telegram(text: str) -> str:
         return protect(f"<pre>{_escape_html(ascii_t)}</pre>")
 
     # Aufeinanderfolgende Zeilen, die mit | beginnen
-    text = re.sub(r"(?m)(^\|.+\n?)+", _table, text)
+    text = re.sub(r"(?m)(^[ \t]*\|.+\n?)+", _table, text)
 
     # ── 3. Inline Code ────────────────────────────────────────────────────────
     def _inline_code(m: re.Match) -> str:

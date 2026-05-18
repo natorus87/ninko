@@ -53,6 +53,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nicht in `<pre>`-Tabellen sichtbar bleibt.
 - Testnachrichten nutzen denselben Telegram-HTML-Formatter wie der Bot.
 
+## [1.2.3] - 2026-05-18
+
+### Fixed
+- Telegram-Live-Preview entfernt Markdown-Marker vor dem finalen HTML-Edit,
+  damit Proxmox- und andere Markdown-Antworten während Streaming nicht roh
+  angezeigt werden.
+- Tabellen-Erkennung akzeptiert auch eingerückte Markdown-Tabellen.
+- Marketplace-Katalogversion auf die aktuelle Telegram-Modulversion angehoben.
+
 ## Module Information
 
 - **Name**: telegram

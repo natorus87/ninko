@@ -87,7 +87,7 @@ def format_for_teams(text: str) -> str:
         ascii_t = _ascii_table(m.group(0))
         return protect(f"```\n{ascii_t}\n```")
 
-    text = re.sub(r"(?m)(^\|.+\n?)+", _table, text)
+    text = re.sub(r"(?m)(^[ \t]*\|.+\n?)+", _table, text)
 
     # 3. Platzhalter wiederherstellen
     def _restore(m: re.Match) -> str:

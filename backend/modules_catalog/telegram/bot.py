@@ -95,6 +95,19 @@ def _strip_pipeline_headers(text: str) -> str:
     return text.strip()
 
 
+def _plain_preview_text(text: str) -> str:
+    """Keep live Telegram edits readable before the final HTML rendering pass."""
+    text = re.sub(r"```[\s\S]*?```", lambda m: m.group(0).strip("`"), text)
+    text = re.sub(r"`([^`\n]+)`", r"\1", text)
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
+    text = re.sub(r"__(.+?)__", r"\1", text)
+    text = re.sub(r"\*([^*\n]+)\*", r"\1", text)
+    text = re.sub(r"(?<!\w)_([^_\n]+)_(?!\w)", r"\1", text)
+    text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    return _strip_pipeline_headers(text)
+
+
 class TelegramBot:
     def __init__(self, app: FastAPI) -> None:
         self.app = app
@@ -811,7 +824,7 @@ class TelegramBot:
                 enough_time = now - last_edit_at >= 1.2
                 route_finished = route_task.done() and token_queue.empty()
                 if buffer:
-                    preview = buffer[-3900:]
+                    preview = _plain_preview_text(buffer)[-3900:]
                     if not route_finished:
                         preview = f"{preview} ..."
                 elif latest_status:

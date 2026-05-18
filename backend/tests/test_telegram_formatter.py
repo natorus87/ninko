@@ -30,3 +30,18 @@ def test_markdown_table_cells_are_cleaned_inside_pre_block() -> None:
     assert "`1`" not in formatted
     assert "| Nodes" in formatted
     assert "| 1" in formatted
+
+
+def test_indented_markdown_table_is_converted() -> None:
+    text = (
+        "  | VMID | Name |\n"
+        "  | --- | --- |\n"
+        "  | `100` | **proxmox-vm** |\n"
+    )
+
+    formatted = format_for_telegram(text)
+
+    assert formatted.startswith("<pre>")
+    assert "`100`" not in formatted
+    assert "**proxmox-vm**" not in formatted
+    assert "| 100" in formatted
