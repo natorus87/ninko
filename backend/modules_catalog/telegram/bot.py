@@ -77,7 +77,7 @@ _MAX_MSG_LEN = 4000
 
 
 def _strip_pipeline_headers(text: str) -> str:
-    """Remove 'Step N – module:' headers and Telegram send confirmations from pipeline responses."""
+    """Remove transport-only markers from pipeline responses."""
     # **Step 1 – module:** (Markdown bold)
     text = re.sub(r"\*\*Schritt\s+\d+\s*[–-]\s*\w+:\*\*\s*\n?", "", text)
     # Step 1 – module: (plain)
@@ -89,6 +89,7 @@ def _strip_pipeline_headers(text: str) -> str:
         text,
         flags=re.IGNORECASE,
     )
+    text = re.sub(r"\n\n_via [^_\n]+_\s*$", "", text)
     # Normalize multiple blank lines
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
@@ -1375,8 +1376,6 @@ class TelegramBot:
 
             # ── Text response (for text inputs only) ──────────────────────────
             final_text = _strip_pipeline_headers(response_text)
-            if module_used:
-                final_text += f"\n\n_via {module_used}_"
 
             # ── Image generation: detect marker, URL, or phrase ────────────
             image_path = None
