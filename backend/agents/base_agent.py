@@ -257,6 +257,14 @@ class _StatusEmitter(AsyncCallbackHandler):
             self._cleanup_run(run_id)
 
     async def on_llm_start(self, serialized: dict, messages: list, **kwargs) -> None:  # type: ignore[override]
+        await status_bus.emit_trace(
+            self.session_id,
+            phase="llm",
+            label="LLM-Aufruf gestartet",
+            detail=f"Agent: {self.agent_name}",
+            data={"agent": self.agent_name, "message_batches": len(messages or [])},
+            status="running",
+        )
         await status_bus.emit(
             self.session_id,
             _t(
@@ -276,6 +284,7 @@ class _StatusEmitter(AsyncCallbackHandler):
     async def on_llm_end(self, response: Any, **kwargs) -> None:  # type: ignore[override]
         """Token-Usage tracken + Reasoning-Text ans Frontend senden."""
         # ── Token-Tracking ──────────────────────────────────────────────────
+        usage_payload: dict[str, int] = {}
         try:
             usage = getattr(response, "usage_metadata", None)
             if usage and isinstance(usage, dict):
@@ -286,6 +295,10 @@ class _StatusEmitter(AsyncCallbackHandler):
                     "completion_tokens", 0
                 )
                 if prompt_tokens > 0 or completion_tokens > 0:
+                    usage_payload = {
+                        "prompt_tokens": int(prompt_tokens),
+                        "completion_tokens": int(completion_tokens),
+                    }
                     from core.metrics import record_llm_tokens
 
                     _tok_task = asyncio.create_task(
@@ -298,6 +311,15 @@ class _StatusEmitter(AsyncCallbackHandler):
                     _tok_task.add_done_callback(_log_bg_task_exception)
         except Exception as _tok_exc:
             logger.warning("Token-Tracking fehlgeschlagen (ignoriert): %s", _tok_exc)
+
+        await status_bus.emit_trace(
+            self.session_id,
+            phase="llm",
+            label="LLM-Aufruf abgeschlossen",
+            detail=f"Agent: {self.agent_name}",
+            data={"agent": self.agent_name, **usage_payload},
+            status="done",
+        )
 
         # ── Reasoning-Text extrahieren – NUR bei Zwischenschritten mit Tool-Calls ──
         # Bei der finalen Antwort (kein Tool-Call) NICHT emittieren,
@@ -792,6 +814,14 @@ class BaseAgent:
 
         did_compact = False
         if self._context_mgr.should_reset(history):
+            await status_bus.emit_trace(
+                session_id,
+                phase="context",
+                label="Kontext-Komprimierung gestartet",
+                detail="Der Gesprächsverlauf überschreitet das aktuelle Kontextbudget.",
+                data={"history_messages": len(history)},
+                status="running",
+            )
             await status_bus.emit(
                 session_id, _t("Kontext wird komprimiert…", "Compacting context…")
             )
@@ -800,6 +830,15 @@ class BaseAgent:
                 did_compact,
             ) = await self._context_mgr.compact_messages_async(history, self._llm)
             self._last_compaction_summary = self._context_mgr.get_last_summary()
+            await status_bus.emit_trace(
+                session_id,
+                phase="context",
+                label="Kontext komprimiert",
+                data={
+                    "history_messages_before": len(history),
+                    "history_messages_after": len(trimmed_history),
+                },
+            )
         else:
             history = self._context_mgr.trim_large_messages(history)
             trimmed_history = self._context_mgr.trim_messages(
@@ -807,6 +846,16 @@ class BaseAgent:
                 system_prompt=self.system_prompt,
             )
             self._last_compaction_summary = None
+            if len(trimmed_history) != len(history):
+                await status_bus.emit_trace(
+                    session_id,
+                    phase="context",
+                    label="Kontext gekürzt",
+                    data={
+                        "history_messages_before": len(history),
+                        "history_messages_after": len(trimmed_history),
+                    },
+                )
 
         # Dynamischen Zusatz für den System Prompt
         appendix = await self._dynamic_prompt_appendix()
@@ -821,6 +870,26 @@ class BaseAgent:
             if len(active_tools) != len(self.tools)
             else self._agent
         )
+        if len(active_tools) != len(self.tools):
+            await status_bus.emit_trace(
+                session_id,
+                phase="agent",
+                label="Tool-Auswahl reduziert",
+                detail=f"JIT Tool Injection für Agent '{self.name}'",
+                data={
+                    "agent": self.name,
+                    "total_tools": len(self.tools),
+                    "active_tools": [getattr(tool, "name", str(tool)) for tool in active_tools],
+                },
+            )
+        else:
+            await status_bus.emit_trace(
+                session_id,
+                phase="agent",
+                label="Agent vorbereitet",
+                detail=f"Agent '{self.name}' erhält {len(active_tools)} Tool(s).",
+                data={"agent": self.name, "active_tool_count": len(active_tools)},
+            )
 
         # Middleware-Kontext aufbauen
         ctx = MiddlewareContext(
