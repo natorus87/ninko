@@ -123,8 +123,27 @@ async def _stream_safe_generate(
         return await request.is_disconnected()
 
     try:
+        await status_bus.emit_trace(
+            scoped_session_id,
+            phase="request",
+            label="Chat-Verarbeitung gestartet",
+            detail="Streaming-Antwortpfad",
+            data={
+                "confirmed": body.confirmed,
+                "force_module": body.force_module,
+                "message_length": len(body.message or ""),
+            },
+            status="running",
+        )
         # ── Tool-Level Safeguard: Resume nach Bestätigung ───────────────────
         if body.confirmed:
+            await status_bus.emit_trace(
+                scoped_session_id,
+                phase="safeguard",
+                label="Bestätigte Tool-Ausführung wird fortgesetzt",
+                data={"confirmed": True},
+                status="running",
+            )
             current_tx_id = await op_journal.get_pending_for_session(scoped_session_id)
             if current_tx_id:
                 await op_journal.mark_confirmed(current_tx_id)
@@ -190,8 +209,22 @@ async def _stream_safe_generate(
         # ── Safeguard-Check ──────────────────────────────────────────────────
         safeguard = getattr(request.app.state, "safeguard", None)
         if not goto_stream_response and safeguard and not body.confirmed:
+            await status_bus.emit_trace(
+                scoped_session_id,
+                phase="safeguard",
+                label="Nachricht wird durch SafeGuard geprüft",
+                data={"message_length": len(body.message or "")},
+                status="running",
+            )
             sg_result = await safeguard.check(body.message, session_id=scoped_session_id)
             if sg_result.requires_confirmation:
+                await status_bus.emit_trace(
+                    scoped_session_id,
+                    phase="safeguard",
+                    label="SafeGuard fordert Bestätigung",
+                    detail=sg_result.rationale,
+                    data={"category": sg_result.category.value},
+                )
                 if sg_result.category in (ActionCategory.DESTRUCTIVE, ActionCategory.STATE_CHANGING):
                     current_tx_id = await op_journal.create_pending(
                         session_id=scoped_session_id,
@@ -218,6 +251,14 @@ async def _stream_safe_generate(
                 return
 
             if sg_result.auto_decided and sg_result.auto_decision == "deny":
+                await status_bus.emit_trace(
+                    scoped_session_id,
+                    phase="safeguard",
+                    label="SafeGuard lehnt automatisch ab",
+                    detail=sg_result.rationale,
+                    data={"category": sg_result.category.value},
+                    status="error",
+                )
                 await status_bus.done(scoped_session_id)
                 response_text = _t(
                     f"🛡️ **SafeGuard Auto-Mode: Aktion abgelehnt**\n\n"
@@ -239,9 +280,22 @@ async def _stream_safe_generate(
                 yield _stream_frame("final", request_id, message_id, response=response_text, meta=meta)
                 return
 
+            await status_bus.emit_trace(
+                scoped_session_id,
+                phase="safeguard",
+                label="Nachrichten-SafeGuard freigegeben",
+                data={"category": sg_result.category.value},
+            )
+
         # ── Chat-History laden ───────────────────────────────────────────────
         if not goto_stream_response:
             history = await redis.get_chat_history(scoped_session_id)
+            await status_bus.emit_trace(
+                scoped_session_id,
+                phase="context",
+                label="Chat-History geladen",
+                data={"history_messages": len(history)},
+            )
 
         # ── R12: Korrektur erkennen ──────────────────────────────────────────
         _telemetry = get_routing_telemetry()
@@ -257,6 +311,13 @@ async def _stream_safe_generate(
 
         # ── Routing ───────────────────────────────────────────────────────────
         if not goto_stream_response:
+            await status_bus.emit_trace(
+                scoped_session_id,
+                phase="routing",
+                label="Routing gestartet",
+                data={"force_module": body.force_module},
+                status="running",
+            )
             route_task = asyncio.create_task(
                 orchestrator.route(
                     message=body.message,
@@ -295,6 +356,16 @@ async def _stream_safe_generate(
                     f"Expected (str, str|None, bool), got: {type(route_result).__name__}"
                 )
             response_text, module_used, did_compact = route_result
+            await status_bus.emit_trace(
+                scoped_session_id,
+                phase="routing",
+                label="Routing abgeschlossen",
+                data={
+                    "module_used": module_used,
+                    "compacted": did_compact,
+                    "response_length": len(response_text or ""),
+                },
+            )
 
             # Verbleibende Tokens nach route_task.done() drainen, um Token-Verlust
             # zwischen letztem queue.get()-Timeout und Task-Completion zu vermeiden.
@@ -334,9 +405,12 @@ async def _stream_safe_generate(
             yield _stream_frame("final", request_id, message_id, response="", meta=meta)
             return
 
-        # SSE-Consumer signalisieren
-        await status_bus.done(scoped_session_id)
-
+        await status_bus.emit_trace(
+            scoped_session_id,
+            phase="request",
+            label="Chat-Verarbeitung abgeschlossen",
+            data={"module_used": module_used, "response_length": len(response_text or "")},
+        )
         # ── Stream Tokens in Chunks ───────────────────────────────────────────
         # Mini-Chunking: ~8 Zeichen pro Frame + 60ms Pause zwischen Chunks fuer
         # ein fluessig wirkendes Streaming (viele kleine Updates statt grosser Sprunge).
@@ -405,6 +479,9 @@ async def _stream_safe_generate(
             "safeguard": None,
             "routing_confidence": routing_confidence,
         }
+        # Status-SSE erst direkt vor dem finalen Chat-Frame schließen. So bleibt
+        # der sichtbare Trace während langsamem Fallback-Chunking konsistent.
+        await status_bus.done(scoped_session_id)
         yield _stream_frame("final", request_id, message_id, response=response_text, meta=meta)
 
     except asyncio.CancelledError:
@@ -475,6 +552,18 @@ async def chat(request: Request, body: ChatRequest):
 
     # Status-Queue vorab erstellen (damit SSE-Consumer sofort lesen kann)
     status_bus.get_queue(scoped_session_id)
+    await status_bus.emit_trace(
+        scoped_session_id,
+        phase="request",
+        label="Chat-Verarbeitung gestartet",
+        detail="JSON-Antwortpfad",
+        data={
+            "confirmed": body.confirmed,
+            "force_module": body.force_module,
+            "message_length": len(body.message or ""),
+        },
+        status="running",
+    )
 
     # ── Tool-Level Safeguard: Resume nach Bestätigung ─────────────────────────
     # Wenn confirmed=True und ein Tool-Call auf Bestätigung wartet → resumieren
@@ -540,8 +629,22 @@ async def chat(request: Request, body: ChatRequest):
     # ── Safeguard-Check (vor dem 4-tier Routing) ──────────────────────────────
     safeguard = getattr(request.app.state, "safeguard", None)
     if safeguard and not body.confirmed:
+        await status_bus.emit_trace(
+            scoped_session_id,
+            phase="safeguard",
+            label="Nachricht wird durch SafeGuard geprüft",
+            data={"message_length": len(body.message or "")},
+            status="running",
+        )
         sg_result = await safeguard.check(body.message, session_id=scoped_session_id)
         if sg_result.requires_confirmation:
+            await status_bus.emit_trace(
+                scoped_session_id,
+                phase="safeguard",
+                label="SafeGuard fordert Bestätigung",
+                detail=sg_result.rationale,
+                data={"category": sg_result.category.value},
+            )
             if sg_result.category in (ActionCategory.DESTRUCTIVE, ActionCategory.STATE_CHANGING):
                 current_tx_id = await op_journal.create_pending(
                     session_id=scoped_session_id,
@@ -575,6 +678,14 @@ async def chat(request: Request, body: ChatRequest):
             )
         # Auto-mode: autonomous denial (no user dialog)
         if sg_result.auto_decided and sg_result.auto_decision == "deny":
+            await status_bus.emit_trace(
+                scoped_session_id,
+                phase="safeguard",
+                label="SafeGuard lehnt automatisch ab",
+                detail=sg_result.rationale,
+                data={"category": sg_result.category.value},
+                status="error",
+            )
             await status_bus.done(scoped_session_id)
             return ChatResponse(
                 response=_t(
@@ -591,9 +702,21 @@ async def chat(request: Request, body: ChatRequest):
                 safeguard=sg_result.to_dict(),
                 timestamp=datetime.now(timezone.utc),
             )
+        await status_bus.emit_trace(
+            scoped_session_id,
+            phase="safeguard",
+            label="Nachrichten-SafeGuard freigegeben",
+            data={"category": sg_result.category.value},
+        )
 
     # Chat-History laden
     history = await redis.get_chat_history(scoped_session_id)
+    await status_bus.emit_trace(
+        scoped_session_id,
+        phase="context",
+        label="Chat-History geladen",
+        data={"history_messages": len(history)},
+    )
 
     # ── R12: Korrektur erkennen (vor route()) ─────────────────────────────────
     _telemetry = get_routing_telemetry()
@@ -608,12 +731,29 @@ async def chat(request: Request, body: ChatRequest):
             orchestrator.apply_embedding_corrections(body.force_module, _examples)
 
     # Nachricht an Orchestrator routen
+    await status_bus.emit_trace(
+        scoped_session_id,
+        phase="routing",
+        label="Routing gestartet",
+        data={"force_module": body.force_module},
+        status="running",
+    )
     response_text, module_used, did_compact = await orchestrator.route(
         message=body.message,
         chat_history=history,
         session_id=scoped_session_id,
         confirmed=body.confirmed,
         force_module=body.force_module,
+    )
+    await status_bus.emit_trace(
+        scoped_session_id,
+        phase="routing",
+        label="Routing abgeschlossen",
+        data={
+            "module_used": module_used,
+            "compacted": did_compact,
+            "response_length": len(response_text or ""),
+        },
     )
 
     # ── Tool-Level Safeguard Sentinel prüfen ─────────────────────────────────
@@ -635,6 +775,12 @@ async def chat(request: Request, body: ChatRequest):
             info["transaction_id"] = current_tx_id
         return _tool_confirmation_response(info, body.session_id)
 
+    await status_bus.emit_trace(
+        scoped_session_id,
+        phase="request",
+        label="Chat-Verarbeitung abgeschlossen",
+        data={"module_used": module_used, "response_length": len(response_text or "")},
+    )
     # SSE-Consumer signalisieren: Verarbeitung abgeschlossen
     await status_bus.done(scoped_session_id)
 
