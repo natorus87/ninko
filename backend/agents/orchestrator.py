@@ -21,7 +21,6 @@ import numpy as np
 
 # ── Intent-Detection-Patterns ───────────────────────────────────────────────
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_core.tools import tool
 
 from agents.base_agent import BaseAgent, _t
 from agents.core_tools import (
@@ -630,6 +629,14 @@ class OrchestratorAgent(BaseAgent):
         tool_args = tool_call.get("arguments", {})
         query = tool_args.get("query", message)
 
+        await status_bus.emit_trace(
+            session_id,
+            phase="routing",
+            label="Modul aus Routing-Entscheidung ausgewählt",
+            detail=tool_name,
+            data={"module": tool_name, "arguments": tool_args},
+        )
+
         result = await self._invoke_module_agent(
             tool_name,
             message=query,
@@ -678,6 +685,14 @@ class OrchestratorAgent(BaseAgent):
                 "task": tc.get("arguments", {}).get("query", message),
             })
 
+        await status_bus.emit_trace(
+            session_id,
+            phase="pipeline",
+            label="Mehrschritt-Pipeline geplant",
+            detail=f"{len(steps)} Schritt(e)",
+            data={"steps": steps},
+            status="running",
+        )
         await status_bus.emit(
             session_id,
             _t(de="Pipelines werden ausgeführt…", en="Executing pipeline…"),
@@ -716,10 +731,24 @@ class OrchestratorAgent(BaseAgent):
         """Führt LLM-Native Function Calling Routing durch."""
         function_calling_enabled, tool_choice = await self._get_routing_mode()
         if not function_calling_enabled or tool_choice == "none":
+            await status_bus.emit_trace(
+                session_id,
+                phase="routing",
+                label="Function-Calling-Routing deaktiviert",
+                detail="Fallback auf ReAct-Orchestrator",
+                data={"function_calling_enabled": function_calling_enabled, "tool_choice": tool_choice},
+            )
             return await self._fallback_to_react_loop(
                 message, chat_history, session_id, confirmed, wants_stream, token_callback, cancellation_check
             )
 
+        await status_bus.emit_trace(
+            session_id,
+            phase="routing",
+            label="Function-Calling-Routing gestartet",
+            data={"tool_choice": tool_choice},
+            status="running",
+        )
         await status_bus.emit(
             session_id,
             _t(de="Analysiere Routing…", en="Analyzing routing…"),
@@ -729,16 +758,36 @@ class OrchestratorAgent(BaseAgent):
         cache_text = f"{routing_context}\nCURRENT: {message}" if routing_context else message
 
         if hit := await self._route_cache_exact_get(cache_text):
+            await status_bus.emit_trace(
+                session_id,
+                phase="routing",
+                label="Routing-Cache getroffen",
+                detail="Exact Cache",
+                data={"tool_calls": hit},
+            )
             return await self._dispatch_tool_calls(
                 hit, message, chat_history, session_id, confirmed, wants_stream, token_callback, cancellation_check
             )
         if hit := await self._route_cache_semantic_get(cache_text):
+            await status_bus.emit_trace(
+                session_id,
+                phase="routing",
+                label="Routing-Cache getroffen",
+                detail="Semantic Cache",
+                data={"tool_calls": hit},
+            )
             return await self._dispatch_tool_calls(
                 hit, message, chat_history, session_id, confirmed, wants_stream, token_callback, cancellation_check
             )
 
         tools = self._build_module_tools_schema()
         if not tools:
+            await status_bus.emit_trace(
+                session_id,
+                phase="routing",
+                label="Keine Modul-Tool-Schemas verfügbar",
+                detail="Fallback auf ReAct-Orchestrator",
+            )
             return await self._fallback_to_react_loop(
                 message, chat_history, session_id, confirmed, wants_stream, token_callback, cancellation_check
             )
@@ -763,12 +812,27 @@ class OrchestratorAgent(BaseAgent):
             llm_kwargs: dict[str, Any] = {"tools": tools}
             if tool_choice in {"auto", "required"}:
                 llm_kwargs["tool_choice"] = tool_choice
+            await status_bus.emit_trace(
+                session_id,
+                phase="routing",
+                label="Routing-LLM wird aufgerufen",
+                detail=f"{len(tools)} Modul-Schema(s) verfügbar",
+                data={"tool_choice": llm_kwargs.get("tool_choice", "provider_default"), "tool_count": len(tools)},
+                status="running",
+            )
             response: AIMessage = await llm.ainvoke(
                 messages,
                 **llm_kwargs,
             )
         except Exception as exc:
             logger.warning("Function Calling LLM call failed: %s — falling back to ReAct", exc)
+            await status_bus.emit_trace(
+                session_id,
+                phase="routing",
+                label="Routing-LLM fehlgeschlagen",
+                detail=type(exc).__name__,
+                status="error",
+            )
             return await self._fallback_to_react_loop(
                 message, chat_history, session_id, confirmed, wants_stream, token_callback, cancellation_check
             )
@@ -776,8 +840,22 @@ class OrchestratorAgent(BaseAgent):
         tool_calls = self._extract_tool_calls(response)
         if not tool_calls:
             text = getattr(response, "content", "") or ""
+            await status_bus.emit_trace(
+                session_id,
+                phase="routing",
+                label="Routing-LLM antwortet direkt",
+                detail="Keine Modul-Tool-Calls erzeugt.",
+                data={"response_length": len(str(text or ""))},
+            )
             return str(text) if text else _t("Keine Antwort.", "No response."), None, False
 
+        await status_bus.emit_trace(
+            session_id,
+            phase="routing",
+            label="Routing-LLM hat Tool-Call(s) gewählt",
+            detail=f"{len(tool_calls)} Tool-Call(s)",
+            data={"tool_calls": tool_calls},
+        )
         await self._route_cache_exact_set(cache_text, tool_calls)
         await self._route_cache_semantic_set(cache_text, tool_calls)
 
@@ -840,6 +918,14 @@ class OrchestratorAgent(BaseAgent):
         cancellation_check: Any = None,
     ) -> tuple[str, str | None, bool]:
         """Fallback auf ReAct-Loop wenn Function Calling deaktiviert oder fehlschlägt."""
+        await status_bus.emit_trace(
+            session_id,
+            phase="routing",
+            label="ReAct-Fallback gestartet",
+            detail="Orchestrator beantwortet oder delegiert über seine Tools.",
+            data={"agent": self.name},
+            status="running",
+        )
         response, did_compact = await self.invoke(
             message=message,
             chat_history=chat_history,
@@ -848,6 +934,12 @@ class OrchestratorAgent(BaseAgent):
             wants_stream=wants_stream,
             token_callback=token_callback,
             cancellation_check=cancellation_check,
+        )
+        await status_bus.emit_trace(
+            session_id,
+            phase="routing",
+            label="ReAct-Fallback abgeschlossen",
+            data={"agent": self.name, "compacted": did_compact, "response_length": len(response or "")},
         )
         return response, None, did_compact
 
@@ -2201,6 +2293,14 @@ JSON-SCHEMA:
         """Führt einen Modul-Agenten mit einheitlichem Status-/Fehlerhandling aus."""
         agent = self.registry.get_agent(module_name)
         if agent is None:
+            await status_bus.emit_trace(
+                session_id,
+                phase="agent",
+                label="Modul-Agent nicht verfügbar",
+                detail=module_name,
+                data={"module": module_name},
+                status="error",
+            )
             return (
                 _t(
                     de=f"Fehler: Modul '{module_name}' ist nicht verfügbar oder nicht aktiviert.",
@@ -2218,6 +2318,14 @@ JSON-SCHEMA:
                 False,
             )
 
+        await status_bus.emit_trace(
+            session_id,
+            phase="agent",
+            label="Modul-Agent wird aufgerufen",
+            detail=module_name,
+            data={"module": module_name, "message_length": len(message or "")},
+            status="running",
+        )
         await status_bus.emit(session_id, status_message)
         logger.info("%s '%s': %s…", log_prefix, module_name, message[:80])
         try:
@@ -2232,6 +2340,13 @@ JSON-SCHEMA:
             )
             if did_compact and hasattr(agent, "get_last_compaction_summary"):
                 self._last_compaction_summary = agent.get_last_compaction_summary()
+            await status_bus.emit_trace(
+                session_id,
+                phase="agent",
+                label="Modul-Agent abgeschlossen",
+                detail=module_name,
+                data={"module": module_name, "compacted": did_compact, "response_length": len(response or "")},
+            )
             return response, module_name, did_compact
         except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
             logger.error(
@@ -2240,6 +2355,14 @@ JSON-SCHEMA:
                 module_name,
                 exc,
                 exc_info=True,
+            )
+            await status_bus.emit_trace(
+                session_id,
+                phase="agent",
+                label="Modul-Agent fehlgeschlagen",
+                detail=f"{module_name}: {type(exc).__name__}",
+                data={"module": module_name},
+                status="error",
             )
             return (
                 _t(
@@ -2550,6 +2673,17 @@ JSON-SCHEMA:
         self._last_tier_used = 0
         self._last_routing_confidence = None
         status_bus.set_session_id(session_id)
+        await status_bus.emit_trace(
+            session_id,
+            phase="request",
+            label="Orchestrator gestartet",
+            data={
+                "force_module": force_module,
+                "confirmed": confirmed,
+                "history_messages": len(chat_history or []),
+            },
+            status="running",
+        )
         await status_bus.emit(
             session_id,
             _t(
@@ -2563,6 +2697,13 @@ JSON-SCHEMA:
         # ── Deterministische Fast-Paths (kein LLM-Routing nötig) ────────────
         if force_module:
             self._last_tier_used = 2
+            await status_bus.emit_trace(
+                session_id,
+                phase="routing",
+                label="Direktes Ziel vorgegeben",
+                detail=force_module,
+                data={"force_module": force_module},
+            )
             return await self._route_forced_target(
                 force_module,
                 message=message,
@@ -2576,12 +2717,24 @@ JSON-SCHEMA:
 
         if self._wants_agent_creation(message):
             logger.info("Explizite Agent-Erstellungs-Intention → Auto-Create-Fast-Path.")
+            await status_bus.emit_trace(
+                session_id,
+                phase="routing",
+                label="Agent-Erstellung erkannt",
+                detail="Deterministischer Fast-Path",
+            )
             response, did_compact = await self._auto_create_custom_agent(message, session_id)
             self._last_tier_used = 1
             return response, "orchestrator", did_compact
 
         if self._wants_workflow_creation(message):
             logger.info("Explizite Workflow-Erstellungs-Intention → Auto-Create-Fast-Path.")
+            await status_bus.emit_trace(
+                session_id,
+                phase="routing",
+                label="Workflow-Erstellung erkannt",
+                detail="Deterministischer Fast-Path",
+            )
             response, did_compact = await self._auto_create_workflow(message, session_id)
             self._last_tier_used = 1
             return response, "orchestrator", did_compact
