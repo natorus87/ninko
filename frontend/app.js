@@ -1424,6 +1424,8 @@ const Ninko = {
                         this.updateTypingStatus(data.text);
                     } else if (data.type === 'tool_start' || data.type === 'tool_end') {
                         this.handleToolEvent(data);
+                    } else if (data.type === 'trace_event') {
+                        this._handleTraceEvent(data);
                     } else if (data.type === 'thinking_content') {
                         this._handleThinkingContent(data.text);
                     } else if (data.type === 'subagent_step') {
@@ -2828,6 +2830,7 @@ ${messagesHtml}
     _pendingToolSteps: {},
     _thinkingStep: null,
     _thinkingStepStart: null,
+    _pendingTraceSteps: {},
     _savedSteps: null,
 
     showTyping() {
@@ -2835,6 +2838,7 @@ ${messagesHtml}
         this._pendingToolSteps = {};
         this._thinkingStep = null;
         this._thinkingStepStart = null;
+        this._pendingTraceSteps = {};
         this._savedSteps = null;
         const container = document.getElementById('chat-messages');
         const div = document.createElement('div');
@@ -2889,6 +2893,15 @@ ${messagesHtml}
         this._pendingToolSteps = {};
         this._thinkingStep = null;
         this._thinkingStepStart = null;
+        this._pendingTraceSteps = {};
+    },
+
+    _settleThinkingHeader() {
+        const wrapper = document.querySelector('#typing-indicator .denkschritte-wrapper');
+        if (!wrapper) return;
+        wrapper.classList.remove('denkschritte-running');
+        const label = wrapper.querySelector('.denkschritte-label');
+        if (label) label.textContent = 'Denkschritte';
     },
 
     _formatDuration(ms) {
@@ -2972,6 +2985,12 @@ ${messagesHtml}
 
         const hint = meta.hint ?? this._buildInlineHint(meta.tool, meta.args);
         const hintHtml = hint ? ` <span class="step-hint">${this._escapeHtml(hint)}</span>` : '';
+        const phaseClass = meta.phase
+            ? String(meta.phase).toLowerCase().replace(/[^a-z0-9_-]/g, '-')
+            : '';
+        const phaseHtml = meta.phase && phaseClass !== 'tool'
+            ? `<span class="trace-phase trace-phase-${phaseClass}">${this._escapeHtml(meta.phaseLabel || meta.phase)}</span>`
+            : '';
         const durationHtml = meta.duration_ms != null
             ? `<span class="step-duration">${this._escapeHtml(this._formatDuration(meta.duration_ms))}</span>`
             : '';
@@ -2992,12 +3011,15 @@ ${messagesHtml}
         const step = document.createElement('details');
         step.className = 'typing-step';
         if (meta.state) step.classList.add(`typing-step-${meta.state}`);
+        if (meta.phase) step.dataset.phase = meta.phase;
+        if (phaseClass === 'tool') step.dataset.stepBadge = meta.phaseLabel || 'Tool';
         if (!hasBody) step.classList.add('typing-step-noexpand');
         if (meta.runId) step.dataset.runId = meta.runId;
 
         const thinkingPlaceholder = isThinking ? `<span class="typing-step-thinking-placeholder">${this._escapeHtml(this._getThinkingPlaceholder())}</span>` : '';
         step.innerHTML = `
             <summary>
+                ${phaseHtml}
                 <span class="typing-step-label">${this._escapeHtml(text)}${hintHtml}</span>
                 ${durationHtml}
                 ${hasBody ? '<span class="step-chevron">›</span>' : ''}
@@ -3016,6 +3038,92 @@ ${messagesHtml}
         const all = stepsEl.querySelectorAll('.typing-step');
         if (all.length > 30) all[0].remove();
         return step;
+    },
+
+    _formatTraceData(data) {
+        if (!data || typeof data !== 'object') return '';
+        try {
+            return JSON.stringify(data, null, 2);
+        } catch {
+            return '';
+        }
+    },
+
+    _tracePhaseLabel(phase) {
+        const labels = {
+            request: 'Request',
+            safeguard: 'SafeGuard',
+            context: 'Kontext',
+            routing: 'Routing',
+            pipeline: 'Pipeline',
+            agent: 'Agent',
+            tool: 'Tool',
+            llm: 'LLM',
+        };
+        return labels[phase] || phase || 'Trace';
+    },
+
+    _traceKey(evt) {
+        if (!evt) return '';
+        return [evt.phase || 'trace', evt.label || '', evt.detail || ''].join('::');
+    },
+
+    _traceRunningKey(evt) {
+        if (!evt) return '';
+        const data = evt.data && typeof evt.data === 'object' ? evt.data : {};
+        const subject = data.agent || data.module || data.force_module || evt.detail || '';
+        return [evt.phase || 'trace', subject].join('::');
+    },
+
+    _handleTraceEvent(evt) {
+        if (!evt || !evt.label) return;
+        const stepsEl = document.getElementById('typing-steps');
+        if (!stepsEl) return;
+
+        const phase = String(evt.phase || 'trace').toLowerCase();
+        const state = evt.status === 'error' ? 'error' : (evt.status === 'running' ? 'running' : 'done');
+        const dataText = this._formatTraceData(evt.data);
+        const detail = evt.detail ? String(evt.detail) : '';
+        const key = this._traceKey(evt);
+        const runningKey = this._traceRunningKey(evt);
+
+        const existing = (key && this._pendingTraceSteps[key])
+            || (runningKey && this._pendingTraceSteps[runningKey])
+            || null;
+        if (existing && state !== 'running') {
+            existing.classList.remove('typing-step-running', 'typing-step-enter');
+            existing.classList.add(state === 'error' ? 'typing-step-error' : 'typing-step-done');
+            const body = existing.querySelector('.typing-step-body');
+            if (body && (detail || dataText) && !body.querySelector('.typing-step-preview')) {
+                const pre = document.createElement('pre');
+                pre.className = 'typing-step-preview';
+                pre.textContent = [detail, dataText].filter(Boolean).join('\n\n');
+                body.appendChild(pre);
+                existing.classList.remove('typing-step-noexpand');
+                const summary = existing.querySelector('summary');
+                if (summary && !summary.querySelector('.step-chevron')) {
+                    const ch = document.createElement('span');
+                    ch.className = 'step-chevron';
+                    ch.textContent = '›';
+                    summary.appendChild(ch);
+                }
+            }
+            delete this._pendingTraceSteps[key];
+            delete this._pendingTraceSteps[runningKey];
+            return;
+        }
+
+        const step = this._appendStep(evt.label, {
+            state,
+            phase,
+            phaseLabel: this._tracePhaseLabel(phase),
+            preview: [detail, dataText].filter(Boolean).join('\n\n'),
+        });
+        if (step && state === 'running' && key) {
+            this._pendingTraceSteps[key] = step;
+            if (runningKey) this._pendingTraceSteps[runningKey] = step;
+        }
+
     },
 
     updateTypingStatus(text) {
@@ -3095,6 +3203,8 @@ ${messagesHtml}
             const label = evt.label || evt.tool_name || 'Tool läuft';
             const step = this._appendStep(label, {
                 state: 'running',
+                phase: 'tool',
+                phaseLabel: this._tracePhaseLabel('tool'),
                 tool: evt.tool_name,
                 agent: evt.agent,
                 runId: evt.run_id,
@@ -3149,6 +3259,8 @@ ${messagesHtml}
                 const resultLabel = evt.tool_name || 'Tool-Ergebnis';
                 this._appendStep(resultLabel, {
                     state: evt.error ? 'error' : 'done',
+                    phase: 'tool',
+                    phaseLabel: this._tracePhaseLabel('tool'),
                     tool: evt.tool_name,
                     duration_ms: evt.duration_ms,
                     result_size: evt.result_size,
@@ -3226,6 +3338,10 @@ ${messagesHtml}
         // Beim Abschluss: Typing-Bubble in Denkschritte-Wrapper umwandeln und in
         // die AI-Bubble einbetten (preserveSteps).
         const finalizeBubble = () => {
+            document.querySelectorAll('#typing-steps .typing-step-running').forEach((step) => {
+                step.classList.remove('typing-step-running', 'typing-step-enter');
+                step.classList.add('typing-step-done');
+            });
             this.hideTyping();
             if (!aiBubble || !this._savedSteps) return;
             const hasSteps = this._savedSteps.querySelector('.typing-step');
@@ -3284,6 +3400,7 @@ ${messagesHtml}
                             msgId = frame.message_id;
                             break;
                         case 'token':
+                            this._settleThinkingHeader();
                             buffer += frame.text;
                             update(buffer);
                             break;
