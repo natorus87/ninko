@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from agents.base_agent import BaseAgent
 
 from .tools import (
@@ -107,6 +109,85 @@ Error handling:
 - Suggest concrete next actions."""
 
 
+def _is_simple_cluster_status_request(message: str) -> bool:
+    """Detect simple cluster health questions that do not need LLM planning."""
+    text = message.casefold()
+    has_k8s_target = any(token in text for token in ("kubernetes", "k8s", "cluster"))
+    has_status_intent = any(
+        token in text
+        for token in (
+            "status",
+            "health",
+            "gesund",
+            "zustand",
+            "overview",
+            "übersicht",
+            "uebersicht",
+        )
+    )
+    has_specific_scope = any(
+        token in text
+        for token in (
+            "pod",
+            "pods",
+            "node",
+            "nodes",
+            "deployment",
+            "service",
+            "namespace",
+            "logs",
+            "events",
+            "yaml",
+            "connection",
+            "verbindung",
+        )
+    )
+    has_action = any(
+        token in text
+        for token in (
+            "restart",
+            "scale",
+            "delete",
+            "apply",
+            "create",
+            "patch",
+            "lösche",
+            "loesche",
+            "erstelle",
+            "skaliere",
+            "starte",
+        )
+    )
+    return has_k8s_target and has_status_intent and not has_specific_scope and not has_action
+
+
+def _format_cluster_status(data: dict[str, Any]) -> str:
+    failing = int(data.get("failing_pods") or 0)
+    status = "✅ Gesund" if failing == 0 else "⚠️ Prüfen"
+    rows = [
+        ("Status", status),
+        ("Nodes", data.get("nodes", "n/a")),
+        ("Namespaces", data.get("namespaces", "n/a")),
+        ("Pods gesamt", data.get("total_pods", "n/a")),
+        ("Pods running", data.get("running_pods", "n/a")),
+        ("Pods fehlerhaft", data.get("failing_pods", "n/a")),
+        ("Deployments", data.get("deployments", "n/a")),
+    ]
+    table = "\n".join(
+        [
+            "| Metrik | Wert |",
+            "| --- | --- |",
+            *[f"| {label} | {value} |" for label, value in rows],
+        ]
+    )
+    assessment = (
+        "Der Kubernetes-Cluster wirkt gesund."
+        if failing == 0
+        else "Der Kubernetes-Cluster braucht Aufmerksamkeit."
+    )
+    return f"{assessment}\n\n{table}"
+
+
 class KubernetesAgent(BaseAgent):
     """Kubernetes specialist with all K8s tools."""
 
@@ -156,4 +237,44 @@ class KubernetesAgent(BaseAgent):
                 patch_configmap,
                 create_configmap,
             ],
+        )
+
+    async def invoke(
+        self,
+        message: str,
+        chat_history: list[dict] | None = None,
+        session_id: str = "",
+        confirmed: bool = False,
+        wants_stream: bool = False,
+        token_callback: Any = None,
+        cancellation_check: Any = None,
+    ) -> tuple[str, bool]:
+        if _is_simple_cluster_status_request(message):
+            from core import status_bus
+
+            await status_bus.emit_trace(
+                session_id,
+                phase="agent",
+                label="Kubernetes-Status-Fast-Path",
+                detail="get_cluster_status wird direkt ausgeführt.",
+                data={"agent": self.name, "tool": "get_cluster_status"},
+                status="running",
+            )
+            result = await get_cluster_status.ainvoke({"connection_id": ""})
+            await status_bus.emit_trace(
+                session_id,
+                phase="agent",
+                label="Kubernetes-Status geladen",
+                data={"agent": self.name, "tool": "get_cluster_status"},
+            )
+            return _format_cluster_status(result), False
+
+        return await super().invoke(
+            message=message,
+            chat_history=chat_history,
+            session_id=session_id,
+            confirmed=confirmed,
+            wants_stream=wants_stream,
+            token_callback=token_callback,
+            cancellation_check=cancellation_check,
         )
