@@ -56,3 +56,67 @@ async def test_kubernetes_short_ai_response_gets_tool_table_appended() -> None:
     assert "| Metrik | Wert |" in ctx.response
     assert "| Status | ✅ Gesund |" in ctx.response
     assert "| Pods gesamt | 19 |" in ctx.response
+
+
+def test_simple_cluster_status_request_uses_fast_path_detector(monkeypatch) -> None:
+    import importlib
+
+    import agents.base_agent as base_agent
+
+    monkeypatch.setattr(base_agent, "get_memory", lambda: object())
+    monkeypatch.setattr(base_agent, "get_context_manager", lambda: object())
+    monkeypatch.setattr(base_agent, "get_llm", lambda: object())
+    monkeypatch.setattr(base_agent, "create_react_agent", lambda **_: object())
+
+    kubernetes_agent_module = importlib.import_module("modules_catalog.kubernetes.agent")
+
+    assert kubernetes_agent_module._is_simple_cluster_status_request(
+        "Wie ist der Status von Kubernetes?"
+    )
+    assert not kubernetes_agent_module._is_simple_cluster_status_request(
+        "Wie ist der Status der Kubernetes Pods?"
+    )
+
+
+async def test_simple_cluster_status_request_invokes_tool_once(monkeypatch) -> None:
+    import importlib
+
+    import agents.base_agent as base_agent
+
+    monkeypatch.setattr(base_agent, "get_memory", lambda: object())
+    monkeypatch.setattr(base_agent, "get_context_manager", lambda: object())
+    monkeypatch.setattr(base_agent, "get_llm", lambda: object())
+    monkeypatch.setattr(base_agent, "create_react_agent", lambda **_: object())
+
+    kubernetes_agent_module = importlib.import_module("modules_catalog.kubernetes.agent")
+    from modules_catalog.kubernetes.agent import KubernetesAgent
+
+    calls = 0
+
+    async def fake_ainvoke(_self, args: dict) -> dict:
+        nonlocal calls
+        calls += 1
+        return {
+            "nodes": 1,
+            "namespaces": 7,
+            "total_pods": 19,
+            "running_pods": 19,
+            "failing_pods": 0,
+            "deployments": 15,
+        }
+
+    monkeypatch.setattr(
+        type(kubernetes_agent_module.get_cluster_status),
+        "ainvoke",
+        fake_ainvoke,
+    )
+
+    response, did_compact = await KubernetesAgent().invoke(
+        "Wie ist der Status von Kubernetes?",
+        session_id="test-session",
+    )
+
+    assert calls == 1
+    assert did_compact is False
+    assert "Der Kubernetes-Cluster wirkt gesund." in response
+    assert "| Pods gesamt | 19 |" in response
