@@ -62,6 +62,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tabellen-Erkennung akzeptiert auch eingerückte Markdown-Tabellen.
 - Marketplace-Katalogversion auf die aktuelle Telegram-Modulversion angehoben.
 
+## [1.2.4] - 2026-05-23
+
+### Fixed
+- Inline-Button-Bestätigungen konsumieren ausstehende SafeGuard-Aktionen jetzt
+  atomar und erzeugen bei Mehrfachklicks keine falschen „Keine ausstehende
+  Aktion“-Antworten mehr.
+- Telegram bestätigt Tool-Level-SafeGuard-Unterbrechungen nun mit einem zweiten
+  Button-Dialog, statt nach der ersten Bestätigung in einen generischen
+  Ausführungsfehler zu laufen.
+- Textbasierte Bestätigungen (`ja`) werden beim Re-Routing wieder als
+  bestätigte Ausführung weitergegeben.
+
 ## Module Information
 
 - **Name**: telegram

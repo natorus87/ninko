@@ -453,6 +453,57 @@ class TelegramBot:
             logger.error("_send_with_keyboard error: %s", exc)
             return False
 
+    async def _pop_pending_safeguard_text(self, session_id: str) -> str | None:
+        """Atomically consume a pending bot-level safeguard action if one exists."""
+        from core.safeguard import SAFEGUARD_PENDING_KEY
+
+        redis = get_redis()
+        pending_key = SAFEGUARD_PENDING_KEY.format(session_id=session_id)
+        try:
+            pending_raw = await redis.connection.execute_command("GETDEL", pending_key)
+        except Exception:
+            pending_raw = await redis.connection.get(pending_key)
+            if pending_raw:
+                await redis.connection.delete(pending_key)
+        if not pending_raw:
+            return None
+        return pending_raw.decode() if isinstance(pending_raw, bytes) else pending_raw
+
+    async def _send_tool_confirmation(
+        self,
+        token: str,
+        chat_id: int,
+        info: dict[str, Any],
+    ) -> None:
+        """Render a tool-level safeguard sentinel as a Telegram confirmation."""
+        import html
+
+        category = html.escape(str(info.get("category", "UNKNOWN")))
+        rationale = html.escape(str(info.get("rationale", "")))
+        tool_name = html.escape(str(info.get("tool_name", "unbekannt")))
+        await self._send_with_keyboard(
+            token,
+            chat_id,
+            _t(
+                f"⚠️ <b>Tool-Bestätigung erforderlich</b>\n\n"
+                f"<b>Tool:</b> <code>{tool_name}</code>\n"
+                f"<b>Kategorie:</b> {category}\n"
+                f"<b>Begründung:</b> {rationale}\n\n"
+                f"Möchtest du fortfahren?",
+                f"⚠️ <b>Tool confirmation required</b>\n\n"
+                f"<b>Tool:</b> <code>{tool_name}</code>\n"
+                f"<b>Category:</b> {category}\n"
+                f"<b>Reason:</b> {rationale}\n\n"
+                f"Do you want to continue?",
+            ),
+            [
+                [
+                    {"text": _t("✅ Ja", "✅ Yes"), "callback_data": "confirm_tool_yes"},
+                    {"text": _t("❌ Nein", "❌ No"), "callback_data": "confirm_tool_no"},
+                ]
+            ],
+        )
+
     async def _react(
         self, token: str, chat_id: int, message_id: int, emoji: str = "👍"
     ) -> None:
@@ -860,7 +911,9 @@ class TelegramBot:
         self, callback_query: dict[str, Any], token: str
     ) -> None:
         """Handle safeguard confirmation button clicks (confirm_yes / confirm_no)."""
-        from core.safeguard import SAFEGUARD_PENDING_KEY
+        import json
+
+        from agents.base_agent import _TOOL_SAFEGUARD_SENTINEL
 
         callback_data = callback_query.get("data", "")
         callback_msg = callback_query.get("message", {})
@@ -881,33 +934,15 @@ class TelegramBot:
 
         redis = get_redis()
         session_id = f"telegram_{chat_id}"
-        pending_key = SAFEGUARD_PENDING_KEY.format(session_id=session_id)
-        pending_raw = await redis.connection.get(pending_key)
 
         if callback_data == "confirm_yes":
-            if not pending_raw:
-                await self._send(
-                    token,
-                    chat_id,
-                    _t(
-                        "Keine ausstehende Aktion.",
-                        "No pending action.",
-                        fr="Aucune action en attente.",
-                        es="No hay acción pendiente.",
-                        it="Nessuna azione in sospeso.",
-                        nl="Geen openstaande actie.",
-                        pl="Brak oczekującej akcji.",
-                        pt="Nenhuma ação pendente.",
-                        ja="保留中のアクションはありません。",
-                        zh="没有待处理的操作。",
-                    ),
+            original_text = await self._pop_pending_safeguard_text(session_id)
+            if not original_text:
+                logger.info(
+                    "Safeguard: stale Telegram confirm button for %s.", session_id
                 )
                 return
 
-            original_text = (
-                pending_raw.decode() if isinstance(pending_raw, bytes) else pending_raw
-            )
-            await redis.connection.delete(pending_key)
             logger.info(
                 "Safeguard: Telegram user confirmed via button for %s.", session_id
             )
@@ -925,6 +960,10 @@ class TelegramBot:
                     session_id=session_id,
                     confirmed=True,
                 )
+                if response_text.startswith(_TOOL_SAFEGUARD_SENTINEL):
+                    info = json.loads(response_text[len(_TOOL_SAFEGUARD_SENTINEL) :])
+                    await self._send_tool_confirmation(token, chat_id, info)
+                    return
                 await redis.store_chat_message(
                     session_id=session_id, role="user", content=original_text
                 )
@@ -940,7 +979,12 @@ class TelegramBot:
                         role="system_compaction",
                         content=summary or "Conversation history has been compressed.",
                     )
-                await self._send(token, chat_id, response_text, parse_mode="HTML")
+                await self._send(
+                    token,
+                    chat_id,
+                    format_for_telegram(_strip_pipeline_headers(response_text)),
+                    parse_mode="HTML",
+                )
             except Exception as exc:
                 logger.error(
                     "Callback confirm_yes error for %s: %s", session_id, exc, exc_info=True
@@ -965,6 +1009,9 @@ class TelegramBot:
                 typing_task.cancel()
 
         elif callback_data == "confirm_no":
+            from core.safeguard import SAFEGUARD_PENDING_KEY
+
+            pending_key = SAFEGUARD_PENDING_KEY.format(session_id=session_id)
             await redis.connection.delete(pending_key)
             await self._send(
                 token,
@@ -981,6 +1028,62 @@ class TelegramBot:
                     ja="❌ アクションがキャンセルされました。",
                     zh="❌ 操作已取消。",
                 ),
+            )
+        elif callback_data == "confirm_tool_yes":
+            typing_task = self._track_task(
+                asyncio.create_task(self._keep_typing(token, chat_id))
+            )
+            try:
+                orchestrator = self.app.state.orchestrator
+                response_text, did_compact = await orchestrator.resume_tool_execution(
+                    session_id
+                )
+                if response_text.startswith(_TOOL_SAFEGUARD_SENTINEL):
+                    info = json.loads(response_text[len(_TOOL_SAFEGUARD_SENTINEL) :])
+                    await self._send_tool_confirmation(token, chat_id, info)
+                    return
+                await redis.store_chat_message(
+                    session_id=session_id, role="assistant", content=response_text
+                )
+                if did_compact:
+                    summary = None
+                    if hasattr(orchestrator, "get_last_compaction_summary"):
+                        summary = orchestrator.get_last_compaction_summary()
+                    await redis.store_chat_message(
+                        session_id=session_id,
+                        role="system_compaction",
+                        content=summary or "Conversation history has been compressed.",
+                    )
+                await self._send(
+                    token,
+                    chat_id,
+                    format_for_telegram(_strip_pipeline_headers(response_text)),
+                    parse_mode="HTML",
+                )
+            except Exception as exc:
+                logger.error(
+                    "Callback confirm_tool_yes error for %s: %s",
+                    session_id,
+                    exc,
+                    exc_info=True,
+                )
+                await self._send(
+                    token,
+                    chat_id,
+                    _t(
+                        "❌ Fehler bei der Ausführung.",
+                        "❌ Error during execution.",
+                    ),
+                )
+            finally:
+                typing_task.cancel()
+
+        elif callback_data == "confirm_tool_no":
+            await redis.connection.delete(f"ninko:safeguard_tool_pending:{session_id}")
+            await self._send(
+                token,
+                chat_id,
+                _t("❌ Aktion abgebrochen.", "❌ Action cancelled."),
             )
         # Unknown callback_data: ignore silently
 
@@ -1191,6 +1294,8 @@ class TelegramBot:
 
         try:
             from core.safeguard import is_bot_confirmation, SAFEGUARD_PENDING_KEY
+            from agents.base_agent import _TOOL_SAFEGUARD_SENTINEL
+            import json
 
             orchestrator = self.app.state.orchestrator
             redis = get_redis()
@@ -1200,6 +1305,7 @@ class TelegramBot:
             safeguard = getattr(self.app.state, "safeguard", None)
             pending_key = SAFEGUARD_PENDING_KEY.format(session_id=session_id)
             pending_raw = await redis.connection.get(pending_key)
+            confirmed = False
 
             # Callback queries are handled in _handle_callback_query (dispatched from
             # handle_update before this code path is reached).
@@ -1216,6 +1322,7 @@ class TelegramBot:
                     "Safeguard: Telegram user confirmed pending action for %s.",
                     session_id,
                 )
+                confirmed = True
             elif safeguard:
                 sg_result = await safeguard.check(text)
                 if sg_result.requires_confirmation:
@@ -1308,13 +1415,20 @@ class TelegramBot:
                     contextualized_text=contextualized_text,
                     history=history,
                     session_id=session_id,
+                    confirmed=confirmed,
                 )
             else:
                 response_text, module_used, did_compact = await orchestrator.route(
                     message=contextualized_text,
                     chat_history=history,
                     session_id=session_id,
+                    confirmed=confirmed,
                 )
+
+            if response_text.startswith(_TOOL_SAFEGUARD_SENTINEL):
+                info = json.loads(response_text[len(_TOOL_SAFEGUARD_SENTINEL) :])
+                await self._send_tool_confirmation(token, chat_id, info)
+                return
 
             # Save history — skip if session was cleared in the meantime
             if session_id in self._cleared_sessions:
