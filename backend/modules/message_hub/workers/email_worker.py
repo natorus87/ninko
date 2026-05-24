@@ -155,20 +155,39 @@ class EmailWorker(ChannelWorker):
                     or conn.vault_keys.get("password")
                 )
                 if secret_key:
-                    password = await vault.get_secret(secret_key)
-            # MSAL/OAuth2 wird hier nicht unterstützt (kein Token-Refresh im Background-Worker)
+                    password = (await vault.get_secret(secret_key)) or ""
+            else:
+                logger.info(
+                    "Email-Worker: Auth-Typ %r wird im Background-Worker nicht unterstützt",
+                    auth_type,
+                )
+                return None
 
             username = (
                 cfg.get("username", "")
                 or cfg.get("email_address", "")
             )
+            imap_server = str(cfg.get("imap_server", "") or "").strip()
+            username = str(username or "").strip()
+            password = str(password or "")
+            mailbox = str(cfg.get("mailbox", "INBOX") or "INBOX").strip() or "INBOX"
+
+            if not imap_server or not username or not password:
+                logger.warning(
+                    "Email-Worker: IMAP-Verbindung unvollständig konfiguriert "
+                    "(server=%s, username=%s, password=%s)",
+                    bool(imap_server),
+                    bool(username),
+                    bool(password),
+                )
+                return None
 
             return {
-                "imap_server": cfg.get("imap_server", ""),
+                "imap_server": imap_server,
                 "imap_port": int(cfg.get("imap_port", 993)),
                 "username": username,
                 "password": password,
-                "mailbox": cfg.get("mailbox", "INBOX"),
+                "mailbox": mailbox,
                 "auth_type": auth_type,
             }
         except Exception as exc:

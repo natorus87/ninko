@@ -38,6 +38,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from core.auth import auth_tenant_id, resolve_request_auth
 from core.redis_client import get_redis
 from core.safeguard import ActionCategory
 
@@ -67,6 +68,11 @@ def _get_profile_store(request: Request) -> object:
     if sg.profile_store is None:
         raise HTTPException(status_code=503, detail="SafeguardProfileStore nicht verfügbar.")
     return sg.profile_store
+
+
+def _tenant_session_id(request: Request, session_id: str) -> str:
+    tenant_id = auth_tenant_id(resolve_request_auth(request))
+    return f"{tenant_id}:{session_id}"
 
 
 async def _audit_admin_change(
@@ -175,7 +181,8 @@ async def get_chat_profile(session_id: str, request: Request) -> dict:
     """Aktives Profil für eine Chat-Session abrufen."""
     sg = _get_safeguard(request)
     profile_store = _get_profile_store(request)
-    pid = await profile_store.get_chat_profile(session_id)
+    scoped_session_id = _tenant_session_id(request, session_id)
+    pid = await profile_store.get_chat_profile(scoped_session_id)
     if pid is None:
         return {
             "session_id": session_id,
@@ -197,11 +204,12 @@ async def set_chat_profile(
     profile = await profile_store.get_profile(body.profile_id)
     if profile is None:
         raise HTTPException(status_code=404, detail=f"Profil '{body.profile_id}' nicht gefunden.")
-    await profile_store.set_chat_profile(session_id, body.profile_id)
+    scoped_session_id = _tenant_session_id(request, session_id)
+    await profile_store.set_chat_profile(scoped_session_id, body.profile_id)
     await _audit_admin_change(
         request,
         "Chat safeguard profile changed",
-        rationale=f"session={session_id},profile={body.profile_id}",
+        rationale=f"session={scoped_session_id},profile={body.profile_id}",
     )
     return {"session_id": session_id, "profile_id": body.profile_id}
 
@@ -210,11 +218,12 @@ async def set_chat_profile(
 async def clear_chat_profile(session_id: str, request: Request) -> dict:
     """Chat-spezifisches Profil entfernen (Fallback auf globales Profil)."""
     profile_store = _get_profile_store(request)
-    await profile_store.clear_chat_profile(session_id)
+    scoped_session_id = _tenant_session_id(request, session_id)
+    await profile_store.clear_chat_profile(scoped_session_id)
     await _audit_admin_change(
         request,
         "Chat safeguard profile cleared",
-        rationale=f"session={session_id}",
+        rationale=f"session={scoped_session_id}",
     )
     return {"session_id": session_id, "cleared": True}
 

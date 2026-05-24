@@ -233,6 +233,40 @@ async def create_agent(body: AgentCreate, request: Request) -> dict:
     return {"id": new_agent.id, "status": "created"}
 
 
+@router.get("/templates")
+async def get_agent_templates() -> dict:
+    from core.agent_templates import AGENT_TEMPLATES
+
+    return {"templates": AGENT_TEMPLATES}
+
+
+@router.get("/cards", response_model=AgentCardsResponse)
+async def get_agent_cards(request: Request) -> AgentCardsResponse:
+    """Return all modules as structured AgentCards for external integrations."""
+    _ = auth_tenant_id(resolve_request_auth(request))
+
+    registry = get_registry()
+    if not registry:
+        return AgentCardsResponse(cards=[], total=0)
+
+    cards: list[AgentCard] = []
+    for manifest in registry.list_modules():
+        cards.append(
+            AgentCard(
+                name=manifest.name,
+                display_name=manifest.display_name,
+                description=manifest.description,
+                version=manifest.version,
+                capabilities=manifest.agent_capabilities,
+                keywords=manifest.routing_keywords,
+                api_prefix=manifest.api_prefix,
+                has_dashboard_tab=bool(manifest.dashboard_tab),
+            )
+        )
+
+    return AgentCardsResponse(cards=cards, total=len(cards))
+
+
 @router.get("/{agent_id}")
 async def get_agent(agent_id: str, request: Request) -> dict:
     redis = get_redis()
@@ -317,13 +351,6 @@ async def delete_agent(agent_id: str, request: Request) -> dict:
 
     logger.info("Agent gelöscht: %s", agent_id)
     return {"id": agent_id, "deleted": True}
-
-
-@router.get("/templates")
-async def get_agent_templates() -> dict:
-    from core.agent_templates import AGENT_TEMPLATES
-
-    return {"templates": AGENT_TEMPLATES}
 
 
 @router.post("/generate")
@@ -485,30 +512,3 @@ async def duplicate_agent(agent_id: str, request: Request) -> dict:
     await _save_agents(redis, tenant_id, agents)
     logger.info("Agent dupliziert: %s → %s", agent_id, duplicate["id"])
     return {"id": duplicate["id"], "status": "created"}
-
-
-@router.get("/cards", response_model=AgentCardsResponse)
-async def get_agent_cards(request: Request) -> AgentCardsResponse:
-    """Return all modules as structured AgentCards for external integrations."""
-    _ = auth_tenant_id(resolve_request_auth(request))
-
-    registry = get_registry()
-    if not registry:
-        return AgentCardsResponse(cards=[], total=0)
-
-    cards: list[AgentCard] = []
-    for manifest in registry.list_modules():
-        cards.append(
-            AgentCard(
-                name=manifest.name,
-                display_name=manifest.display_name,
-                description=manifest.description,
-                version=manifest.version,
-                capabilities=manifest.agent_capabilities,
-                keywords=manifest.routing_keywords,
-                api_prefix=manifest.api_prefix,
-                has_dashboard_tab=bool(manifest.dashboard_tab),
-            )
-        )
-
-    return AgentCardsResponse(cards=cards, total=len(cards))

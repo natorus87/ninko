@@ -764,7 +764,7 @@ async def chat(request: Request, body: ChatRequest):
         category = str(info.get("category", "UNKNOWN")).upper()
         if category in {"DESTRUCTIVE", "STATE_CHANGING"}:
             current_tx_id = await op_journal.create_pending(
-                session_id=body.session_id,
+                session_id=scoped_session_id,
                 text=body.message,
                 category=category,
                 rationale=str(info.get("rationale", "")),

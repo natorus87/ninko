@@ -75,6 +75,52 @@ _MAIN_RECOVERABLE_EXCEPTIONS = (
     json.JSONDecodeError,
 )
 
+_SECRET_LOG_PATTERNS = (
+    (re.compile(r"(https://api\.telegram\.org/bot)[^/\s\"']+"), r"\1<redacted>"),
+    (
+        re.compile(
+            r"(?i)([?&](?:token|api_key|apikey|access_token|auth_token|password|secret)=)"
+            r"[^&\s\"']+"
+        ),
+        r"\1<redacted>",
+    ),
+    (re.compile(r"(?i)(bearer\s+)[a-z0-9._~+/\-]+=*"), r"\1<redacted>"),
+)
+
+
+def _redact_log_text(value: str) -> str:
+    redacted = value
+    for pattern, replacement in _SECRET_LOG_PATTERNS:
+        redacted = pattern.sub(replacement, redacted)
+    return redacted
+
+
+class SecretRedactionFilter(logging.Filter):
+    """Redacts credentials before console and Redis handlers format log records."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            record.msg = _redact_log_text(record.msg)
+        if record.args:
+            if isinstance(record.args, dict):
+                record.args = {
+                    key: _redact_log_text(value) if isinstance(value, str) else value
+                    for key, value in record.args.items()
+                }
+            elif isinstance(record.args, tuple):
+                record.args = tuple(
+                    _redact_log_text(value) if isinstance(value, str) else value
+                    for value in record.args
+                )
+        return True
+
+
+_secret_redaction_filter = SecretRedactionFilter()
+for _handler in logging.getLogger().handlers:
+    _handler.addFilter(_secret_redaction_filter)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+
 from core.auth import (
     auth_tenant_id,
     module_access_allows,
@@ -95,6 +141,7 @@ from core.rbac import RBAC_REDIS_KEY, RbacStore
 from core.log_handler import RedisLogHandler as _RedisLogHandler
 
 _redis_log_handler = _RedisLogHandler(level=logging.INFO)
+_redis_log_handler.addFilter(_secret_redaction_filter)
 root_logger = logging.getLogger()
 if not any(isinstance(h, _RedisLogHandler) for h in root_logger.handlers):
     root_logger.addHandler(_redis_log_handler)

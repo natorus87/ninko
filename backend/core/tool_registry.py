@@ -647,21 +647,38 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
         ToolMetadata("list_tasks", "core", readonly=True),
         ToolMetadata("task_output", "core", readonly=True),
         ToolMetadata("list_scheduled_tasks", "core", readonly=True),
+        ToolMetadata("get_routing_info", "core", readonly=True),
+        ToolMetadata("kg_find_related", "core", readonly=True),
+        ToolMetadata("kg_find_path", "core", readonly=True),
+        ToolMetadata("kg_analyze_dependencies", "core", readonly=True),
+        ToolMetadata("list_script_tools", "core", readonly=True),
+        ToolMetadata("wait", "core", readonly=True),
         # WRITE_DATA — schreibt Daten (Memory, Agenten, Skills, Workflows)
         ToolMetadata("remember_fact", "core", tier=ToolTier.WRITE_DATA),
         ToolMetadata("forget_fact", "core", tier=ToolTier.WRITE_DATA),
         ToolMetadata("confirm_forget", "core", tier=ToolTier.WRITE_DATA),
         ToolMetadata("create_custom_agent", "core", tier=ToolTier.WRITE_DATA),
         ToolMetadata("update_custom_agent", "core", tier=ToolTier.WRITE_DATA),
+        ToolMetadata("configure_routing", "core", tier=ToolTier.WRITE_DATA),
         ToolMetadata("install_skill", "core", tier=ToolTier.WRITE_DATA),
         ToolMetadata("create_dag_workflow", "core", tier=ToolTier.WRITE_DATA),
         ToolMetadata("create_linear_workflow", "core", tier=ToolTier.WRITE_DATA),
+        ToolMetadata("create_task", "core", tier=ToolTier.WRITE_DATA),
         ToolMetadata("create_scheduled_task", "core", tier=ToolTier.WRITE_DATA),
         ToolMetadata("generate_image", "core", tier=ToolTier.WRITE_DATA),
+        ToolMetadata("generate_pdf_report", "core", tier=ToolTier.WRITE_DATA),
+        ToolMetadata("kg_record_incident", "core", tier=ToolTier.WRITE_DATA),
+        ToolMetadata("record_alert", "core", tier=ToolTier.WRITE_DATA),
+        ToolMetadata("resolve_alert", "core", tier=ToolTier.WRITE_DATA),
+        ToolMetadata("speak", "core", tier=ToolTier.WRITE_DATA),
         # WRITE_SYSTEM — führt Aktionen aus / verändert Systemzustand
+        ToolMetadata("call_module_agent", "core", tier=ToolTier.WRITE_SYSTEM),
+        ToolMetadata("execute_cli_command", "core", tier=ToolTier.WRITE_SYSTEM),
         ToolMetadata("execute_workflow", "core", tier=ToolTier.WRITE_SYSTEM),
         ToolMetadata("run_pipeline", "core", tier=ToolTier.WRITE_SYSTEM),
         ToolMetadata("run_parallel_pipeline", "core", tier=ToolTier.WRITE_SYSTEM),
+        ToolMetadata("run_script_tool", "core", tier=ToolTier.WRITE_SYSTEM),
+        ToolMetadata("stop_task", "core", tier=ToolTier.WRITE_SYSTEM),
         # ADMIN — destruktiv
         ToolMetadata("delete_scheduled_task", "core", destructive=True, tier=ToolTier.ADMIN),
     ]
@@ -1444,6 +1461,7 @@ def _infer_readonly(tool_name: str) -> bool:
         "check_",
         "load_",
         "inspect_",
+        "read_",
         "recall_",
     )
     readonly_names = {
@@ -1518,7 +1536,7 @@ class ToolSpec:
     @classmethod
     def from_metadata(cls, meta: "ToolMetadata") -> "ToolSpec":
         """Erstellt eine ToolSpec aus vorhandenen ToolMetadata."""
-        tier = meta.tier or _infer_tier(meta.name, meta.destructive)
+        tier = meta.tier or _infer_tier(meta.name, meta.readonly, meta.destructive)
         requires_confirmation = tier in (ToolTier.ADMIN, ToolTier.WRITE_SYSTEM)
         return cls(
             name=meta.name,
@@ -1553,7 +1571,7 @@ def get_or_infer_tool_spec(name: str, module: str = "unknown") -> "ToolSpec":
     if name in _tool_specs:
         return _tool_specs[name]
 
-    tier = _infer_tier(name, _infer_destructive(name))
+    tier = _infer_tier(name, _infer_readonly(name), _infer_destructive(name))
     requires_confirmation = tier in (ToolTier.ADMIN, ToolTier.WRITE_SYSTEM, ToolTier.COMMUNICATE)
     return ToolSpec(
         name=name,

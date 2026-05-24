@@ -1350,6 +1350,11 @@ class SafeguardMiddleware:
                 p = await self._get_profile(pid)
                 if p:
                     return p
+            legacy_enabled = await self.agent_store.get_safeguard(agent_id)
+            if legacy_enabled is False:
+                return _BUILTIN_PROFILES["disabled"]
+            if legacy_enabled is True and self._active_profile_id == "disabled":
+                return _BUILTIN_PROFILES["moderate"]
 
         # 3. Global profile
         p = await self._get_profile(self._active_profile_id)

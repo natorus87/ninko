@@ -1,250 +1,392 @@
-# Plan: Canonical English Prompts for Multilingual Ninko
+# Plan: Core-Agent-, Routes- und Safeguard-Pruefung
 
 ## Ziel
 
-Ninko soll intern stabile, einheitliche System-Prompts verwenden und trotzdem in der Sprache des Users antworten.
-Dafuer werden Modul- und Agent-Prompts schrittweise auf englische Canonical Prompts umgestellt. Die Antwortsprache bleibt zentral ueber Middleware und Settings gesteuert.
+Core-Agent-Module, zentrale API-Routes und der Safeguard-Mechanismus wurden auf Funktionalitaet, Logikfehler, Integrationsprobleme und Sicherheitsrisiken geprueft. Dieses Dokument ersetzt den alten Plan und haelt den aktuellen Befund, die bereits umgesetzten Fixes, offene Risiken und sinnvolle naechste Tests fest.
 
-## Problem
+## Gepruefte Bereiche
 
-Aktuell enthalten viele Prompts sprachspezifische Varianten, z.B. via `_t(de=..., en=...)`. Dadurch laufen Regeln auseinander:
+- `backend/api/routes_chat.py`
+- `backend/api/routes_agents.py`
+- `backend/api/routes_safeguard.py`
+- `backend/api/routes_safeguard_profiles.py`
+- `backend/api/routes_modules.py`
+- `backend/api/routes_routing.py`
+- `backend/api/routes_subagent.py`
+- `backend/api/routes_workflows.py`
+- `backend/api/routes_secrets.py`
+- `backend/agents/base_agent.py`
+- `backend/agents/orchestrator.py`
+- `backend/agents/core_tools.py`
+- `backend/agents/alert_tools.py`
+- `backend/agents/script_tools.py`
+- `backend/agents/middleware/execution.py`
+- `backend/main.py`
+- `backend/core/safeguard.py`
+- `backend/core/safeguard_profiles.py`
+- `backend/core/tool_registry.py`
+- `backend/core/operation_journal.py`
+- `backend/core/api_security_policy.py`
+- `backend/modules/message_hub/workers/email_worker.py`
 
-- Formatregeln koennen in einer Sprache fehlen.
-- Modulverhalten haengt unbeabsichtigt von `LANGUAGE` ab.
-- Aenderungen muessen mehrfach gepflegt werden.
-- Tests gegen Prompt-Verhalten werden schwerer, weil mehrere Prompt-Versionen existieren.
+## Architekturueberblick
 
-Konkretes Beispiel: Beim Kubernetes-Modul stand die Tabellenregel im englischen Prompt, fehlte aber im deutschen Prompt. Dadurch kamen je nach Sprache knappe Antworten oder rohe JSON-/Python-Strukturen im Frontend an.
+### Chat-Datenfluss
 
-## Zielarchitektur
+1. `POST /api/chat/` nimmt `ChatRequest` entgegen.
+2. Session-ID wird tenant-gescoped: `tenant_id:session_id`.
+3. User-Message-Safeguard laeuft vor Routing, ausser `confirmed=true`.
+4. Chat-History wird aus Redis geladen.
+5. `OrchestratorAgent.route()` entscheidet per Function Calling oder Fallback.
+6. Modul-Agenten werden ueber `BaseAgent.invoke()` ausgefuehrt.
+7. Tool-Level-Safeguard kann vor Tool-Execution pausieren.
+8. Pending Tool-Call wird in Redis unter `ninko:safeguard_tool_pending:{tenant:session}` gespeichert.
+9. `confirmed=true` resumiert ueber `orchestrator.resume_tool_execution()`.
+10. Antwort, Audit und Operation Journal werden geschrieben.
 
-- System-, Agent- und Modul-Prompts sind intern Englisch.
-- User-facing Antworten werden weiterhin in der konfigurierten Sprache erzeugt.
-- Sprachsteuerung liegt zentral in `LanguageMiddleware` und nicht in jedem Modul-Prompt.
-- Formatregeln sind sprachneutral und werden nur einmal definiert.
-- Kritische Ausgabeformate werden mit Regressionstests abgesichert.
+### Safeguard-Datenfluss
 
-## Prompt-Prinzipien
+- User-Message-Safeguard: `SafeguardMiddleware.check()`.
+- Tool-Call-Safeguard: `SafeguardMiddleware.check_tool_call()`.
+- Profilauflösung: Chat-Profil > Agent-Profil > Legacy-Agent-Toggle > globales Profil > `moderate`.
+- Bekannte Tools werden deterministisch ueber `ToolRegistry` und `ToolTier` klassifiziert.
+- Unbekannte Tools fallen auf LLM-Klassifikation zurueck.
+- Classifier-Ausfall ist standardmaessig fail-safe, ausser ein Profil setzt `fail_open=True`.
 
-Canonical Prompt:
+### Tool-Tiers
 
-```text
-You are Ninko's Kubernetes specialist.
+- `READONLY`: keine Bestaetigung.
+- `COMMUNICATE`: externe Kommunikation, Audit auch ohne Bestaetigung.
+- `WRITE_DATA`: Daten werden erstellt/geaendert.
+- `WRITE_SYSTEM`: System-/Infrastrukturzustand wird geaendert.
+- `ADMIN`: destruktiv oder irreversibel.
 
-Rules:
-- Always call tools for live cluster data.
-- For status/detail/overview requests, answer with a short assessment followed by Markdown tables.
-- Never return raw JSON or Python repr as the final answer.
+## Behobene Probleme
 
-Response language:
-- Answer in the user's configured language.
-```
+### 1. Agent-Routen wurden durch `/{agent_id}` verschattet
 
-Nicht mehr gewuenscht:
+- Datei: `backend/api/routes_agents.py`
+- Problem: `GET /api/agents/templates` und `GET /api/agents/cards` standen hinter `GET /api/agents/{agent_id}`.
+- Auswirkung: FastAPI interpretierte `templates` und `cards` als Agent-IDs; die Endpunkte konnten 404 liefern.
+- Schweregrad: Mittel
+- Fix: Statische GET-Routen vor `/{agent_id}` verschoben.
+- Verifikation: Statischer Route-Order-Check bestanden.
 
-```python
-_t(
-    de="Du bist ...",
-    en="You are ...",
-)
-```
+### 2. Tool-Safeguard-Pending im Chat-Journal war ungescoped
 
-Ausnahme: User-facing statische Fehlermeldungen, UI-Texte und API-Antworten duerfen weiterhin lokalisiert sein.
+- Datei: `backend/api/routes_chat.py`
+- Problem: Im JSON-Pfad wurde ein Tool-Safeguard-Pending mit `body.session_id` ins Operation Journal geschrieben, waehrend Resume/Lookup `tenant:session` nutzt.
+- Auswirkung: Falsche Pending-Zuordnung, fehlerhafte Journal-/Audit-Korrelation, moegliche Tenant-Kollisionen.
+- Schweregrad: Hoch
+- Fix: `session_id=scoped_session_id`.
+- Verifikation: Statischer Scoping-Check bestanden.
 
-## Migrationsphasen
+### 3. Chat-spezifische Safeguard-Profile wurden falsch gescoped
 
-### Phase 1: Prompt-Inventar
+- Datei: `backend/api/routes_safeguard.py`
+- Problem: Profil-API schrieb `ninko:safeguard:profile:chat:{session}`, der Chat-Safeguard las aber `ninko:safeguard:profile:chat:{tenant}:{session}`.
+- Auswirkung: Chat-Profile wirkten im Chat nicht zuverlaessig und konnten tenant-uebergreifend kollidieren.
+- Schweregrad: Hoch
+- Fix: `GET/POST/DELETE /api/safeguard/chats/{session_id}/profile` nutzen jetzt dieselbe Tenant-Session-ID wie `routes_chat.py`.
+- Verifikation: Statischer Scoping-Check bestanden.
 
-- Alle Modul- und Agent-Prompts erfassen.
-- Prompts nach Risiko priorisieren:
-  - Hoch: Infrastrukturmodule wie Kubernetes, Proxmox, Docker, Linux Server, Checkmk.
-  - Mittel: Kommunikations- und Produktivitaetsmodule.
-  - Niedrig: einfache Utility-Module.
-- Fuer jeden Prompt dokumentieren:
-  - Datei
-  - aktuell verwendete Sprachen
-  - Formatregeln
-  - Tool-Ausfuehrungsregeln
-  - sicherheitsrelevante Regeln
+### 4. Legacy-Per-Agent-Safeguard-Toggle wurde ignoriert
 
-### Phase 2: Zentrale Sprachregel haerten
+- Datei: `backend/core/safeguard.py`
+- Problem: `enable_for_agent()` / `disable_for_agent()` speicherten `safeguard_enabled`, aber `resolve_profile()` wertete diesen Wert nicht aus.
+- Auswirkung: API meldete Erfolg, der Agent blieb aber faktisch auf globalem Profil.
+- Schweregrad: Hoch
+- Fix: `resolve_profile()` wertet Legacy-Toggle nach Agent-Profil und vor Global-Profil aus.
+- Verhalten:
+  - `safeguard_enabled=False` -> `disabled`
+  - `safeguard_enabled=True` bei global `disabled` -> `moderate`
+- Verifikation: Statischer Check bestanden.
 
-- `LanguageMiddleware` als einzige Quelle fuer Antwortsprache definieren.
-- Sicherstellen, dass jeder Agent-Prompt am Ende eine zentrale Regel erhaelt:
-  - "Answer in the user's configured language."
-  - Optional: "Keep technical identifiers, resource names, commands, and JSON keys unchanged."
-- Tests ergaenzen, die bestaetigen, dass deutsche Userfragen weiterhin deutsche Antworten ausloesen.
+### 5. Core-Tools fehlten in der Tool-Registry
 
-### Phase 3: Hochrisiko-Module migrieren
+- Datei: `backend/core/tool_registry.py`
+- Problem: Mehrere echte `@tool`-Funktionen waren nicht explizit registriert, u.a.:
+  - `execute_cli_command`
+  - `call_module_agent`
+  - `create_task`
+  - `stop_task`
+  - `configure_routing`
+  - `get_routing_info`
+  - `wait`
+  - `speak`
+  - `generate_pdf_report`
+  - `kg_find_related`
+  - `kg_find_path`
+  - `kg_analyze_dependencies`
+  - `kg_record_incident`
+  - `record_alert`
+  - `resolve_alert`
+  - `run_script_tool`
+  - `list_script_tools`
+- Auswirkung: Unbekannte Tools fielen auf LLM-Klassifikation zurueck. Das ist fail-safe, aber langsam, fragil und bei Classifier-Ausfall stoerend.
+- Schweregrad: Mittel
+- Fix: Fehlende Core-Tools mit expliziten Tiers registriert.
+- Verifikation: Tool-Coverage-Check: keine echten `@tool`-Funktionen mehr unregistriert, ausser Template-Beispiele.
 
-Startreihenfolge:
+### 6. `read_*`-Tools wurden nicht als read-only erkannt
 
-1. Kubernetes
-2. Proxmox
-3. Docker
-4. Linux Server
-5. Checkmk / Zabbix
+- Datei: `backend/core/tool_registry.py`
+- Problem: `_infer_readonly()` kannte `read_` nicht.
+- Auswirkung: `read_mcp_server_resource` wurde konservativ als schreibend eingestuft.
+- Schweregrad: Mittel
+- Fix: `read_` in Readonly-Prefixes aufgenommen.
+- Verifikation: `read_mcp_server_resource` klassifiziert jetzt als `READONLY`.
 
-Pro Modul:
+### 7. Alte `_infer_tier()`-Aufrufe konnten Runtime-Fehler ausloesen
 
-- `_t(de=..., en=...)` im System-Prompt durch einen englischen Canonical Prompt ersetzen.
-- Regeln in klare Abschnitte trennen:
-  - Role
-  - Capabilities
-  - Tool execution rules
-  - Output format
-  - Safety / confirmation rules
-  - Error handling
-- Keine User-facing Sprache hart im Prompt festlegen.
-- Bestehende Modul-spezifische Gotchas unveraendert uebernehmen.
+- Datei: `backend/core/tool_registry.py`
+- Problem: `ToolSpec.from_metadata()` und `get_or_infer_tool_spec()` riefen `_infer_tier()` mit alter Signatur auf.
+- Auswirkung: Bei Nutzung dieser Hilfen waere `TypeError` moeglich.
+- Schweregrad: Mittel
+- Fix: Aufrufe auf aktuelle Signatur angepasst:
+  - `_infer_tier(meta.name, meta.readonly, meta.destructive)`
+  - `_infer_tier(name, _infer_readonly(name), _infer_destructive(name))`
+- Verifikation: Direkter Runtime-Check gegen `ToolSpec.from_metadata()` und `get_or_infer_tool_spec()` bestanden.
 
-### Phase 4: Output-Format-Regressionen
+### 8. Email-Worker crashte bei fehlendem Vault-Secret
 
-Fuer jedes kritische Modul Tests ergaenzen:
+- Datei: `backend/modules/message_hub/workers/email_worker.py`
+- Problem: `vault.get_secret()` kann `None` liefern. Dieser Wert wurde direkt an `imaplib.login()` uebergeben.
+- Auswirkung: Wiederholter Worker-Crash mit `AttributeError: 'NoneType' object has no attribute 'replace'`.
+- Schweregrad: Mittel
+- Fix:
+  - Fehlende Secrets werden auf `""` normalisiert.
+  - Unvollstaendige IMAP-Konfigurationen werden vor dem Verbindungsaufbau erkannt.
+  - Nicht unterstuetzte Auth-Typen werden kontrolliert als "nicht konfiguriert" behandelt.
+- Verifikation:
+  - Container-Compile bestanden.
+  - Kubernetes-Log-Nachlauf zeigt kontrollierte Meldung `IMAP-Verbindung unvollständig konfiguriert`.
+  - Keine `email-Worker Fehler` / `NoneType`-Crashes mehr im Nachlauf.
 
-- Listen duerfen nicht als rohes JSON/Python-Repr ausgegeben werden.
-- Status-/Detailfragen liefern eine kurze Einschaetzung plus Markdown-Tabelle.
-- Tool-Fallbacks werden lesbar formatiert.
-- Fehlerantworten enthalten keine Secrets und keine Stacktraces.
+### 9. HTTPX-INFO-Logs konnten Secrets in URLs offenlegen
 
-Bereits vorhandenes Muster:
+- Datei: `backend/main.py`
+- Problem: `httpx` loggte vollstaendige Request-URLs auf INFO-Level. Bei URL-basierten APIs koennen darin Tokens stehen.
+- Auswirkung: Credential-Leak in Container- und Redis-Logs.
+- Schweregrad: Hoch
+- Fix:
+  - Zentraler `SecretRedactionFilter` fuer Console- und Redis-Loghandler.
+  - Redaction fuer Telegram-Bot-URLs, bekannte Secret-Query-Parameter und Bearer-Tokens.
+  - `httpx` und `httpcore` auf `WARNING` gesetzt, damit erfolgreiche Request-URLs nicht auf INFO erscheinen.
+- Verifikation:
+  - Isolierter Redaction-Test bestanden.
+  - Kubernetes-Log-Nachlauf zeigt keine `HTTP Request:`-INFO-Zeilen und keine Telegram-Bot-URL-Leaks mehr.
 
-- `backend/tests/test_kubernetes_response_formatting.py`
+## Verifikation
 
-Dieses Muster kann fuer weitere Module wiederverwendet werden.
-
-### Phase 5: Generischer Tool-Fallback
-
-Der aktuelle Kubernetes-spezifische Fallback ist bewusst eng geschnitten. Danach pruefen:
-
-- Welche Module liefern strukturierte Listen/Dictionaries?
-- Ob ein generischer Markdown-Table-Fallback fuer `list_*`/`get_*` Tools sinnvoll ist.
-- Welche Module eigene Spaltenreihenfolgen brauchen.
-
-Ziel: Rohes JSON nur noch dann anzeigen, wenn der User explizit JSON verlangt.
-
-### Phase 6: Cleanup und Konvention
-
-- Neue Regel in Projekt-Dokumentation aufnehmen:
-  - "New agent/module system prompts must be written in English."
-  - "Response language is controlled centrally."
-- README/CLAUDE.md nur kurz verlinken, Details in `.claude/memory/` oder `.claude/rules/`.
-- Prompt-Review in PR-/Review-Checkliste aufnehmen.
-
-## Review-Findings vom 2026-05-15
-
-### Findings zur aktuellen uncommitted Umsetzung
-
-1. ✅ **Behoben (2026-05-15):** `backend/agents/middleware/postprocess.py`: `preferred_table_columns` sind jetzt modul-qualifiziert.
-   - Fix: `_PREFERRED_COLUMNS_BY_TOOL` durch `_PREFERRED_COLUMNS_BY_AGENT_TOOL: dict[str, dict[str, list[str]]]` ersetzt (`{"kubernetes": {"list_services": [...]}}`).
-   - Lookup ueber neuen Helper `_preferred_columns_for(agent_name, tool_name)`; `_format_structured_as_table` und `_format_tool_fallback` nehmen jetzt `agent_name` als Parameter entgegen.
-   - Damit kollidieren `list_services` (Kubernetes vs. Linux Server) und `get_nodes` (Proxmox vs. eventuelle Kollisionen) nicht mehr.
-   - Regression: `test_kubernetes_list_services_keeps_k8s_columns` und `test_linux_server_list_services_uses_systemd_columns` in `backend/tests/test_module_response_formatting.py`.
-
-2. ✅ **Behoben (2026-05-15):** AI-Antwort-Augmentation fuer alle migrierten Hochrisiko-Module aktiv.
-   - Fix: Neue Konstante `_TABLE_AUGMENT_MODULES` (`kubernetes, proxmox, docker, linux_server, checkmk, opnsense, zabbix`); die Bedingung in `ResponseExtractionMiddleware.post_process` prueft `ctx.agent_name in _TABLE_AUGMENT_MODULES` statt nur Kubernetes.
-   - Neuer Helper `_build_table_details` waehlt fuer Kubernetes weiterhin die bespoke Summary-Card, fuer alle anderen den generischen `_format_structured_as_table`-Pfad.
-   - Wird die AI-Antwort selbst schon Markdown-Tabellen enthalten, wird kein zweiter Block angehaengt (`_contains_markdown_table`-Guard).
-   - Regression: `test_proxmox_short_ai_response_gets_tool_table_appended`, `test_docker_short_ai_response_gets_tool_table_appended`, `test_proxmox_ai_response_with_existing_table_is_not_doubled` sowie `test_non_migrated_module_does_not_get_table_appended` in `backend/tests/test_module_response_formatting.py`.
-
-3. ✅ **Behoben (2026-05-15):** `backend/modules_catalog/zabbix/agent.py` kompatibel mit `BaseAgent`.
-   - Fix: `super().__init__(name="zabbix", system_prompt=self.system_prompt, tools=[...])`; das nicht existente `self._register_tools(...)` wurde entfernt. Ungenutzter `from typing import Optional`-Import ebenfalls entfernt.
-   - Damit kann Zabbix in Phase 3 sauber instanziiert werden.
-   - Regression: `test_zabbix_agent_source_uses_baseagent_signature` (statische Quellpruefung, da der vollstaendige Modulimport `aiosqlite` benoetigt, das im Unit-Test-Env fehlt).
-
-### Verifizierter Backlog
-
-- `PLAN.md` selbst ist fachlich stimmig; die Risiken liegen in der aktuellen Umsetzung und den offenen Migrationsschritten.
-- `.claude/knowledge/prompt-inventory.md` existiert und enthaelt das Prompt-Inventar.
-- ✅ Es verbleiben aktuell **0 Catalog-Agent-Prompts mit `_t()`-Systemprompts**.
-- Zuletzt migrierte Catalog-Agenten:
-  - `discord`
-  - `fritzbox`
-  - `glpi`
-  - `licium`
-  - `qdrant`
-  - `redmine`
-  - `tasmota`
-  - `wordpress`
-- Zuvor migrierte Catalog-Agenten:
-  - `confluence`
-  - `email`
-  - `homeassistant`
-  - `ionos`
-  - `jira`
-  - `mcp_server`
-  - `pihole`
-  - `synology`
-  - `teams`
-  - `telegram`
-- Zusaetzlich bereinigt:
-  - `github`, `gitlab`, `netbox`: alte mehrsprachige `system_prompt = {...}`-Dicts ersetzt.
-  - `cisco`, `hpe_ilo`, `lenovo_xclarity`, `microsoft_entra`, `microsoft_intune`,
-    `mikrotik`, `netgear`, `nextcloud`, `openproject`, `slack`, `ubiquiti`:
-    lokale Antwortsprach-Regeln entfernt und auf englische Canonical Prompts mit
-    `BaseAgent(..., tools=[...])` konsolidiert.
-- Das Modul-Template ist migriert:
-  - `backend/modules_catalog/_template/agent.py` nutzt einen englischen Canonical Prompt.
-  - `backend/modules_catalog/_template/README.md` dokumentiert keine `_t()`-Systemprompts mehr fuer neue Module.
-- ✅ Die vier zuvor deutsch-only Core-Module sind migriert:
-  - `backend/modules/codelab/agent.py`
-  - `backend/modules/image_gen/agent.py`
-  - `backend/modules/network_analysis/agent.py`
-  - `backend/modules/web_search/agent.py`
-- ✅ Prompt-Scan fuer Agent-Systemprompts ist sauber:
-  - Keine `_t()`-Systemprompts in `backend/modules_catalog/*/agent.py`.
-  - Keine mehrsprachigen `system_prompt = {...}`-Dicts in `backend/modules_catalog/*/agent.py`.
-  - Keine lokalen "Always respond in the user's language"-Regeln in den geprueften Agenten.
-- ✅ Intent-Detection fuer "gib mir JSON" ist umgesetzt.
-  - `ResponseExtractionMiddleware` erkennt explizite JSON-Wuensche in `ctx.message`.
-  - Bei Tool-only-Fallbacks werden strukturierte Tooldaten dann als JSON-Codeblock gerendert statt als Markdown-Tabelle.
-  - Bei kurzen AI-Antworten wird keine Tool-Tabelle angehaengt, wenn der User JSON verlangt.
-
-### Test-Findings
-
-- Ausgefuehrter Review-Check:
+### Erfolgreich
 
 ```bash
-.venv-test/bin/pytest backend/tests/test_language_middleware.py backend/tests/test_module_response_formatting.py backend/tests/test_kubernetes_response_formatting.py -q
+python3 -m compileall -q backend/agents backend/api backend/core
 ```
 
-- Aktueller Stand nach Fixes (2026-05-15): `75 passed`.
-- Statische Checks nach Weiterarbeit:
-  - `python3 -m py_compile` fuer alle geaenderten Agent- und Middleware-Dateien: bestanden.
-  - Voller `ruff check` fuer alle geaenderten Agent- und Middleware-Dateien: bestanden.
-- Abgedeckt durch neue Regressionstests:
-  - ✅ Toolnamen-Kollisionen zwischen Modulen (`list_services` Kubernetes vs. Linux Server).
-  - ✅ Kurze AI-Antworten bei Proxmox und Docker erhalten Markdown-Tabellen.
-  - ✅ AI-Antworten mit bereits enthaltener Markdown-Tabelle werden nicht doppelt augmentiert.
-  - ✅ Nicht-migrierte Module (z.B. `discord`) lassen kurze AI-Antworten unveraendert.
-  - ✅ Zabbix-Agent-Initialisierung (statische Quellpruefung).
-  - ✅ Expliziter JSON-Output-Wunsch deaktiviert den Markdown-Table-Fallback.
+Weitere erfolgreiche statische Checks:
 
-## Akzeptanzkriterien
+- Agent-Route-Order-Check.
+- Chat-Tool-Pending-Scoping-Check.
+- Safeguard-Chat-Profil-Scoping-Check.
+- Legacy-Agent-Toggle-Resolution-Check.
+- Tool-Registry-Tier-Check.
+- Tool-Coverage-Check fuer echte `@tool`-Funktionen.
+- Readlike-Tool-Tier-Check.
+- Email-Worker-Config-Guard-Check.
+- Log-Redaction-Pattern-Check.
 
-- Ein Modul verhaelt sich unabhaengig von `LANGUAGE` gleich, abgesehen von der Antwortsprache.
-- Formatregeln sind nicht mehr zwischen deutschen und englischen Prompt-Versionen dupliziert.
-- Kubernetes-Statusfragen liefern bei Deutsch und Englisch jeweils Tabellen, keine rohen Listen.
-- Neue Modul-Prompts werden nur noch als englische Canonical Prompts angelegt.
-- Regressionstests decken mindestens Kubernetes und ein weiteres Infrastrukturmodul ab.
-- Tabellen-Hints sind modulqualifiziert, sodass gleichnamige Tools keine falschen Spalten erhalten.
-- Migrierte Hochrisiko-Module haengen strukturierte Tooldetails auch dann an, wenn die AI-Antwort zu knapp ist.
-- Zabbix initialisiert mit `BaseAgent` korrekt oder bleibt explizit ausserhalb des Migrationsumfangs.
-- Explizite JSON-Wuensche liefern strukturierte Tooldaten als JSON-Codeblock statt Markdown-Tabelle.
+### Deployment-Verifikation
 
-## Risiken
+Das Backend wurde neu gebaut, gepusht und in Kubernetes ausgerollt.
 
-- Manche Modelle folgen englischen System-Prompts besser als deutschen, aber die Antwortsprache muss trotzdem sauber kontrolliert werden.
-- Bestehende Skills oder Memories koennen noch deutschsprachige Instruktionen injizieren.
-- Generische Tool-Fallbacks koennen zu breite Tabellen erzeugen, wenn Felder unklar sind.
-- Global indizierte Tool-Hints koennen bei gleichnamigen Tools zwischen Modulen kollidieren.
-- Tests koennen versehentlich das falsche Verhalten festschreiben, wenn sie kurze AI-Antworten fuer Nicht-Kubernetes-Module unveraendert erwarten.
+Image-Digest:
 
-## Entscheidungen und verbleibende Architekturfragen
+```text
+docker.io/natorus87/ninko-backend@sha256:dd7a0f1124e88b4691d048bd623e63dea920361a7c025afee40d32bb79af8f7d
+```
 
-- Soll es eine zentrale Prompt-Konstante fuer gemeinsame Formatregeln geben?
-- Soll jedes Modul eigene `preferred_table_columns` definieren?
-- ✅ Entschieden: Explizites "gib mir JSON" deaktiviert den Markdown-Table-Fallback.
-- ✅ Entschieden: Die Catalog-Agent-Prompt-Migration wurde breit umgesetzt statt nur fuer installierte/aktive Module.
-- ✅ Entschieden: Der generische Tool-Fallback bleibt auf explizit freigeschaltete Module begrenzt.
-- ✅ Entschieden: Zabbix wurde in Phase 3 repariert und ist kein separater Modul-Bug mehr.
+Erfolgreiche Checks im Deployment:
+
+- `kubectl rollout status deployment/ninko-backend -n ninko --timeout=180s`
+- Pod `1/1 Running`, Restart-Count `0`
+- In-Container-Compile fuer `/app/main.py` und `/app/modules/message_hub/workers/email_worker.py`
+- Marker-Check fuer Email-Worker-Fix und Log-Redaction-Fix
+- `GET /health` im Pod liefert `200` mit `{"status":"ok","service":"ninko","version":"1.3.4"}`
+- Log-Nachlauf ueber mehrere Worker-Zyklen:
+  - keine `NoneType`-Crashes
+  - keine `email-Worker Fehler`
+  - keine `HTTP Request:`-INFO-Logs
+  - keine Telegram-Bot-URL-Leaks
+
+### Nicht erfolgreich ausfuehrbar
+
+Pytest konnte in der aktuellen lokalen Umgebung nicht laufen, weil `fastapi` fehlt.
+
+Betroffene Kommandos:
+
+```bash
+pytest -q backend/tests/test_api_security_policy.py backend/tests/test_chat_streaming.py backend/tests/test_agents_integration.py
+.venv/bin/python -m pytest -q backend/tests/test_api_security_policy.py backend/tests/test_chat_streaming.py backend/tests/test_agents_integration.py
+```
+
+Fehler:
+
+```text
+ModuleNotFoundError: No module named 'fastapi'
+```
+
+Bewertung: Das ist ein Environment-/Dependency-Problem, kein durch die aktuellen Fixes verursachter Testfehler. Die Tests scheitern bereits bei Collection.
+
+## Offene Risiken
+
+### 1. Authentifizierte API-/E2E-Verifikation fehlt noch
+
+Deployment-Smoke-Checks sind sauber, aber authentifizierte Funktionsfluesse wurden noch nicht vollstaendig gegen das laufende System ausgefuehrt.
+
+Noch zu pruefen:
+
+- `POST /api/chat/` mit destruktiver Anfrage.
+- `confirmed=true` Resume fuer Tool-Level-Safeguard.
+- `POST /api/safeguard/chats/{session}/profile` und anschliessender Chat mit derselben Session.
+- Tool-Safeguard bei Modul-Agenten.
+- SSE-Pfad und JSON-Pfad im Vergleich.
+
+### 2. Plugin-/Custom-Tool-Tiers bleiben ein Hardening-Thema
+
+Die Registry deckt vorhandene Tools ab. Fuer zukuenftige Plugins bleibt aber ein architekturelles Risiko:
+
+- Plugin-Code kann Tool-Namen und `TOOL_REGISTRY_OVERRIDES` beeinflussen.
+- Falsche `readonly=True`-Overrides koennten ein Tool zu niedrig einstufen.
+
+Empfehlung:
+
+- Plugin-Installationspfad sollte Tool-Tiers validieren.
+- Riskante Prefixes wie `delete_`, `restart_`, `execute_`, `run_`, `send_` sollten nicht per Plugin-Override auf `READONLY` herabgestuft werden duerfen, ausser eine Admin-Whitelist erlaubt es explizit.
+
+### 3. `wait` ist aktuell `READONLY`
+
+`wait` veraendert keinen externen Zustand, kann aber Agent-Laufzeit blockieren.
+
+Aktuelle Einstufung:
+
+- `READONLY`
+
+Alternative:
+
+- `WRITE_SYSTEM` oder dediziertes Rate-/Timeout-Limit, falls Blockierung als operatives Risiko bewertet wird.
+
+### 4. User-Message-Safeguard prueft nur Initialmessage
+
+Bekannter Architekturpunkt:
+
+- Pipeline-Substeps werden nicht als neue User-Messages durch den User-Message-Safeguard geschickt.
+- Tool-Level-Safeguard schuetzt bekannte Tool-Calls, aber Plan-/Task-Strings koennen weiterhin Prompt-Injection-artige Inhalte enthalten.
+
+Empfehlung:
+
+- Pipeline-Engine sollte fuer risikoreiche Step-Tasks optional `SafeguardMiddleware.check()` auf Step-Text ausfuehren.
+- Mindestens Tests fuer Pipeline-Step-Bestaetigungen ergaenzen.
+
+## Empfohlene Regressionstests
+
+### Agent Routes
+
+- `GET /api/agents/templates` liefert Templates und wird nicht als Agent-ID interpretiert.
+- `GET /api/agents/cards` liefert Modul-Cards und wird nicht als Agent-ID interpretiert.
+
+### Chat Safeguard
+
+- Destruktive User-Message erzeugt `confirmation_required=True`.
+- `confirmed=true` ohne Pending faellt nicht in falschen Resume-Pfad.
+- Tool-Level-Safeguard erzeugt Pending unter `tenant:session`.
+- Resume liest denselben Pending-Key und raeumt ihn danach auf.
+- JSON- und SSE-Pfad verhalten sich gleich.
+
+### Safeguard Profile
+
+- Chat-Profil wird unter gescopter Session gespeichert.
+- `resolve_profile(session_id="tenant:abc")` findet das ueber API gesetzte Profil fuer `abc`.
+- `DELETE /api/safeguard/chats/{session}/profile` entfernt den gescopten Key.
+
+### Per-Agent Safeguard
+
+- `POST /api/safeguard/agents/{id}/disable` fuehrt bei `resolve_profile(agent_id=id)` zu `disabled`.
+- `POST /api/safeguard/agents/{id}/enable` bei global `disabled` fuehrt zu `moderate`.
+- Explizites Agent-Profil hat Vorrang vor Legacy-Toggle.
+
+### Tool Registry
+
+- Alle echten `@tool`-Funktionen sind registriert oder durch Discovery registrierbar.
+- `execute_cli_command` ist `WRITE_SYSTEM`.
+- `call_module_agent` ist `WRITE_SYSTEM`.
+- `create_task` ist `WRITE_DATA`.
+- `stop_task` ist `WRITE_SYSTEM`.
+- `record_alert` und `resolve_alert` sind `WRITE_DATA`.
+- `read_mcp_server_resource` ist `READONLY`.
+- `ToolSpec.from_metadata()` und `get_or_infer_tool_spec()` werfen keinen `TypeError`.
+
+## Naechste Schritte
+
+1. Backend-Testumgebung reparieren:
+
+```bash
+cd backend
+pip install -r requirements.txt
+```
+
+oder die vorgesehene Projekt-Testumgebung verwenden.
+
+2. Regressionstests aus dem Abschnitt oben ergaenzen.
+
+3. Relevante Tests laufen lassen:
+
+```bash
+pytest -q backend/tests/test_api_security_policy.py backend/tests/test_chat_streaming.py backend/tests/test_agents_integration.py
+```
+
+4. Danach einen echten lokalen Smoke-Test mit Redis/FastAPI durchfuehren:
+
+```bash
+docker compose up -d
+```
+
+5. Optionales Hardening fuer Plugin-Tool-Tiers planen.
+
+## Aktueller Code-Stand
+
+Geaenderte Dateien:
+
+- `backend/api/routes_agents.py`
+- `backend/api/routes_chat.py`
+- `backend/api/routes_safeguard.py`
+- `backend/main.py`
+- `backend/core/safeguard.py`
+- `backend/core/tool_registry.py`
+- `backend/modules/message_hub/workers/email_worker.py`
+
+Status:
+
+- Konkrete gefundene Bugs sind behoben.
+- Compile-, statische Verifikationen und Deployment-Smoke-Checks sind sauber.
+- Authentifizierte E2E-Regressionstests bleiben offen.
+- Pytest lokal bleibt wegen fehlender Dependencies offen.
+
+## Commit-/Deployment-Abschluss
+
+Stand vor Commit:
+
+- Deployment erfolgreich auf `natorus87/ninko-backend:latest`.
+- Aktiver Kubernetes-Image-Digest:
+
+```text
+docker.io/natorus87/ninko-backend@sha256:dd7a0f1124e88b4691d048bd623e63dea920361a7c025afee40d32bb79af8f7d
+```
+
+- Pod-Status: `1/1 Running`, Restart-Count `0`.
+- Healthcheck im Pod: `GET /health` -> `200`.
+- Log-Nachlauf: keine `NoneType`-Crashes, keine `email-Worker Fehler`, keine `HTTP Request:`-INFO-Logs und keine Telegram-Bot-URL-Leaks.
+- Lokaler Diff-Check: `git diff --check` sauber.
+
+Dieser Stand wird als ein zusammenhaengender Fix-Commit festgehalten.
