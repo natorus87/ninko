@@ -65,6 +65,17 @@ _BASE_AGENT_RECOVERABLE_EXCEPTIONS = (
 )
 
 
+def _tool_display_name(tool: Any) -> str:
+    """Return a stable name for LangChain tools and plain callable tools."""
+    name = getattr(tool, "name", None) or getattr(tool, "__name__", None)
+    return str(name or tool.__class__.__name__)
+
+
+def _tool_description(tool: Any) -> str:
+    description = getattr(tool, "description", None) or getattr(tool, "__doc__", "")
+    return str(description or "")
+
+
 def _get_language() -> str:
     """Gibt den konfigurierten Sprach-Code zurück (gecacht, Fallback: 'de')."""
     try:
@@ -191,13 +202,13 @@ class _StatusEmitter(AsyncCallbackHandler):
             for key in ("password", "secret", "token", "api_key", "apikey", "key",
                         "bearer", "auth", "private", "credential"):
                 redacted = re.sub(
-                    rf'("{key}"\\s*:\\s*)"[^"]+"',
+                    rf'("{key}"\s*:\s*)"[^"]+"',
                     r'\1"***"',
                     redacted,
                     flags=re.IGNORECASE,
                 )
                 redacted = re.sub(
-                    rf"({key}\\s*[=:]\\s*)[^\\s,;]{{1,100}}",
+                    rf"({key}\s*[=:]\s*)[^\s,;]{{1,100}}",
                     r"\1***",
                     redacted,
                     flags=re.IGNORECASE,
@@ -500,9 +511,8 @@ def _get_safeguard_session_lock(session_id: str) -> asyncio.Lock:
         _safeguard_session_locks.pop(oldest_sid, None)
         _safeguard_session_locks_ts.pop(oldest_sid, None)
 
-    if session_id not in _safeguard_session_locks:
-        _safeguard_session_locks[session_id] = asyncio.Lock()
-        _safeguard_session_locks_ts[session_id] = now
+    _safeguard_session_locks_ts[session_id] = now
+    _safeguard_session_locks.setdefault(session_id, asyncio.Lock())
     return _safeguard_session_locks[session_id]
 
 
@@ -715,7 +725,7 @@ class BaseAgent:
 
         return registry
 
-    def _select_tools_for_request(self, message: str) -> list[BaseTool]:
+    def _select_tools_for_request(self, message: str) -> list[Any]:
         """
         JIT Tool Injection (OpenClaw-Prinzip):
         Gibt nur die für diese Anfrage relevanten Tools zurück.
@@ -735,9 +745,9 @@ class BaseAgent:
             if len(w.strip(".,!?:;")) >= 2
         ]
 
-        scored: list[tuple[int, BaseTool]] = []
+        scored: list[tuple[int, Any]] = []
         for t in self.tools:
-            searchable = f"{t.name} {t.description or ''}".lower()
+            searchable = f"{_tool_display_name(t)} {_tool_description(t)}".lower()
             score = sum(1 for w in words if w in searchable)
             scored.append((score, t))
 
@@ -879,7 +889,7 @@ class BaseAgent:
                 data={
                     "agent": self.name,
                     "total_tools": len(self.tools),
-                    "active_tools": [getattr(tool, "name", str(tool)) for tool in active_tools],
+                    "active_tools": [_tool_display_name(tool) for tool in active_tools],
                 },
             )
         else:
@@ -1046,8 +1056,6 @@ class BaseAgent:
             # Pausiert: Zustand im Modul-Dict speichern + in Redis vermerken
             import time as _time_mod
 
-            _paused_sg_agents[session_id] = (sg_agent, thread_config)
-            _paused_sg_agents_ts[session_id] = _time_mod.monotonic()
             from core.redis_client import get_redis
 
             redis = get_redis()
@@ -1064,6 +1072,8 @@ class BaseAgent:
                     }
                 ),
             )
+            _paused_sg_agents[session_id] = (sg_agent, thread_config)
+            _paused_sg_agents_ts[session_id] = _time_mod.monotonic()
 
             logger.info(
                 "[Safeguard] Tool-Call '%s' pausiert (Agent: '%s', Session: '%s').",
@@ -1109,6 +1119,23 @@ class BaseAgent:
         Setzt die Ausführung nach Safeguard-Bestätigung durch den User fort.
         Holt den pausierten Agenten aus _paused_sg_agents und resumiert den Graph.
         """
+        async def _cleanup_pending_state() -> None:
+            _paused_sg_agents.pop(session_id, None)
+            _paused_sg_agents_ts.pop(session_id, None)
+            try:
+                from core.redis_client import get_redis
+
+                redis = get_redis()
+                await redis.connection.delete(
+                    f"ninko:safeguard_tool_pending:{session_id}"
+                )
+            except _BASE_AGENT_RECOVERABLE_EXCEPTIONS as exc:
+                logger.debug(
+                    "[Safeguard] Pending-Key Cleanup fehlgeschlagen (Session: %s): %s",
+                    session_id,
+                    exc,
+                )
+
         if session_id not in _paused_sg_agents:
             logger.warning(
                 "[Safeguard] Resume angefragt, aber kein pausierter Agent für Session '%s'.",
@@ -1136,6 +1163,7 @@ class BaseAgent:
                     self.name,
                     session_id,
                 )
+                await _cleanup_pending_state()
                 return _t(
                     "Die Ausführung hat zu lange gedauert und wurde abgebrochen.",
                     "Execution timed out and was aborted.",
@@ -1144,6 +1172,7 @@ class BaseAgent:
                 logger.error(
                     "Agent '%s' Fehler beim Resume: %s", self.name, exc, exc_info=True
                 )
+                await _cleanup_pending_state()
                 return _t(
                     "Fehler: Resume fehlgeschlagen. Bitte erneut bestätigen oder Anfrage wiederholen.",
                     "Error: Resume failed. Please confirm again or retry the request.",
@@ -1154,21 +1183,7 @@ class BaseAgent:
                 return result, False
 
             # Erfolg: pausierten Zustand + Pending-Key aufräumen
-            _paused_sg_agents.pop(session_id, None)
-            _paused_sg_agents_ts.pop(session_id, None)
-            try:
-                from core.redis_client import get_redis
-
-                redis = get_redis()
-                await redis.connection.delete(
-                    f"ninko:safeguard_tool_pending:{session_id}"
-                )
-            except _BASE_AGENT_RECOVERABLE_EXCEPTIONS as exc:
-                logger.debug(
-                    "[Safeguard] Pending-Key Cleanup fehlgeschlagen (Session: %s): %s",
-                    session_id,
-                    exc,
-                )
+            await _cleanup_pending_state()
             return self._extract_result_response(result), False
 
     async def store_incident(

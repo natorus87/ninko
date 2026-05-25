@@ -108,6 +108,38 @@ def _plain_preview_text(text: str) -> str:
     return _strip_pipeline_headers(text)
 
 
+def _telegram_error_message(exc: BaseException) -> str:
+    """Build a concise, actionable Telegram error without leaking internals."""
+    err_type = type(exc).__name__
+    lower = f"{err_type} {exc}".lower()
+
+    if any(
+        marker in lower
+        for marker in (
+            "apiconnectionerror",
+            "connecterror",
+            "connection error",
+            "connection refused",
+            "all connection attempts failed",
+        )
+    ):
+        return _t(
+            "❌ Der KI-Backend-Endpunkt ist aktuell nicht erreichbar. Bitte prüfe den aktiven LLM-Provider in den Ninko-Einstellungen und versuche es erneut.",
+            "❌ The AI backend endpoint is currently unreachable. Please check the active LLM provider in Ninko settings and try again.",
+        )
+
+    if "timeout" in lower:
+        return _t(
+            "❌ Die Ausführung hat zu lange gedauert. Bitte versuche es erneut oder stelle die Anfrage enger.",
+            "❌ Execution timed out. Please try again or narrow the request.",
+        )
+
+    return _t(
+        f"❌ Fehler bei der Ausführung ({err_type}). Bitte versuche es erneut.",
+        f"❌ Error during execution ({err_type}). Please try again.",
+    )
+
+
 class TelegramBot:
     def __init__(self, app: FastAPI) -> None:
         self.app = app
@@ -992,18 +1024,7 @@ class TelegramBot:
                 await self._send(
                     token,
                     chat_id,
-                    _t(
-                        "❌ Fehler bei der Ausführung.",
-                        "❌ Error during execution.",
-                        fr="❌ Erreur lors de l'exécution.",
-                        es="❌ Error durante la ejecución.",
-                        it="❌ Errore durante l'esecuzione.",
-                        nl="❌ Fout bij uitvoering.",
-                        pl="❌ Błąd podczas wykonywania.",
-                        pt="❌ Erro durante a execução.",
-                        ja="❌ 実行中にエラーが発生しました。",
-                        zh="❌ 执行时出错。",
-                    ),
+                    _telegram_error_message(exc),
                 )
             finally:
                 typing_task.cancel()
@@ -1070,10 +1091,7 @@ class TelegramBot:
                 await self._send(
                     token,
                     chat_id,
-                    _t(
-                        "❌ Fehler bei der Ausführung.",
-                        "❌ Error during execution.",
-                    ),
+                    _telegram_error_message(exc),
                 )
             finally:
                 typing_task.cancel()
@@ -1324,7 +1342,11 @@ class TelegramBot:
                 )
                 confirmed = True
             elif safeguard:
-                sg_result = await safeguard.check(text)
+                sg_result = await safeguard.check(
+                    text,
+                    agent_id="telegram",
+                    session_id=session_id,
+                )
                 if sg_result.requires_confirmation:
                     await redis.connection.set(pending_key, text, ex=300)
                     await self._send_with_keyboard(
@@ -1656,24 +1678,12 @@ class TelegramBot:
                             reply_to_message_id=message_id if idx == 0 else None,
                         )
 
-        except (
-            RuntimeError,
-            ValueError,
-            TypeError,
-            KeyError,
-            OSError,
-            asyncio.TimeoutError,
-        ) as exc:
+        except Exception as exc:
             logger.exception("Error in Telegram orchestrator processing: %s", exc)
-            # Descriptive error message instead of generic text
-            err_type = type(exc).__name__
             await self._send(
                 token,
                 chat_id,
-                _t(
-                    f"❌ Fehler bei der Verarbeitung ({err_type}):\n{str(exc)[:300]}\n\nBitte versuche es erneut.",
-                    f"❌ Error during processing ({err_type}):\n{str(exc)[:300]}\n\nPlease try again.",
-                ),
+                _telegram_error_message(exc),
                 reply_to_message_id=message_id,
             )
         finally:

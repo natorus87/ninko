@@ -312,6 +312,7 @@ async def run_workflow(workflow_id: str, request: Request) -> dict:
         workflow_version=int(wf.get("version", 1) or 1),
         status="running",
         started_at=now,
+        updated_at=now,
         steps=[],
         triggered_by="manual",
     )
@@ -336,9 +337,14 @@ async def run_workflow(workflow_id: str, request: Request) -> dict:
     try:
         from core.workflow_engine import WorkflowEngine
 
-        orchestrator = request.app.state.orchestrator
-        engine = WorkflowEngine(redis, orchestrator)
-        _track_workflow_task(asyncio.create_task(engine.execute(wf, run_id)))
+        orchestrator = getattr(request.app.state, "orchestrator", None)
+        if orchestrator is None:
+            logger.warning(
+                "Workflow-Engine nicht gestartet: Orchestrator ist nicht initialisiert."
+            )
+        else:
+            engine = WorkflowEngine(redis, orchestrator)
+            _track_workflow_task(asyncio.create_task(engine.execute(wf, run_id)))
     except (RuntimeError, ValueError, TypeError, KeyError, OSError) as exc:
         logger.warning("Workflow-Engine konnte nicht gestartet werden: %s", exc)
 
@@ -351,9 +357,21 @@ async def list_workflow_versions(workflow_id: str, request: Request) -> dict:
     redis = get_redis()
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     scoped_id = _tenant_workflow_id(tenant_id, workflow_id)
+    workflows = await _load_workflows(redis, tenant_id)
+    current = next((w for w in workflows if w["id"] == scoped_id), None)
+    if current is None:
+        raise HTTPException(status_code=404, detail=f"Workflow '{workflow_id}' nicht gefunden")
     versions_raw = await redis.connection.get(_versions_key(tenant_id, scoped_id))
     versions = json.loads(versions_raw) if versions_raw else []
-    versions = list(reversed(versions))
+    versions = [
+        {
+            "version": int(current.get("version", 1) or 1),
+            "saved_at": current.get("updated_at") or current.get("created_at"),
+            "workflow": current,
+            "current": True,
+        },
+        *list(reversed(versions)),
+    ]
     return {"workflow_id": workflow_id, "versions": versions, "total": len(versions)}
 
 
@@ -494,13 +512,18 @@ async def retry_workflow_step(run_id: str, step_index: int, request: Request) ->
     try:
         from core.workflow_engine import WorkflowEngine
 
-        orchestrator = request.app.state.orchestrator
-        engine = WorkflowEngine(redis, orchestrator)
-        _track_workflow_task(
-            asyncio.create_task(
-                engine.execute_step(wf, run_id, step_index, run.get("variables", {}))
+        orchestrator = getattr(request.app.state, "orchestrator", None)
+        if orchestrator is None:
+            raise HTTPException(status_code=503, detail="Workflow-Engine nicht initialisiert")
+        else:
+            engine = WorkflowEngine(redis, orchestrator)
+            _track_workflow_task(
+                asyncio.create_task(
+                    engine.execute_step(wf, run_id, step_index, run.get("variables", {}))
+                )
             )
-        )
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.warning("Step-Retry konnte nicht gestartet werden: %s", exc)
         raise HTTPException(status_code=500, detail=f"Retry konnte nicht gestartet werden: {exc}")

@@ -257,6 +257,17 @@ def _is_trusted_proxy(host: str | None) -> bool:
         return False
 
 
+def _is_loopback_request(request: Request) -> bool:
+    if not request.client:
+        return False
+    try:
+        import ipaddress
+
+        return ipaddress.ip_address(request.client.host).is_loopback
+    except ValueError:
+        return False
+
+
 def _should_set_secure_cookie(request: Request, cfg_secure: bool) -> bool:
     """
     Enable Secure cookies only when requested by config and request is HTTPS.
@@ -503,6 +514,11 @@ async def bootstrap_admin(body: LoginRequest, request: Request) -> dict:
     cfg = get_settings()
     if cfg.API_AUTH_ENABLED:
         _assert_admin(request)
+    elif not _is_loopback_request(request):
+        raise HTTPException(
+            status_code=403,
+            detail="Bootstrap is limited to loopback clients when auth is disabled.",
+        )
 
     username = _validate_id(body.username, "username")
     if len(body.password) < 8:
@@ -726,7 +742,10 @@ async def list_user_api_tokens(username: str, request: Request) -> dict:
 
 @router.post("/users/{username}/api-tokens")
 async def create_user_api_token(
-    username: str, body: ApiTokenCreateRequest, request: Request
+    username: str,
+    body: ApiTokenCreateRequest,
+    request: Request,
+    response: Response,
 ) -> dict:
     _assert_admin(request)
     username = _validate_id(username, "username")
@@ -781,6 +800,8 @@ async def create_user_api_token(
     user["updated_at"] = state["updated_at"]
     await rbac_store.save(state)
 
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
     return {
         "status": "created",
         "username": username,

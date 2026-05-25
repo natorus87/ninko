@@ -5,8 +5,9 @@ Ninko Secrets API – CRUD für Vault/SQLite Secrets Store.
 from __future__ import annotations
 
 import logging
+import re
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from schemas.secret import (
     SecretSetRequest,
@@ -16,12 +17,24 @@ from schemas.secret import (
     VaultHealthResponse,
     SECRET_KEY_PATTERN,
 )
+from core.auth import ROLE_ADMIN, resolve_request_auth_async
 from core.vault import get_vault
-import re
 
 logger = logging.getLogger("ninko.api.secrets")
-router = APIRouter(prefix="/api/secrets", tags=["Secrets"])
 _SECRET_KEY_RE = re.compile(SECRET_KEY_PATTERN)
+
+
+async def require_admin(request: Request) -> None:
+    auth_ctx = await resolve_request_auth_async(request)
+    if not auth_ctx or auth_ctx.get("role") != ROLE_ADMIN:
+        raise HTTPException(status_code=403, detail="Admin role required.")
+
+
+router = APIRouter(
+    prefix="/api/secrets",
+    tags=["Secrets"],
+    dependencies=[Depends(require_admin)],
+)
 
 
 def _validate_secret_key(key: str) -> str:

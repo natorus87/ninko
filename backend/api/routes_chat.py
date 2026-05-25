@@ -113,7 +113,7 @@ async def _stream_safe_generate(
     module_used: str | None = None
     did_compact = False
     current_tx_id: str | None = None
-    token_queue: asyncio.Queue[str] = asyncio.Queue()
+    token_queue: asyncio.Queue[str] = asyncio.Queue(maxsize=1000)
 
     async def _emit_live_token(token: str) -> None:
         if token:
@@ -121,6 +121,21 @@ async def _stream_safe_generate(
 
     async def _is_cancelled() -> bool:
         return await request.is_disconnected()
+
+    async def _mark_current_tx_failed(error: str) -> None:
+        nonlocal current_tx_id
+        if not current_tx_id:
+            return
+        try:
+            await op_journal.mark_failed(current_tx_id, error=error)
+            await op_journal.clear_pending_for_session(scoped_session_id)
+        except Exception as journal_exc:
+            logger.warning(
+                "Operation-Journal Cleanup fehlgeschlagen: %s",
+                type(journal_exc).__name__,
+            )
+        finally:
+            current_tx_id = None
 
     try:
         await status_bus.emit_trace(
@@ -486,6 +501,9 @@ async def _stream_safe_generate(
 
     except asyncio.CancelledError:
         # Client hat abgebrochen — keine Assistant-History für unvollständige Antwort
+        await _mark_current_tx_failed(
+            "Chat streaming cancelled before execution completed."
+        )
         await status_bus.done(scoped_session_id)
         yield _stream_frame(
             "cancelled",
@@ -495,7 +513,14 @@ async def _stream_safe_generate(
         )
         raise
     except Exception as exc:
-        logger.error("Chat-Streaming fehlgeschlagen: %s", exc, exc_info=True)
+        await _mark_current_tx_failed(
+            "Chat streaming failed before execution completed."
+        )
+        logger.error(
+            "Chat-Streaming fehlgeschlagen: %s",
+            type(exc).__name__,
+            exc_info=False,
+        )
         await status_bus.done(scoped_session_id)
         yield _stream_frame(
             "error",

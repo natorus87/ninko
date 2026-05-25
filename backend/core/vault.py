@@ -50,6 +50,7 @@ class VaultClient:
 
     def __init__(self) -> None:
         self._settings = get_settings()
+        self.SQLITE_DB_PATH = str(Path(self._settings.DATA_DIR) / "secrets.db")
         self._backend: str = "vault"
         self._hvac_client = None
         self._fernet: Fernet | None = None
@@ -277,15 +278,10 @@ class VaultClient:
                     "möglicherweise mit anderem Schlüssel verschlüsselt.",
                     key,
                 )
-                # SECURITY: Bei nicht entschlüsselbaren Secrets nicht crashen,
-                # sondern None zurückgeben. Das erlaubt den App-Start und den
-                # Benutzer kann das Secret neu setzen.
-                logger.warning(
-                    "Secret '%s' wird als None zurückgegeben. "
-                    "Bitte das Secret neu setzen um es mit dem aktuellen Key zu verschlüsseln.",
-                    key,
+                raise InvalidToken(
+                    f"Secret '{key}' kann nicht entschlüsselt werden. "
+                    "Manuelle Re-Einstellung erforderlich."
                 )
-                return None
 
     async def _migrate_secret(
         self, db: aiosqlite.Connection, key: str, value: str
@@ -302,6 +298,55 @@ class VaultClient:
         )
         await db.commit()
         self._migration_count += 1
+
+    async def migrate_legacy_sqlite_secrets(self) -> int:
+        """Re-encrypt all SQLite secrets that still use legacy Fernet keys."""
+        if self._backend != "sqlite":
+            return 0
+        if not self._fernet:
+            raise RuntimeError("Kein Verschlüsselungs-Backend initialisiert.")
+
+        migrated = 0
+        async with aiosqlite.connect(self.SQLITE_DB_PATH) as db:
+            await self._ensure_sqlite_table(db)
+            async with db.execute("SELECT key, value FROM secrets") as cursor:
+                rows = await cursor.fetchall()
+
+            for key, encrypted_value in rows:
+                try:
+                    self._fernet.decrypt(encrypted_value.encode()).decode()
+                    continue
+                except InvalidToken:
+                    pass
+
+                decrypted = None
+                for cipher_name, cipher in (
+                    ("PBKDF2-100k", getattr(self, "_legacy_fernet", None)),
+                    ("SHA256-v1", getattr(self, "_v1_fernet", None)),
+                ):
+                    if cipher is None:
+                        continue
+                    try:
+                        decrypted = cipher.decrypt(encrypted_value.encode()).decode()
+                        logger.info(
+                            "Migriere Secret '%s' von Legacy-Verschlüsselung %s zu PBKDF2-210k.",
+                            key,
+                            cipher_name,
+                        )
+                        break
+                    except InvalidToken:
+                        continue
+
+                if decrypted is None:
+                    raise InvalidToken(
+                        f"Secret '{key}' kann nicht entschlüsselt werden. "
+                        "Manuelle Re-Einstellung erforderlich."
+                    )
+
+                await self._migrate_secret(db, key, decrypted)
+                migrated += 1
+
+        return migrated
 
     # ── Write ──────────────────────────────────────────
     async def set_secret(self, key: str, value: str) -> None:

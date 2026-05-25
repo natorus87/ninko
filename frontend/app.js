@@ -576,10 +576,22 @@ const Ninko = {
                             const html = await htmlRes.text();
                             panel.innerHTML = (typeof DOMPurify !== 'undefined')
                                 ? DOMPurify.sanitize(html, {
-                                    ADD_ATTR: ['target', 'rel', 'onclick', 'style'],
+                                    ADD_ATTR: ['target', 'rel'],
                                     FORBID_TAGS: ['script', 'iframe', 'style'],
+                                    FORBID_ATTR: [
+                                        'onclick',
+                                        'onerror',
+                                        'onload',
+                                        'onmouseover',
+                                        'onfocus',
+                                        'onblur',
+                                        'onchange',
+                                        'onsubmit',
+                                        'formaction',
+                                    ],
+                                    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|\/api\/)/i,
                                 })
-                                : html;
+                                : '';
                             hasFrontend = true;
                         } else {
                             panel.innerHTML = `<div class="module-tab-content"><p class="empty-state">${t('module.noDashboard', mod.display_name)}</p></div>`;
@@ -3316,7 +3328,7 @@ ${messagesHtml}
         } else {
             html = this._escapeHtml(preview).replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>').replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>').replace(/\n/g, '<br>');
         }
-        const sanitized = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(html, { ADD_ATTR: ['target', 'rel'], FORBID_TAGS: ['script', 'style', 'iframe', 'form', 'input'], ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|\/api\/images\/|data:image\/(?:png|jpeg|jpg|webp);base64,)/i }) : html;
+        const sanitized = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(html, { ADD_ATTR: ['target', 'rel'], FORBID_TAGS: ['script', 'style', 'iframe', 'form', 'input'], ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|\/api\/images\/|data:image\/(?:png|jpeg|jpg|webp);base64,)/i }) : this._escapeHtml(preview);
         return sanitized.replace(/<a /g, '<a target="_blank" rel="noopener noreferrer" ');
     },
 

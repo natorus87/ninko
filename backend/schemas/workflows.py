@@ -124,7 +124,7 @@ class WorkflowRunStep(BaseModel):
     node_id: str
     node_type: str
     node_label: str = ""
-    status: Literal["pending", "running", "succeeded", "failed", "skipped"] = "pending"
+    status: Literal["pending", "running", "succeeded", "failed", "skipped", "interrupted"] = "pending"
     started_at: Optional[str] = None
     finished_at: Optional[str] = None
     duration_ms: Optional[int] = None
@@ -140,8 +140,9 @@ class WorkflowRun(BaseModel):
     workflow_id: str
     workflow_name: str = ""
     workflow_version: Optional[int] = None
-    status: Literal["idle", "running", "succeeded", "failed"] = "idle"
+    status: Literal["idle", "running", "succeeded", "failed", "interrupted"] = "idle"
     started_at: Optional[str] = None
+    updated_at: Optional[str] = None
     finished_at: Optional[str] = None
     duration_ms: Optional[int] = None
     steps: list[WorkflowRunStep] = Field(default_factory=list)

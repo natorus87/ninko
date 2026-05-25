@@ -11,7 +11,7 @@ import logging
 import re
 import shlex
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 # Per-workflow asyncio locks prevent concurrent R-M-W races on run state
@@ -35,6 +35,7 @@ REDIS_KEY_RUN_INDEX = "ninko:workflow:run_index"
 MAX_RUNS_PER_WORKFLOW = 50
 MAX_NODE_RETRIES = 5
 MAX_PARALLEL_TASKS = 12
+ORPHAN_RUN_CUTOFF_MINUTES = 10
 
 
 def _compare(a, op: str, b) -> bool:
@@ -63,6 +64,72 @@ def _tenant_from_scoped_workflow_id(workflow_id: str) -> str:
     if "::" in workflow_id:
         return workflow_id.split("::", 1)[0].strip().lower() or "default"
     return "default"
+
+
+def _parse_iso_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+async def sweep_orphan_workflow_runs(redis, *, cutoff_minutes: int = ORPHAN_RUN_CUTOFF_MINUTES) -> int:
+    """Mark stale running workflow runs as interrupted after a backend crash."""
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=cutoff_minutes)
+    interrupted = 0
+
+    cursor = 0
+    while True:
+        cursor, keys = await redis.connection.scan(
+            cursor=cursor,
+            match=f"{REDIS_KEY_RUNS_PREFIX}*",
+            count=100,
+        )
+        for raw_key in keys:
+            key = raw_key.decode("utf-8") if isinstance(raw_key, bytes) else raw_key
+            runs_raw = await redis.connection.get(key)
+            if not runs_raw:
+                continue
+            try:
+                runs = json.loads(runs_raw)
+            except json.JSONDecodeError:
+                logger.warning("Workflow-Run-Key '%s' enthält ungültiges JSON.", key)
+                continue
+            if not isinstance(runs, list):
+                continue
+
+            changed = False
+            now = datetime.now(timezone.utc).isoformat()
+            for run in runs:
+                if not isinstance(run, dict) or run.get("status") != "running":
+                    continue
+                last_seen = _parse_iso_datetime(run.get("updated_at")) or _parse_iso_datetime(
+                    run.get("started_at")
+                )
+                if last_seen and last_seen > cutoff:
+                    continue
+                run["status"] = "interrupted"
+                run["finished_at"] = now
+                run["error"] = "Workflow run interrupted by backend restart."
+                for step in run.get("steps", []):
+                    if isinstance(step, dict) and step.get("status") == "running":
+                        step["status"] = "interrupted"
+                        step["finished_at"] = now
+                changed = True
+                interrupted += 1
+
+            if changed:
+                await redis.connection.set(key, json.dumps(runs))
+
+        if str(cursor) == "0":
+            break
+
+    return interrupted
 
 
 class WorkflowEngine:
@@ -739,11 +806,12 @@ class WorkflowEngine:
                 runs[run_idx]["status"] = status
                 runs[run_idx]["steps"] = steps
                 runs[run_idx]["variables"] = variables
+                runs[run_idx]["updated_at"] = now
                 if error is not None:
                     runs[run_idx]["error"] = error
-                elif status != "failed":
+                elif status not in ("failed", "interrupted"):
                     runs[run_idx]["error"] = None
-                if status in ("succeeded", "failed"):
+                if status in ("succeeded", "failed", "interrupted"):
                     runs[run_idx]["finished_at"] = now
                     if duration_ms is not None:
                         runs[run_idx]["duration_ms"] = duration_ms

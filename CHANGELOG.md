@@ -9,6 +9,32 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.3.7] – 2026-05-25
+
+### Added
+
+- **Telegram/K8s regression coverage** (`backend/tests/test_k8s_telegram_regressions.py`): Focused tests for Telegram/Safeguard failures, callable tool selection, FRITZ!Box/Tasmota discovery, and LLM fallback error handling.
+- **FRITZ!Box/Tasmota deterministic fast path** (`backend/agents/orchestrator.py`): Explicit requests such as "Benutze FRITZ!Box, um alle Tasmota Geräte zu finden" now query the FRITZ!Box device list directly and filter Tasmota matches without relying on LLM routing.
+- **Workflow restart recovery stage 1** (`backend/core/workflow_engine.py`, `backend/main.py`): Startup sweeper marks orphaned in-flight workflow runs as `interrupted` after backend restarts.
+
+### Changed
+
+- **Telegram reliability** (`backend/modules_catalog/telegram/bot.py`): User-facing execution errors now distinguish unreachable LLM backends and timeouts from generic processing failures.
+- **Embedding provider restoration** (`backend/main.py`): Startup now restores the separate Redis-backed embedding provider (`ninko:settings:embed_provider`) instead of falling back to the active chat LLM endpoint.
+- **Workflow API behavior** (`backend/api/routes_workflows.py`): Version listing includes the current workflow version plus history, and workflow runs can be persisted even when the orchestrator is not initialized.
+- **Safeguard read-only prefilter** (`backend/core/safeguard.py`): German read-only discovery requests using `finden` are classified as safe when no write/destructive intent appears in the same message.
+- **Agent tool metadata handling** (`backend/agents/base_agent.py`): JIT tool selection now handles both LangChain tools and plain callables without assuming `.name` / `.description`.
+
+### Fixed
+
+- **Telegram confirmation failures**: Confirmed Safeguard actions no longer fall through to opaque "Fehler bei der Ausführung" for common LLM connection failures.
+- **Safeguard false confirmations**: Read-only German discovery/search requests are no longer forced into fail-safe confirmation solely because the classifier is unavailable.
+- **ReAct fallback crash**: Plain callable tools no longer crash the ReAct fallback with `'function' object has no attribute 'name'`.
+- **Embedding endpoint mismatch**: Semantic routing/cache code now uses the configured embedding endpoint after container restarts, fixing accidental `/embeddings` calls against chat-only providers.
+- **Secret and auth hardening**: Secret routes now require admin access, SQLite vault decryption failures raise instead of silently returning `None`, and API token creation responses are marked `no-store`.
+- **Frontend sanitization**: Module HTML sanitization removes inline event handlers and fails closed if DOMPurify is unavailable.
+- **Pipeline and chat error hygiene**: Pipeline/agent execution errors avoid leaking raw exception details to end users while preserving server-side diagnostics.
+
 ## [1.3.6] – 2026-05-16
 
 ### Added

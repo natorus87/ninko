@@ -13,6 +13,7 @@ import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from cryptography.fernet import InvalidToken
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -163,6 +164,7 @@ async def lifespan(app: FastAPI) -> object:
             REDIS_KEY_LLM,
             REDIS_KEY_LLM_PROVIDERS,
             REDIS_KEY_EMBED_MODEL,
+            REDIS_KEY_EMBED_PROVIDER,
             _reconfigure_llm,
             _apply_default_provider,
         )
@@ -217,6 +219,37 @@ async def lifespan(app: FastAPI) -> object:
             logger.info(
                 "Embedding-Modell aus Redis wiederhergestellt: %s", _embed_model
             )
+
+        # ④ Separaten Embedding-Provider aus Redis laden.
+        # Ohne diesen Schritt fällt get_embeddings() nach einem Restart auf den
+        # Chat-LLM-Endpoint zurück, der nicht zwingend /embeddings bereitstellt.
+        _embed_provider_raw = await _redis_startup.connection.get(
+            REDIS_KEY_EMBED_PROVIDER
+        )
+        if _embed_provider_raw:
+            _embed_provider = _json.loads(_embed_provider_raw)
+            if _embed_provider.get("use_custom"):
+                _embed_backend = str(_embed_provider.get("backend") or "").strip()
+                _embed_base_url = str(_embed_provider.get("base_url") or "").strip()
+                _embed_api_key = str(_embed_provider.get("api_key") or "").strip()
+                _embed_provider_model = str(_embed_provider.get("model") or "").strip()
+                if _embed_backend:
+                    _os.environ["EMBED_BACKEND"] = _embed_backend
+                if _embed_base_url:
+                    _os.environ["EMBED_BASE_URL"] = _embed_base_url
+                if _embed_api_key:
+                    _os.environ["EMBED_API_KEY"] = _embed_api_key
+                if _embed_provider_model:
+                    _os.environ["EMBED_MODEL"] = _embed_provider_model
+                logger.info(
+                    "Embedding-Provider aus Redis wiederhergestellt: backend=%s, model=%s, url=%s",
+                    _embed_backend or "-",
+                    _embed_provider_model or _os.environ.get("EMBED_MODEL", "-"),
+                    _embed_base_url or "-",
+                )
+            else:
+                for _key in ("EMBED_BACKEND", "EMBED_BASE_URL", "EMBED_API_KEY"):
+                    _os.environ.pop(_key, None)
     except (
         RuntimeError,
         ValueError,
@@ -227,6 +260,34 @@ async def lifespan(app: FastAPI) -> object:
         json.JSONDecodeError,
     ) as _exc:
         logger.warning("LLM-Startup-Config konnte nicht geladen werden: %s", _exc)
+
+    # ── Startup-Recovery für persistente Stores ──────────────────────────────
+    try:
+        from core.redis_client import get_redis as _get_redis_recovery
+        from core.vault import get_vault
+        from core.workflow_engine import sweep_orphan_workflow_runs
+
+        vault_migrated = await get_vault().migrate_legacy_sqlite_secrets()
+        if vault_migrated:
+            logger.info("Vault-Startup-Migration: %d Legacy-Secrets re-encrypted.", vault_migrated)
+
+        workflow_interrupted = await sweep_orphan_workflow_runs(_get_redis_recovery())
+        if workflow_interrupted:
+            logger.warning(
+                "Workflow-Recovery: %d verwaiste laufende Runs als interrupted markiert.",
+                workflow_interrupted,
+            )
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        InvalidToken,
+        json.JSONDecodeError,
+    ) as _recovery_exc:
+        logger.warning("Startup-Recovery konnte nicht abgeschlossen werden: %s", _recovery_exc)
 
     # ── RBAC Bootstrap-Admin synchronisieren ──────────────────────────────────
     try:

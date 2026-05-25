@@ -850,6 +850,7 @@ _SAFE_PATTERNS: tuple[str, ...] = (
     "hilfe",
     "suche",
     "finde ",
+    "finden",
     "prüfe ",
     # French
     "montre ",
@@ -971,6 +972,25 @@ _HIGH_CONFIDENCE_STATE: tuple[str, ...] = (
 )
 
 
+def _term_matches(text: str, term: str, need_word_boundary: bool) -> bool:
+    if need_word_boundary:
+        return bool(re.search(rf"\b{re.escape(term.strip())}\b", text))
+    return term in text
+
+
+def _contains_write_or_destructive_intent(text: str) -> bool:
+    return any(
+        _term_matches(text, kw, need_wb) for kw, need_wb in _DESTRUCTIVE_TERMS
+    ) or any(
+        _term_matches(text, kw, need_wb) for kw, need_wb in _STATE_TERMS
+    )
+
+
+def _matches_readonly_pattern(text: str) -> bool:
+    spaced = f" {text} "
+    return any(text.startswith(pat) or pat in spaced for pat in _SAFE_PATTERNS)
+
+
 def _keyword_prefilter(text: str) -> PrefilterResult:
     """
     Fast-path classifier with confidence scoring.
@@ -988,17 +1008,17 @@ def _keyword_prefilter(text: str) -> PrefilterResult:
       5. No match → hit=False (confidence 0.0)
     """
     lower = text.lower().strip()
-    spaced = f" {lower} "  # wrap for word-boundary substring matching
 
     # 1. Clearly read-only — no confirmation needed
-    for pat in _SAFE_PATTERNS:
-        if lower.startswith(pat) or pat in spaced:
-            return PrefilterResult(
-                hit=True,
-                category=ActionCategory.SAFE,
-                confidence=0.80,
-                rationale="Read-only keyword detected — safe to execute directly.",
-            )
+    if _matches_readonly_pattern(lower) and not _contains_write_or_destructive_intent(
+        lower
+    ):
+        return PrefilterResult(
+            hit=True,
+            category=ActionCategory.SAFE,
+            confidence=0.80,
+            rationale="Read-only keyword detected — safe to execute directly.",
+        )
 
     # 2. High-confidence destructive CLI/SQL patterns (skip LLM)
     for pat in _HIGH_CONFIDENCE_DESTRUCTIVE:
@@ -1411,9 +1431,14 @@ class SafeguardMiddleware:
             "liste",
             "was ",
             "wie ",
+            "finde ",
+            "finden",
             "mostra ",
         )
-        if any(lower.startswith(kw) for kw in safe_keywords) or lower.endswith("?"):
+        if (
+            any(lower.startswith(kw) or kw in lower for kw in safe_keywords)
+            or lower.endswith("?")
+        ) and not _contains_write_or_destructive_intent(lower):
             return {
                 "requires_confirmation": False,
                 "category": ActionCategory.SAFE,
@@ -1427,6 +1452,8 @@ class SafeguardMiddleware:
             "web search",
             "suche ",
             "suche nach",
+            "finde ",
+            "finden",
             "search ",
             "google ",
             "recherche",
@@ -1441,7 +1468,9 @@ class SafeguardMiddleware:
             "server-analyse",
             "website-analyse",
         )
-        if any(kw in lower for kw in search_keywords):
+        if any(
+            kw in lower for kw in search_keywords
+        ) and not _contains_write_or_destructive_intent(lower):
             return {
                 "requires_confirmation": False,
                 "category": ActionCategory.SAFE,

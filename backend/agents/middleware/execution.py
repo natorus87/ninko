@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import TYPE_CHECKING, Any
 
 from core import status_bus
@@ -18,6 +19,35 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_AGENT_TIMEOUT_SECS = 1800
 _DEFAULT_AGENT_RECURSION_LIMIT = 80
+_SENSITIVE_KEYS = (
+    "password",
+    "secret",
+    "token",
+    "api_key",
+    "apikey",
+    "bearer",
+    "auth",
+    "private",
+    "credential",
+)
+
+
+def _redact_exception_text(value: object, *, limit: int = 300) -> str:
+    text = str(value)[:limit]
+    for key in _SENSITIVE_KEYS:
+        text = re.sub(
+            rf'("{key}"\s*:\s*)"[^"]+"',
+            r'\1"***"',
+            text,
+            flags=re.IGNORECASE,
+        )
+        text = re.sub(
+            rf"({key}\s*[=:]\s*)[^\s,;]{{1,200}}",
+            r"\1***",
+            text,
+            flags=re.IGNORECASE,
+        )
+    return text
 
 
 def _get_timeout() -> int:
@@ -67,7 +97,11 @@ async def _stream_and_accumulate(
     except asyncio.CancelledError:
         raise
     except Exception as exc:
-        logger.warning("stream_and_accumulate error: %s", exc, exc_info=True)
+        logger.warning(
+            "stream_and_accumulate error: %s",
+            type(exc).__name__,
+            exc_info=False,
+        )
         raise
 
     return tokens, result
@@ -309,13 +343,18 @@ class AgentExecutionMiddleware(BaseMiddleware):
                 logger.warning(
                     "Agent '%s' Fehler wird gegenüber User sanitisiert. raw_error=%s",
                     ctx.agent_name,
-                    exc_str[:300],
+                    _redact_exception_text(exc),
                 )
                 ctx.response = (
                     "Fehler: Bei der Verarbeitung ist ein interner Fehler aufgetreten. "
                     "Bitte versuche es erneut oder präzisiere die Anfrage."
                 )
-            logger.error("Agent '%s' Fehler: %s", ctx.agent_name, exc, exc_info=True)
+            logger.error(
+                "Agent '%s' Fehler: %s",
+                ctx.agent_name,
+                type(exc).__name__,
+                exc_info=False,
+            )
             await status_bus.emit_trace(
                 ctx.session_id,
                 phase="agent",

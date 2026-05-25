@@ -551,17 +551,25 @@ class OrchestratorAgent(BaseAgent):
             redis_client = get_redis()
             embeddings = get_embeddings()
             query_vec = embeddings.embed_query(query)
-            all_keys = [key async for key in redis_client.connection.scan_iter(match=f"{self._TOOL_CALL_CACHE_PREFIX}sem:*", count=100)]
+            all_keys = [
+                key
+                async for key in redis_client.connection.scan_iter(
+                    match=f"{self._TOOL_CALL_CACHE_PREFIX}sem:*",
+                    count=100,
+                )
+            ]
             if not all_keys:
                 return None
             module_vecs = {}
-            for key in all_keys:
-                raw = await redis_client.connection.get(key)
+            module_payloads = {}
+            raw_values = await redis_client.connection.mget(all_keys)
+            for key, raw in zip(all_keys, raw_values, strict=False):
                 if raw:
                     data = _json.loads(raw)
                     vec = data.get("embedding", [])
                     if vec:
                         module_vecs[key] = np.array(vec, dtype=np.float32)
+                        module_payloads[key] = data
             if not module_vecs:
                 return None
             q_vec = np.array(query_vec, dtype=np.float32)
@@ -574,9 +582,7 @@ class OrchestratorAgent(BaseAgent):
                     if score > best_score:
                         best_score, best_key = score, key
             if best_key and best_score >= self._SEMANTIC_THRESHOLD:
-                raw = await redis_client.connection.get(best_key)
-                if raw:
-                    return _json.loads(raw).get("tool_calls")
+                return module_payloads.get(best_key, {}).get("tool_calls")
         except Exception as exc:
             logger.debug("Semantic cache miss: %s", exc)
         return None
@@ -698,7 +704,12 @@ class OrchestratorAgent(BaseAgent):
             _t(de="Pipelines werden ausgeführt…", en="Executing pipeline…"),
         )
         try:
-            from core.pipeline_engine import get_pipeline_engine, PipelineStep, PipelineStatus
+            from core.pipeline_engine import (
+                PipelineStatus,
+                PipelineStep,
+                StepStatus,
+                get_pipeline_engine,
+            )
             engine = get_pipeline_engine()
             typed_steps = [PipelineStep.from_dict(s) for s in steps]
             result = await engine.execute(
@@ -707,14 +718,42 @@ class OrchestratorAgent(BaseAgent):
                 auto_confirm=confirmed,
                 skip_on_error=False,
             )
-            markdown = result.to_markdown()
             status = result.status
             if status == PipelineStatus.FAILED:
-                return f"Pipeline fehlgeschlagen: {result.error}\n\n{markdown}", None, False
-            return markdown if markdown else _t("Pipeline abgeschlossen.", "Pipeline completed."), None, False
+                logger.warning(
+                    "Pipeline failed during routing: %s",
+                    type(result.error).__name__,
+                )
+                safe_lines = []
+                for step in result.steps:
+                    if step.status == StepStatus.COMPLETED:
+                        safe_lines.append(f"**{step.module}:**\n{step.result}")
+                    elif step.status == StepStatus.FAILED:
+                        safe_lines.append(
+                            f"**{step.module} – Fehler:**\n"
+                            "Interner Schrittfehler. Details wurden aus Sicherheitsgründen ausgeblendet."
+                        )
+                safe_markdown = "\n\n".join(safe_lines)
+                return (
+                    "Pipeline fehlgeschlagen: Ein interner Schritt konnte nicht abgeschlossen werden."
+                    f"\n\n{safe_markdown}"
+                ), None, False
+            markdown = result.to_markdown()
+            return (
+                markdown if markdown else _t("Pipeline abgeschlossen.", "Pipeline completed."),
+                None,
+                False,
+            )
         except Exception as exc:
-            logger.error("Pipeline execution failed: %s", exc)
-            return f"Pipeline-Fehler: {exc}", None, False
+            logger.error(
+                "Pipeline execution failed: %s",
+                type(exc).__name__,
+                exc_info=False,
+            )
+            return _t(
+                "Pipeline-Fehler: Bei der Verarbeitung ist ein interner Fehler aufgetreten.",
+                "Pipeline error: An internal error occurred while processing the request.",
+            ), None, False
 
     # ── LLM Function Calling Route ──────────────────────────────────────────────
 
@@ -926,15 +965,38 @@ class OrchestratorAgent(BaseAgent):
             data={"agent": self.name},
             status="running",
         )
-        response, did_compact = await self.invoke(
-            message=message,
-            chat_history=chat_history,
-            session_id=session_id,
-            confirmed=confirmed,
-            wants_stream=wants_stream,
-            token_callback=token_callback,
-            cancellation_check=cancellation_check,
-        )
+        try:
+            response, did_compact = await self.invoke(
+                message=message,
+                chat_history=chat_history,
+                session_id=session_id,
+                confirmed=confirmed,
+                wants_stream=wants_stream,
+                token_callback=token_callback,
+                cancellation_check=cancellation_check,
+            )
+        except Exception as exc:
+            logger.error(
+                "ReAct fallback failed: %s",
+                type(exc).__name__,
+                exc_info=True,
+            )
+            await status_bus.emit_trace(
+                session_id,
+                phase="routing",
+                label="ReAct-Fallback fehlgeschlagen",
+                detail=type(exc).__name__,
+                data={"agent": self.name},
+                status="error",
+            )
+            return (
+                _t(
+                    "Ich kann die Anfrage gerade nicht ausführen, weil der KI-Backend-Aufruf fehlgeschlagen ist. Bitte prüfe den aktiven LLM-Provider und versuche es erneut.",
+                    "I cannot execute the request right now because the AI backend call failed. Please check the active LLM provider and try again.",
+                ),
+                None,
+                False,
+            )
         await status_bus.emit_trace(
             session_id,
             phase="routing",
@@ -2650,6 +2712,101 @@ JSON-SCHEMA:
             cancellation_check=cancellation_check,
         )
 
+    @staticmethod
+    def _wants_fritzbox_tasmota_discovery(message: str) -> bool:
+        lower = message.lower()
+        return (
+            "fritz" in lower
+            and "tasmota" in lower
+            and any(
+                token in lower
+                for token in ("find", "finden", "finde", "such", "suche", "liste", "list")
+            )
+        )
+
+    async def _try_fritzbox_tasmota_fast_path(
+        self,
+        message: str,
+        session_id: str,
+    ) -> tuple[str, str | None, bool] | None:
+        """Handle explicit FRITZ!Box Tasmota discovery without LLM routing."""
+        if not self._wants_fritzbox_tasmota_discovery(message):
+            return None
+
+        await status_bus.emit_trace(
+            session_id,
+            phase="routing",
+            label="FRITZ!Box-Tasmota-Erkennung",
+            detail="Deterministischer Read-only-Fast-Path",
+            data={"module": "fritzbox"},
+        )
+        await status_bus.emit(
+            session_id,
+            _t(
+                de="Frage FRITZ!Box-Geräteliste ab…",
+                en="Querying FRITZ!Box device list…",
+            ),
+        )
+
+        from modules_catalog.fritzbox.tools import get_fritz_devices
+
+        devices = await get_fritz_devices.ainvoke({"connection_id": ""})
+        if not isinstance(devices, list):
+            return (
+                _t(
+                    de="FRITZ!Box hat keine verwertbare Geräteliste zurückgegeben.",
+                    en="FRITZ!Box did not return a usable device list.",
+                ),
+                "fritzbox",
+                False,
+            )
+
+        if devices and isinstance(devices[0], dict) and devices[0].get("error"):
+            return (
+                _t(
+                    de=f"FRITZ!Box-Fehler: {devices[0]['error']}",
+                    en=f"FRITZ!Box error: {devices[0]['error']}",
+                ),
+                "fritzbox",
+                False,
+            )
+
+        matches = [
+            d
+            for d in devices
+            if isinstance(d, dict)
+            and "tasmota"
+            in " ".join(str(d.get(k, "")) for k in ("name", "ip", "mac", "interface")).lower()
+        ]
+        if not matches:
+            return (
+                _t(
+                    de=f"Keine Tasmota-Geräte in der FRITZ!Box-Geräteliste gefunden ({len(devices)} Geräte geprüft).",
+                    en=f"No Tasmota devices found in the FRITZ!Box device list ({len(devices)} devices checked).",
+                ),
+                "fritzbox",
+                False,
+            )
+
+        rows = ["| Name | IP | MAC | Status |", "|---|---|---|---|"]
+        for d in matches:
+            rows.append(
+                "| {name} | {ip} | {mac} | {status} |".format(
+                    name=str(d.get("name") or "-"),
+                    ip=str(d.get("ip") or "-"),
+                    mac=str(d.get("mac") or "-"),
+                    status=str(d.get("status") or "-"),
+                )
+            )
+        return (
+            _t(
+                de=f"Gefundene Tasmota-Geräte: {len(matches)}\n\n" + "\n".join(rows),
+                en=f"Found Tasmota devices: {len(matches)}\n\n" + "\n".join(rows),
+            ),
+            "fritzbox",
+            False,
+        )
+
     async def route(
         self,
         message: str,
@@ -2738,6 +2895,11 @@ JSON-SCHEMA:
             response, did_compact = await self._auto_create_workflow(message, session_id)
             self._last_tier_used = 1
             return response, "orchestrator", did_compact
+
+        fast_path = await self._try_fritzbox_tasmota_fast_path(message, session_id)
+        if fast_path is not None:
+            self._last_tier_used = 1
+            return fast_path
 
         # ── LLM-Native Function Calling Routing (primär) ────────────────────
         function_calling_enabled, _ = await self._get_routing_mode()
