@@ -52,32 +52,32 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 <table>
   <tr>
     <td align="center" width="50%">
-      <img src="images/screens/Eingef%C3%BCgtes%20Bild.png" alt="Chat – Dark Mode" width="100%"><br>
-      <sub><b>Chat interface — Dark Mode</b></sub>
+      <img src="images/screens/readme/chat-dark.png" alt="Chat home screen" width="100%"><br>
+      <sub><b>Chat — Dark interface</b></sub>
     </td>
     <td align="center" width="50%">
-      <img src="images/screens/Eingef%C3%BCgtes%20Bild%20(2).png" alt="Chat – Light Mode" width="100%"><br>
-      <sub><b>Chat interface — Light Mode</b></sub>
+      <img src="images/screens/readme/module-sidebar.png" alt="Module sidebar with Agent Browser" width="100%"><br>
+      <sub><b>Modules — Sidebar navigation &amp; Agent Browser</b></sub>
     </td>
   </tr>
   <tr>
     <td align="center" width="50%">
-      <img src="images/screens/Eingef%C3%BCgtes%20Bild%20(3).png" alt="CodeLab Module" width="100%"><br>
+      <img src="images/screens/readme/codelab.png" alt="CodeLab Module" width="100%"><br>
       <sub><b>CodeLab — Code execution &amp; text improvement</b></sub>
     </td>
     <td align="center" width="50%">
-      <img src="images/screens/Eingef%C3%BCgtes%20Bild%20(6).png" alt="Workflow Canvas" width="100%"><br>
+      <img src="images/screens/readme/workflow-editor.png" alt="Workflow Canvas" width="100%"><br>
       <sub><b>Automation — Visual DAG workflow editor</b></sub>
     </td>
   </tr>
   <tr>
     <td align="center" width="50%">
-      <img src="images/screens/Eingef%C3%BCgtes%20Bild%20(4).png" alt="FritzBox Module" width="100%"><br>
-      <sub><b>FritzBox — Network management dashboard</b></sub>
+      <img src="images/screens/readme/settings-llm.png" alt="LLM provider and routing settings" width="100%"><br>
+      <sub><b>Settings — LLM providers &amp; routing</b></sub>
     </td>
     <td align="center" width="50%">
-      <img src="images/screens/Eingef%C3%BCgtes%20Bild%20(5).png" alt="Pi-hole Module" width="100%"><br>
-      <sub><b>Pi-hole — DNS blocking &amp; query log</b></sub>
+      <img src="images/screens/readme/settings-modules.png" alt="Module installation and marketplace settings" width="100%"><br>
+      <sub><b>Settings — Modules &amp; marketplace</b></sub>
     </td>
   </tr>
 </table>
