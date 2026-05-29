@@ -2930,28 +2930,6 @@ select {
     display: none;
 }
 
-.typing-step[data-step-badge] summary::before {
-    content: attr(data-step-badge);
-    display: inline-block;
-    flex-shrink: 0;
-    min-width: 4.6rem;
-    max-width: 6rem;
-    padding: 0.08rem 0.36rem;
-    border-radius: 4px;
-    border: 1px solid rgba(99, 102, 241, 0.35);
-    background: rgba(99, 102, 241, 0.08);
-    color: #9aa6ff;
-    font-size: 0.62rem;
-    font-weight: 700;
-    letter-spacing: 0;
-    line-height: 1.35;
-    text-align: center;
-    text-transform: uppercase;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
 /* Step-Label + inline Hint */
 .typing-step-label {
     font-size: 0.86rem;
@@ -3130,14 +3108,6 @@ select {
 .typing-step-error summary::before {
     content: '';
     display: none;
-    animation: none !important;
-}
-
-.typing-step-running[data-step-badge] summary::before,
-.typing-step-done[data-step-badge] summary::before,
-.typing-step-error[data-step-badge] summary::before {
-    content: attr(data-step-badge);
-    display: inline-block;
     animation: none !important;
 }
 
