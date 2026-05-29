@@ -152,6 +152,15 @@ _TOOL_STATUS_LABELS: dict[str, str] = {
     "get_dns_zones": _t(de="Lade DNS-Zonen", en="Loading DNS zones"),
     "get_zone_records": _t(de="Lade DNS-Einträge", en="Loading DNS records"),
     "create_dns_record": _t(de="Erstelle DNS-Eintrag", en="Creating DNS record"),
+    "get_nodes": _t(de="Lade Proxmox-Nodes", en="Loading Proxmox nodes"),
+    "get_node_status": _t(
+        de="Lade Proxmox-Node-Status", en="Loading Proxmox node status"
+    ),
+    "list_all_vms": _t(de="Lade Proxmox-VMs", en="Loading Proxmox VMs"),
+    "list_vms": _t(de="Lade Proxmox-VMs", en="Loading Proxmox VMs"),
+    "get_vm_status": _t(de="Lade VM-Status", en="Loading VM status"),
+    "get_vm_config": _t(de="Lade VM-Konfiguration", en="Loading VM configuration"),
+    "get_recent_tasks": _t(de="Lade Proxmox-Tasks", en="Loading Proxmox tasks"),
     "send_email": _t(de="Sende E-Mail", en="Sending email"),
     "fetch_emails": _t(de="Lade E-Mails", en="Fetching emails"),
     "send_telegram_message": _t(
