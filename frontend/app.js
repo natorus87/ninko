@@ -3000,8 +3000,9 @@ ${messagesHtml}
         const phaseClass = meta.phase
             ? String(meta.phase).toLowerCase().replace(/[^a-z0-9_-]/g, '-')
             : '';
-        const phaseHtml = meta.phase && phaseClass !== 'tool'
-            ? `<span class="trace-phase trace-phase-${phaseClass}">${this._escapeHtml(meta.phaseLabel || meta.phase)}</span>`
+        const phaseLabel = String(meta.phaseLabel || meta.phase || 'Trace').trim() || 'Trace';
+        const phaseHtml = meta.phase
+            ? `<span class="trace-phase trace-phase-${phaseClass}">${this._escapeHtml(phaseLabel)}</span>`
             : '';
         const durationHtml = meta.duration_ms != null
             ? `<span class="step-duration">${this._escapeHtml(this._formatDuration(meta.duration_ms))}</span>`
@@ -3024,7 +3025,6 @@ ${messagesHtml}
         step.className = 'typing-step';
         if (meta.state) step.classList.add(`typing-step-${meta.state}`);
         if (meta.phase) step.dataset.phase = meta.phase;
-        if (phaseClass === 'tool') step.dataset.stepBadge = meta.phaseLabel || 'Tool';
         if (!hasBody) step.classList.add('typing-step-noexpand');
         if (meta.runId) step.dataset.runId = meta.runId;
 
