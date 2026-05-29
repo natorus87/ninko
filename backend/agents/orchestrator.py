@@ -2901,6 +2901,19 @@ JSON-SCHEMA:
             self._last_tier_used = 1
             return fast_path
 
+        status_fast_path = await self._try_infra_status_fast_path(
+            message=message,
+            chat_history=chat_history,
+            session_id=session_id,
+            confirmed=confirmed,
+            wants_stream=wants_stream,
+            token_callback=token_callback,
+            cancellation_check=cancellation_check,
+        )
+        if status_fast_path is not None:
+            self._last_tier_used = 1
+            return status_fast_path
+
         # ── LLM-Native Function Calling Routing (primär) ────────────────────
         function_calling_enabled, _ = await self._get_routing_mode()
         if function_calling_enabled:
@@ -2920,6 +2933,66 @@ JSON-SCHEMA:
             chat_history=chat_history,
             session_id=session_id,
             confirmed=confirmed,
+            wants_stream=wants_stream,
+            token_callback=token_callback,
+            cancellation_check=cancellation_check,
+        )
+
+    async def _try_infra_status_fast_path(
+        self,
+        *,
+        message: str,
+        chat_history: list[dict] | None,
+        session_id: str,
+        confirmed: bool,
+        wants_stream: bool = False,
+        token_callback: Any = None,
+        cancellation_check: Any = None,
+    ) -> tuple[str, str | None, bool] | None:
+        """Route simple infra status questions without LLM routing."""
+        text = (message or "").casefold()
+        has_status_intent = any(
+            token in text
+            for token in (
+                "status",
+                "health",
+                "gesund",
+                "zustand",
+                "overview",
+                "übersicht",
+                "uebersicht",
+            )
+        )
+        if not has_status_intent:
+            return None
+
+        target_module = ""
+        if any(token in text for token in ("proxmox", "pve")):
+            target_module = "proxmox"
+        elif any(token in text for token in ("kubernetes", "k8s", "cluster")):
+            target_module = "kubernetes"
+
+        if not target_module:
+            return None
+
+        await status_bus.emit_trace(
+            session_id,
+            phase="routing",
+            label="Infrastruktur-Status erkannt",
+            detail=target_module,
+            data={"module": target_module},
+        )
+        return await self._invoke_module_agent(
+            target_module,
+            message=message,
+            chat_history=chat_history,
+            session_id=session_id,
+            confirmed=confirmed,
+            status_message=_t(
+                de=f"Prüfe den Status von {self._module_display_name(target_module)}…",
+                en=f"Checking {self._module_display_name(target_module)} status…",
+            ),
+            log_prefix="Status-Fast-Path an Modul",
             wants_stream=wants_stream,
             token_callback=token_callback,
             cancellation_check=cancellation_check,

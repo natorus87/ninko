@@ -26,7 +26,7 @@ from core import status_bus
 from core.operation_journal import get_operation_journal
 from core.auth import auth_tenant_id, resolve_request_auth
 from agents.base_agent import _t, _TOOL_SAFEGUARD_SENTINEL
-from core.safeguard import ActionCategory
+from core.safeguard import ActionCategory, is_bot_confirmation
 from core.routing_telemetry import get_routing_telemetry
 
 logger = logging.getLogger("ninko.api.chat")
@@ -49,30 +49,88 @@ def _parse_sentinel(response_text: str) -> dict:
 
 def _tool_confirmation_response(info: dict, session_id: str) -> ChatResponse:
     """Baut eine ChatResponse für eine Tool-Level Safeguard Confirmation."""
-    tool_name = info.get("tool_name", "unbekannt")
-    category  = info.get("category", "UNKNOWN")
-    rationale = info.get("rationale", "")
+    response = _tool_confirmation_text(info)
     return ChatResponse(
-        response=_t(
-            f"⚠️ **Tool-Bestätigung erforderlich**\n\n"
-            f"Der Agent möchte folgendes Tool ausführen:\n\n"
-            f"**Tool:** `{tool_name}`\n"
-            f"**Kategorie:** {category}\n"
-            f"**Begründung:** {rationale}\n\n"
-            f"Sende die Nachricht erneut mit `confirmed: true` um fortzufahren.",
-            f"⚠️ **Tool Confirmation Required**\n\n"
-            f"The agent wants to execute a tool:\n\n"
-            f"**Tool:** `{tool_name}`\n"
-            f"**Category:** {category}\n"
-            f"**Rationale:** {rationale}\n\n"
-            f"Resend the message with `confirmed: true` to proceed.",
-        ),
+        response=response,
         module_used=None,
         session_id=session_id,
         confirmation_required=True,
         safeguard=info,
         timestamp=datetime.now(timezone.utc),
     )
+
+
+def _tool_confirmation_text(info: dict) -> str:
+    """Baut den sichtbaren Chat-Text für eine Tool-Level Confirmation."""
+    tool_name = info.get("tool_name", "unbekannt")
+    category = info.get("category", "UNKNOWN")
+    rationale = info.get("rationale", "")
+    return _t(
+        f"⚠️ **Tool-Bestätigung erforderlich**\n\n"
+        f"Der Agent möchte folgendes Tool ausführen:\n\n"
+        f"**Tool:** `{tool_name}`\n"
+        f"**Kategorie:** {category}\n"
+        f"**Begründung:** {rationale}\n\n"
+        f"Sende die Nachricht erneut mit `confirmed: true` um fortzufahren.",
+        f"⚠️ **Tool Confirmation Required**\n\n"
+        f"The agent wants to execute a tool:\n\n"
+        f"**Tool:** `{tool_name}`\n"
+        f"**Category:** {category}\n"
+        f"**Rationale:** {rationale}\n\n"
+        f"Resend the message with `confirmed: true` to proceed.",
+    )
+
+
+def _message_confirmation_text(sg_result) -> str:
+    """Baut den sichtbaren Chat-Text für eine Message-Level Confirmation."""
+    return _t(
+        f"⚠️ **Bestätigung erforderlich**\n\n"
+        f"Diese Aktion erfordert eine explizite Bestätigung.\n\n"
+        f"**Kategorie:** {sg_result.category.value}\n"
+        f"**Begründung:** {sg_result.rationale}\n\n"
+        f"Sende die Nachricht erneut mit `confirmed: true` um fortzufahren.",
+        f"⚠️ **Confirmation Required**\n\n"
+        f"This action requires explicit confirmation.\n\n"
+        f"**Category:** {sg_result.category.value}\n"
+        f"**Rationale:** {sg_result.rationale}\n\n"
+        f"Resend the message with `confirmed: true` to proceed.",
+    )
+
+
+async def _resolve_confirmed_message(
+    body: ChatRequest,
+    scoped_session_id: str,
+    redis,
+    op_journal,
+) -> tuple[str, bool, str | None]:
+    """
+    Akzeptiert kurze Textbestaetigungen wie "ok" nur, wenn fuer die Session
+    bereits eine SafeGuard-Aktion pending ist.
+    """
+    if body.confirmed:
+        return body.message, True, None
+
+    if not is_bot_confirmation(body.message):
+        return body.message, False, None
+
+    tool_pending_raw = await redis.connection.get(
+        f"ninko:safeguard_tool_pending:{scoped_session_id}"
+    )
+    pending_tx_id = await op_journal.get_pending_for_session(scoped_session_id)
+    if not tool_pending_raw and not pending_tx_id:
+        return body.message, False, None
+
+    effective_message = body.message
+    if pending_tx_id and not tool_pending_raw:
+        try:
+            tx = await op_journal.get(pending_tx_id)
+        except Exception as exc:
+            logger.warning("Pending SafeGuard transaction lookup failed: %s", exc)
+            tx = {}
+        if tx.get("source") == "chat_safeguard" and tx.get("text"):
+            effective_message = tx["text"]
+
+    return effective_message, True, pending_tx_id
 
 
 # ── Stream-Frame-Helper ────────────────────────────────────────────────────────
@@ -114,6 +172,11 @@ async def _stream_safe_generate(
     did_compact = False
     current_tx_id: str | None = None
     token_queue: asyncio.Queue[str] = asyncio.Queue(maxsize=1000)
+    effective_message, confirmed, pending_tx_id = await _resolve_confirmed_message(
+        body, scoped_session_id, redis, op_journal
+    )
+    if pending_tx_id:
+        current_tx_id = pending_tx_id
 
     async def _emit_live_token(token: str) -> None:
         if token:
@@ -144,14 +207,14 @@ async def _stream_safe_generate(
             label="Chat-Verarbeitung gestartet",
             detail="Streaming-Antwortpfad",
             data={
-                "confirmed": body.confirmed,
+                "confirmed": confirmed,
                 "force_module": body.force_module,
-                "message_length": len(body.message or ""),
+                "message_length": len(effective_message or ""),
             },
             status="running",
         )
         # ── Tool-Level Safeguard: Resume nach Bestätigung ───────────────────
-        if body.confirmed:
+        if confirmed:
             await status_bus.emit_trace(
                 scoped_session_id,
                 phase="safeguard",
@@ -176,8 +239,10 @@ async def _stream_safe_generate(
                     if safeguard:
                         await safeguard._audit_log(
                             action="tool_confirmed",
-                            category=ActionCategory(_pending_info.get("category", "STATE_CHANGING")),
-                            text=body.message,
+                            category=ActionCategory(
+                                _pending_info.get("category", "STATE_CHANGING")
+                            ),
+                            text=effective_message,
                             session_id=scoped_session_id,
                             agent_id=_pending_info.get("agent", ""),
                             tool_name=_pending_info.get("tool_name", ""),
@@ -185,7 +250,9 @@ async def _stream_safe_generate(
                             rationale=_pending_info.get("rationale", ""),
                         )
 
-                response_text, did_compact = await orchestrator.resume_tool_execution(scoped_session_id)
+                response_text, did_compact = (
+                    await orchestrator.resume_tool_execution(scoped_session_id)
+                )
 
                 if response_text.startswith(_TOOL_SAFEGUARD_SENTINEL):
                     await status_bus.done(scoped_session_id)
@@ -199,7 +266,13 @@ async def _stream_safe_generate(
                         "module_used": None,
                         "routing_confidence": None,
                     }
-                    yield _stream_frame("final", request_id, message_id, response="", meta=meta)
+                    yield _stream_frame(
+                        "final",
+                        request_id,
+                        message_id,
+                        response=_tool_confirmation_text(info),
+                        meta=meta,
+                    )
                     return
 
                 if current_tx_id:
@@ -223,15 +296,15 @@ async def _stream_safe_generate(
 
         # ── Safeguard-Check ──────────────────────────────────────────────────
         safeguard = getattr(request.app.state, "safeguard", None)
-        if not goto_stream_response and safeguard and not body.confirmed:
+        if not goto_stream_response and safeguard and not confirmed:
             await status_bus.emit_trace(
                 scoped_session_id,
                 phase="safeguard",
                 label="Nachricht wird durch SafeGuard geprüft",
-                data={"message_length": len(body.message or "")},
+                data={"message_length": len(effective_message or "")},
                 status="running",
             )
-            sg_result = await safeguard.check(body.message, session_id=scoped_session_id)
+            sg_result = await safeguard.check(effective_message, session_id=scoped_session_id)
             if sg_result.requires_confirmation:
                 await status_bus.emit_trace(
                     scoped_session_id,
@@ -240,10 +313,13 @@ async def _stream_safe_generate(
                     detail=sg_result.rationale,
                     data={"category": sg_result.category.value},
                 )
-                if sg_result.category in (ActionCategory.DESTRUCTIVE, ActionCategory.STATE_CHANGING):
+                if sg_result.category in (
+                    ActionCategory.DESTRUCTIVE,
+                    ActionCategory.STATE_CHANGING,
+                ):
                     current_tx_id = await op_journal.create_pending(
                         session_id=scoped_session_id,
-                        text=body.message,
+                        text=effective_message,
                         category=sg_result.category.value,
                         rationale=sg_result.rationale,
                         source="chat_safeguard",
@@ -262,7 +338,13 @@ async def _stream_safe_generate(
                     "module_used": None,
                     "routing_confidence": None,
                 }
-                yield _stream_frame("final", request_id, message_id, response="", meta=meta)
+                yield _stream_frame(
+                    "final",
+                    request_id,
+                    message_id,
+                    response=_message_confirmation_text(sg_result),
+                    meta=meta,
+                )
                 return
 
             if sg_result.auto_decided and sg_result.auto_decision == "deny":
@@ -292,7 +374,13 @@ async def _stream_safe_generate(
                     "module_used": None,
                     "routing_confidence": None,
                 }
-                yield _stream_frame("final", request_id, message_id, response=response_text, meta=meta)
+                yield _stream_frame(
+                    "final",
+                    request_id,
+                    message_id,
+                    response=response_text,
+                    meta=meta,
+                )
                 return
 
             await status_bus.emit_trace(
@@ -318,7 +406,7 @@ async def _stream_safe_generate(
             _correction = await _telemetry.check_and_record_correction(
                 session_id=scoped_session_id,
                 force_module=body.force_module,
-                message=body.message,
+                message=effective_message,
             )
             if _correction and hasattr(orchestrator, "apply_embedding_corrections"):
                 _examples = await _telemetry.get_correction_examples(body.force_module)
@@ -335,10 +423,10 @@ async def _stream_safe_generate(
             )
             route_task = asyncio.create_task(
                 orchestrator.route(
-                    message=body.message,
+                    message=effective_message,
                     chat_history=history,
                     session_id=scoped_session_id,
-                    confirmed=body.confirmed,
+                    confirmed=confirmed,
                     force_module=body.force_module,
                     wants_stream=True,
                     token_callback=_emit_live_token,
@@ -399,7 +487,7 @@ async def _stream_safe_generate(
             if category in {"DESTRUCTIVE", "STATE_CHANGING"}:
                 current_tx_id = await op_journal.create_pending(
                     session_id=scoped_session_id,
-                    text=body.message,
+                    text=effective_message,
                     category=category,
                     rationale=str(info.get("rationale", "")),
                     source="tool_safeguard",
@@ -417,7 +505,13 @@ async def _stream_safe_generate(
                 "module_used": module_used,
                 "routing_confidence": getattr(orchestrator, "_last_routing_confidence", None),
             }
-            yield _stream_frame("final", request_id, message_id, response="", meta=meta)
+            yield _stream_frame(
+                "final",
+                request_id,
+                message_id,
+                response=_tool_confirmation_text(info),
+                meta=meta,
+            )
             return
 
         await status_bus.emit_trace(
@@ -461,15 +555,27 @@ async def _stream_safe_generate(
             )
 
         # ── History speichern ────────────────────────────────────────────────
-        await redis.store_chat_message(session_id=scoped_session_id, role="user", content=body.message)
-        await redis.store_chat_message(session_id=scoped_session_id, role="assistant", content=response_text)
+        await redis.store_chat_message(
+            session_id=scoped_session_id,
+            role="user",
+            content=effective_message,
+        )
+        await redis.store_chat_message(
+            session_id=scoped_session_id,
+            role="assistant",
+            content=response_text,
+        )
 
         # Context-Budget
         updated_history = await redis.get_chat_history(scoped_session_id)
         budget = ctx_mgr.get_budget_info(updated_history)
 
         if current_tx_id:
-            await op_journal.mark_executed(current_tx_id, module=module_used, summary=response_text[:600])
+            await op_journal.mark_executed(
+                current_tx_id,
+                module=module_used,
+                summary=response_text[:600],
+            )
             await op_journal.clear_pending_for_session(scoped_session_id)
 
         routing_confidence = getattr(orchestrator, "_last_routing_confidence", None)
@@ -481,7 +587,7 @@ async def _stream_safe_generate(
                 module=module_used,
                 tier=getattr(orchestrator, "_last_tier_used", 0),
                 confidence=routing_confidence,
-                message=body.message,
+                message=effective_message,
             )
 
         # ── Final Frame ───────────────────────────────────────────────────────
@@ -574,6 +680,11 @@ async def chat(request: Request, body: ChatRequest):
     op_journal = get_operation_journal()
     current_tx_id: str | None = None
     scoped_session_id = _tenant_session_id(request, body.session_id)
+    effective_message, confirmed, pending_tx_id = await _resolve_confirmed_message(
+        body, scoped_session_id, redis, op_journal
+    )
+    if pending_tx_id:
+        current_tx_id = pending_tx_id
 
     # Status-Queue vorab erstellen (damit SSE-Consumer sofort lesen kann)
     status_bus.get_queue(scoped_session_id)
@@ -583,16 +694,16 @@ async def chat(request: Request, body: ChatRequest):
         label="Chat-Verarbeitung gestartet",
         detail="JSON-Antwortpfad",
         data={
-            "confirmed": body.confirmed,
+            "confirmed": confirmed,
             "force_module": body.force_module,
-            "message_length": len(body.message or ""),
+            "message_length": len(effective_message or ""),
         },
         status="running",
     )
 
     # ── Tool-Level Safeguard: Resume nach Bestätigung ─────────────────────────
     # Wenn confirmed=True und ein Tool-Call auf Bestätigung wartet → resumieren
-    if body.confirmed:
+    if confirmed:
         current_tx_id = await op_journal.get_pending_for_session(scoped_session_id)
         if current_tx_id:
             await op_journal.mark_confirmed(current_tx_id)
@@ -607,8 +718,10 @@ async def chat(request: Request, body: ChatRequest):
                 if safeguard:
                     await safeguard._audit_log(
                         action="tool_confirmed",
-                        category=ActionCategory(_pending_info.get("category", "STATE_CHANGING")),
-                        text=body.message,
+                        category=ActionCategory(
+                            _pending_info.get("category", "STATE_CHANGING")
+                        ),
+                        text=effective_message,
                         session_id=scoped_session_id,
                         agent_id=_pending_info.get("agent", ""),
                         tool_name=_pending_info.get("tool_name", ""),
@@ -618,7 +731,9 @@ async def chat(request: Request, body: ChatRequest):
             except json.JSONDecodeError as exc:
                 logger.warning("Audit-Log für Tool-Confirmation fehlgeschlagen: %s", exc)
             # Redis-Key nicht löschen — resume_tool_execution() macht das selbst
-            response_text, did_compact = await orchestrator.resume_tool_execution(scoped_session_id)
+            response_text, did_compact = (
+                await orchestrator.resume_tool_execution(scoped_session_id)
+            )
             await status_bus.done(scoped_session_id)
 
             # Resume hat weiteren Tool-Call aufgedeckt → nochmals Bestätigung
@@ -635,7 +750,7 @@ async def chat(request: Request, body: ChatRequest):
                 )
                 await op_journal.clear_pending_for_session(scoped_session_id)
             await redis.store_chat_message(
-                session_id=scoped_session_id, role="user", content=body.message
+                session_id=scoped_session_id, role="user", content=effective_message
             )
             await redis.store_chat_message(
                 session_id=scoped_session_id, role="assistant", content=response_text
@@ -653,15 +768,15 @@ async def chat(request: Request, body: ChatRequest):
 
     # ── Safeguard-Check (vor dem 4-tier Routing) ──────────────────────────────
     safeguard = getattr(request.app.state, "safeguard", None)
-    if safeguard and not body.confirmed:
+    if safeguard and not confirmed:
         await status_bus.emit_trace(
             scoped_session_id,
             phase="safeguard",
             label="Nachricht wird durch SafeGuard geprüft",
-            data={"message_length": len(body.message or "")},
+            data={"message_length": len(effective_message or "")},
             status="running",
         )
-        sg_result = await safeguard.check(body.message, session_id=scoped_session_id)
+        sg_result = await safeguard.check(effective_message, session_id=scoped_session_id)
         if sg_result.requires_confirmation:
             await status_bus.emit_trace(
                 scoped_session_id,
@@ -673,7 +788,7 @@ async def chat(request: Request, body: ChatRequest):
             if sg_result.category in (ActionCategory.DESTRUCTIVE, ActionCategory.STATE_CHANGING):
                 current_tx_id = await op_journal.create_pending(
                     session_id=scoped_session_id,
-                    text=body.message,
+                    text=effective_message,
                     category=sg_result.category.value,
                     rationale=sg_result.rationale,
                     source="chat_safeguard",
@@ -683,18 +798,7 @@ async def chat(request: Request, body: ChatRequest):
                 sg_payload["transaction_id"] = current_tx_id
             await status_bus.done(scoped_session_id)
             return ChatResponse(
-                response=_t(
-                    f"⚠️ **Bestätigung erforderlich**\n\n"
-                    f"Diese Aktion erfordert eine explizite Bestätigung.\n\n"
-                    f"**Kategorie:** {sg_result.category.value}\n"
-                    f"**Begründung:** {sg_result.rationale}\n\n"
-                    f"Sende die Nachricht erneut mit `confirmed: true` um fortzufahren.",
-                    f"⚠️ **Confirmation Required**\n\n"
-                    f"This action requires explicit confirmation.\n\n"
-                    f"**Category:** {sg_result.category.value}\n"
-                    f"**Rationale:** {sg_result.rationale}\n\n"
-                    f"Resend the message with `confirmed: true` to proceed.",
-                ),
+                response=_message_confirmation_text(sg_result),
                 module_used=None,
                 session_id=body.session_id,
                 confirmation_required=True,
@@ -749,7 +853,7 @@ async def chat(request: Request, body: ChatRequest):
         _correction = await _telemetry.check_and_record_correction(
             session_id=scoped_session_id,
             force_module=body.force_module,
-            message=body.message,
+            message=effective_message,
         )
         if _correction and hasattr(orchestrator, "apply_embedding_corrections"):
             _examples = await _telemetry.get_correction_examples(body.force_module)
@@ -764,10 +868,10 @@ async def chat(request: Request, body: ChatRequest):
         status="running",
     )
     response_text, module_used, did_compact = await orchestrator.route(
-        message=body.message,
+        message=effective_message,
         chat_history=history,
         session_id=scoped_session_id,
-        confirmed=body.confirmed,
+        confirmed=confirmed,
         force_module=body.force_module,
     )
     await status_bus.emit_trace(
@@ -790,7 +894,7 @@ async def chat(request: Request, body: ChatRequest):
         if category in {"DESTRUCTIVE", "STATE_CHANGING"}:
             current_tx_id = await op_journal.create_pending(
                 session_id=scoped_session_id,
-                text=body.message,
+                text=effective_message,
                 category=category,
                 rationale=str(info.get("rationale", "")),
                 source="tool_safeguard",
@@ -831,7 +935,7 @@ async def chat(request: Request, body: ChatRequest):
     await redis.store_chat_message(
         session_id=scoped_session_id,
         role="user",
-        content=body.message,
+        content=effective_message,
     )
     await redis.store_chat_message(
         session_id=scoped_session_id,
@@ -859,7 +963,7 @@ async def chat(request: Request, body: ChatRequest):
             module=module_used,
             tier=getattr(orchestrator, "_last_tier_used", 0),
             confidence=routing_confidence,
-            message=body.message,
+            message=effective_message,
         )
 
     return ChatResponse(

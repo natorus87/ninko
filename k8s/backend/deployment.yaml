@@ -16,6 +16,9 @@ spec:
         app: ninko-backend
     spec:
       serviceAccountName: ninko
+      # Graceful shutdown: ensure Telegram bot poll loop stops before
+      # the new pod starts polling (avoids HTTP 409 Conflict overlap).
+      terminationGracePeriodSeconds: 60
       securityContext:
         seLinuxOptions: {}
         runAsUser: 0
@@ -46,6 +49,10 @@ spec:
             seLinuxOptions: {}
           ports:
             - containerPort: 8000
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 15"]
           env:
             # ─── LLM / Embeddings (LM Studio – OpenAI-kompatibel) ───
             - name: LLM_BACKEND

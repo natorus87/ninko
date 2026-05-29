@@ -147,7 +147,7 @@ def _extract_json_from_llm_response(raw: str) -> dict:
     """Extract JSON from LLM response - handles Markdown and formatting issues."""
     import re
 
-    raw = re.sub(r".*?", "", raw, flags=re.DOTALL).strip()
+    raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL | re.IGNORECASE).strip()
 
     patterns = [
         (r"```json\s*(.*?)```", re.DOTALL),
@@ -229,6 +229,7 @@ async def create_agent(body: AgentCreate, request: Request) -> dict:
     )
     agents.append({**new_agent.model_dump(), "tenant_id": tenant_id})
     await _save_agents(redis, tenant_id, agents)
+    await _sync_agent_pool({**new_agent.model_dump(), "tenant_id": tenant_id})
     logger.info("Agent erstellt: %s (%s)", new_agent.name, new_agent.id)
     return {"id": new_agent.id, "status": "created"}
 
@@ -316,6 +317,7 @@ async def update_agent(agent_id: str, body: AgentCreate, request: Request) -> di
     }
     agents[idx] = updated
     await _save_agents(redis, tenant_id, agents)
+    await _sync_agent_pool(updated)
     logger.info("Agent aktualisiert: %s", agent_id)
     return {"id": agent_id, "status": "updated"}
 
@@ -331,6 +333,7 @@ async def delete_agent(agent_id: str, request: Request) -> dict:
 
     agents = [a for a in agents if a["id"] != agent_id]
     await _save_agents(redis, tenant_id, agents)
+    await _remove_agent_from_pool(agent_id, tenant_id)
 
     try:
         from core.soul_manager import get_soul_manager
@@ -441,7 +444,8 @@ Antworte AUSSCHLIESSLICH mit einem JSON-Objekt:
             )
         except asyncio.TimeoutError as exc:
             raise RuntimeError(
-                f"LLM-Aufruf für Agent-Generierung hat Timeout ({AGENT_GENERATION_TIMEOUT_SECONDS}s) überschritten"
+                "LLM-Aufruf für Agent-Generierung hat Timeout "
+                f"({AGENT_GENERATION_TIMEOUT_SECONDS}s) überschritten"
             ) from exc
 
         raw = response.content if hasattr(response, "content") else str(response)
@@ -510,5 +514,42 @@ async def duplicate_agent(agent_id: str, request: Request) -> dict:
     }
     agents.append(duplicate)
     await _save_agents(redis, tenant_id, agents)
+    await _sync_agent_pool(duplicate)
     logger.info("Agent dupliziert: %s → %s", agent_id, duplicate["id"])
     return {"id": duplicate["id"], "status": "created"}
+
+
+async def _sync_agent_pool(agent: dict) -> None:
+    """Keep API-created or edited agents available in the live DynamicAgentPool."""
+    try:
+        from core.agent_pool import get_agent_pool
+
+        await get_agent_pool().sync_agent(agent)
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        json.JSONDecodeError,
+    ) as exc:
+        logger.warning("Live-Agent-Pool-Sync fehlgeschlagen (%s): %s", agent.get("id"), exc)
+
+
+async def _remove_agent_from_pool(agent_id: str, tenant_id: str) -> None:
+    """Remove deleted agents from the live DynamicAgentPool."""
+    try:
+        from core.agent_pool import get_agent_pool
+
+        await get_agent_pool().remove_agent(agent_id, tenant_id=tenant_id)
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        json.JSONDecodeError,
+    ) as exc:
+        logger.warning("Live-Agent-Pool-Remove fehlgeschlagen (%s): %s", agent_id, exc)

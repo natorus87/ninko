@@ -78,7 +78,22 @@ def _parse_iso_datetime(value: str | None) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
-async def sweep_orphan_workflow_runs(redis, *, cutoff_minutes: int = ORPHAN_RUN_CUTOFF_MINUTES) -> int:
+def _dedupe_preserve_order(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        result.append(item)
+    return result
+
+
+async def sweep_orphan_workflow_runs(
+    redis,
+    *,
+    cutoff_minutes: int = ORPHAN_RUN_CUTOFF_MINUTES,
+) -> int:
     """Mark stale running workflow runs as interrupted after a backend crash."""
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=cutoff_minutes)
     interrupted = 0
@@ -214,13 +229,26 @@ class WorkflowEngine:
         t_run_start = datetime.now(timezone.utc)
 
         try:
+            def _dependencies_complete(target_id: str) -> bool:
+                for incoming_edge in edges:
+                    if incoming_edge.get("target_id") != target_id:
+                        continue
+                    source_step = step_map.get(incoming_edge.get("source_id"))
+                    if not source_step:
+                        continue
+                    if source_step.get("status") in {"pending", "running"}:
+                        return False
+                    if source_step.get("status") == "failed":
+                        return False
+                return True
+
             # BFS-Traversal durch den DAG
             queue = [n["id"] for n in start_nodes]
             visited = set()
 
             while queue:
                 # Parallel Execution: alle aktuell wartenden Nodes zeitgleich starten
-                batch_ids = [nid for nid in queue if nid not in visited]
+                batch_ids = _dedupe_preserve_order([nid for nid in queue if nid not in visited])
                 queue = []
                 if not batch_ids:
                     continue
@@ -308,7 +336,11 @@ class WorkflowEngine:
                                 step_map[target]["status"] = "skipped"
                             continue
                         target_id = edge["target_id"]
-                        if target_id not in visited:
+                        if (
+                            target_id not in visited
+                            and target_id not in queue
+                            and _dependencies_complete(target_id)
+                        ):
                             queue.append(target_id)
 
         except _WORKFLOW_EXCEPTIONS as exc:

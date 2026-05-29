@@ -328,6 +328,12 @@ class TelegramBot:
         """Main long-polling loop."""
         timeout_s = 30
 
+        # Startup delay: random 0-5s to desynchronize multiple pods during
+        # K8s rolling updates and reduce 409 Conflict collisions.
+        import random as _random
+
+        await asyncio.sleep(_random.uniform(0, 5))
+
         while self.running:
             token = await self.get_token()
             if not token:
@@ -366,9 +372,21 @@ class TelegramBot:
                         logger.error("Telegram Unauthorized. Stopping polling.")
                         self.running = False
                         break
+                    elif resp.status_code == 409:
+                        logger.warning(
+                            "Telegram HTTP 409 Conflict: Multiple long-polling instances "
+                            "use the same bot token. Check for duplicate pods (K8s rolling "
+                            "update overlap) or another bot instance running elsewhere. "
+                            "Retrying in 30s."
+                        )
+                        await asyncio.sleep(30)
                     else:
-                        logger.warning("Telegram HTTP Error: %s", resp.status_code)
-                        await asyncio.sleep(5)
+                        logger.warning(
+                            "Telegram HTTP Error %s: Unexpected status from getUpdates. "
+                            "Retrying in 10s.",
+                            resp.status_code,
+                        )
+                        await asyncio.sleep(10)
 
             except asyncio.CancelledError:
                 break
@@ -1157,7 +1175,6 @@ class TelegramBot:
 
         user = msg.get("from", {})
         user_id = user.get("id")
-        username = user.get("username", "")
         is_group = msg.get("chat", {}).get("type") in ["group", "supergroup"]
 
         authorized, reason = await self._is_user_authorized(user_id, chat_id, is_group)
@@ -1250,19 +1267,9 @@ class TelegramBot:
                     return
 
         # Read voice-reply configuration from connection
-        voice_reply = False
-        voice_reply_text_too = False
         voice_lang: str | None = None
         voice_name: str | None = None
         if conn:
-            voice_reply = str(conn.config.get("voice_reply", "false")).lower() in (
-                "true",
-                "1",
-                "yes",
-            )
-            voice_reply_text_too = str(
-                conn.config.get("voice_reply_text_too", "false")
-            ).lower() in ("true", "1", "yes")
             voice_lang = conn.config.get("voice_lang") or None
             voice_name = conn.config.get("voice_name") or None
 

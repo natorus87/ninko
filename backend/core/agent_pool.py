@@ -172,6 +172,21 @@ class DynamicAgentPool:
         )
         return agent
 
+    async def _close_live_agent(self, scoped_id: str) -> None:
+        """Close and remove a live agent instance plus its search metadata."""
+        old_agent = self._live_agents.pop(scoped_id, None)
+        self._meta.pop(scoped_id, None)
+        self._remove_index(scoped_id)
+        if old_agent and hasattr(old_agent, "aclose"):
+            try:
+                await old_agent.aclose()
+            except _AGENT_POOL_EXCEPTIONS as exc:
+                logger.debug(
+                    "Agent '%s' konnte nicht sauber geschlossen werden: %s",
+                    scoped_id,
+                    exc,
+                )
+
     def _mark_used(self, scoped_id: str) -> None:
         """Markiert einen Agenten als zuletzt verwendet, damit die Eviction echtes LRU bleibt."""
         if scoped_id in self._live_agents:
@@ -383,6 +398,38 @@ class DynamicAgentPool:
         )
         return agent_id, agent
 
+    async def sync_agent(self, agent_def: dict) -> None:
+        """
+        Synchronisiert einen bereits persistierten Agenten in den Live-Pool.
+
+        Wird von der Agents-API genutzt, damit UI/REST-erstellte oder aktualisierte
+        Agenten ohne Backend-Neustart direkt routbar sind.
+        """
+        tenant = _normalize_tenant(agent_def.get("tenant_id", "default"))
+        agent_id = str(agent_def.get("id", "")).strip()
+        if not agent_id:
+            raise ValueError("Agent-ID fehlt")
+
+        scoped_id = _scoped_id(tenant, agent_id)
+        if not agent_def.get("enabled", True) or not agent_def.get("system_prompt"):
+            await self._close_live_agent(scoped_id)
+            return
+
+        normalized_def = {**agent_def, "id": agent_id, "tenant_id": tenant}
+        async with self._register_lock:
+            await self._close_live_agent(scoped_id)
+            self._instantiate(normalized_def)
+
+    async def remove_agent(self, agent_id: str, tenant_id: str = "") -> bool:
+        """Entfernt einen Agenten aus dem Live-Pool."""
+        tenant = _effective_tenant_id(tenant_id)
+        scoped_id = _scoped_id(tenant, agent_id)
+        if scoped_id not in self._live_agents and scoped_id not in self._meta:
+            return False
+        async with self._register_lock:
+            await self._close_live_agent(scoped_id)
+        return True
+
     def get_by_id(self, agent_id: str) -> "BaseAgent | None":
         """Gibt einen Live-Agenten anhand seiner ID zurück."""
         tenant = _effective_tenant_id()
@@ -440,18 +487,11 @@ class DynamicAgentPool:
             await redis.connection.set(redis_key, json.dumps(agents))
 
             # Live-Instanz neu erstellen damit der neue Prompt sofort wirkt
-            self._meta[scoped_id] = agents[idx]
-            if scoped_id in self._live_agents:
-                old_agent = self._live_agents[scoped_id]
-                try:
-                    if hasattr(old_agent, "aclose"):
-                        await old_agent.aclose()
-                except Exception:
-                    pass
+            if agents[idx].get("enabled", True) and agents[idx].get("system_prompt"):
+                await self._close_live_agent(scoped_id)
                 self._instantiate(agents[idx])
             else:
-                self._remove_index(scoped_id)
-                self._index_agent(scoped_id, agents[idx])
+                await self._close_live_agent(scoped_id)
 
         # Soul MD neu generieren wenn name oder description geändert wurde
         if name is not None or description is not None:

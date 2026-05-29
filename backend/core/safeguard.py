@@ -1721,7 +1721,13 @@ class SafeguardMiddleware:
                 max_tokens=max_tokens,
                 timeout=self.timeout,
             )
-            raw = response.choices[0].message.content.strip()
+            content = response.choices[0].message.content
+            if content is None:
+                raise ValueError(
+                    "LLM classifier returned content=None. "
+                    "The provider may have returned a tool-call response or an empty completion."
+                )
+            raw = content.strip()
             parsed = self._parse(raw)
             req_conf = parsed.category.value in profile.confirm_categories
             latency = (time.monotonic() - t0) * 1000
@@ -1902,7 +1908,13 @@ class SafeguardMiddleware:
                 max_tokens=100,
                 timeout=self.timeout,
             )
-            raw = response.choices[0].message.content.strip()
+            content = response.choices[0].message.content
+            if content is None:
+                raise ValueError(
+                    "Classifier auto-decision got content=None. "
+                    "Falling back to fail-safe."
+                )
+            raw = content.strip()
             # Strip think blocks and fences
             raw = _RE_THINK.sub("", raw).strip()
             raw = _RE_MD_FENCE.sub("", raw).strip()
@@ -2081,7 +2093,13 @@ _CONFIRMATION_WORDS: frozenset[str] = frozenset(
         "sure",
         "absolutely",
         "confirm",
+        "confirm:true",
+        "confirm: true",
+        "confirm true",
         "confirmed",
+        "confirmed:true",
+        "confirmed: true",
+        "confirmed true",
         "proceed",
         "continue",
         "run",

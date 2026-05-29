@@ -91,7 +91,7 @@ class CoreSettings(BaseSettings):
     ADMIN_USERNAME: str = "admin"
     ADMIN_PASSWORD: str = ""
     BOOTSTRAP_ADMIN_PASSWORD: str = ""
-    SESSION_SECRET: str = Field(default="", min_length=32)
+    SESSION_SECRET: str = Field(default="")
     SESSION_TTL_HOURS: int = 24
     CHAT_HISTORY_TTL_SECONDS: int = 86400  # 24h, matching SESSION_TTL_HOURS
     SESSION_COOKIE_NAME: str = "ninko_session"

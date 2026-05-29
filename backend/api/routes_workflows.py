@@ -83,6 +83,28 @@ async def _save_workflows(redis, tenant_id: str, workflows: list[dict]) -> None:
     await redis.connection.set(_tenant_key(REDIS_KEY_WORKFLOWS, tenant_id), json.dumps(workflows))
 
 
+async def _mark_workflow_run_failed(
+    redis,
+    *,
+    tenant_id: str,
+    workflow_id: str,
+    run_id: str,
+    error: str,
+) -> None:
+    runs_key = f"{_tenant_key(REDIS_KEY_RUNS_PREFIX, tenant_id)}{workflow_id}"
+    runs_raw = await redis.connection.get(runs_key)
+    runs = json.loads(runs_raw) if runs_raw else []
+    now = datetime.now(timezone.utc).isoformat()
+    for run in runs:
+        if run.get("id") == run_id:
+            run["status"] = "failed"
+            run["error"] = error
+            run["finished_at"] = now
+            run["updated_at"] = now
+            break
+    await redis.connection.set(runs_key, json.dumps(runs))
+
+
 @router.get("/", response_model=WorkflowListResponse)
 async def list_workflows(request: Request) -> WorkflowListResponse:
     """Alle Workflows auflisten."""
@@ -301,6 +323,10 @@ async def run_workflow(workflow_id: str, request: Request) -> dict:
     if not wf:
         raise HTTPException(status_code=404, detail=f"Workflow '{workflow_id}' nicht gefunden")
 
+    orchestrator = getattr(request.app.state, "orchestrator", None)
+    if orchestrator is None:
+        raise HTTPException(status_code=503, detail="Workflow-Engine nicht initialisiert")
+
     run_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
 
@@ -337,16 +363,21 @@ async def run_workflow(workflow_id: str, request: Request) -> dict:
     try:
         from core.workflow_engine import WorkflowEngine
 
-        orchestrator = getattr(request.app.state, "orchestrator", None)
-        if orchestrator is None:
-            logger.warning(
-                "Workflow-Engine nicht gestartet: Orchestrator ist nicht initialisiert."
-            )
-        else:
-            engine = WorkflowEngine(redis, orchestrator)
-            _track_workflow_task(asyncio.create_task(engine.execute(wf, run_id)))
+        engine = WorkflowEngine(redis, orchestrator)
+        _track_workflow_task(asyncio.create_task(engine.execute(wf, run_id)))
     except (RuntimeError, ValueError, TypeError, KeyError, OSError) as exc:
         logger.warning("Workflow-Engine konnte nicht gestartet werden: %s", exc)
+        await _mark_workflow_run_failed(
+            redis,
+            tenant_id=tenant_id,
+            workflow_id=scoped_id,
+            run_id=run_id,
+            error=f"Workflow-Engine konnte nicht gestartet werden: {exc}",
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Workflow-Engine konnte nicht gestartet werden",
+        ) from exc
 
     return {"run_id": run_id, "status": "running"}
 
@@ -567,7 +598,9 @@ async def run_debate(debate_id: str, request: Request) -> dict:
     from core.llm_factory import llm_factory
     debate_service = DebateService(redis, request.app.state.orchestrator, llm_factory)
     await debate_service.run_full_debate(debate_id, tenant_id)
-    return await debate_service.get_debate_result(debate_id, tenant_id) or {"error": "Debate not found"}
+    return await debate_service.get_debate_result(debate_id, tenant_id) or {
+        "error": "Debate not found"
+    }
 
 
 @router.post("/debates/{debate_id}/round")
