@@ -156,9 +156,17 @@ _TOOL_STATUS_LABELS: dict[str, str] = {
     "get_node_status": _t(
         de="Lade Proxmox-Node-Status", en="Loading Proxmox node status"
     ),
+    "get_node_ip_addresses": _t(
+        de="Lade Proxmox-Node-IP-Adressen", en="Loading Proxmox node IP addresses"
+    ),
+    "list_node_ip_addresses": _t(
+        de="Lade Proxmox-Node-IP-Adressen", en="Loading Proxmox node IP addresses"
+    ),
     "list_all_vms": _t(de="Lade Proxmox-VMs", en="Loading Proxmox VMs"),
     "list_vms": _t(de="Lade Proxmox-VMs", en="Loading Proxmox VMs"),
     "get_vm_status": _t(de="Lade VM-Status", en="Loading VM status"),
+    "get_vm_ip_addresses": _t(de="Lade VM-IP-Adressen", en="Loading VM IP addresses"),
+    "list_vm_ip_addresses": _t(de="Lade VM-IP-Adressen", en="Loading VM IP addresses"),
     "get_vm_config": _t(de="Lade VM-Konfiguration", en="Loading VM configuration"),
     "get_recent_tasks": _t(de="Lade Proxmox-Tasks", en="Loading Proxmox tasks"),
     "send_email": _t(de="Sende E-Mail", en="Sending email"),
@@ -887,9 +895,13 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
     proxmox_tools = [
         ToolMetadata("get_nodes", "proxmox", readonly=True),
         ToolMetadata("get_node_status", "proxmox", readonly=True),
+        ToolMetadata("get_node_ip_addresses", "proxmox", readonly=True),
+        ToolMetadata("list_node_ip_addresses", "proxmox", readonly=True),
         ToolMetadata("list_all_vms", "proxmox", readonly=True),
         ToolMetadata("list_vms", "proxmox", readonly=True),
         ToolMetadata("get_vm_status", "proxmox", readonly=True),
+        ToolMetadata("get_vm_ip_addresses", "proxmox", readonly=True),
+        ToolMetadata("list_vm_ip_addresses", "proxmox", readonly=True),
         ToolMetadata("get_vm_config", "proxmox", readonly=True),
         ToolMetadata("get_recent_tasks", "proxmox", readonly=True),
     ]

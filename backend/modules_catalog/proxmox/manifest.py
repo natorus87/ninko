@@ -83,7 +83,7 @@ module_manifest = ModuleManifest(
         "cluster nodes, snapshots, backups. Diagnose hung or stuck VMs and "
         "dev environments."
     ),
-    version="1.1.3",
+    version="1.1.4",
     author="Ninko Team",
     enabled_by_default=True,
     env_prefix="PROXMOX_",

@@ -11,10 +11,14 @@ import logging
 from fastapi import APIRouter
 
 from .tools import (
+    get_node_ip_addresses,
     get_nodes,
     get_node_status,
+    get_vm_ip_addresses,
     list_all_vms,
+    list_node_ip_addresses,
     list_vms,
+    list_vm_ip_addresses,
     get_vm_status,
     start_vm as start_vm_tool,
     stop_vm as stop_vm_tool,
@@ -55,6 +59,22 @@ async def node_status(node: str, connection_id: str = "") -> object:
     return _normalize_tool_output(result)
 
 
+@router.get("/nodes/{node}/ips")
+async def node_ip_addresses(node: str, connection_id: str = "") -> object:
+    """IP addresses of a single Proxmox node."""
+    result = await get_node_ip_addresses.ainvoke(
+        {"node": node, "connection_id": connection_id}
+    )
+    return _normalize_tool_output(result)
+
+
+@router.get("/node-ips")
+async def all_node_ip_addresses(connection_id: str = "") -> object:
+    """IP addresses of all Proxmox nodes."""
+    result = await list_node_ip_addresses.ainvoke({"connection_id": connection_id})
+    return _normalize_tool_output(result)
+
+
 @router.get("/vms")
 async def all_vms(connection_id: str = "") -> object:
     """All VMs across all nodes."""
@@ -75,6 +95,22 @@ async def vm_status(node: str, vmid: int, connection_id: str = "") -> object:
     result = await get_vm_status.ainvoke(
         {"node": node, "vmid": vmid, "connection_id": connection_id}
     )
+    return _normalize_tool_output(result)
+
+
+@router.get("/vm/{node}/{vmid}/ips")
+async def vm_ip_addresses(node: str, vmid: int, connection_id: str = "") -> object:
+    """IP addresses of a single VM or LXC container."""
+    result = await get_vm_ip_addresses.ainvoke(
+        {"node": node, "vmid": vmid, "connection_id": connection_id}
+    )
+    return _normalize_tool_output(result)
+
+
+@router.get("/vm-ips")
+async def all_vm_ip_addresses(connection_id: str = "") -> object:
+    """IP addresses of all Proxmox VMs and LXC containers."""
+    result = await list_vm_ip_addresses.ainvoke({"connection_id": connection_id})
     return _normalize_tool_output(result)
 
 

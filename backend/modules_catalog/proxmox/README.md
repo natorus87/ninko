@@ -31,11 +31,18 @@ Der AI Orchestrator nutzt folgende Funktionen:
 - `get_cluster_status`: Zusammenfassung aller Nodes und deren Ressourcen.
 - `list_vms`: Listet alle VMs und Container eines spezifischen Nodes auf.
 - `get_vm_status`: Detaillierter Status (CPU, RAM, Uptime) einer spezifischen VM.
+- `get_node_ip_addresses` / `list_node_ip_addresses`: IP-Adressen einzelner oder aller Proxmox-Nodes.
+- `get_vm_ip_addresses` / `list_vm_ip_addresses`: IP-Adressen einzelner oder aller QEMU-VMs und LXC-Container.
+- `get_vm_config`: VM-/LXC-Konfiguration inklusive Netzwerkadapter und statischer IP-Hinweise.
 - `start_vm` / `stop_vm` / `reset_vm`: Power-Management-Aktionen.
 - `get_recent_tasks`: Zeigt die letzten PVE-Aufgaben und Logs an.
+
+Hinweis: QEMU-VM-IP-Adressen werden über den Proxmox Guest Agent gelesen. Wenn der Agent in der VM nicht läuft, kann Proxmox die In-Guest-IP-Adresse meist nicht zuverlässig melden. LXC-Container werden über die Proxmox-Interfaces-API gelesen, mit Config-Fallback für statische Adressen.
 
 ## Beispiel-Prompt (Chat)
 
 - *"Zeige mir alle VMs auf dem Node `pve-01`."*
+- *"Welche IP-Adresse hat die VM 105?"*
+- *"Liste alle IP-Adressen meiner Proxmox-Nodes, VMs und LXCs."*
 - *"Starte die VM 105."*
 - *"Die VM 200 hängt – kannst du sie hart neustarten (reset)?"*

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import os
+from ipaddress import ip_address, ip_network
 
 from langchain_core.tools import tool
 
@@ -80,7 +81,7 @@ async def _get_proxmox_client(connection_id: str = "") -> object:
     password = None
     if "password" in conn.vault_keys:
         password = await vault.get_secret(conn.vault_keys["password"])
-        
+
     if password:
         return ProxmoxAPI(
             host,
@@ -101,6 +102,100 @@ def _format_bytes(b: int) -> str:
     return f"{b:.1f} PB"
 
 
+def _normalize_ip_entry(address: str, family: str, interface: str = "") -> dict | None:
+    """Normalizes an IP address entry from Proxmox into a stable shape."""
+    value = str(address or "").strip()
+    if not value:
+        return None
+
+    ip_value = value.split("/", 1)[0]
+    try:
+        parsed = ip_address(ip_value)
+    except ValueError:
+        return None
+
+    if parsed.is_loopback or parsed.is_unspecified or parsed.is_link_local:
+        return None
+
+    return {
+        "interface": interface,
+        "address": value,
+        "ip": str(parsed),
+        "family": family or f"ipv{parsed.version}",
+    }
+
+
+def _extract_qemu_agent_ips(interfaces: list[dict]) -> list[dict]:
+    """Extracts usable IPs from QEMU guest-agent network-get-interfaces output."""
+    ips = []
+    seen = set()
+    for iface in interfaces:
+        interface_name = str(iface.get("name", ""))
+        for item in iface.get("ip-addresses", []) or []:
+            normalized = _normalize_ip_entry(
+                str(item.get("ip-address", "")),
+                str(item.get("ip-address-type", "")),
+                interface_name,
+            )
+            if not normalized:
+                continue
+            key = (normalized["interface"], normalized["ip"], normalized["family"])
+            if key not in seen:
+                ips.append(normalized)
+                seen.add(key)
+    return ips
+
+
+def _extract_lxc_interface_ips(interfaces: list[dict]) -> list[dict]:
+    """Extracts usable IPs from the LXC interfaces API response."""
+    ips = []
+    seen = set()
+    for iface in interfaces:
+        interface_name = str(iface.get("name", iface.get("iface", "")))
+        for field, family in (("inet", "ipv4"), ("inet6", "ipv6")):
+            normalized = _normalize_ip_entry(str(iface.get(field, "")), family, interface_name)
+            if not normalized:
+                continue
+            key = (normalized["interface"], normalized["ip"], normalized["family"])
+            if key not in seen:
+                ips.append(normalized)
+                seen.add(key)
+    return ips
+
+
+def _parse_proxmox_net_config(config: dict) -> list[dict]:
+    """Extracts static IP hints from QEMU/LXC net* config values."""
+    ips = []
+    seen = set()
+    for key, raw_value in sorted(config.items()):
+        if not key.startswith("net"):
+            continue
+        interface = str(key)
+        parts = str(raw_value).split(",")
+        for part in parts:
+            name, _, value = part.partition("=")
+            if name not in {"ip", "ip6"} or value in {"", "dhcp", "auto", "manual"}:
+                continue
+            normalized = _normalize_ip_entry(value, "ipv6" if name == "ip6" else "ipv4", interface)
+            if not normalized:
+                continue
+            key_tuple = (normalized["interface"], normalized["ip"], normalized["family"])
+            if key_tuple not in seen:
+                ips.append(normalized)
+                seen.add(key_tuple)
+    return ips
+
+
+def _netmask_to_prefix(address: str, netmask: str) -> str:
+    if not netmask:
+        return str(address)
+    try:
+        network = ip_network(f"{address}/{netmask}", strict=False)
+    except ValueError:
+        return str(address)
+    return f"{address}/{network.prefixlen}"
+
+
 @tool
 async def get_nodes(connection_id: str = "") -> list[dict]:
     """Returns all Proxmox nodes with status information."""
@@ -112,7 +207,6 @@ async def get_nodes(connection_id: str = "") -> list[dict]:
         # Load detailed status (CPU, RAM, etc.)
         try:
             status = proxmox.nodes(node_name).status.get()
-            cpu_info = status.get("cpuinfo", {})
             mem_info = status.get("memory", {})
             cpu_usage = round(status.get("cpu", 0) * 100, 1)
             mem_total = mem_info.get("total", 0)
@@ -154,6 +248,49 @@ async def get_node_status(node: str, connection_id: str = "") -> dict:
         "kernel_version": status.get("kversion", ""),
         "pve_version": status.get("pveversion", ""),
     }
+
+
+@tool
+async def get_node_ip_addresses(node: str, connection_id: str = "") -> list[dict]:
+    """Returns configured IP addresses for a Proxmox node."""
+    proxmox = await _get_proxmox_client(connection_id)
+    interfaces = proxmox.nodes(node).network.get()
+    ips = []
+    for iface in interfaces:
+        address = str(iface.get("address", "")).strip()
+        if not address:
+            continue
+        cidr = _netmask_to_prefix(address, str(iface.get("netmask", "")))
+        normalized = _normalize_ip_entry(cidr, "ipv4", str(iface.get("iface", "")))
+        if normalized:
+            normalized.update(
+                {
+                    "node": node,
+                    "type": iface.get("type", ""),
+                    "active": bool(iface.get("active", False)),
+                    "gateway": iface.get("gateway", ""),
+                }
+            )
+            ips.append(normalized)
+    return ips
+
+
+@tool
+async def list_node_ip_addresses(connection_id: str = "") -> list[dict]:
+    """Returns configured IP addresses for all Proxmox nodes."""
+    proxmox = await _get_proxmox_client(connection_id)
+    results = []
+    for node_info in proxmox.nodes.get():
+        node = node_info["node"]
+        try:
+            results.extend(
+                await get_node_ip_addresses.ainvoke(
+                    {"node": node, "connection_id": connection_id}
+                )
+            )
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError) as exc:
+            logger.warning("Failed to read node IP addresses on %s: %s", node, exc)
+    return results
 
 
 @tool
@@ -259,6 +396,117 @@ async def get_vm_status(node: str, vmid: int, connection_id: str = "") -> dict:
             "mem_used": status.get("mem", 0),
             "uptime": status.get("uptime", 0),
         }
+
+
+@tool
+async def get_vm_ip_addresses(node: str, vmid: int, connection_id: str = "") -> dict:
+    """Returns IP addresses for a QEMU VM or LXC container."""
+    proxmox = await _get_proxmox_client(connection_id)
+    try:
+        status = proxmox.nodes(node).qemu(vmid).status.current.get()
+        config = proxmox.nodes(node).qemu(vmid).config.get()
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as qemu_exc:
+        return await _get_lxc_ip_addresses(proxmox, node, vmid, qemu_exc)
+
+    try:
+        agent_data = (
+            proxmox.nodes(node).qemu(vmid).agent("network-get-interfaces").get()
+        )
+        interfaces = agent_data.get("result", agent_data)
+        ips = _extract_qemu_agent_ips(
+            interfaces if isinstance(interfaces, list) else []
+        )
+        return {
+            "vmid": vmid,
+            "name": status.get("name", config.get("name", f"VM-{vmid}")),
+            "node": node,
+            "type": "qemu",
+            "status": status.get("status", "unknown"),
+            "ips": ips,
+            "source": "qemu_guest_agent",
+            "note": "" if ips else "No IPs reported by the QEMU guest agent.",
+        }
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as agent_exc:
+        ips = _parse_proxmox_net_config(config)
+        return {
+            "vmid": vmid,
+            "name": status.get("name", config.get("name", f"VM-{vmid}")),
+            "node": node,
+            "type": "qemu",
+            "status": status.get("status", "unknown"),
+            "ips": ips,
+            "source": "qemu_config",
+            "note": (
+                f"QEMU guest agent did not report interfaces: {agent_exc}. "
+                "Enable and run the guest agent inside the VM for live IP discovery."
+            ),
+        }
+
+
+async def _get_lxc_ip_addresses(proxmox: object, node: str, vmid: int, qemu_exc: Exception) -> dict:
+    try:
+        status = proxmox.nodes(node).lxc(vmid).status.current.get()
+        config = proxmox.nodes(node).lxc(vmid).config.get()
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as lxc_exc:
+        return {
+            "vmid": vmid,
+            "node": node,
+            "type": "unknown",
+            "status": "error",
+            "ips": [],
+            "source": "",
+            "note": f"Could not read VM/LXC IPs. QEMU: {qemu_exc}; LXC: {lxc_exc}",
+        }
+
+    try:
+        interfaces = proxmox.nodes(node).lxc(vmid).interfaces.get()
+        ips = _extract_lxc_interface_ips(interfaces)
+        source = "lxc_interfaces"
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError):
+        ips = []
+        source = "lxc_config"
+
+    if not ips:
+        ips = _parse_proxmox_net_config(config)
+        source = "lxc_config"
+
+    return {
+        "vmid": vmid,
+        "name": status.get("name", config.get("hostname", f"CT-{vmid}")),
+        "node": node,
+        "type": "lxc",
+        "status": status.get("status", "unknown"),
+        "ips": ips,
+        "source": source,
+        "note": "" if ips else "No IPs reported by the LXC interfaces or config.",
+    }
+
+
+@tool
+async def list_vm_ip_addresses(connection_id: str = "") -> list[dict]:
+    """Returns IP addresses for all QEMU VMs and LXC containers across all nodes."""
+    vms = await list_all_vms.ainvoke({"connection_id": connection_id})
+    results = []
+    for vm in vms:
+        try:
+            results.append(
+                await get_vm_ip_addresses.ainvoke(
+                    {
+                        "node": vm["node"],
+                        "vmid": vm["vmid"],
+                        "connection_id": connection_id,
+                    }
+                )
+            )
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError) as exc:
+            logger.warning(
+                "Failed to read IP addresses for %s %s on %s: %s",
+                vm.get("type", "guest"),
+                vm.get("vmid"),
+                vm.get("node"),
+                exc,
+            )
+    return results
 
 
 @tool
@@ -441,9 +689,15 @@ async def get_vm_config(node: str, vmid: int, connection_id: str = "") -> dict:
     proxmox = await _get_proxmox_client(connection_id)
     try:
         config = proxmox.nodes(node).qemu(vmid).config.get()
+        networks = {
+            key: value
+            for key, value in sorted(config.items())
+            if str(key).startswith("net")
+        }
         return {
             "vmid": vmid,
             "node": node,
+            "type": "qemu",
             "name": config.get("name", ""),
             "cores": config.get("cores", 0),
             "sockets": config.get("sockets", 1),
@@ -453,9 +707,16 @@ async def get_vm_config(node: str, vmid: int, connection_id: str = "") -> dict:
             "ostype": config.get("ostype", ""),
             "scsihw": config.get("scsihw", ""),
             "net0": config.get("net0", ""),
+            "networks": networks,
+            "ip_hints": _parse_proxmox_net_config(config),
         }
     except (RuntimeError, ValueError, TypeError, KeyError, OSError):
         config = proxmox.nodes(node).lxc(vmid).config.get()
+        networks = {
+            key: value
+            for key, value in sorted(config.items())
+            if str(key).startswith("net")
+        }
         return {
             "vmid": vmid,
             "node": node,
@@ -466,4 +727,6 @@ async def get_vm_config(node: str, vmid: int, connection_id: str = "") -> dict:
             "swap": config.get("swap", 0),
             "rootfs": config.get("rootfs", ""),
             "net0": config.get("net0", ""),
+            "networks": networks,
+            "ip_hints": _parse_proxmox_net_config(config),
         }

@@ -8,12 +8,16 @@ from agents.base_agent import BaseAgent
 
 from .tools import (
     get_node_status,
+    get_node_ip_addresses,
     get_nodes,
     get_recent_tasks,
+    get_vm_ip_addresses,
     get_vm_config,
     get_vm_status,
+    list_node_ip_addresses,
     list_all_vms,
     list_containers,
+    list_vm_ip_addresses,
     list_vms,
     reboot_container,
     reboot_vm,
@@ -30,6 +34,7 @@ PROXMOX_SYSTEM_PROMPT = """You are Ninko's Proxmox specialist.
 
 Capabilities:
 - Node status and resource monitoring (CPU, RAM)
+- IP address discovery for nodes, VMs, and LXC containers
 - VM management: list, start, stop, restart, reset, suspend, resume
 - LXC container management
 - Task overview and VM configuration
@@ -41,6 +46,9 @@ Tool execution rules:
   - "What is the status of Proxmox?" → call `get_nodes` first, then `list_all_vms` if needed.
   - "What is the status of node X?" → call `get_node_status`.
   - "What is the status of VM Y?" → call `get_vm_status`.
+  - "Which IP address does node X have?" → call `get_node_ip_addresses`.
+  - "Which IP address does VM/CT Y have?" → call `get_vm_ip_addresses`.
+  - "Show all Proxmox IP addresses" → call `list_node_ip_addresses` and `list_vm_ip_addresses`.
 
 Output format:
 - For lists (VMs, Nodes, Containers): ALWAYS use Markdown tables.
@@ -157,9 +165,13 @@ class ProxmoxAgent(BaseAgent):
             tools=[
                 get_nodes,
                 get_node_status,
+                get_node_ip_addresses,
+                list_node_ip_addresses,
                 list_all_vms,
                 list_vms,
                 get_vm_status,
+                get_vm_ip_addresses,
+                list_vm_ip_addresses,
                 start_vm,
                 stop_vm,
                 reboot_vm,
