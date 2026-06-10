@@ -4,35 +4,65 @@ from __future__ import annotations
 
 import logging
 import os
+from urllib.parse import quote_plus
+
+import httpx
 
 from core.module_registry import ModuleManifest
 
 logger = logging.getLogger("ninko.modules.tasmota")
 
 
+def _build_tasmota_command_url(host: str, command: str) -> str:
+    base = host.strip().rstrip("/")
+    if not base:
+        raise ValueError("No host address configured.")
+    if not base.startswith(("http://", "https://")):
+        base = f"http://{base}"
+    return f"{base}/cm?cmnd={quote_plus(command)}"
+
+
 async def check_tasmota_health(connection_id: str = "") -> dict:
     """Health check for Tasmota devices via HTTP."""
     from core.connections import ConnectionManager
-    import httpx
 
     try:
-        conn_data = await ConnectionManager.get_connection("tasmota", connection_id)
-        if not conn_data:
+        if connection_id:
+            conn_data = await ConnectionManager.get_connection("tasmota", connection_id)
+        else:
             conn_data = await ConnectionManager.get_default_connection("tasmota")
 
+        host = ""
+        source = "connection"
+        if conn_data:
+            host = conn_data.config.get("host", "")
+        if not host:
+            host = os.environ.get("TASMOTA_HOST", "")
+            source = "env"
         if not conn_data:
-            return {"status": "error", "detail": "No Tasmota connection configured."}
+            source = "env" if host else "none"
 
-        host = conn_data.config.get("host", "")
         if not host:
             return {"status": "error", "detail": "No host address configured."}
 
+        url = _build_tasmota_command_url(host, "Status")
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"http://{host}/cm?cmnd=Status")
+            resp = await client.get(url)
             if resp.status_code == 200:
-                return {"status": "ok", "detail": f"Tasmota at {host} reachable"}
+                return {
+                    "status": "ok",
+                    "detail": f"Tasmota at {host} reachable ({source})",
+                }
             return {"status": "error", "detail": f"HTTP {resp.status_code}"}
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        httpx.HTTPError,
+    ) as exc:
         return {"status": "error", "detail": str(exc)}
 
 
@@ -44,7 +74,7 @@ module_manifest = ModuleManifest(
         "switches, plugs, relays, sensors. Read temperature, humidity, power "
         "and energy consumption; MQTT, smart meters."
     ),
-    version="1.1.3",
+    version="1.1.4",
     author="Ninko",
     enabled_by_default=False,
     env_prefix="TASMOTA_",

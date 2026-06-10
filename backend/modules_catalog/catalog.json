@@ -186,7 +186,7 @@
       "name": "tasmota",
       "display_name": "Tasmota",
       "description": "Steuerung und Monitoring von Tasmota-Geräten (ESP8266/ESP32) via HTTP REST API.",
-      "version": "1.1.3",
+      "version": "1.1.4",
       "author": "Ninko"
     },
     {

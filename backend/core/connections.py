@@ -9,7 +9,7 @@ import asyncio
 import json
 import logging
 import uuid
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 # Per-module asyncio locks prevent concurrent R-M-W races on connections
 _connection_locks: dict[str, asyncio.Lock] = {}
@@ -82,6 +82,14 @@ class ConnectionManager:
         t = (tenant_id or "").strip().lower()
         if t:
             return t
+        try:
+            from core.auth import get_current_tenant_id
+
+            auth_tenant = (get_current_tenant_id() or "").strip().lower()
+            if auth_tenant:
+                return auth_tenant
+        except (ImportError, AttributeError, RuntimeError):
+            pass
         session_id = status_bus.get_session_id().strip()
         if ":" in session_id:
             return session_id.split(":", 1)[0].strip().lower() or "default"
@@ -118,10 +126,10 @@ class ConnectionManager:
                     legacy_key,
                     key,
                 )
-        
+
         if not raw:
             return []
-            
+
         data_list: List[dict] = json.loads(raw)
         connections = []
         for d in data_list:
@@ -129,7 +137,7 @@ class ConnectionManager:
                 connections.append(ConnectionRead(**d))
             except (RuntimeError, ValueError, TypeError, KeyError) as e:
                 logger.error("Fehler beim Parsen von Connection %s: %s", d.get("id"), e)
-                
+
         # Sortiere so, dass default ganz oben steht
         connections.sort(key=lambda x: (not x.is_default, x.name))
         return connections
@@ -149,11 +157,11 @@ class ConnectionManager:
         connections = await ConnectionManager.list_connections(module_id, tenant_id)
         if not connections:
             return None
-        
+
         for conn in connections:
             if conn.is_default:
                 return conn
-                
+
         # Fallback auf die erste
         return connections[0]
 
@@ -199,7 +207,7 @@ class ConnectionManager:
             logger.info("Verbindung erstellt: %s im Modul %s (ID: %s)", data.name, module_id, conn_id)
 
             return new_conn
-        
+
     @staticmethod
     async def update_connection(module_id: str, connection_id: str, data: ConnectionUpdate, tenant_id: str = "") -> Optional[ConnectionRead]:
         """Aktualisiert eine bestehende Verbindung."""
