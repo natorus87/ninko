@@ -12,6 +12,7 @@ import importlib
 import logging
 import os
 import pkgutil
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -31,6 +32,12 @@ _REGISTRY_EXCEPTIONS = (
     RuntimeError,
     OSError,
 )
+
+
+def _version_key(version: str) -> tuple[int, ...]:
+    """Parse simple semantic versions for catalog/plugin precedence checks."""
+    parts = re.findall(r"\d+", str(version or "0"))
+    return tuple(int(part) for part in parts[:4]) or (0,)
 
 
 # ── Modul-Manifest-Datenklasse ──────────────────────────────
@@ -150,6 +157,10 @@ class ModuleRegistry:
                 "Modul '%s' hat kein 'module_manifest' – übersprungen.", modname
             )
             return
+        if is_plugin:
+            package, manifest = self._prefer_catalog_module_when_current(
+                modname, package, manifest
+            )
 
         # Prüfe ob per Env aktiviert/deaktiviert
         # Plugins (vom Marketplace installiert) sind immer aktiv, außer eine Env-Var sagt explizit false
@@ -189,6 +200,42 @@ class ModuleRegistry:
             len(manifest.routing_keywords),
             manifest.api_prefix or "–",
         )
+
+    def _prefer_catalog_module_when_current(
+        self,
+        modname: str,
+        plugin_package: Any,
+        plugin_manifest: ModuleManifest,
+    ) -> tuple[Any, ModuleManifest]:
+        """
+        Prefer the bundled catalog module over a stale marketplace plugin copy.
+
+        Marketplace installs persist under backend/plugins. After an image update
+        those files can lag behind the catalog version and still override the
+        fixed module because plugins are loaded later. If both module names match
+        and the bundled catalog version is at least as new, use the catalog
+        package for runtime registration.
+        """
+        catalog_package_path = f"modules_catalog.{modname}"
+        try:
+            catalog_package = importlib.import_module(catalog_package_path)
+        except _REGISTRY_EXCEPTIONS:
+            return plugin_package, plugin_manifest
+
+        catalog_manifest = getattr(catalog_package, "module_manifest", None)
+        if catalog_manifest is None or catalog_manifest.name != plugin_manifest.name:
+            return plugin_package, plugin_manifest
+
+        if _version_key(catalog_manifest.version) < _version_key(plugin_manifest.version):
+            return plugin_package, plugin_manifest
+
+        logger.info(
+            "Plugin '%s' v%s wird durch aktuelleres Katalogmodul v%s ersetzt.",
+            plugin_manifest.name,
+            plugin_manifest.version,
+            catalog_manifest.version,
+        )
+        return catalog_package, catalog_manifest
 
     # ── Route-Registration ──────────────────────────────
     def register_routes(self, app: FastAPI) -> None:
