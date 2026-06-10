@@ -198,8 +198,7 @@ def _make_preexec(
     return _preexec
 
 
-@tool
-async def execute_code(code: str, language: str = "python", timeout: int = 15) -> dict:
+async def execute_code_raw(code: str, language: str = "python", timeout: int = 15) -> dict:
     """
     Führt Code in einer isolierten Sandbox aus und gibt stdout, stderr,
     Exit-Code und Ausführungsdauer zurück.
@@ -347,6 +346,23 @@ async def execute_code(code: str, language: str = "python", timeout: int = 15) -
             "language": language,
             "error": "",
         }
+
+
+@tool
+async def execute_code(code: str, language: str = "python", timeout: int = 15) -> dict:
+    """
+    Führt Code in einer isolierten Sandbox aus und gibt stdout, stderr,
+    Exit-Code und Ausführungsdauer zurück.
+
+    Args:
+        code: Der auszuführende Quellcode.
+        language: Programmiersprache (python, bash, javascript, sh).
+        timeout: Maximale Laufzeit in Sekunden (Standard: 15, Max: 60).
+
+    Returns:
+        Dict mit stdout, stderr, exit_code, duration_ms, language.
+    """
+    return await execute_code_raw(code=code, language=language, timeout=timeout)
 
 
 @tool

@@ -574,6 +574,7 @@ async def check_plugin_updates(request: Request) -> JSONResponse:
 
 
 _MAX_UNCOMPRESSED_SIZE = 100 * 1024 * 1024  # 100 MB
+_MAX_COMPRESSED_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB (CWE-400: Disk-DoS-Schutz beim Upload)
 _MAX_PLUGIN_FILES = 500  # Max Anzahl Dateien im ZIP (CWE-400: ZIP-Bomb-Schutz)
 _DANGEROUS_REQ_PATTERNS = (
     "--index-url",
@@ -660,8 +661,25 @@ async def upload_plugin(request: Request, file: UploadFile = File(...)) -> JSONR
     zip_path = temp_dir / "upload.zip"
 
     try:
+        # CWE-400: Streaming-Größenlimit beim Schreiben — verhindert Disk-DoS,
+        # bevor die ZIP-Header überhaupt gelesen werden.
+        chunk_size = 1024 * 1024  # 1 MB
+        written = 0
         with open(zip_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > _MAX_COMPRESSED_UPLOAD_SIZE:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=(
+                            "ZIP-Upload zu groß: max. "
+                            f"{_MAX_COMPRESSED_UPLOAD_SIZE // (1024 * 1024)} MB komprimiert."
+                        ),
+                    )
+                buffer.write(chunk)
 
         # 2. ZIP-Sicherheitsprüfung und Entpacken
         extract_dir = temp_dir / "extracted"

@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from core.auth import auth_tenant_id, resolve_request_auth
 from core.redis_client import get_redis
-from modules.codelab.tools import execute_code
+from modules.codelab.tools import execute_code_raw
 from modules.scripting.schemas import (
     ScriptCreate,
     ScriptExecutionRequest,
@@ -366,12 +366,10 @@ async def execute_script(
         timeout = script.get("timeout", 30)
 
     try:
-        result = await execute_code.ainvoke(
-            {
-                "code": script["code"],
-                "language": script.get("language", "python"),
-                "timeout": min(timeout, 300),
-            }
+        result = await execute_code_raw(
+            code=script["code"],
+            language=script.get("language", "python"),
+            timeout=min(timeout, 300),
         )
 
         finished_at = datetime.now(timezone.utc)
@@ -517,12 +515,10 @@ async def execute_tool(
             input_json = json.dumps(input_data, ensure_ascii=False)
             code_with_input = f"import json\n_ninko_tool_input = json.loads({repr(input_json)})\n\n{code_with_input}"
 
-        result = await execute_code.ainvoke(
-            {
-                "code": code_with_input,
-                "language": script.get("language", "python"),
-                "timeout": min(timeout, 300),
-            }
+        result = await execute_code_raw(
+            code=code_with_input,
+            language=script.get("language", "python"),
+            timeout=min(timeout, 300),
         )
 
         finished_at = datetime.now(timezone.utc)

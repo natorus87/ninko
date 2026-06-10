@@ -632,14 +632,12 @@ class WorkflowEngine:
 
             # Code ausführen via codelab
             try:
-                from modules.codelab.tools import execute_code
+                from modules.codelab.tools import execute_code_raw
 
-                result = await execute_code.ainvoke(
-                    {
-                        "language": language,
-                        "code": script_code,
-                        "timeout": timeout,
-                    }
+                result = await execute_code_raw(
+                    language=language,
+                    code=script_code,
+                    timeout=timeout,
                 )
 
                 # Ergebnis verarbeiten

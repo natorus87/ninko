@@ -254,27 +254,35 @@
                     container.innerHTML = '<p class="empty-state">Keine Skills vorhanden.</p>';
                     return;
                 }
-                container.innerHTML = skills.map(s => `
+                container.innerHTML = skills.map(s => {
+                    const modules = Array.isArray(s.modules) ? s.modules : [];
+                    return `
                     <div class="agent-card" style="position:relative;">
                         <div class="agent-card-header">
                             <div style="display:flex;align-items:center;gap:0.5rem;flex:1;min-width:0;">
                                 <span style="font-size:1.1rem;">${s.builtin ? '🔒' : '📝'}</span>
                                 <div style="min-width:0;">
-                                    <div class="agent-card-name">${s.name}</div>
-                                    <div class="agent-card-desc">${s.description}</div>
+                                    <div class="agent-card-name">${this._escapeHtml(s.name)}</div>
+                                    <div class="agent-card-desc">${this._escapeHtml(s.description || '')}</div>
                                 </div>
                             </div>
                             <div class="agent-card-actions">
-                                ${!s.builtin ? `<button class="btn-icon btn-icon-sm" onclick="Ninko.openSkillEditor('${s.name}')" title="Bearbeiten">${this._ic.edit}</button>` : `<button class="btn-icon btn-icon-sm" onclick="Ninko.openSkillEditor('${s.name}')" title="Ansehen/Override">${this._ic.edit}</button>`}
-                                ${!s.builtin ? `<button class="btn-icon btn-icon-sm" onclick="Ninko.deleteSkill('${s.name}')" title="Löschen" style="color:var(--error-color);">${this._ic.trash}</button>` : ''}
+                                <button class="btn-icon btn-icon-sm" data-action="edit-skill" data-skill-name="${this._escapeHtml(s.name)}" title="${s.builtin ? 'Ansehen/Override' : 'Bearbeiten'}">${this._ic.edit}</button>
+                                ${!s.builtin ? `<button class="btn-icon btn-icon-sm" data-action="delete-skill" data-skill-name="${this._escapeHtml(s.name)}" title="Löschen" style="color:var(--error-color);">${this._ic.trash}</button>` : ''}
                             </div>
                         </div>
                         <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-top:0.5rem;">
                             ${s.builtin ? '<span class="status-badge status-unknown" style="font-size:0.7rem;">built-in</span>' : '<span class="status-badge status-ok" style="font-size:0.7rem;">custom</span>'}
-                            ${s.modules.length ? s.modules.map(m => `<span class="status-badge" style="font-size:0.7rem;background:rgba(92,158,235,0.15);color:var(--accent-blue);border:1px solid var(--accent-blue);">${m}</span>`).join('') : '<span class="status-badge status-unknown" style="font-size:0.7rem;">alle Agenten</span>'}
+                            ${modules.length ? modules.map(m => `<span class="status-badge" style="font-size:0.7rem;background:rgba(92,158,235,0.15);color:var(--accent-blue);border:1px solid var(--accent-blue);">${this._escapeHtml(m)}</span>`).join('') : '<span class="status-badge status-unknown" style="font-size:0.7rem;">alle Agenten</span>'}
                         </div>
-                    </div>
-                `).join('');
+                    </div>`;
+                }).join('');
+                container.querySelectorAll('[data-action="edit-skill"]').forEach(btn => {
+                    btn.addEventListener('click', () => this.openSkillEditor(btn.dataset.skillName || ''));
+                });
+                container.querySelectorAll('[data-action="delete-skill"]').forEach(btn => {
+                    btn.addEventListener('click', () => this.deleteSkill(btn.dataset.skillName || ''));
+                });
             } catch {
                 container.innerHTML = '<p class="empty-state text-error">Fehler beim Laden.</p>';
             }
@@ -285,15 +293,13 @@
         // -------------------------------------------------------------------
 
         openSkillsPanelFromSettings() {
-            this.switchTab('automatisierung');
-            this._showOnlyPanel('agenten-skills');
+            this.switchAutoTab('skills');
             this.switchSkillTab('installed');
             this.loadSkillsList();
         },
 
         openSkillMarketplaceFromSettings() {
-            this.switchTab('automatisierung');
-            this._showOnlyPanel('agenten-skills');
+            this.switchAutoTab('skills');
             this.switchSkillTab('marketplace');
             this.loadSkillMarketplace();
         },
@@ -309,23 +315,25 @@
                     container.innerHTML = '<p class="empty-state">Keine Skills vorhanden.</p>';
                     return;
                 }
-                container.innerHTML = skills.map(s => `
+                container.innerHTML = skills.map(s => {
+                    const modules = Array.isArray(s.modules) ? s.modules : [];
+                    return `
                     <div class="agent-card" style="position:relative;">
                         <div class="agent-card-header">
                             <div style="display:flex;align-items:center;gap:0.5rem;flex:1;min-width:0;">
                                 <span style="font-size:1.1rem;">${s.builtin ? '🔒' : '📝'}</span>
                                 <div style="min-width:0;">
-                                    <div class="agent-card-name">${s.name}</div>
-                                    <div class="agent-card-desc">${s.description}</div>
+                                    <div class="agent-card-name">${this._escapeHtml(s.name)}</div>
+                                    <div class="agent-card-desc">${this._escapeHtml(s.description || '')}</div>
                                 </div>
                             </div>
                         </div>
                         <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-top:0.5rem;">
                             ${s.builtin ? '<span class="status-badge status-unknown" style="font-size:0.7rem;">built-in</span>' : '<span class="status-badge status-ok" style="font-size:0.7rem;">custom</span>'}
-                            ${s.modules.length ? s.modules.map(m => `<span class="status-badge" style="font-size:0.7rem;background:rgba(92,158,235,0.15);color:var(--accent-blue);border:1px solid var(--accent-blue);">${m}</span>`).join('') : '<span class="status-badge status-unknown" style="font-size:0.7rem;">alle Agenten</span>'}
+                            ${modules.length ? modules.map(m => `<span class="status-badge" style="font-size:0.7rem;background:rgba(92,158,235,0.15);color:var(--accent-blue);border:1px solid var(--accent-blue);">${this._escapeHtml(m)}</span>`).join('') : '<span class="status-badge status-unknown" style="font-size:0.7rem;">alle Agenten</span>'}
                         </div>
-                    </div>
-                `).join('');
+                    </div>`;
+                }).join('');
             } catch {
                 container.innerHTML = '<p class="empty-state text-error">Fehler beim Laden.</p>';
             }
@@ -614,7 +622,10 @@
             try {
                 const res = await fetch('/api/skills/');
                 const skills = await res.json();
-                const relevant = skills.filter(s => !s.modules.length || s.modules.includes(agentName));
+                const relevant = skills.filter(s => {
+                    const modules = Array.isArray(s.modules) ? s.modules : [];
+                    return !modules.length || modules.includes(agentName);
+                });
                 if (!relevant.length) {
                     container.innerHTML = '<p class="text-muted" style="font-size:0.82rem;">Keine Skills vorhanden.</p>';
                     return;
@@ -622,13 +633,16 @@
                 container.innerHTML = relevant.map(s => `
                     <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;padding:0.3rem 0.5rem;border-radius:4px;background:var(--bg-body);border:1px solid var(--border-color);">
                         <div style="min-width:0;">
-                            <span style="font-size:0.82rem;color:var(--text-color);font-weight:500;">${s.name}</span>
+                            <span style="font-size:0.82rem;color:var(--text-color);font-weight:500;">${this._escapeHtml(s.name)}</span>
                             ${s.builtin ? '<span class="status-badge status-unknown" style="font-size:0.68rem;margin-left:4px;">built-in</span>' : ''}
-                            <div style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${s.description}</div>
+                            <div style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${this._escapeHtml(s.description || '')}</div>
                         </div>
-                        <button class="btn-icon btn-icon-sm" onclick="Ninko.openSkillEditorFromAgentWithName('${s.name}')" title="Bearbeiten" style="flex-shrink:0;">${this._ic.edit}</button>
+                        <button class="btn-icon btn-icon-sm" data-action="edit-agent-skill" data-skill-name="${this._escapeHtml(s.name)}" title="Bearbeiten" style="flex-shrink:0;">${this._ic.edit}</button>
                     </div>
                 `).join('');
+                container.querySelectorAll('[data-action="edit-agent-skill"]').forEach(btn => {
+                    btn.addEventListener('click', () => this.openSkillEditorFromAgentWithName(btn.dataset.skillName || ''));
+                });
             } catch {
                 container.innerHTML = '<p class="text-muted" style="font-size:0.82rem;">Fehler beim Laden.</p>';
             }

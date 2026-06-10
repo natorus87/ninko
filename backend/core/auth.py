@@ -259,6 +259,49 @@ async def _is_token_blacklisted(token: str) -> bool:
         return False
 
 
+async def is_active_api_token(username: str, raw_token: str) -> bool:
+    """
+    Check whether a user-generated API access token is still active.
+
+    Honors both the user's ``active`` flag and the per-token ``revoked`` flag in
+    the RBAC state. Mirrors the HTTP middleware check so the WebSocket path does
+    not keep accepting revoked tokens (CWE-613).
+    """
+    if not username or not raw_token:
+        return False
+    try:
+        from core.rbac import RBAC_REDIS_KEY
+        from core.redis_client import get_redis
+
+        redis = get_redis()
+        raw = await redis.connection.get(RBAC_REDIS_KEY)
+        if not raw:
+            return False
+        state = json.loads(raw if isinstance(raw, str) else raw.decode("utf-8"))
+        users = state.get("users", {}) if isinstance(state, dict) else {}
+        user = users.get(username, {}) if isinstance(users, dict) else {}
+        if not isinstance(user, dict):
+            return False
+        if not bool(user.get("active", True)):
+            return False
+
+        token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+        token_entries = user.get("api_tokens", [])
+        if not isinstance(token_entries, list):
+            return False
+        for entry in token_entries:
+            if not isinstance(entry, dict):
+                continue
+            if str(entry.get("token_hash", "")) != token_hash:
+                continue
+            if bool(entry.get("revoked", False)):
+                return False
+            return True
+        return False
+    except Exception:
+        return False
+
+
 def _session_context(session_token: str) -> dict[str, Any] | None:
     payload = _parse_session_token(session_token)
     if not payload:
@@ -376,6 +419,10 @@ async def resolve_websocket_role_async(websocket: WebSocket) -> str | None:
     if key:
         ctx = _api_key_context(key)
         if ctx:
+            if str(ctx.get("auth_source", "")) == "api_token":
+                username = str(ctx.get("username", "")).strip()
+                if not await is_active_api_token(username, key):
+                    return None
             return str(ctx.get("role", ROLE_READ))
 
     session_token = _extract_session_from_websocket(websocket)

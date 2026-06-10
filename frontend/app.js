@@ -919,6 +919,11 @@ const Ninko = {
         return !!document.querySelector(`#subnav-settings .settings-tab[data-settings-tab="${tabId}"]`);
     },
 
+    _domHasAutoTab(tabId) {
+        if (tabId === 'skills') return !!document.getElementById('tab-agents');
+        return this._domHasTab(tabId);
+    },
+
     _restoreRoute() {
         const route = this._readPersistedRoute();
         if (!route || !this._isValidRouteId(route.tab) || route.tab === 'chat') return false;
@@ -936,7 +941,7 @@ const Ninko = {
         if (route.tab === 'modules' && this._isValidRouteId(route.moduleTab) && this._domHasTab(route.moduleTab)) {
             this.switchModuleTab(route.moduleTab);
         }
-        if (route.tab === 'automatisierung' && this._isValidRouteId(route.autoTab) && this._domHasTab(route.autoTab)) {
+        if (route.tab === 'automatisierung' && this._isValidRouteId(route.autoTab) && this._domHasAutoTab(route.autoTab)) {
             this.switchAutoTab(route.autoTab);
         }
         return true;
@@ -945,7 +950,7 @@ const Ninko = {
     // --- Tab Switching ---
     switchTab(tabId) {
         // Redirect tasks/agents/workflows through the automatisierung tab
-        if (['tasks', 'agents', 'workflows'].includes(tabId)) {
+        if (['tasks', 'agents', 'skills', 'workflows'].includes(tabId)) {
             if (this.activeTab !== 'automatisierung') {
                 this._doSwitchTab('automatisierung');
             }
@@ -1059,6 +1064,7 @@ const Ninko = {
     // --- Automatisierung Sub-Tab Switching ---
     switchAutoTab(tabId) {
         this.openSidebarPanel('automatisierung');
+        const panelTabId = tabId === 'skills' ? 'agents' : tabId;
 
         // Ensure the automatisierung parent panel is active (e.g. when coming from scripting/modules)
         const autoPanel = document.getElementById('tab-automatisierung');
@@ -1077,7 +1083,8 @@ const Ninko = {
 
         // Restore previous panel back to main-content (hidden)
         if (this._activeAutoTab && this._activeAutoTab !== tabId) {
-            const prev = document.getElementById(`tab-${this._activeAutoTab}`);
+            const prevTabId = this._activeAutoTab === 'skills' ? 'agents' : this._activeAutoTab;
+            const prev = document.getElementById(`tab-${prevTabId}`);
             if (prev) {
                 document.getElementById('main-content')?.appendChild(prev);
                 prev.classList.remove('active');
@@ -1089,7 +1096,7 @@ const Ninko = {
 
         // Move panel into auto-content and activate
         const autoContent = document.getElementById('auto-content');
-        const panel = document.getElementById(`tab-${tabId}`);
+        const panel = document.getElementById(`tab-${panelTabId}`);
         if (autoContent && panel) {
             autoContent.appendChild(panel);
             panel.classList.add('active');
@@ -1099,7 +1106,15 @@ const Ninko = {
 
         // Load content
         if (tabId === 'tasks') this.loadScheduledTasks();
-        if (tabId === 'agents') this.loadAgents();
+        if (tabId === 'agents') {
+            if (typeof this._showOnlyPanel === 'function') this._showOnlyPanel('agenten-overview');
+            this.loadAgents();
+        }
+        if (tabId === 'skills') {
+            if (typeof this._showOnlyPanel === 'function') this._showOnlyPanel('agenten-skills');
+            if (typeof this.switchSkillTab === 'function') this.switchSkillTab('installed');
+            if (typeof this.loadSkillsList === 'function') this.loadSkillsList();
+        }
         if (tabId === 'workflows') this.loadWorkflows();
         this._updateBreadcrumb();
         this._persistRoute();
@@ -1160,12 +1175,36 @@ const Ninko = {
         return tabId;
     },
 
+    _usesLegacyConnectionSelector(tabId) {
+        const moduleName = this._normalizeConnectionModuleName(tabId);
+        const coreModulesWithoutConnections = new Set([
+            'agent_browser',
+            'codelab',
+            'dataviz',
+            'image_gen',
+            'knowledge_graph',
+            'message_hub',
+            'network_analysis',
+            'scripting',
+            'web_search',
+        ]);
+        return !coreModulesWithoutConnections.has(moduleName);
+    },
+
     async _syncLegacyConnectionSelector(tabId) {
         const wrap = document.getElementById('legacy-connection-bar');
         const select = document.getElementById('connection-selector');
         if (!select) return;
 
         const moduleName = this._normalizeConnectionModuleName(tabId);
+        if (!this._usesLegacyConnectionSelector(moduleName)) {
+            select.innerHTML = '';
+            select.value = '';
+            select.disabled = true;
+            wrap?.classList.add('hidden');
+            return;
+        }
+
         try {
             const res = await fetch(`/api/connections/${moduleName}?_t=${Date.now()}`, { cache: 'no-store' });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);

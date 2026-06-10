@@ -6,7 +6,6 @@ Lädt Module dynamisch, registriert Routen, startet Monitor.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import logging
 import re
@@ -124,6 +123,7 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 from core.auth import (
     auth_tenant_id,
+    is_active_api_token,
     module_access_allows,
     reset_current_tenant_id,
     resolve_request_auth_async,
@@ -136,7 +136,7 @@ from core.api_security_policy import (
     required_role_for_request,
 )
 from core.rate_limit import RedisRateLimiter
-from core.rbac import RBAC_REDIS_KEY, RbacStore
+from core.rbac import RbacStore
 
 # Redis-Log-Handler (nach Redis-Verfügbarkeit lazy)
 from core.log_handler import RedisLogHandler as _RedisLogHandler
@@ -709,39 +709,9 @@ def _extract_api_key_from_request(request: Request) -> str:
 
 
 async def _is_active_user_api_token(username: str, raw_token: str) -> bool:
-    if not username or not raw_token:
-        return False
-    try:
-        from core.redis_client import get_redis as _get_redis
-
-        redis = _get_redis()
-        raw = await redis.connection.get(RBAC_REDIS_KEY)
-        if not raw:
-            return False
-        state = json.loads(raw if isinstance(raw, str) else raw.decode("utf-8"))
-        users = state.get("users", {}) if isinstance(state, dict) else {}
-        user = users.get(username, {}) if isinstance(users, dict) else {}
-        if not isinstance(user, dict):
-            return False
-        if not bool(user.get("active", True)):
-            return False
-
-        token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
-        token_entries = user.get("api_tokens", [])
-        if not isinstance(token_entries, list):
-            return False
-        for entry in token_entries:
-            if not isinstance(entry, dict):
-                continue
-            if str(entry.get("token_hash", "")) != token_hash:
-                continue
-            if bool(entry.get("revoked", False)):
-                return False
-            return True
-        return False
-    except Exception as exc:
-        logger.warning("API token check failed: %s", exc)
-        return False
+    # Delegates to core.auth so HTTP middleware and the WebSocket resolver share
+    # one revocation check (single source of truth for the RBAC token state).
+    return await is_active_api_token(username, raw_token)
 
 
 @app.middleware("http")

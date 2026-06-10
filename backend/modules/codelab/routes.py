@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from langchain_core.messages import HumanMessage
 
 from modules.codelab.schemas import ExecuteRequest, ImproveTextRequest
-from modules.codelab.tools import execute_code, get_available_languages
+from modules.codelab.tools import execute_code_raw, get_available_languages
 
 logger = logging.getLogger("ninko.modules.codelab.routes")
 router = APIRouter()
@@ -25,11 +25,11 @@ def _error(msg: str, status: int = 400) -> JSONResponse:
 async def run_code(req: ExecuteRequest) -> object:
     """Führt Code in der Sandbox aus."""
     try:
-        result = await execute_code.ainvoke({
-            "code": req.code,
-            "language": req.language,
-            "timeout": req.timeout,
-        })
+        result = await execute_code_raw(
+            code=req.code,
+            language=req.language,
+            timeout=req.timeout,
+        )
         return result
     except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         logger.exception("Fehler bei Code-Ausführung")

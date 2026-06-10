@@ -44,7 +44,8 @@ const NinkoRegistry = {
         }
 
         for (const depId of mod.dependencies) {
-            if (!this._initialized.has(depId)) {
+            const dep = this._modules.get(depId);
+            if (!dep || !dep._initialized) {
                 await this.init(depId);
             }
         }

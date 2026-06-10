@@ -231,6 +231,8 @@
             const container = document.getElementById('wf-canvas-container');
             if (!minimap || !content || !viewport || !container) return;
 
+            this._wfPositionCanvasOverlays();
+
             const mapW = minimap.clientWidth;
             const mapH = minimap.clientHeight;
             const worldW = 3000 * this._wfZoom;
@@ -248,6 +250,15 @@
             viewport.style.top = `${container.scrollTop * scaleY}px`;
             viewport.style.width = `${container.clientWidth * scaleX}px`;
             viewport.style.height = `${container.clientHeight * scaleY}px`;
+        },
+
+        _wfPositionCanvasOverlays() {
+            const container = document.getElementById('wf-canvas-container');
+            if (!container) return;
+
+            const offset = `translate(${container.scrollLeft}px, ${container.scrollTop}px)`;
+            document.getElementById('wf-minimap')?.style.setProperty('transform', offset);
+            document.getElementById('wf-zoom-controls')?.style.setProperty('transform', offset);
         },
 
         _wfEnsureEditorBindings() {
