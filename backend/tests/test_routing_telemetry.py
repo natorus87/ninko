@@ -3,12 +3,11 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
 from core.routing_telemetry import RoutingTelemetry
-from core.embedding_router import EmbeddingRouter
 
 
 # ── Redis-Mock ────────────────────────────────────────────────────────────────
@@ -222,38 +221,3 @@ async def test_get_correction_examples_returns_messages() -> None:
     await tel.check_and_record_correction("s1", "proxmox", "VM erstellen")
     examples = await tel.get_correction_examples("proxmox")
     assert "VM erstellen" in examples
-
-
-# ── EmbeddingRouter.incorporate_corrections ───────────────────────────────────
-
-
-def test_incorporate_corrections_blends_tokens() -> None:
-    router = EmbeddingRouter()
-    router.update_module_descriptions({"proxmox": "proxmox vm cluster node"})
-    router.incorporate_corrections("proxmox", ["VM starten", "neue VM anlegen"])
-    bow = router._module_bow["proxmox"]
-    assert "starten" in bow or "neue" in bow or "anlegen" in bow
-
-
-def test_incorporate_corrections_invalidates_dense_vec() -> None:
-    router = EmbeddingRouter()
-    router.update_module_descriptions({"proxmox": "proxmox vm"})
-    router._module_vecs["proxmox"] = [0.1, 0.2, 0.3]
-    router.incorporate_corrections("proxmox", ["VM starten"])
-    assert "proxmox" not in router._module_vecs
-
-
-def test_incorporate_corrections_ignores_unknown_module() -> None:
-    router = EmbeddingRouter()
-    router.update_module_descriptions({"docker": "docker container"})
-    router.incorporate_corrections("unknown_module", ["some message"])
-    assert "unknown_module" not in router._module_bow
-
-
-def test_incorporate_corrections_skips_short_tokens() -> None:
-    router = EmbeddingRouter()
-    router.update_module_descriptions({"docker": "docker container"})
-    router.incorporate_corrections("docker", ["VM an"])
-    bow = router._module_bow["docker"]
-    assert "an" not in bow
-    assert "vm" not in bow

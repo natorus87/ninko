@@ -8,7 +8,15 @@ Abgedeckte Szenarien:
   4. Fehlgeschlagener Step → Retry → Erfolg
   5. LLM-Planner liefert ungültiges JSON → deterministischer Fallback
   6. LLM-Planner liefert unbekanntes Tool/Modul → verworfen
-  7. SafeGuard requires_confirmation → Step übersprungen ohne auto_confirm
+  7. SafeGuard requires_confirmation → Pipeline pausiert (PLAN.md 1.4)
+  7b. requires_confirmation an späterem Step → Pipeline pausiert davor
+  7c. Kein requires_confirmation → keine Pause
+  7d. auto_confirm=True → Pre-Flight-Gate übersprungen
+  7e. Pause erzeugt op_journal Pending-Entry mit pipeline_id-Metadata
+  7f. Pause speichert original-Steps im Checkpoint
+  7g. resume() führt alle Steps mit auto_confirm=True aus
+  7h. resume() mit unbekannter pipeline_id → ValueError
+  7i. resume() überspringt Pre-Flight-Gate
   8. Pipeline läuft nach auto_confirm weiter
   9. Utility-Modul nicht explizit erwähnt → verworfen
  10. Kein Fallback in freien ReAct-Modus bei Pipeline-Fehler
@@ -18,18 +26,19 @@ Alle Tests sind Unit-Tests ohne echte Netzwerkaufrufe (Mocking via unittest.mock
 
 from __future__ import annotations
 
-import asyncio
 import json
+from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import ValidationError
 
 from core.pipeline_engine import (
     PipelineEngine,
+    PipelineResult,
     PipelineStep,
     PipelineStatus,
     StepStatus,
-    StepType,
     RetryPolicy,
     _build_execution_groups,
     get_pipeline_engine,
@@ -37,11 +46,9 @@ from core.pipeline_engine import (
 from core.pipeline_events import (
     PipelineEvent,
     PipelineEventType,
-    emit_pipeline_event,
     on_pipeline_event,
     remove_pipeline_listener,
 )
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -58,6 +65,72 @@ def make_mock_agent(response: str = "OK", raises: Exception | None = None):
     else:
         agent.invoke = AsyncMock(return_value=(response, False))
     return agent
+
+
+class FakeOperationJournal:
+    def __init__(self) -> None:
+        self.entries: dict[str, dict] = {}
+        self.pending_by_session: dict[str, str] = {}
+
+    async def create_pending(self, **kwargs) -> str:
+        tx_id = f"tx_{len(self.entries) + 1}"
+        entry = {
+            "id": tx_id,
+            "status": "pending_confirmation",
+            "session_id": kwargs["session_id"],
+            "source": kwargs["source"],
+            "category": kwargs["category"],
+            "module": kwargs.get("module") or "",
+            "text": kwargs["text"],
+            "rationale": kwargs["rationale"],
+            "metadata": json.dumps(kwargs.get("metadata") or {}),
+        }
+        self.entries[tx_id] = entry
+        self.pending_by_session[kwargs["session_id"]] = tx_id
+        return tx_id
+
+    async def get_pending_for_session(self, session_id: str) -> str | None:
+        return self.pending_by_session.get(session_id)
+
+    async def get(self, tx_id: str) -> dict:
+        return self.entries.get(tx_id, {})
+
+    async def clear_pending_for_session(self, session_id: str) -> None:
+        self.pending_by_session.pop(session_id, None)
+
+
+@contextmanager
+def patch_engine_checkpoint(engine: PipelineEngine, store: dict[str, dict] | None = None):
+    checkpoint_store = store if store is not None else {}
+
+    async def checkpoint(
+        pipeline_id: str,
+        session_id: str,
+        result: PipelineResult,
+        *,
+        steps: list[PipelineStep] | None = None,
+    ) -> None:
+        payload = {
+            **checkpoint_store.get(pipeline_id, {}),
+            "result": result.model_dump(),
+            "session_id": session_id,
+        }
+        if steps is not None:
+            payload["steps"] = [step.model_dump() for step in steps]
+        checkpoint_store[pipeline_id] = payload
+
+    async def load_checkpoint(pipeline_id: str) -> dict:
+        return checkpoint_store.get(pipeline_id, {})
+
+    async def has_checkpoint(pipeline_id: str) -> bool:
+        return pipeline_id in checkpoint_store
+
+    with (
+        patch.object(engine, "_checkpoint", new=checkpoint),
+        patch.object(engine, "_load_checkpoint", new=load_checkpoint),
+        patch.object(engine, "_has_checkpoint", new=has_checkpoint),
+    ):
+        yield checkpoint_store
 
 
 # ── Test 1: Single-Step Modul-Aufruf ─────────────────────────────────────────
@@ -223,12 +296,12 @@ def test_validate_steps_rejects_unknown_module():
     assert all(s.module in {"kubernetes", "telegram"} for s in valid)
 
 
-# ── Test 7: SafeGuard requires_confirmation → Step übersprungen ───────────────
+# ── Test 7: SafeGuard requires_confirmation → Pipeline pausiert ──────────────
 
 
 @pytest.mark.asyncio
-async def test_confirmation_required_skips_step_without_auto_confirm():
-    """Step mit requires_confirmation=True wird ohne auto_confirm übersprungen."""
+async def test_confirmation_required_pauses_pipeline_without_auto_confirm():
+    """Pipeline mit requires_confirmation=True pausiert VOR dem ersten Step."""
     step = make_step("kubernetes", "Lösche alle Pods", requires_confirmation=True)
     engine = PipelineEngine()
 
@@ -238,18 +311,239 @@ async def test_confirmation_required_skips_step_without_auto_confirm():
         events_captured.append(event)
 
     on_pipeline_event(capture)
+    fake_journal = FakeOperationJournal()
     try:
         with (
-            patch.object(engine, "_get_module_agent", return_value=make_mock_agent()),
+            patch_engine_checkpoint(engine),
+            patch("core.operation_journal.get_operation_journal", return_value=fake_journal),
+            patch.object(engine, "_get_module_agent", return_value=make_mock_agent()) as get_agent,
             patch("core.status_bus.emit", new=AsyncMock()),
         ):
             result = await engine.execute([step], session_id="test-session-7", auto_confirm=False)
     finally:
         remove_pipeline_listener(capture)
 
-    assert result.steps[0].status == StepStatus.SKIPPED
+    assert result.status == PipelineStatus.AWAITING_CONFIRMATION
+    assert len(result.steps) == 1
+    assert result.steps[0].status == StepStatus.AWAITING_CONFIRMATION
+    assert result.steps[0].module == "kubernetes"
+    get_agent.assert_not_called()
     event_types = [e.type for e in events_captured]
-    assert PipelineEventType.CONFIRMATION_REQUIRED in event_types
+    assert PipelineEventType.PIPELINE_AWAITING_CONFIRMATION in event_types
+
+
+# ── Test 7b: requires_confirmation nur an späterem Step → Pipeline pausiert ───
+
+
+@pytest.mark.asyncio
+async def test_confirmation_required_pauses_before_first_confirming_step():
+    """Pausiert VOR dem ersten requires_confirmation=True Step; vorherige Steps laufen NICHT."""
+    step1 = make_step("web_search", "Recherchiere X")
+    step2 = make_step("kubernetes", "Lösche alle Pods", requires_confirmation=True)
+    step3 = make_step("telegram", "Benachrichtige")
+    engine = PipelineEngine()
+
+    events: list[PipelineEvent] = []
+
+    async def capture(event: PipelineEvent):
+        events.append(event)
+
+    on_pipeline_event(capture)
+    fake_journal = FakeOperationJournal()
+    try:
+        with (
+            patch_engine_checkpoint(engine),
+            patch("core.operation_journal.get_operation_journal", return_value=fake_journal),
+            patch.object(engine, "_get_module_agent", return_value=make_mock_agent()) as get_agent,
+            patch("core.status_bus.emit", new=AsyncMock()),
+        ):
+            result = await engine.execute(
+                [step1, step2, step3], session_id="test-session-7b", auto_confirm=False,
+            )
+    finally:
+        remove_pipeline_listener(capture)
+
+    assert result.status == PipelineStatus.AWAITING_CONFIRMATION
+    assert len(result.steps) == 1
+    assert result.steps[0].module == "kubernetes"
+    assert result.steps[0].step_index == 1
+    get_agent.assert_not_called()
+    assert PipelineEventType.PIPELINE_AWAITING_CONFIRMATION in [e.type for e in events]
+
+
+# ── Test 7c: Kein requires_confirmation → keine Pause ─────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_no_confirmation_required_runs_normally():
+    """Pipeline ohne requires_confirmation läuft normal durch."""
+    step = make_step("kubernetes", "Prüfe Pods")
+    engine = PipelineEngine()
+    mock_agent = make_mock_agent("Alles OK")
+
+    with (
+        patch.object(engine, "_get_module_agent", return_value=mock_agent),
+        patch("core.pipeline_events.emit_pipeline_event", new=AsyncMock()),
+        patch("core.status_bus.emit", new=AsyncMock()),
+    ):
+        result = await engine.execute([step], session_id="test-session-7c", auto_confirm=False)
+
+    assert result.status == PipelineStatus.COMPLETED
+    assert result.steps[0].status == StepStatus.COMPLETED
+
+
+# ── Test 7d: Pre-Flight übersprungen wenn auto_confirm=True ─────────────────
+
+
+@pytest.mark.asyncio
+async def test_auto_confirm_bypasses_pre_flight_gate():
+    """Mit auto_confirm=True läuft requires_confirmation-Step normal."""
+    step = make_step("kubernetes", "Lösche alle Pods", requires_confirmation=True)
+    engine = PipelineEngine()
+    mock_agent = make_mock_agent("Pods gelöscht")
+
+    with (
+        patch.object(engine, "_get_module_agent", return_value=mock_agent),
+        patch("core.pipeline_events.emit_pipeline_event", new=AsyncMock()),
+        patch("core.status_bus.emit", new=AsyncMock()),
+    ):
+        result = await engine.execute([step], session_id="test-session-7d", auto_confirm=True)
+
+    assert result.status == PipelineStatus.COMPLETED
+    assert result.steps[0].status == StepStatus.COMPLETED
+
+
+# ── Test 7e: Pause erzeugt op_journal Pending-Entry mit pipeline_id-Metadata ─
+
+
+@pytest.mark.asyncio
+async def test_pause_creates_op_journal_pending_entry():
+    """Pre-Flight-Pause erstellt op_journal-Entry mit source=pipeline_safeguard und metadata.pipeline_id."""
+    step = make_step("kubernetes", "Lösche alle Pods", requires_confirmation=True)
+    engine = PipelineEngine()
+    op_journal = FakeOperationJournal()
+
+    with (
+        patch_engine_checkpoint(engine),
+        patch("core.operation_journal.get_operation_journal", return_value=op_journal),
+        patch.object(engine, "_get_module_agent", return_value=make_mock_agent()),
+        patch("core.status_bus.emit", new=AsyncMock()),
+    ):
+        result = await engine.execute(
+            [step], session_id="tenant_x:session-7e", auto_confirm=False,
+        )
+
+    assert result.status == PipelineStatus.AWAITING_CONFIRMATION
+    pending_tx_id = await op_journal.get_pending_for_session("tenant_x:session-7e")
+    assert pending_tx_id is not None
+    tx = await op_journal.get(pending_tx_id)
+    assert tx.get("source") == "pipeline_safeguard"
+    assert tx.get("module") == "kubernetes"
+    meta = json.loads(tx.get("metadata") or "{}")
+    assert meta.get("pipeline_id") == result.pipeline_id
+    assert meta.get("step_count") == 1
+    await op_journal.clear_pending_for_session("tenant_x:session-7e")
+
+
+# ── Test 7f: Pause speichert original-Steps im Checkpoint (für resume) ────────
+
+
+@pytest.mark.asyncio
+async def test_pause_steps_in_checkpoint_for_resume():
+    """Checkpoint enthält die original-Steps als JSON, damit resume() sie rekonstruieren kann."""
+    step1 = make_step("web_search", "Recherchiere X")
+    step2 = make_step("kubernetes", "Lösche alle Pods", requires_confirmation=True)
+    engine = PipelineEngine()
+    fake_journal = FakeOperationJournal()
+    checkpoint_store: dict[str, dict] = {}
+
+    with (
+        patch_engine_checkpoint(engine, checkpoint_store),
+        patch("core.operation_journal.get_operation_journal", return_value=fake_journal),
+        patch.object(engine, "_get_module_agent", return_value=make_mock_agent()),
+        patch("core.status_bus.emit", new=AsyncMock()),
+    ):
+        result = await engine.execute(
+            [step1, step2], session_id="test-session-7f", auto_confirm=False,
+        )
+
+    assert result.status == PipelineStatus.AWAITING_CONFIRMATION
+    checkpoint = checkpoint_store[result.pipeline_id]
+    assert "steps" in checkpoint
+    assert len(checkpoint["steps"]) == 2
+    assert checkpoint["steps"][0]["module"] == "web_search"
+    assert checkpoint["steps"][1]["module"] == "kubernetes"
+    assert checkpoint["steps"][1]["requires_confirmation"] is True
+
+
+# ── Test 7g: resume() führt Pipeline ab Checkpoint mit auto_confirm=True aus ─
+
+
+@pytest.mark.asyncio
+async def test_resume_runs_remaining_steps_with_auto_confirm():
+    """resume() lädt Checkpoint, führt alle Steps mit auto_confirm=True aus, kein erneuter Pause."""
+    step1 = make_step("kubernetes", "Lösche alle Pods", requires_confirmation=True)
+    step2 = make_step("telegram", "Benachrichtige Admins")
+    engine = PipelineEngine()
+
+    mock_agent = make_mock_agent("OK")
+    fake_journal = FakeOperationJournal()
+
+    with (
+        patch_engine_checkpoint(engine),
+        patch("core.operation_journal.get_operation_journal", return_value=fake_journal),
+        patch.object(engine, "_get_module_agent", return_value=mock_agent),
+        patch("core.pipeline_events.emit_pipeline_event", new=AsyncMock()),
+        patch("core.status_bus.emit", new=AsyncMock()),
+    ):
+        paused = await engine.execute(
+            [step1, step2], session_id="test-session-7g", auto_confirm=False,
+        )
+        assert paused.status == PipelineStatus.AWAITING_CONFIRMATION
+
+        result = await engine.resume(paused.pipeline_id, "test-session-7g", auto_confirm=True)
+
+    assert result.status == PipelineStatus.COMPLETED
+    assert len(result.steps) == 2
+    assert all(s.status == StepStatus.COMPLETED for s in result.steps)
+
+
+# ── Test 7h: resume() mit unbekannter pipeline_id → ValueError ───────────────
+
+
+@pytest.mark.asyncio
+async def test_resume_raises_value_error_for_unknown_pipeline():
+    engine = PipelineEngine()
+    with pytest.raises(ValueError, match="Kein Checkpoint"):
+        await engine.resume("pipe_does_not_exist", "session-x")
+
+
+# ── Test 7i: resume() überspringt Pre-Flight-Gate (is_resume=True) ───────────
+
+
+@pytest.mark.asyncio
+async def test_resume_bypasses_pre_flight_gate():
+    """Auch wenn Steps requires_confirmation=True haben, läuft resume() durch."""
+    step = make_step("kubernetes", "Lösche alle Pods", requires_confirmation=True)
+    engine = PipelineEngine()
+    mock_agent = make_mock_agent("Gelöscht")
+    fake_journal = FakeOperationJournal()
+
+    with (
+        patch_engine_checkpoint(engine),
+        patch("core.operation_journal.get_operation_journal", return_value=fake_journal),
+        patch.object(engine, "_get_module_agent", return_value=mock_agent),
+        patch("core.pipeline_events.emit_pipeline_event", new=AsyncMock()),
+        patch("core.status_bus.emit", new=AsyncMock()),
+    ):
+        paused = await engine.execute(
+            [step], session_id="test-session-7i", auto_confirm=False,
+        )
+        assert paused.status == PipelineStatus.AWAITING_CONFIRMATION
+        result = await engine.resume(paused.pipeline_id, "test-session-7i", auto_confirm=True)
+
+    assert result.status == PipelineStatus.COMPLETED
+    assert result.steps[0].status == StepStatus.COMPLETED
 
 
 # ── Test 8: Pipeline läuft nach auto_confirm weiter ──────────────────────────
@@ -366,7 +660,7 @@ def test_pipeline_step_from_dict_valid():
 
 
 def test_pipeline_step_from_dict_empty_module_raises():
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         PipelineStep.from_dict({"module": "", "task": "irgendwas"})
 
 

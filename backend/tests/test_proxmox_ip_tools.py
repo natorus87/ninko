@@ -40,6 +40,112 @@ def test_extract_qemu_agent_ips_filters_loopback_and_link_local() -> None:
     ]
 
 
+def test_extract_qemu_agent_ips_strips_cidr_suffix() -> None:
+    interfaces = [
+        {
+            "name": "eth0",
+            "ip-addresses": [
+                {"ip-address": "192.168.10.25/24", "ip-address-type": "ipv4"},
+                {"ip-address": "2001:db8::5/64", "ip-address-type": "ipv6"},
+            ],
+        }
+    ]
+
+    assert proxmox_tools._extract_qemu_agent_ips(interfaces) == [
+        {
+            "interface": "eth0",
+            "address": "192.168.10.25/24",
+            "ip": "192.168.10.25",
+            "family": "ipv4",
+        },
+        {
+            "interface": "eth0",
+            "address": "2001:db8::5/64",
+            "ip": "2001:db8::5",
+            "family": "ipv6",
+        },
+    ]
+
+
+def test_extract_qemu_agent_ips_filters_ipv6_zone_id_link_local() -> None:
+    interfaces = [
+        {
+            "name": "eth0",
+            "ip-addresses": [
+                {"ip-address": "fe80::1%eth0", "ip-address-type": "ipv6"},
+            ],
+        }
+    ]
+
+    assert proxmox_tools._extract_qemu_agent_ips(interfaces) == []
+
+
+def test_extract_qemu_agent_ips_preserves_global_ipv6_zone_id() -> None:
+    interfaces = [
+        {
+            "name": "eth0",
+            "ip-addresses": [
+                {"ip-address": "2001:db8::1%eth0", "ip-address-type": "ipv6"},
+            ],
+        }
+    ]
+
+    assert proxmox_tools._extract_qemu_agent_ips(interfaces) == [
+        {
+            "interface": "eth0",
+            "address": "2001:db8::1%eth0",
+            "ip": "2001:db8::1%eth0",
+            "family": "ipv6",
+        }
+    ]
+
+
+def test_extract_qemu_agent_ips_handles_malformed_input() -> None:
+    interfaces = [
+        None,
+        {},
+        {"name": "eth0"},
+        {"name": "eth0", "ip-addresses": None},
+        {"name": "eth0", "ip-addresses": []},
+        {"name": "eth0", "ip-addresses": [None]},
+        {"name": "eth0", "ip-addresses": [{}]},
+        {"name": "eth0", "ip-addresses": [{"ip-address": "", "ip-address-type": "ipv4"}]},
+        {"name": "eth0", "ip-addresses": [{"ip-address": "not.an.ip", "ip-address-type": "ipv4"}]},
+        {"name": "eth0", "ip-addresses": [{"ip-address": "8.8.8.8", "ip-address-type": "ipv4"}]},
+    ]
+
+    result = proxmox_tools._extract_qemu_agent_ips(interfaces)
+    assert result == [
+        {
+            "interface": "eth0",
+            "address": "8.8.8.8",
+            "ip": "8.8.8.8",
+            "family": "ipv4",
+        }
+    ]
+
+
+def test_extract_qemu_agent_ips_deduplicates_by_interface_ip_family() -> None:
+    interfaces = [
+        {
+            "name": "eth0",
+            "ip-addresses": [
+                {"ip-address": "192.168.10.25", "ip-address-type": "ipv4"},
+                {"ip-address": "192.168.10.25", "ip-address-type": "ipv4"},
+            ],
+        }
+    ]
+
+    assert proxmox_tools._extract_qemu_agent_ips(interfaces) == [
+        {
+            "interface": "eth0",
+            "address": "192.168.10.25",
+            "ip": "192.168.10.25",
+            "family": "ipv4",
+        }
+    ]
+
+
 def test_extract_lxc_interface_ips_supports_inet_and_inet6() -> None:
     interfaces = [
         {
