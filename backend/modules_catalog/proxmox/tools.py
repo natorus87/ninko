@@ -6,7 +6,6 @@ Full implementation using proxmoxer.
 from __future__ import annotations
 
 import logging
-import os
 from ipaddress import ip_address, ip_network
 
 from langchain_core.tools import tool
@@ -129,9 +128,13 @@ def _extract_qemu_agent_ips(interfaces: list[dict]) -> list[dict]:
     """Extracts usable IPs from QEMU guest-agent network-get-interfaces output."""
     ips = []
     seen = set()
-    for iface in interfaces:
+    for iface in interfaces or []:
+        if not isinstance(iface, dict):
+            continue
         interface_name = str(iface.get("name", ""))
         for item in iface.get("ip-addresses", []) or []:
+            if not isinstance(item, dict):
+                continue
             normalized = _normalize_ip_entry(
                 str(item.get("ip-address", "")),
                 str(item.get("ip-address-type", "")),
@@ -528,17 +531,7 @@ async def start_vm(node: str, vmid: int, connection_id: str = "") -> dict:
 
 @tool
 async def stop_vm(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Stops a VM (DESTRUCTIVE — requires confirmation)."""
-    confirm = os.environ.get("PROXMOX_CONFIRM_DESTRUCTIVE", "true").lower()
-    if confirm == "true":
-        return {
-            "action": "stop",
-            "target": f"VM {vmid}",
-            "node": node,
-            "status": "confirmation_required",
-            "detail": f"Should VM {vmid} on node '{node}' really be stopped? Please confirm with 'Yes'.",
-        }
-
+    """Graceful ACPI shutdown of a VM."""
     proxmox = await _get_proxmox_client(connection_id)
     try:
         proxmox.nodes(node).qemu(vmid).status.stop.post()
@@ -549,7 +542,7 @@ async def stop_vm(node: str, vmid: int, connection_id: str = "") -> dict:
 
 @tool
 async def reboot_vm(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Restarts a VM (reboot)."""
+    """Graceful ACPI reboot of a VM."""
     proxmox = await _get_proxmox_client(connection_id)
     try:
         proxmox.nodes(node).qemu(vmid).status.reboot.post()
@@ -560,17 +553,7 @@ async def reboot_vm(node: str, vmid: int, connection_id: str = "") -> dict:
 
 @tool
 async def reset_vm(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Hard-reset of a VM (DESTRUCTIVE — requires confirmation)."""
-    confirm = os.environ.get("PROXMOX_CONFIRM_DESTRUCTIVE", "true").lower()
-    if confirm == "true":
-        return {
-            "action": "reset",
-            "target": f"VM {vmid}",
-            "node": node,
-            "status": "confirmation_required",
-            "detail": f"Hard-reset VM {vmid} on node '{node}'? This may cause data loss! Confirm with 'Yes'.",
-        }
-
+    """Hard power-cut of a VM (no graceful shutdown — may cause data loss)."""
     proxmox = await _get_proxmox_client(connection_id)
     try:
         proxmox.nodes(node).qemu(vmid).status.reset.post()
@@ -581,7 +564,7 @@ async def reset_vm(node: str, vmid: int, connection_id: str = "") -> dict:
 
 @tool
 async def suspend_vm(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Suspends a VM."""
+    """Suspends a VM (RAM preserved, execution paused)."""
     proxmox = await _get_proxmox_client(connection_id)
     try:
         proxmox.nodes(node).qemu(vmid).status.suspend.post()
@@ -634,17 +617,7 @@ async def start_container(node: str, vmid: int, connection_id: str = "") -> dict
 
 @tool
 async def stop_container(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Stops an LXC container (DESTRUCTIVE)."""
-    confirm = os.environ.get("PROXMOX_CONFIRM_DESTRUCTIVE", "true").lower()
-    if confirm == "true":
-        return {
-            "action": "stop",
-            "target": f"CT {vmid}",
-            "node": node,
-            "status": "confirmation_required",
-            "detail": f"Stop container {vmid} on node '{node}'? Confirm with 'Yes'.",
-        }
-
+    """Graceful shutdown of an LXC container."""
     proxmox = await _get_proxmox_client(connection_id)
     try:
         proxmox.nodes(node).lxc(vmid).status.stop.post()
@@ -655,7 +628,7 @@ async def stop_container(node: str, vmid: int, connection_id: str = "") -> dict:
 
 @tool
 async def reboot_container(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Restarts an LXC container."""
+    """Graceful reboot of an LXC container."""
     proxmox = await _get_proxmox_client(connection_id)
     try:
         proxmox.nodes(node).lxc(vmid).status.reboot.post()
