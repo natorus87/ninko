@@ -29,6 +29,32 @@ from core.auth import (
 from core.config import get_settings
 from core.rbac import RbacStore, hash_password
 from core.redis_client import get_redis
+from schemas.auth import (
+    ApiTokenCreateResponse,
+    ApiTokenListResponse,
+    BootstrapResponse,
+    ChangePasswordResponse,
+    GroupListResponse,
+    LoginResponse,
+    LogoutResponse,
+    MeResponse,
+    RevokeTokenResponse,
+    RoleCreateResponse,
+    RoleDeleteResponse,
+    RoleEntry,
+    RoleListResponse,
+    RoleUpdateResponse,
+    SanitizedApiToken,
+    SanitizedUser,
+    UserCreateResponse,
+    UserDeleteResponse,
+    UserListResponse,
+    UserSetPasswordResponse,
+    UserSettingsResponse,
+    UserSettingsUpdateResponse,
+    UserUpdateResponse,
+)
+from schemas.mutations import MutationResponse
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 rbac_store = RbacStore()
@@ -288,8 +314,8 @@ def _should_set_secure_cookie(request: Request, cfg_secure: bool) -> bool:
     return is_https
 
 
-@router.post("/login")
-async def login(body: LoginRequest, response: Response, request: Request) -> dict:
+@router.post("/login", response_model=LoginResponse)
+async def login(body: LoginRequest, response: Response, request: Request) -> LoginResponse:
     cfg = get_settings()
     if not cfg.API_AUTH_ENABLED:
         raise HTTPException(status_code=400, detail="Auth is disabled.")
@@ -339,15 +365,15 @@ async def login(body: LoginRequest, response: Response, request: Request) -> dic
             max_age=max(1, int(cfg.SESSION_TTL_HOURS)) * 3600,
             path="/",
         )
-        return {
-            "authenticated": True,
-            "role": effective["base_role"],
-            "username": username,
-            "roles": effective["role_ids"],
-            "groups": effective["group_ids"],
-            "tenant_id": effective.get("tenant_id", "default"),
-            "password_change_required": bool(user.get("must_change_password", False)),
-        }
+        return LoginResponse(
+            authenticated=True,
+            role=effective["base_role"],
+            username=username,
+            roles=effective["role_ids"],
+            groups=effective["group_ids"],
+            tenant_id=effective.get("tenant_id", "default"),
+            password_change_required=bool(user.get("must_change_password", False)),
+        )
 
     # Record failed login attempt
     await _record_login_attempt(username, success=False)
@@ -355,8 +381,8 @@ async def login(body: LoginRequest, response: Response, request: Request) -> dic
     raise HTTPException(status_code=401, detail="Invalid credentials.")
 
 
-@router.post("/logout")
-async def logout(response: Response, request: Request) -> dict:
+@router.post("/logout", response_model=LogoutResponse)
+async def logout(response: Response, request: Request) -> LogoutResponse:
     """
     Logout: Delete session cookie and blacklist the token.
     Prevents CWE-613: Lack of Logout in Session Tokens.
@@ -386,65 +412,65 @@ async def logout(response: Response, request: Request) -> dict:
         path="/",
         samesite="lax",
     )
-    return {"authenticated": False}
+    return LogoutResponse(authenticated=False)
 
 
-@router.get("/me")
-async def me(request: Request) -> dict:
+@router.get("/me", response_model=MeResponse)
+async def me(request: Request) -> MeResponse:
     cfg = get_settings()
     if not cfg.API_AUTH_ENABLED:
-        return {
-            "authenticated": True,
-            "role": "admin",
-            "username": cfg.ADMIN_USERNAME,
-            "auth_enabled": False,
-            "roles": ["role_admin"],
-            "groups": ["group_admins"],
-            "module_permissions": {"*": {"read": True, "write": True}},
-            "tenant_id": "default",
-            "password_change_required": False,
-        }
+        return MeResponse(
+            authenticated=True,
+            role="admin",
+            username=cfg.ADMIN_USERNAME,
+            auth_enabled=False,
+            roles=["role_admin"],
+            groups=["group_admins"],
+            module_permissions={"*": {"read": True, "write": True}},
+            tenant_id="default",
+            password_change_required=False,
+        )
 
     auth_ctx = await resolve_request_auth_async(request)
     if not auth_ctx:
-        return {"authenticated": False, "auth_enabled": True}
+        return MeResponse(authenticated=False, auth_enabled=True)
 
     username = str(auth_ctx.get("username", "")).strip()
     effective = await rbac_store.build_effective_permissions(username)
     if effective:
-        return {
-            "authenticated": True,
-            "auth_enabled": True,
-            "username": username,
-            "role": effective["base_role"],
-            "roles": effective["role_ids"],
-            "groups": effective["group_ids"],
-            "module_permissions": effective["module_permissions"],
-            "tenant_id": effective.get("tenant_id", "default"),
-            "password_change_required": bool(
+        return MeResponse(
+            authenticated=True,
+            auth_enabled=True,
+            username=username,
+            role=effective["base_role"],
+            roles=effective["role_ids"],
+            groups=effective["group_ids"],
+            module_permissions=effective["module_permissions"],
+            tenant_id=effective.get("tenant_id", "default"),
+            password_change_required=bool(
                 effective.get("password_change_required", False)
             ),
-        }
+        )
 
-    return {
-        "authenticated": True,
-        "auth_enabled": True,
-        "username": username,
-        "role": auth_ctx.get("role", "read"),
-        "roles": [],
-        "groups": [],
-        "module_permissions": auth_ctx.get("module_permissions", {}),
-        "tenant_id": auth_ctx.get("tenant_id", "default"),
-        "password_change_required": bool(
+    return MeResponse(
+        authenticated=True,
+        auth_enabled=True,
+        username=username,
+        role=auth_ctx.get("role", "read"),
+        roles=[],
+        groups=[],
+        module_permissions=auth_ctx.get("module_permissions", {}),
+        tenant_id=auth_ctx.get("tenant_id", "default"),
+        password_change_required=bool(
             auth_ctx.get("password_change_required", False)
         ),
-    }
+    )
 
 
-@router.post("/change-password")
+@router.post("/change-password", response_model=ChangePasswordResponse)
 async def change_own_password(
     body: ChangeOwnPasswordRequest, request: Request, response: Response
-) -> dict:
+) -> ChangePasswordResponse:
     cfg = get_settings()
     if not cfg.API_AUTH_ENABLED:
         raise HTTPException(status_code=400, detail="Auth is disabled.")
@@ -500,11 +526,11 @@ async def change_own_password(
             path="/",
         )
 
-    return {"status": "updated", "username": username}
+    return ChangePasswordResponse(status="updated", username=username)
 
 
-@router.post("/bootstrap")
-async def bootstrap_admin(body: LoginRequest, request: Request) -> dict:
+@router.post("/bootstrap", response_model=BootstrapResponse)
+async def bootstrap_admin(body: LoginRequest, request: Request) -> BootstrapResponse:
     """
     Create/repair the bootstrap admin user inside RBAC storage.
     Allowed when:
@@ -527,20 +553,23 @@ async def bootstrap_admin(body: LoginRequest, request: Request) -> dict:
         )
 
     await rbac_store.bootstrap_admin_if_needed(username, body.password)
-    return {"status": "ok", "username": username}
+    return BootstrapResponse(status="ok", username=username)
 
 
-@router.get("/users")
-async def list_users(request: Request) -> dict:
+@router.get("/users", response_model=UserListResponse)
+async def list_users(request: Request) -> UserListResponse:
     _assert_admin(request)
     state = await rbac_store.load()
     users = [_sanitize_user(u) for u in state["users"].values() if isinstance(u, dict)]
     users.sort(key=lambda x: x["username"])
-    return {"users": users, "count": len(users)}
+    return UserListResponse(
+        users=[SanitizedUser(**u) for u in users],
+        count=len(users),
+    )
 
 
-@router.post("/users")
-async def create_user(body: UserCreateRequest, request: Request) -> dict:
+@router.post("/users", response_model=UserCreateResponse)
+async def create_user(body: UserCreateRequest, request: Request) -> UserCreateResponse:
     _assert_admin(request)
     username = _validate_id(body.username, "username")
     if len(body.password) < 8:
@@ -585,11 +614,14 @@ async def create_user(body: UserCreateRequest, request: Request) -> dict:
             group["users"] = sorted(member_set)
 
     await rbac_store.save(state)
-    return {"status": "created", "user": _sanitize_user(users[username])}
+    return UserCreateResponse(
+        status="created",
+        user=SanitizedUser(**_sanitize_user(users[username])),
+    )
 
 
-@router.put("/users/{username}")
-async def update_user(username: str, body: UserUpdateRequest, request: Request) -> dict:
+@router.put("/users/{username}", response_model=UserUpdateResponse)
+async def update_user(username: str, body: UserUpdateRequest, request: Request) -> UserUpdateResponse:
     _assert_admin(request)
     username = _validate_id(username, "username")
     state = await rbac_store.load()
@@ -639,13 +671,16 @@ async def update_user(username: str, body: UserUpdateRequest, request: Request) 
 
     user["updated_at"] = state["updated_at"]
     await rbac_store.save(state)
-    return {"status": "updated", "user": _sanitize_user(user)}
+    return UserUpdateResponse(
+        status="updated",
+        user=SanitizedUser(**_sanitize_user(user)),
+    )
 
 
-@router.put("/users/{username}/password")
+@router.put("/users/{username}/password", response_model=UserSetPasswordResponse)
 async def set_user_password(
     username: str, body: UserPasswordRequest, request: Request
-) -> dict:
+) -> UserSetPasswordResponse:
     _assert_admin(request)
     username = _validate_id(username, "username")
     if len(body.password) < 8:
@@ -663,11 +698,11 @@ async def set_user_password(
     user["must_change_password"] = False
     user["updated_at"] = state["updated_at"]
     await rbac_store.save(state)
-    return {"status": "updated", "username": username}
+    return UserSetPasswordResponse(status="updated", username=username)
 
 
-@router.delete("/users/{username}")
-async def delete_user(username: str, request: Request) -> dict:
+@router.delete("/users/{username}", response_model=UserDeleteResponse)
+async def delete_user(username: str, request: Request) -> UserDeleteResponse:
     _assert_admin(request)
     username = _validate_id(username, "username")
     state = await rbac_store.load()
@@ -686,11 +721,11 @@ async def delete_user(username: str, request: Request) -> dict:
             group["users"] = sorted(members)
 
     await rbac_store.save(state)
-    return {"status": "deleted", "username": username}
+    return UserDeleteResponse(status="deleted", username=username)
 
 
-@router.get("/users/{username}/settings")
-async def get_user_custom_settings(username: str, request: Request) -> dict:
+@router.get("/users/{username}/settings", response_model=UserSettingsResponse)
+async def get_user_custom_settings(username: str, request: Request) -> UserSettingsResponse:
     _assert_admin(request)
     username = _validate_id(username, "username")
     state = await rbac_store.load()
@@ -700,13 +735,13 @@ async def get_user_custom_settings(username: str, request: Request) -> dict:
     settings = user.get("custom_settings", {})
     if not isinstance(settings, dict):
         settings = {}
-    return {"username": username, "settings": settings}
+    return UserSettingsResponse(username=username, settings=settings)
 
 
-@router.put("/users/{username}/settings")
+@router.put("/users/{username}/settings", response_model=UserSettingsUpdateResponse)
 async def update_user_custom_settings(
     username: str, body: UserCustomSettingsRequest, request: Request
-) -> dict:
+) -> UserSettingsUpdateResponse:
     _assert_admin(request)
     username = _validate_id(username, "username")
     state = await rbac_store.load()
@@ -717,15 +752,15 @@ async def update_user_custom_settings(
     user["custom_settings"] = body.settings if isinstance(body.settings, dict) else {}
     user["updated_at"] = state["updated_at"]
     await rbac_store.save(state)
-    return {
-        "status": "updated",
-        "username": username,
-        "settings": user["custom_settings"],
-    }
+    return UserSettingsUpdateResponse(
+        status="updated",
+        username=username,
+        settings=user["custom_settings"],
+    )
 
 
-@router.get("/users/{username}/api-tokens")
-async def list_user_api_tokens(username: str, request: Request) -> dict:
+@router.get("/users/{username}/api-tokens", response_model=ApiTokenListResponse)
+async def list_user_api_tokens(username: str, request: Request) -> ApiTokenListResponse:
     _assert_admin(request)
     username = _validate_id(username, "username")
     state = await rbac_store.load()
@@ -737,16 +772,20 @@ async def list_user_api_tokens(username: str, request: Request) -> dict:
         tokens = []
     sanitized = [_sanitize_api_token_entry(t) for t in tokens if isinstance(t, dict)]
     sanitized.sort(key=lambda t: t.get("created_at", ""), reverse=True)
-    return {"username": username, "tokens": sanitized, "count": len(sanitized)}
+    return ApiTokenListResponse(
+        username=username,
+        tokens=[SanitizedApiToken(**t) for t in sanitized],
+        count=len(sanitized),
+    )
 
 
-@router.post("/users/{username}/api-tokens")
+@router.post("/users/{username}/api-tokens", response_model=ApiTokenCreateResponse)
 async def create_user_api_token(
     username: str,
     body: ApiTokenCreateRequest,
     request: Request,
     response: Response,
-) -> dict:
+) -> ApiTokenCreateResponse:
     _assert_admin(request)
     username = _validate_id(username, "username")
     state = await rbac_store.load()
@@ -773,7 +812,9 @@ async def create_user_api_token(
         expires_hours=body.expires_hours,
     )
     token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
-    token_id = secrets.token_hex(8)
+    # 32 Bytes = 256 Bit Entropie für DB-Lookup-ID. token_urlsafe ist URL-safe
+    # (kein Padding), widerstandsfähig gegen Erraten/Brute-Force (CWE-330 Mitigation).
+    token_id = secrets.token_urlsafe(32)
     auth_ctx = resolve_request_auth(request) or {}
     created_by = str(auth_ctx.get("username", "admin"))
     expires_at = time.strftime(
@@ -802,17 +843,17 @@ async def create_user_api_token(
 
     response.headers["Cache-Control"] = "no-store"
     response.headers["Pragma"] = "no-cache"
-    return {
-        "status": "created",
-        "username": username,
-        "token": raw_token,
-        "token_meta": _sanitize_api_token_entry(token_entry),
-        "warning": "Store this token securely. It is shown only once.",
-    }
+    return ApiTokenCreateResponse(
+        status="created",
+        username=username,
+        token=raw_token,
+        token_meta=SanitizedApiToken(**_sanitize_api_token_entry(token_entry)),
+        warning="Store this token securely. It is shown only once.",
+    )
 
 
-@router.delete("/users/{username}/api-tokens/{token_id}")
-async def revoke_user_api_token(username: str, token_id: str, request: Request) -> dict:
+@router.delete("/users/{username}/api-tokens/{token_id}", response_model=RevokeTokenResponse)
+async def revoke_user_api_token(username: str, token_id: str, request: Request) -> RevokeTokenResponse:
     _assert_admin(request)
     username = _validate_id(username, "username")
     token_id = _validate_id(token_id, "token_id")
@@ -837,20 +878,23 @@ async def revoke_user_api_token(username: str, token_id: str, request: Request) 
     found["revoked_at"] = state["updated_at"]
     user["updated_at"] = state["updated_at"]
     await rbac_store.save(state)
-    return {"status": "revoked", "username": username, "token_id": token_id}
+    return RevokeTokenResponse(status="revoked", username=username, token_id=token_id)
 
 
-@router.get("/roles")
-async def list_roles(request: Request) -> dict:
+@router.get("/roles", response_model=RoleListResponse)
+async def list_roles(request: Request) -> RoleListResponse:
     _assert_admin(request)
     state = await rbac_store.load()
     roles = [r for r in state["roles"].values() if isinstance(r, dict)]
     roles.sort(key=lambda r: str(r.get("id", "")))
-    return {"roles": roles, "count": len(roles)}
+    return RoleListResponse(
+        roles=[RoleEntry(**r) for r in roles],
+        count=len(roles),
+    )
 
 
-@router.post("/roles")
-async def create_role(body: RoleCreateRequest, request: Request) -> dict:
+@router.post("/roles", response_model=RoleCreateResponse)
+async def create_role(body: RoleCreateRequest, request: Request) -> RoleCreateResponse:
     _assert_admin(request)
     role_id = _validate_id(body.role_id, "role_id")
     state = await rbac_store.load()
@@ -875,11 +919,14 @@ async def create_role(body: RoleCreateRequest, request: Request) -> dict:
         or {"*": {"read": True, "write": body.base_role != "read"}},
     }
     await rbac_store.save(state)
-    return {"status": "created", "role": roles[role_id]}
+    return RoleCreateResponse(
+        status="created",
+        role=RoleEntry(**roles[role_id]),
+    )
 
 
-@router.put("/roles/{role_id}")
-async def update_role(role_id: str, body: RoleUpdateRequest, request: Request) -> dict:
+@router.put("/roles/{role_id}", response_model=RoleUpdateResponse)
+async def update_role(role_id: str, body: RoleUpdateRequest, request: Request) -> RoleUpdateResponse:
     _assert_admin(request)
     role_id = _validate_id(role_id, "role_id")
     state = await rbac_store.load()
@@ -905,11 +952,14 @@ async def update_role(role_id: str, body: RoleUpdateRequest, request: Request) -
         }
 
     await rbac_store.save(state)
-    return {"status": "updated", "role": role}
+    return RoleUpdateResponse(
+        status="updated",
+        role=RoleEntry(**role),
+    )
 
 
-@router.delete("/roles/{role_id}")
-async def delete_role(role_id: str, request: Request) -> dict:
+@router.delete("/roles/{role_id}", response_model=RoleDeleteResponse)
+async def delete_role(role_id: str, request: Request) -> RoleDeleteResponse:
     _assert_admin(request)
     role_id = _validate_id(role_id, "role_id")
     if role_id == "role_admin":
@@ -933,11 +983,11 @@ async def delete_role(role_id: str, request: Request) -> dict:
             group["roles"] = [r for r in (group.get("roles") or []) if r != role_id]
 
     await rbac_store.save(state)
-    return {"status": "deleted", "role_id": role_id}
+    return RoleDeleteResponse(status="deleted", role_id=role_id)
 
 
-@router.get("/groups")
-async def list_groups(request: Request) -> dict:
+@router.get("/groups", response_model=GroupListResponse)
+async def list_groups(request: Request) -> GroupListResponse:
     _assert_admin(request)
     state = await rbac_store.load()
     groups = [g for g in state["groups"].values() if isinstance(g, dict)]
@@ -966,8 +1016,8 @@ async def list_available_modules(request: Request) -> dict:
     return {"modules": modules, "count": len(modules)}
 
 
-@router.post("/groups")
-async def create_group(body: GroupCreateRequest, request: Request) -> dict:
+@router.post("/groups", response_model=MutationResponse)
+async def create_group(body: GroupCreateRequest, request: Request) -> MutationResponse:
     _assert_admin(request)
     group_id = _validate_id(body.group_id, "group_id")
     state = await rbac_store.load()
@@ -987,13 +1037,13 @@ async def create_group(body: GroupCreateRequest, request: Request) -> dict:
         "users": [],
     }
     await rbac_store.save(state)
-    return {"status": "created", "group": groups[group_id]}
+    return MutationResponse(status="created", id=group_id, data={"group": groups[group_id]})
 
 
-@router.put("/groups/{group_id}")
+@router.put("/groups/{group_id}", response_model=MutationResponse)
 async def update_group(
     group_id: str, body: GroupUpdateRequest, request: Request
-) -> dict:
+) -> MutationResponse:
     _assert_admin(request)
     group_id = _validate_id(group_id, "group_id")
     state = await rbac_store.load()
@@ -1036,11 +1086,11 @@ async def update_group(
         group["users"] = sorted(set(body.users))
 
     await rbac_store.save(state)
-    return {"status": "updated", "group": group}
+    return MutationResponse(status="updated", id=group_id, data={"group": group})
 
 
-@router.delete("/groups/{group_id}")
-async def delete_group(group_id: str, request: Request) -> dict:
+@router.delete("/groups/{group_id}", response_model=MutationResponse)
+async def delete_group(group_id: str, request: Request) -> MutationResponse:
     _assert_admin(request)
     group_id = _validate_id(group_id, "group_id")
     if group_id == "group_admins":
@@ -1060,4 +1110,4 @@ async def delete_group(group_id: str, request: Request) -> dict:
             user["groups"] = [g for g in (user.get("groups") or []) if g != group_id]
 
     await rbac_store.save(state)
-    return {"status": "deleted", "group_id": group_id}
+    return MutationResponse(status="deleted", id=group_id)

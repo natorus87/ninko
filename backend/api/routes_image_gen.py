@@ -6,11 +6,9 @@ Serving generierter Bilder + Provider-Konfiguration.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
 
 from core.auth import ROLE_ADMIN, resolve_request_auth_async
 from core.image_provider import (
@@ -18,6 +16,13 @@ from core.image_provider import (
     get_image_provider_config,
     save_image_provider_config,
     IMAGES_DIR,
+)
+from schemas.image_gen import (
+    ImageGenerateRequest,
+    ImageGenerateResponse,
+    ImageProviderConfig,
+    ImageProviderInfo,
+    ImageProviderUpdateResponse,
 )
 
 logger = logging.getLogger("ninko.api.routes_image_gen")
@@ -68,36 +73,32 @@ async def serve_image(filename: str) -> FileResponse:
     )
 
 
-# ── Provider Settings ───────────────────────────────────────────────────────
-
-class ImageProviderConfig(BaseModel):
-    backend: str = ""
-    api_key: str = ""
-    model: str = ""
+# ── Provider Settings ────────────────────────────────────────────────────────
 
 
-class ImageGenerateRequest(BaseModel):
-    prompt: str
-    size: str = "1024x1024"
-
-
-@router.get("/api/settings/image-provider")
-async def get_image_provider(request: Request) -> dict:
+@router.get("/api/settings/image-provider", response_model=ImageProviderInfo)
+async def get_image_provider(request: Request) -> ImageProviderInfo:
     """Holt die aktuelle Image-Provider-Konfiguration."""
     await _assert_admin(request)
     config = await get_image_provider_config()
-    # API-Key maskieren
-    if config.get("api_key"):
-        key = config["api_key"]
-        config["api_key_masked"] = f"{key[:4]}...{key[-4:]}" if len(key) > 8 else "****"
-        config["api_key"] = ""
-    return config
+    api_key = config.get("api_key", "")
+    if api_key:
+        key = api_key
+        masked = f"{key[:4]}...{key[-4:]}" if len(key) > 8 else "****"
+    else:
+        masked = ""
+    return ImageProviderInfo(
+        backend=config.get("backend", ""),
+        api_key="",
+        api_key_masked=masked,
+        model=config.get("model", ""),
+    )
 
 
-@router.put("/api/settings/image-provider")
+@router.put("/api/settings/image-provider", response_model=ImageProviderUpdateResponse)
 async def update_image_provider(
     request: Request, data: ImageProviderConfig
-) -> dict[str, str]:
+) -> ImageProviderUpdateResponse:
     """Aktualisiert die Image-Provider-Konfiguration."""
     await _assert_admin(request)
     current = await get_image_provider_config()
@@ -111,11 +112,17 @@ async def update_image_provider(
 
     await save_image_provider_config(config)
     logger.info("Image-Provider konfiguriert: %s (Modell: %s)", config["backend"], config["model"])
-    return {"status": "ok", "backend": config["backend"], "model": config["model"]}
+    return ImageProviderUpdateResponse(
+        status="ok",
+        backend=config["backend"],
+        model=config["model"],
+    )
 
 
-@router.post("/api/images/generate")
-async def generate_image_asset(request: Request, body: ImageGenerateRequest) -> dict:
+@router.post("/api/images/generate", response_model=ImageGenerateResponse)
+async def generate_image_asset(
+    request: Request, body: ImageGenerateRequest
+) -> ImageGenerateResponse:
     """
     Generiert ein Bild direkt über die konfigurierte Image-Provider-Pipeline.
     """
@@ -125,15 +132,15 @@ async def generate_image_asset(request: Request, body: ImageGenerateRequest) -> 
         raise HTTPException(status_code=400, detail="Prompt darf nicht leer sein.")
     try:
         result = await generate_image(prompt=prompt, size=body.size or "1024x1024")
-        return {
-            "status": "ok",
-            "image_id": result.get("image_id", ""),
-            "filename": result.get("filename", ""),
-            "url": result.get("url", ""),
-            "backend": result.get("backend", ""),
-            "model": result.get("model", ""),
-            "size_bytes": result.get("size_bytes", 0),
-        }
+        return ImageGenerateResponse(
+            status="ok",
+            image_id=result.get("image_id", ""),
+            filename=result.get("filename", ""),
+            url=result.get("url", ""),
+            backend=result.get("backend", ""),
+            model=result.get("model", ""),
+            size_bytes=result.get("size_bytes", 0),
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except RuntimeError as e:

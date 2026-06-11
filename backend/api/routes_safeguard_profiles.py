@@ -17,6 +17,8 @@ import re
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, field_validator
 
+from schemas.safeguard import SafeguardProfilePayload
+
 logger = logging.getLogger("ninko.api.safeguard_profiles")
 router = APIRouter(prefix="/api/safeguard/profiles", tags=["Safeguard Profiles"])
 
@@ -85,15 +87,18 @@ def _get_profile_store(request: Request) -> object:
 
 # ─── CRUD ─────────────────────────────────────────────────────────────────────
 
-@router.get("")
-async def list_profiles(request: Request) -> list[dict]:
+@router.get("", response_model=list[SafeguardProfilePayload])
+async def list_profiles(request: Request) -> list[SafeguardProfilePayload]:
     """Alle Profile (Built-in + Custom) auflisten."""
     profile_store = _get_profile_store(request)
-    return await profile_store.list_profiles()
+    raw = await profile_store.list_profiles()
+    return [SafeguardProfilePayload(**p) for p in raw]
 
 
-@router.post("", status_code=201)
-async def create_profile(body: ProfileCreateRequest, request: Request) -> dict:
+@router.post("", status_code=201, response_model=SafeguardProfilePayload)
+async def create_profile(
+    body: ProfileCreateRequest, request: Request
+) -> SafeguardProfilePayload:
     """Neues Custom-Profil erstellen."""
     from core.safeguard import SafeguardProfile, _BUILTIN_PROFILES
 
@@ -127,25 +132,27 @@ async def create_profile(body: ProfileCreateRequest, request: Request) -> dict:
         auto_mode_policy        = body.auto_mode_policy,
     )
     await profile_store.save_profile(profile)
-    return profile.to_dict()
+    return SafeguardProfilePayload(**profile.to_dict())
 
 
-@router.get("/{profile_id}")
-async def get_profile(profile_id: str, request: Request) -> dict:
+@router.get("/{profile_id}", response_model=SafeguardProfilePayload)
+async def get_profile(
+    profile_id: str, request: Request
+) -> SafeguardProfilePayload:
     """Einzelnes Profil abrufen."""
     profile_store = _get_profile_store(request)
     profile = await profile_store.get_profile(profile_id)
     if profile is None:
         raise HTTPException(status_code=404, detail=f"Profil '{profile_id}' nicht gefunden.")
-    return profile.to_dict()
+    return SafeguardProfilePayload(**profile.to_dict())
 
 
-@router.put("/{profile_id}")
+@router.put("/{profile_id}", response_model=SafeguardProfilePayload)
 async def update_profile(
     profile_id: str,
     body: ProfileUpdateRequest,
     request: Request,
-) -> dict:
+) -> SafeguardProfilePayload:
     """Custom-Profil aktualisieren. Built-in Profile sind unveränderlich."""
     from core.safeguard import _BUILTIN_PROFILES
 
@@ -179,7 +186,7 @@ async def update_profile(
         profile.auto_mode_policy = body.auto_mode_policy
 
     await profile_store.save_profile(profile)
-    return profile.to_dict()
+    return SafeguardProfilePayload(**profile.to_dict())
 
 
 @router.delete("/{profile_id}", status_code=204, response_model=None)

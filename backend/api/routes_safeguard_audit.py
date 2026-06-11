@@ -16,6 +16,11 @@ from fastapi import APIRouter, Query, Request
 
 from core.redis_client import get_redis
 from core.safeguard import ActionCategory, SafeguardMiddleware
+from schemas.safeguard import (
+    SafeguardAuditClearResponse,
+    SafeguardAuditListResponse,
+    SafeguardMetricsResponse,
+)
 
 logger = logging.getLogger("ninko.api.safeguard_audit")
 router = APIRouter(prefix="/api/safeguard/audit", tags=["Safeguard Audit"])
@@ -24,7 +29,7 @@ AUDIT_LOG_KEY = "ninko:safeguard_audit"
 MAX_ENTRIES = 5000
 
 
-@router.get("/")
+@router.get("/", response_model=SafeguardAuditListResponse)
 async def get_audit_log(
     category: Optional[str] = Query(None, description="Filter by category: DESTRUCTIVE, STATE_CHANGING, PROMPT_INJECTION, UNKNOWN"),
     action: Optional[str] = Query(None, description="Filter by action: user_message, tool_confirmed, classifier_error"),
@@ -35,7 +40,7 @@ async def get_audit_log(
     to_ts: Optional[float] = Query(None, description="Unix timestamp end"),
     search: Optional[str] = Query(None, description="Free-text search in text/rationale"),
     limit: int = Query(200, le=2000),
-) -> dict:
+) -> SafeguardAuditListResponse:
     """Retrieve safeguard audit log entries with optional filters."""
     redis = get_redis()
     raw_entries = await redis.connection.lrange(AUDIT_LOG_KEY, 0, MAX_ENTRIES - 1)
@@ -72,20 +77,21 @@ async def get_audit_log(
         if len(entries) >= limit:
             break
 
-    return {"entries": entries, "total": len(entries)}
+    return SafeguardAuditListResponse(entries=entries, total=len(entries))
 
 
-@router.get("/metrics")
-async def get_safeguard_metrics(request: Request) -> dict:
+@router.get("/metrics", response_model=SafeguardMetricsResponse)
+async def get_safeguard_metrics(request: Request) -> SafeguardMetricsResponse:
     """Return safeguard latency percentiles and path breakdown from recent checks."""
     sg: SafeguardMiddleware | None = getattr(request.app.state, "safeguard", None)
     if sg is None:
-        return {"p50_ms": 0, "p95_ms": 0, "p99_ms": 0, "path_breakdown": {}, "total_checks": 0}
-    return await sg.get_metrics()
+        return SafeguardMetricsResponse()
+    data = await sg.get_metrics()
+    return SafeguardMetricsResponse(**data)
 
 
-@router.delete("/")
-async def clear_audit_log(request: Request) -> dict:
+@router.delete("/", response_model=SafeguardAuditClearResponse)
+async def clear_audit_log(request: Request) -> SafeguardAuditClearResponse:
     """Clear the safeguard audit log."""
     try:
         sg: SafeguardMiddleware | None = getattr(request.app.state, "safeguard", None)
@@ -107,4 +113,4 @@ async def clear_audit_log(request: Request) -> dict:
     redis = get_redis()
     await redis.connection.delete(AUDIT_LOG_KEY)
     logger.info("[Safeguard/Audit] Audit log cleared via API.")
-    return {"cleared": True}
+    return SafeguardAuditClearResponse()

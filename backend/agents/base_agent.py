@@ -6,6 +6,7 @@ Nutzt LangGraph für Tool-Calling und Conversation-Management.
 from __future__ import annotations
 
 import asyncio
+import atexit as _atexit
 import json
 import logging
 import re
@@ -29,6 +30,7 @@ from core.memory import get_memory
 from core.context_manager import get_context_manager
 from core import status_bus
 from core.events import ToolEvent, emit_tool_event
+from core.redaction import redact_text
 from core.tool_error_handling import wrap_tools_with_sanitizer, sanitize_tool_output
 from core.tool_registry import get_tool_status_label, get_tool_registry
 
@@ -194,26 +196,9 @@ class _StatusEmitter(AsyncCallbackHandler):
 
         result_size = len(result_str)
 
-        # Ergebnis-Preview (sicher gekürzt, keine Secrets)
         result_preview = ""
         if result_str:
-            # Primitive Redaction
-            redacted = result_str
-            for key in ("password", "secret", "token", "api_key", "apikey", "key",
-                        "bearer", "auth", "private", "credential"):
-                redacted = re.sub(
-                    rf'("{key}"\s*:\s*)"[^"]+"',
-                    r'\1"***"',
-                    redacted,
-                    flags=re.IGNORECASE,
-                )
-                redacted = re.sub(
-                    rf"({key}\s*[=:]\s*)[^\s,;]{{1,100}}",
-                    r"\1***",
-                    redacted,
-                    flags=re.IGNORECASE,
-                )
-            result_preview = redacted[:400]
+            result_preview = redact_text(result_str, limit=400)[:400]
 
         # Args aus on_tool_start holen
         args = self._tool_args.pop(run_id, {})
@@ -409,7 +394,6 @@ def _cleanup_agent_state() -> None:
     logger.info("Agent global state cleanup done.")
 
 
-import atexit as _atexit
 _atexit.register(_cleanup_agent_state)
 
 
@@ -558,21 +542,6 @@ def _get_memorize_cooldown_secs() -> float:
         return max(0.0, value)
     except (ImportError, AttributeError, TypeError, ValueError):
         return _DEFAULT_MEMORIZE_COOLDOWN_SECS
-
-
-# Sprachanweisungen für Language-Injection am Ende jedes System-Prompts
-_LANG_INSTRUCTIONS: dict[str, str] = {
-    "de": "Antworte immer auf Deutsch. Verwende passende Emojis in deinen Antworten, um sie lebendiger und übersichtlicher zu gestalten – z. B. am Anfang von Abschnitten, bei Status-Angaben oder zur Hervorhebung wichtiger Punkte.",
-    "en": "Always respond in English. Use fitting emojis in your responses to make them more lively and clear – e.g. at the start of sections, for status indicators, or to highlight key points.",
-    "fr": "Réponds toujours en français.",
-    "es": "Responde siempre en español.",
-    "it": "Rispondi sempre in italiano.",
-    "nl": "Antwoord altijd in het Nederlands.",
-    "pl": "Zawsze odpowiadaj po polsku.",
-    "pt": "Responda sempre em português.",
-    "ja": "常に日本語で回答してください。",
-    "zh": "请始终用中文回答。",
-}
 
 
 def _extract_text(content: str | list) -> str:
@@ -787,19 +756,14 @@ class BaseAgent:
             if not conns:
                 return ""
 
-            info = _t(
-                "VERFÜGBARE VERBINDUNGEN FÜR DIESES MODUL:\n",
-                "AVAILABLE CONNECTIONS FOR THIS MODULE:\n",
-            )
+            info = "AVAILABLE CONNECTIONS FOR THIS MODULE:\n"
             for c in conns:
                 d = " [DEFAULT]" if c.is_default else ""
                 info += f"- connection_id: '{c.id}' | Name: '{c.name}' | Env: '{c.environment}'{d}\n"
 
-            info += _t(
-                "\nWICHTIG: Nutze IMMER die passende 'connection_id' für Tools! "
-                "Wenn der User keine Umgebung nennt, nutze die Default-Verbindung.",
+            info += (
                 "\nIMPORTANT: ALWAYS use the appropriate 'connection_id' for tools! "
-                "If the user does not specify an environment, use the default connection.",
+                "If the user does not specify an environment, use the default connection."
             )
             return info
         except _BASE_AGENT_RECOVERABLE_EXCEPTIONS as e:
@@ -1207,15 +1171,7 @@ class BaseAgent:
         Nutzt Auto-Importance für besseres Memory-Ranking.
         """
         try:
-            prompt = _t(
-                "Extrahiere aus diesem Gespräch NUR dauerhaft relevante Fakten "
-                "(z.B. Namen des Users, IPs, Präferenzen, Entscheidungen, gelöste Probleme, gelernte Konfigurationen). "
-                'Antworte NUR mit JSON: {"fact": "...", "importance": 0.5}\n'
-                "importance: 1.0 = kritisch (Systemausfall, Kernkonfiguration), "
-                "0.5 = normal (Präferenzen, gelernte Patterns), "
-                "0.2 = trivial (temporäre Info). "
-                'Wenn NICHTS dauerhaft Merkenswertes vorhanden ist: {"fact": "NICHTS", "importance": 0.0}\n\n'
-                f"User: {user_msg}\nAssistent: {ai_response[:800]}",
+            prompt = (
                 "Extract ONLY permanently relevant facts from this conversation "
                 "(e.g. user names, IPs, preferences, decisions, solved problems, learned configurations). "
                 'Respond ONLY with JSON: {"fact": "...", "importance": 0.5}\n'
@@ -1223,7 +1179,7 @@ class BaseAgent:
                 "0.5 = normal (preferences, learned patterns), "
                 "0.2 = trivial (temporary info). "
                 'If NOTHING permanently noteworthy: {"fact": "NOTHING", "importance": 0.0}\n\n'
-                f"User: {user_msg}\nAssistant: {ai_response[:800]}",
+                f"User: {user_msg}\nAssistant: {ai_response[:800]}"
             )
             result = await self._llm.ainvoke([HumanMessage(content=prompt)])
             content = (

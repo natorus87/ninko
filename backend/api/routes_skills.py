@@ -14,6 +14,18 @@ from pydantic import BaseModel
 from core.auth import ROLE_ADMIN, resolve_request_auth_async
 from core.skills_manager import get_skills_manager
 from core.skill_marketplace import get_skill_marketplace
+from schemas.skills import (
+    MarketplaceEntry,
+    MarketplaceInstallResponse,
+    SkillCreateResponse,
+    SkillDeleteResponse,
+    SkillDetail,
+    SkillRepo,
+    SkillRepoAddResponse,
+    SkillRepoRemoveResponse,
+    SkillSummary,
+    SkillUpdateResponse,
+)
 
 logger = logging.getLogger("ninko.api.skills")
 
@@ -58,10 +70,11 @@ class RepoCreate(BaseModel):
 # ── Endpunkte ─────────────────────────────────────────────────────────────────
 
 
-@router.get("/")
-async def list_skills() -> list[dict]:
+@router.get("/", response_model=list[SkillSummary])
+async def list_skills() -> list[SkillSummary]:
     """Gibt alle geladenen Skills zurück (Katalog ohne Content)."""
-    return get_skills_manager().get_catalog()
+    raw = get_skills_manager().get_catalog()
+    return [SkillSummary(**s) for s in raw]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -70,19 +83,21 @@ async def list_skills() -> list[dict]:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-@router.get("/marketplace")
-async def get_marketplace() -> list[dict]:
+@router.get("/marketplace", response_model=list[MarketplaceEntry])
+async def get_marketplace() -> list[MarketplaceEntry]:
     """Aggregierter Katalog aller konfigurierten Skill-Repos."""
     mp = get_skill_marketplace()
     installed = {s["name"] for s in get_skills_manager().get_catalog()}
     skills = await mp.fetch_all_catalogs()
     for s in skills:
         s["installed"] = s.get("name", "") in installed
-    return skills
+    return [MarketplaceEntry(**s) for s in skills]
 
 
-@router.post("/marketplace/install", status_code=201)
-async def install_from_marketplace(body: MarketplaceInstall, request: Request) -> dict:
+@router.post("/marketplace/install", status_code=201, response_model=MarketplaceInstallResponse)
+async def install_from_marketplace(
+    body: MarketplaceInstall, request: Request
+) -> MarketplaceInstallResponse:
     """Installiert einen Skill aus dem Marketplace."""
     await _assert_admin(request)
     mp = get_skill_marketplace()
@@ -92,7 +107,7 @@ async def install_from_marketplace(body: MarketplaceInstall, request: Request) -
             name=body.name,
             modules=body.modules,
         )
-        return {"status": "installed", "name": body.name, "path": str(path)}
+        return MarketplaceInstallResponse(name=body.name, path=str(path))
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
@@ -100,15 +115,18 @@ async def install_from_marketplace(body: MarketplaceInstall, request: Request) -
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.get("/repos")
-async def list_repos() -> list[dict]:
+@router.get("/repos", response_model=list[SkillRepo])
+async def list_repos() -> list[SkillRepo]:
     """Konfigurierte Skill-Repositories auflisten."""
     mp = get_skill_marketplace()
-    return await mp.get_repos()
+    raw = await mp.get_repos()
+    return [SkillRepo(**r) for r in raw]
 
 
-@router.post("/repos", status_code=201)
-async def add_repo(body: RepoCreate, request: Request) -> dict:
+@router.post("/repos", status_code=201, response_model=SkillRepoAddResponse)
+async def add_repo(
+    body: RepoCreate, request: Request
+) -> SkillRepoAddResponse:
     """Neues Skill-Repository hinzufügen."""
     await _assert_admin(request)
     mp = get_skill_marketplace()
@@ -121,19 +139,21 @@ async def add_repo(body: RepoCreate, request: Request) -> dict:
                 "builtin": False,
             }
         )
-        return {"status": "added", "id": body.id}
+        return SkillRepoAddResponse(id=body.id)
     except (ValueError, PermissionError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
 
-@router.delete("/repos/{repo_id}")
-async def remove_repo(repo_id: str, request: Request) -> dict:
+@router.delete("/repos/{repo_id}", response_model=SkillRepoRemoveResponse)
+async def remove_repo(
+    repo_id: str, request: Request
+) -> SkillRepoRemoveResponse:
     """Skill-Repository entfernen (builtin-Repos geschützt)."""
     await _assert_admin(request)
     mp = get_skill_marketplace()
     try:
         await mp.remove_repo(repo_id)
-        return {"status": "removed", "id": repo_id}
+        return SkillRepoRemoveResponse(id=repo_id)
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
@@ -145,17 +165,19 @@ async def remove_repo(repo_id: str, request: Request) -> dict:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-@router.get("/{name}")
-async def get_skill(name: str) -> dict:
+@router.get("/{name}", response_model=SkillDetail)
+async def get_skill(name: str) -> SkillDetail:
     """Gibt einen einzelnen Skill inkl. vollem Content zurück."""
     skill = get_skills_manager().get_skill_full(name)
     if not skill:
         raise HTTPException(status_code=404, detail=f"Skill '{name}' nicht gefunden.")
-    return skill
+    return SkillDetail(**skill)
 
 
-@router.post("/", status_code=201)
-async def create_skill(body: SkillCreate, request: Request) -> dict:
+@router.post("/", status_code=201, response_model=SkillCreateResponse)
+async def create_skill(
+    body: SkillCreate, request: Request
+) -> SkillCreateResponse:
     """Erstellt einen neuen Skill und persistiert ihn in data/skills/."""
     await _assert_admin(request)
     mgr = get_skills_manager()
@@ -168,27 +190,31 @@ async def create_skill(body: SkillCreate, request: Request) -> dict:
         path = mgr.install_skill(
             body.name, body.description, body.content, body.modules
         )
-        return {"status": "created", "name": body.name, "path": str(path)}
+        return SkillCreateResponse(name=body.name, path=str(path))
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         logger.error("Skill-Erstellung fehlgeschlagen: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.put("/{name}")
-async def update_skill(name: str, body: SkillUpdate, request: Request) -> dict:
+@router.put("/{name}", response_model=SkillUpdateResponse)
+async def update_skill(
+    name: str, body: SkillUpdate, request: Request
+) -> SkillUpdateResponse:
     """Aktualisiert einen bestehenden Skill (Runtime-Override für Built-ins möglich)."""
     await _assert_admin(request)
     mgr = get_skills_manager()
     try:
         path = mgr.update_skill(name, body.description, body.content, body.modules)
-        return {"status": "updated", "name": name, "path": str(path)}
+        return SkillUpdateResponse(name=name, path=str(path))
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         logger.error("Skill-Update fehlgeschlagen: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.delete("/{name}", status_code=200)
-async def delete_skill(name: str, request: Request) -> dict:
+@router.delete("/{name}", status_code=200, response_model=SkillDeleteResponse)
+async def delete_skill(
+    name: str, request: Request
+) -> SkillDeleteResponse:
     """Löscht einen Runtime-Skill. Built-in Skills können nicht gelöscht werden."""
     await _assert_admin(request)
     mgr = get_skills_manager()
@@ -198,7 +224,7 @@ async def delete_skill(name: str, request: Request) -> dict:
             raise HTTPException(
                 status_code=404, detail=f"Skill '{name}' nicht gefunden."
             )
-        return {"deleted": name}
+        return SkillDeleteResponse(deleted=name)
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
     except HTTPException:

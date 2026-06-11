@@ -11,9 +11,10 @@ from fastapi import APIRouter, HTTPException, Request
 
 from schemas.scheduler import (
     ScheduledTaskCreate,
-    ScheduledTaskUpdate,
+    ScheduledTaskDeleteResponse,
     ScheduledTaskInfo,
     ScheduledTaskListResponse,
+    ScheduledTaskUpdate,
     TaskExecutionLog,
 )
 
@@ -88,15 +89,15 @@ async def update_task(
     return ScheduledTaskInfo(**task)
 
 
-@router.delete("/tasks/{task_id}")
-async def delete_task(request: Request, task_id: str) -> dict:
+@router.delete("/tasks/{task_id}", response_model=ScheduledTaskDeleteResponse)
+async def delete_task(request: Request, task_id: str) -> ScheduledTaskDeleteResponse:
     """Geplante Aufgabe löschen."""
     scheduler = _get_scheduler(request)
     deleted = await scheduler.delete_task(task_id)
 
     if not deleted:
         raise HTTPException(status_code=404, detail="Aufgabe nicht gefunden.")
-    return {"id": task_id, "deleted": True}
+    return ScheduledTaskDeleteResponse(id=task_id, deleted=True)
 
 
 @router.put("/tasks/{task_id}/toggle", response_model=ScheduledTaskInfo)

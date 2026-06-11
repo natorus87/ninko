@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 from typing import TYPE_CHECKING, Any
 
 from core import status_bus
+from core.redaction import redact_text
 from core.streaming import SSEStreamGenerator
 
 from .base import BaseMiddleware, MiddlewareContext, MiddlewareResult
@@ -19,35 +19,10 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_AGENT_TIMEOUT_SECS = 1800
 _DEFAULT_AGENT_RECURSION_LIMIT = 80
-_SENSITIVE_KEYS = (
-    "password",
-    "secret",
-    "token",
-    "api_key",
-    "apikey",
-    "bearer",
-    "auth",
-    "private",
-    "credential",
-)
 
 
 def _redact_exception_text(value: object, *, limit: int = 300) -> str:
-    text = str(value)[:limit]
-    for key in _SENSITIVE_KEYS:
-        text = re.sub(
-            rf'("{key}"\s*:\s*)"[^"]+"',
-            r'\1"***"',
-            text,
-            flags=re.IGNORECASE,
-        )
-        text = re.sub(
-            rf"({key}\s*[=:]\s*)[^\s,;]{{1,200}}",
-            r"\1***",
-            text,
-            flags=re.IGNORECASE,
-        )
-    return text
+    return redact_text(str(value), limit=limit)
 
 
 def _get_timeout() -> int:

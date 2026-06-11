@@ -41,6 +41,23 @@ from pydantic import BaseModel
 from core.auth import auth_tenant_id, resolve_request_auth
 from core.redis_client import get_redis
 from core.safeguard import ActionCategory
+from schemas.safeguard import (
+    SafeguardActiveProfileResponse,
+    SafeguardAgentPolicyClearedResponse,
+    SafeguardAgentPolicyResponse,
+    SafeguardAgentPolicySetResponse,
+    SafeguardAgentProfileResponse,
+    SafeguardAgentStatusResponse,
+    SafeguardAgentToggleResponse,
+    SafeguardChatProfileResponse,
+    SafeguardClearAgentProfileResponse,
+    SafeguardClearChatProfileResponse,
+    SafeguardDisableResponse,
+    SafeguardEnableResponse,
+    SafeguardProfilePayload,
+    SafeguardSetActiveProfileResponse,
+    SafeguardStatusResponse,
+)
 
 logger = logging.getLogger("ninko.api.safeguard")
 router = APIRouter(prefix="/api/safeguard", tags=["Safeguard"])
@@ -102,18 +119,18 @@ async def _audit_admin_change(
 
 # ─── Global Status / Toggle (backward-compat) ─────────────────────────────────
 
-@router.get("/status")
-async def safeguard_status(request: Request) -> dict:
+@router.get("/status", response_model=SafeguardStatusResponse)
+async def safeguard_status(request: Request) -> SafeguardStatusResponse:
     """Globalen Safeguard-Status und aktives Profil abrufen."""
     sg = _get_safeguard(request)
-    return {
-        "enabled": sg.enabled,
-        "profile_id": sg.get_active_profile_id(),
-    }
+    return SafeguardStatusResponse(
+        enabled=sg.enabled,
+        profile_id=sg.get_active_profile_id(),
+    )
 
 
-@router.post("/enable")
-async def safeguard_enable(request: Request) -> dict:
+@router.post("/enable", response_model=SafeguardEnableResponse)
+async def safeguard_enable(request: Request) -> SafeguardEnableResponse:
     """Safeguard global aktivieren (setzt Profil auf 'moderate')."""
     sg = _get_safeguard(request)
     sg.enable()
@@ -125,11 +142,11 @@ async def safeguard_enable(request: Request) -> dict:
         rationale=f"profile={sg.get_active_profile_id()}",
     )
     logger.info("[Safeguard] Global via API aktiviert (Profil: %s).", sg.get_active_profile_id())
-    return {"safeguard": "enabled", "profile_id": sg.get_active_profile_id()}
+    return SafeguardEnableResponse(profile_id=sg.get_active_profile_id())
 
 
-@router.post("/disable")
-async def safeguard_disable(request: Request) -> dict:
+@router.post("/disable", response_model=SafeguardDisableResponse)
+async def safeguard_disable(request: Request) -> SafeguardDisableResponse:
     """Safeguard global deaktivieren (setzt Profil auf 'disabled')."""
     sg = _get_safeguard(request)
     sg.disable()
@@ -141,25 +158,27 @@ async def safeguard_disable(request: Request) -> dict:
         rationale="profile=disabled",
     )
     logger.warning("[Safeguard] Global via API DEAKTIVIERT.")
-    return {"safeguard": "disabled", "profile_id": "disabled"}
+    return SafeguardDisableResponse()
 
 
 # ─── Aktives globales Profil ──────────────────────────────────────────────────
 
-@router.get("/active")
-async def get_active_profile(request: Request) -> dict:
+@router.get("/active", response_model=SafeguardActiveProfileResponse)
+async def get_active_profile(request: Request) -> SafeguardActiveProfileResponse:
     """Aktives globales Profil abrufen."""
     sg = _get_safeguard(request)
     profile_store = _get_profile_store(request)
     profile = await profile_store.get_profile(sg.get_active_profile_id())
-    return {
-        "profile_id": sg.get_active_profile_id(),
-        "profile": profile.to_dict() if profile else None,
-    }
+    return SafeguardActiveProfileResponse(
+        profile_id=sg.get_active_profile_id(),
+        profile=SafeguardProfilePayload(**profile.to_dict()) if profile else None,
+    )
 
 
-@router.post("/active")
-async def set_active_profile(body: ProfileAssignRequest, request: Request) -> dict:
+@router.post("/active", response_model=SafeguardSetActiveProfileResponse)
+async def set_active_profile(
+    body: ProfileAssignRequest, request: Request
+) -> SafeguardSetActiveProfileResponse:
     """Globales aktives Profil setzen."""
     sg = _get_safeguard(request)
     try:
@@ -171,33 +190,37 @@ async def set_active_profile(body: ProfileAssignRequest, request: Request) -> di
         "Global safeguard profile changed",
         rationale=f"profile={body.profile_id}",
     )
-    return {"profile_id": body.profile_id}
+    return SafeguardSetActiveProfileResponse(profile_id=body.profile_id)
 
 
 # ─── Per-Chat Profil ──────────────────────────────────────────────────────────
 
-@router.get("/chats/{session_id}/profile")
-async def get_chat_profile(session_id: str, request: Request) -> dict:
+@router.get("/chats/{session_id}/profile", response_model=SafeguardChatProfileResponse)
+async def get_chat_profile(
+    session_id: str, request: Request
+) -> SafeguardChatProfileResponse:
     """Aktives Profil für eine Chat-Session abrufen."""
     sg = _get_safeguard(request)
     profile_store = _get_profile_store(request)
     scoped_session_id = _tenant_session_id(request, session_id)
     pid = await profile_store.get_chat_profile(scoped_session_id)
     if pid is None:
-        return {
-            "session_id": session_id,
-            "profile_id": sg.get_active_profile_id(),
-            "source": "global",
-        }
-    return {"session_id": session_id, "profile_id": pid, "source": "chat"}
+        return SafeguardChatProfileResponse(
+            session_id=session_id,
+            profile_id=sg.get_active_profile_id(),
+            source="global",
+        )
+    return SafeguardChatProfileResponse(
+        session_id=session_id, profile_id=pid, source="chat"
+    )
 
 
-@router.post("/chats/{session_id}/profile")
+@router.post("/chats/{session_id}/profile", response_model=SafeguardChatProfileResponse)
 async def set_chat_profile(
     session_id: str,
     body: ProfileAssignRequest,
     request: Request,
-) -> dict:
+) -> SafeguardChatProfileResponse:
     """Profil für eine Chat-Session setzen (TTL 24h)."""
     profile_store = _get_profile_store(request)
     # Validate profile exists
@@ -211,11 +234,15 @@ async def set_chat_profile(
         "Chat safeguard profile changed",
         rationale=f"session={scoped_session_id},profile={body.profile_id}",
     )
-    return {"session_id": session_id, "profile_id": body.profile_id}
+    return SafeguardChatProfileResponse(
+        session_id=session_id, profile_id=body.profile_id, source="chat"
+    )
 
 
-@router.delete("/chats/{session_id}/profile")
-async def clear_chat_profile(session_id: str, request: Request) -> dict:
+@router.delete("/chats/{session_id}/profile", response_model=SafeguardClearChatProfileResponse)
+async def clear_chat_profile(
+    session_id: str, request: Request
+) -> SafeguardClearChatProfileResponse:
     """Chat-spezifisches Profil entfernen (Fallback auf globales Profil)."""
     profile_store = _get_profile_store(request)
     scoped_session_id = _tenant_session_id(request, session_id)
@@ -225,31 +252,33 @@ async def clear_chat_profile(session_id: str, request: Request) -> dict:
         "Chat safeguard profile cleared",
         rationale=f"session={scoped_session_id}",
     )
-    return {"session_id": session_id, "cleared": True}
+    return SafeguardClearChatProfileResponse(session_id=session_id)
 
 
 # ─── Per-Agent Profil ─────────────────────────────────────────────────────────
 
-@router.get("/agents/{agent_id}/profile")
-async def get_agent_profile(agent_id: str, request: Request) -> dict:
+@router.get("/agents/{agent_id}/profile", response_model=SafeguardAgentProfileResponse)
+async def get_agent_profile(
+    agent_id: str, request: Request
+) -> SafeguardAgentProfileResponse:
     """Aktives Profil für einen Agent abrufen."""
     sg = _get_safeguard(request)
     if sg.agent_store is None:
         raise HTTPException(status_code=503, detail="AgentConfigStore nicht verfügbar.")
     pid = await sg.agent_store.get_profile(agent_id)
-    return {
-        "agent_id": agent_id,
-        "profile_id": pid if pid else sg.get_active_profile_id(),
-        "source": "agent" if pid else "global",
-    }
+    return SafeguardAgentProfileResponse(
+        agent_id=agent_id,
+        profile_id=pid if pid else sg.get_active_profile_id(),
+        source="agent" if pid else "global",
+    )
 
 
-@router.post("/agents/{agent_id}/profile")
+@router.post("/agents/{agent_id}/profile", response_model=SafeguardAgentProfileResponse)
 async def set_agent_profile(
     agent_id: str,
     body: ProfileAssignRequest,
     request: Request,
-) -> dict:
+) -> SafeguardAgentProfileResponse:
     """Profil für einen Agent setzen."""
     sg = _get_safeguard(request)
     if sg.agent_store is None:
@@ -264,11 +293,15 @@ async def set_agent_profile(
         "Agent safeguard profile changed",
         rationale=f"agent={agent_id},profile={body.profile_id}",
     )
-    return {"agent_id": agent_id, "profile_id": body.profile_id}
+    return SafeguardAgentProfileResponse(
+        agent_id=agent_id, profile_id=body.profile_id, source="agent"
+    )
 
 
-@router.delete("/agents/{agent_id}/profile")
-async def clear_agent_profile(agent_id: str, request: Request) -> dict:
+@router.delete("/agents/{agent_id}/profile", response_model=SafeguardClearAgentProfileResponse)
+async def clear_agent_profile(
+    agent_id: str, request: Request
+) -> SafeguardClearAgentProfileResponse:
     """Per-Agent Profil entfernen (Fallback auf globales Profil)."""
     sg = _get_safeguard(request)
     if sg.agent_store is None:
@@ -279,29 +312,33 @@ async def clear_agent_profile(agent_id: str, request: Request) -> dict:
         "Agent safeguard profile cleared",
         rationale=f"agent={agent_id}",
     )
-    return {"agent_id": agent_id, "cleared": True}
+    return SafeguardClearAgentProfileResponse(agent_id=agent_id)
 
 
 # ─── Per-Agent Toggle (backward-compat) ──────────────────────────────────────
 
-@router.get("/agents/{agent_id}")
-async def agent_safeguard_status(agent_id: str, request: Request) -> dict:
+@router.get("/agents/{agent_id}", response_model=SafeguardAgentStatusResponse)
+async def agent_safeguard_status(
+    agent_id: str, request: Request
+) -> SafeguardAgentStatusResponse:
     """Per-Agent Safeguard-Status abrufen (backward-compat)."""
     sg = _get_safeguard(request)
     if sg.agent_store is None:
         raise HTTPException(status_code=503, detail="AgentConfigStore nicht verfügbar.")
     state = await sg.agent_store.get_safeguard(agent_id)
     pid = await sg.agent_store.get_profile(agent_id)
-    return {
-        "agent_id": agent_id,
-        "safeguard_enabled": state if state is not None else sg.enabled,
-        "profile_id": pid if pid else sg.get_active_profile_id(),
-        "source": "agent" if (state is not None or pid) else "global",
-    }
+    return SafeguardAgentStatusResponse(
+        agent_id=agent_id,
+        safeguard_enabled=state if state is not None else sg.enabled,
+        profile_id=pid if pid else sg.get_active_profile_id(),
+        source="agent" if (state is not None or pid) else "global",
+    )
 
 
-@router.post("/agents/{agent_id}/enable")
-async def agent_safeguard_enable(agent_id: str, request: Request) -> dict:
+@router.post("/agents/{agent_id}/enable", response_model=SafeguardAgentToggleResponse)
+async def agent_safeguard_enable(
+    agent_id: str, request: Request
+) -> SafeguardAgentToggleResponse:
     """Safeguard für einen Agent aktivieren (backward-compat)."""
     sg = _get_safeguard(request)
     await sg.enable_for_agent(agent_id)
@@ -310,11 +347,13 @@ async def agent_safeguard_enable(agent_id: str, request: Request) -> dict:
         "Agent safeguard enabled",
         rationale=f"agent={agent_id}",
     )
-    return {"agent_id": agent_id, "safeguard": "enabled"}
+    return SafeguardAgentToggleResponse(agent_id=agent_id, safeguard="enabled")
 
 
-@router.post("/agents/{agent_id}/disable")
-async def agent_safeguard_disable(agent_id: str, request: Request) -> dict:
+@router.post("/agents/{agent_id}/disable", response_model=SafeguardAgentToggleResponse)
+async def agent_safeguard_disable(
+    agent_id: str, request: Request
+) -> SafeguardAgentToggleResponse:
     """Safeguard für einen Agent deaktivieren (backward-compat)."""
     sg = _get_safeguard(request)
     await sg.disable_for_agent(agent_id)
@@ -323,31 +362,33 @@ async def agent_safeguard_disable(agent_id: str, request: Request) -> dict:
         "Agent safeguard disabled",
         rationale=f"agent={agent_id}",
     )
-    return {"agent_id": agent_id, "safeguard": "disabled"}
+    return SafeguardAgentToggleResponse(agent_id=agent_id, safeguard="disabled")
 
 
 # ─── Per-Agent Classifier Policy ──────────────────────────────────────────────
 
-@router.get("/agents/{agent_id}/policy")
-async def get_agent_classifier_policy(agent_id: str, request: Request) -> dict:
+@router.get("/agents/{agent_id}/policy", response_model=SafeguardAgentPolicyResponse)
+async def get_agent_classifier_policy(
+    agent_id: str, request: Request
+) -> SafeguardAgentPolicyResponse:
     """Custom safeguard classifier policy für einen Agent abrufen."""
     sg = _get_safeguard(request)
     if sg.agent_store is None:
         raise HTTPException(status_code=503, detail="AgentConfigStore nicht verfügbar.")
     policy = await sg.agent_store.get_classifier_policy(agent_id)
-    return {
-        "agent_id": agent_id,
-        "policy": policy or "",
-        "has_custom_policy": policy is not None,
-    }
+    return SafeguardAgentPolicyResponse(
+        agent_id=agent_id,
+        policy=policy or "",
+        has_custom_policy=policy is not None,
+    )
 
 
-@router.post("/agents/{agent_id}/policy")
+@router.post("/agents/{agent_id}/policy", response_model=SafeguardAgentPolicySetResponse)
 async def set_agent_classifier_policy(
     agent_id: str,
     body: ClassifierPolicyRequest,
     request: Request,
-) -> dict:
+) -> SafeguardAgentPolicySetResponse:
     """Custom safeguard classifier policy für einen Agent setzen."""
     sg = _get_safeguard(request)
     if sg.agent_store is None:
@@ -360,11 +401,13 @@ async def set_agent_classifier_policy(
         "Agent safeguard policy set",
         rationale=f"agent={agent_id},policy_len={len(body.policy)}",
     )
-    return {"agent_id": agent_id, "policy_set": True}
+    return SafeguardAgentPolicySetResponse(agent_id=agent_id)
 
 
-@router.delete("/agents/{agent_id}/policy")
-async def clear_agent_classifier_policy(agent_id: str, request: Request) -> dict:
+@router.delete("/agents/{agent_id}/policy", response_model=SafeguardAgentPolicyClearedResponse)
+async def clear_agent_classifier_policy(
+    agent_id: str, request: Request
+) -> SafeguardAgentPolicyClearedResponse:
     """Custom safeguard classifier policy für einen Agent entfernen."""
     sg = _get_safeguard(request)
     if sg.agent_store is None:
@@ -375,4 +418,4 @@ async def clear_agent_classifier_policy(agent_id: str, request: Request) -> dict
         "Agent safeguard policy cleared",
         rationale=f"agent={agent_id}",
     )
-    return {"agent_id": agent_id, "policy_cleared": True}
+    return SafeguardAgentPolicyClearedResponse(agent_id=agent_id)

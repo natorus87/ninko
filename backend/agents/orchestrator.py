@@ -13,7 +13,6 @@ import json as _json
 import logging
 import re
 from datetime import datetime, timezone
-from dataclasses import dataclass as _dc_dataclass, fields as _dc_fields
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -49,10 +48,6 @@ from agents.alert_tools import (
     resolve_alert,
 )
 from agents.script_tools import run_script_tool, list_script_tools
-from agents.data_analysis_subagent import (
-    _get_or_create_subagent,
-    _cleanup_subagent,
-)
 from core import status_bus
 from core.config import get_settings
 from core.llm_factory import get_llm, get_embeddings
@@ -87,7 +82,6 @@ _ORCH_RECOVERABLE_EXCEPTIONS = (
 
 # ── LLM-Timeouts (Orchestrator-eigene Konstanten) ────────────────────────────
 _LLM_ROUTING_TIMEOUT: float = 10.0
-_COMPLEXITY_CHECK_TIMEOUT: float = 2.0
 
 # ── Intent-Detection-Patterns (Tier-1/3, kein Routing-Concern) ───────────────
 
@@ -145,47 +139,6 @@ _UTILITY_MODULES: frozenset[str] = frozenset(
     {"web_search", "image_gen", "telegram", "email", "teams"}
 )
 
-_SPEED_SIGNALS: frozenset[str] = frozenset(
-    {
-        "schnell", "schnelle", "schneller", "schnelles",
-        "quick", "fast", "kurz", "kurze", "kurzer", "kurzes",
-        "brief", "knapp", "simplified", "einfach", "kürzer", "kürze",
-    }
-)
-
-_SESSION_ROUTING_TTL: float = 86400.0
-
-
-def _routing_config_key(session_id: str) -> str:
-    return f"ninko:orchestrator:routing:{session_id}"
-
-
-def _routing_stats_key(session_id: str) -> str:
-    return f"ninko:orchestrator:routing_stats:{session_id}"
-
-
-@_dc_dataclass
-class RoutingConfig:
-    tier1_enabled: bool = True
-    tier2_enabled: bool = True
-    tier4_enabled: bool = True
-    preset: str = "default"
-
-    @classmethod
-    def from_dict(cls, d: dict) -> "RoutingConfig":
-        known = {f.name for f in _dc_fields(cls)}
-        return cls(**{k: v for k, v in d.items() if k in known})
-
-    def to_dict(self) -> dict:
-        return {f.name: getattr(self, f.name) for f in _dc_fields(self)}
-
-
-ROUTING_PRESETS: dict[str, dict] = {
-    "default": {},
-    "fast": {"preset": "fast", "tier4_enabled": False},
-    "module-only": {"preset": "module-only", "tier1_enabled": False, "tier4_enabled": False},
-}
-
 
 class KeywordRouter:
     """Minimal compatibility router for legacy helper paths.
@@ -218,9 +171,18 @@ class KeywordRouter:
 
     def has_multistep_indicators(self, message: str, current_scores: dict[str, int]) -> bool:
         lowered = message.lower()
-        return len(current_scores) > 1 or any(
+        has_sequence_marker = any(
             marker in lowered for marker in (" und dann ", " danach ", " anschließend ", " then ")
         )
+        if not has_sequence_marker:
+            return False
+
+        qualified_modules = [
+            module
+            for module, score in current_scores.items()
+            if score >= 2 or (module in _UTILITY_MODULES and score >= 1)
+        ]
+        return len(qualified_modules) >= 2
 
     def detect_module(
         self,
@@ -238,19 +200,6 @@ class KeywordRouter:
             return top_module, is_compound, min(1.0, top_score / max(1, top_score + second_score))
         return None, is_compound, None
 
-    def classify_tier(
-        self,
-        message: str,
-        chat_history: list[dict] | None,
-        cfg: RoutingConfig | None = None,
-    ) -> tuple[int, str | None, float | None]:
-        module, is_compound, confidence = self.detect_module(message, chat_history)
-        if is_compound and (cfg is None or cfg.tier4_enabled):
-            return 4, None, confidence
-        if module and (cfg is None or cfg.tier2_enabled):
-            return 2, module, confidence
-        return 1, None, confidence
-
 
 # ── Intent-Detection-Patterns (Tier-1/3, kein Routing-Concern) ───────────────
 async def generate_image(prompt: str, size: str = "1024x1024") -> str:
@@ -262,92 +211,6 @@ async def generate_image(prompt: str, size: str = "1024x1024") -> str:
     from modules.image_gen.tools import generate_image as _gen
 
     return await _gen(prompt=prompt, size=size)
-
-
-async def get_session_routing_config(session_id: str) -> RoutingConfig | None:
-    """Gibt die session-scoped Routing-Config aus Redis zurück."""
-    if not session_id:
-        return None
-    try:
-        from core.redis_client import get_redis
-
-        raw = await get_redis().connection.get(_routing_config_key(session_id))
-        if not raw:
-            return None
-        payload = _json.loads(raw)
-        if not isinstance(payload, dict):
-            return None
-        return RoutingConfig.from_dict(payload)
-    except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
-        logger.warning(
-            "Konnte Routing-Config für Session '%s' nicht laden: %s",
-            session_id,
-            exc,
-        )
-        return None
-
-
-async def set_session_routing_config(session_id: str, cfg: RoutingConfig) -> None:
-    """Persistiert die session-scoped Routing-Config in Redis."""
-    if not session_id:
-        return
-    from core.redis_client import get_redis
-
-    await get_redis().connection.set(
-        _routing_config_key(session_id),
-        _json.dumps(cfg.to_dict()),
-        ex=int(_SESSION_ROUTING_TTL),
-    )
-
-
-async def clear_session_routing_config(session_id: str) -> None:
-    """Löscht die session-scoped Routing-Config aus Redis."""
-    if not session_id:
-        return
-    from core.redis_client import get_redis
-
-    await get_redis().connection.delete(_routing_config_key(session_id))
-
-
-async def _get_session_routing_stats(session_id: str) -> dict[str, list]:
-    """Lädt Routing-Heuristik-Stats für eine Session aus Redis."""
-    if not session_id:
-        return {"tiers": [], "modules": []}
-    try:
-        from core.redis_client import get_redis
-
-        raw = await get_redis().connection.get(_routing_stats_key(session_id))
-        if not raw:
-            return {"tiers": [], "modules": []}
-        payload = _json.loads(raw)
-        if not isinstance(payload, dict):
-            return {"tiers": [], "modules": []}
-        tiers = payload.get("tiers")
-        modules = payload.get("modules")
-        return {
-            "tiers": list(tiers) if isinstance(tiers, list) else [],
-            "modules": list(modules) if isinstance(modules, list) else [],
-        }
-    except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
-        logger.warning(
-            "Konnte Routing-Stats für Session '%s' nicht laden: %s",
-            session_id,
-            exc,
-        )
-        return {"tiers": [], "modules": []}
-
-
-async def _set_session_routing_stats(session_id: str, stats: dict[str, list]) -> None:
-    """Persistiert Routing-Heuristik-Stats für eine Session in Redis."""
-    if not session_id:
-        return
-    from core.redis_client import get_redis
-
-    await get_redis().connection.set(
-        _routing_stats_key(session_id),
-        _json.dumps(stats),
-        ex=int(_SESSION_ROUTING_TTL),
-    )
 
 
 SYSTEM_PROMPT = """Du bist Ninko – ein intelligenter IT-Operations-Assistent.
@@ -437,16 +300,7 @@ class OrchestratorAgent(BaseAgent):
         self._routing_map: dict[str, str] = {}
         self._routing_dirty = True
         self._router: KeywordRouter = KeywordRouter({})
-        from core.embedding_router import EmbeddingRouter
-        self._embedding_router: EmbeddingRouter = EmbeddingRouter()
-        from core.config import get_settings as _get_settings
-        self._routing_embedding_enabled: bool = _get_settings().ROUTING_EMBEDDING_ENABLED
         self._refresh_routing_map()
-        # ── Self-adaptive routing config ──
-        self._routing_config: RoutingConfig = RoutingConfig()
-        self._routing_config_loaded_at: float = 0.0
-        self._last_tier_used: int = 0
-        self._last_routing_confidence: float | None = None
 
     def _build_module_tools_schema(self) -> list[dict]:
         """JSON Tool-Defs aus Modul-Manifesten für Function Calling."""
@@ -1089,99 +943,9 @@ class OrchestratorAgent(BaseAgent):
 
         return "\n\n".join(parts)
 
-    async def _load_routing_config(self, session_id: str = "") -> RoutingConfig:
-        """Gibt die Routing-Config für die Session zurück.
-
-        Priorität: session-scoped config > RoutingConfig() Defaults.
-        Session-Config wird durch configure_routing-Tool oder proaktive Heuristiken gesetzt.
-        """
-        session_cfg = await get_session_routing_config(session_id)
-        if session_cfg is not None:
-            return session_cfg
-        return RoutingConfig()
-
     def _invalidate_routing_cache(self) -> None:
         """Markiert die Routing-Map als veraltet (nach Modul-Änderungen aufrufen)."""
         self._routing_dirty = True
-
-    async def _proactive_routing_adjust(
-        self,
-        session_id: str,
-        message: str,
-        chat_history: list[dict] | None,
-        cfg: RoutingConfig,
-    ) -> RoutingConfig:
-        """Proaktive Heuristiken: passt die Session-Routing-Config ohne expliziten User-Befehl an.
-
-        Läuft synchron und ohne LLM-Call — nur Pattern-Matching und Session-Stats.
-        """
-        msg_lower = message.lower()
-        stats = await _get_session_routing_stats(session_id)
-        words = set(re.sub(r"[^\w\s]", " ", msg_lower).split())
-
-        # ── Heuristik 1: Speed-Signale → Fast-Preset für diese Session ──────
-        if cfg.preset != "fast" and words & _SPEED_SIGNALS:
-            new_cfg = RoutingConfig.from_dict({**RoutingConfig().to_dict(), "preset": "fast"})
-            await set_session_routing_config(session_id, new_cfg)
-            logger.info(
-                "Proaktives Routing: Speed-Signal erkannt → Fast-Preset für Session '%s'",
-                session_id,
-            )
-            return new_cfg
-
-        # ── Heuristik 2: Reset-Signale → zurück zu Defaults ─────────────────
-        _RESET_SIGNALS = {
-            "default",
-            "normal",
-            "reset",
-            "zurück",
-            "standard",
-            "alles",
-            "wieder",
-        }
-        if words & _RESET_SIGNALS and cfg.preset != "default":
-            await clear_session_routing_config(session_id)
-            logger.info(
-                "Proaktives Routing: Reset-Signal erkannt → Defaults für Session '%s'",
-                session_id,
-            )
-            return RoutingConfig()
-
-        # ── Heuristik 3: Modul-Fokus → Tier 2 dominiert, kein Bedarf für ReAct-Loop ─
-        # Informativer Log — im neuen Modell gibt es kein llm_routing_enabled mehr,
-        # aber wir tracken den Fokus weiterhin für zukünftige Optimierungen.
-        recent_tiers = stats.get("tiers", [])[-6:]
-        recent_modules = [m for m in stats.get("modules", [])[-6:] if m]
-        if (
-            len(recent_tiers) >= 5
-            and all(t == 2 for t in recent_tiers)
-            and len(set(recent_modules)) == 1
-            and not cfg.preset.startswith("focus:")
-        ):
-            dominant = recent_modules[0]
-            new_cfg = RoutingConfig.from_dict({**cfg.to_dict(), "preset": f"focus:{dominant}"})
-            await set_session_routing_config(session_id, new_cfg)
-            logger.info(
-                "Proaktives Routing: Modul-Fokus '%s' erkannt (Session '%s')",
-                dominant,
-                session_id,
-            )
-            return new_cfg
-
-        return cfg
-
-    async def _update_session_stats(self, session_id: str, tier: int, module: str | None) -> None:
-        """Trackt Tier-Nutzung und Modul-Verteilung pro Session für proaktive Heuristiken."""
-        if not session_id:
-            return
-        stats = await _get_session_routing_stats(session_id)
-        stats["tiers"].append(tier)
-        stats["modules"].append(module)
-        # Nur die letzten 20 Einträge behalten
-        if len(stats["tiers"]) > 20:
-            stats["tiers"] = stats["tiers"][-20:]
-            stats["modules"] = stats["modules"][-20:]
-        await _set_session_routing_stats(session_id, stats)
 
     def _refresh_routing_map(self) -> None:
         """Routing-Map aus der Registry aktualisieren (nur wenn dirty)."""
@@ -1189,12 +953,6 @@ class OrchestratorAgent(BaseAgent):
             return
         self._routing_map = self.registry.get_routing_map()
         self._router.update_routing_map(self._routing_map)
-        module_keywords: dict[str, list[str]] = {}
-        for keyword, module_name in self._routing_map.items():
-            module_keywords.setdefault(module_name, []).append(keyword)
-        self._embedding_router.update_module_descriptions(
-            {m: " ".join(kws) for m, kws in module_keywords.items()}
-        )
         self._routing_dirty = False
         logger.info(
             "Routing-Map aktualisiert: %d Keywords → %d Module",
@@ -1224,85 +982,6 @@ class OrchestratorAgent(BaseAgent):
         if not module_agent:
             return []
         return [t for t in module_agent.tools if t.name in _TOOL_READONLY]
-
-    async def _check_task_complexity(self, message: str, module: str) -> dict | None:
-        from core.llm_factory import get_llm
-        from langchain_core.messages import HumanMessage
-
-        prompt = f"""Analysiere diese Aufgabe für Modul "{module}":
-
-User-Query: {message}
-
-Wird diese Aufgabe wahrscheinlich viele Datensätze zurückliefern
-(> 20 Ergebnisse, komplexe Filterung, Aggregation)?
-
-Indikatoren für JA (is_complex: true):
-- "alle/list all/show all" → viele Ergebnisse erwartet
-- "gruppiert nach/group by" → Aggregation über große Menge
-- "vergleiche/compare" → muss viele Daten durchgehen
-- Keine explizite Limitierung ("die letzten 5")
-- "Überblick/overview" über viele Ressourcen
-- "Statistik/statistics" über große Mengen
-- "älter als/older than" kombiniert mit "alle/all"
-
-Indikatoren für NEIN (is_complex: false):
-- "Ticket #123" → einzelne Ressource
-- "erstelle/create" → Schreiboperation, keine Datenabfrage
-- Explizites Limit ("zeige 3", "letzte 5")
-- "Status von/status of" einzelner Ressource
-- "Details" zu spezifischer Ressource
-
-Antworte NUR mit JSON:
-{{
-  "is_complex": true/false,
-  "sub_tasks": ["task1", "task2"],
-  "suggested_subagent_count": 1-2,
-  "reasoning": "kurze Begründung"
-}}"""
-
-        try:
-            llm = get_llm()
-            response = await asyncio.wait_for(
-                llm.ainvoke([HumanMessage(content=prompt)]),
-                timeout=_COMPLEXITY_CHECK_TIMEOUT,
-            )
-            raw = response.content if hasattr(response, "content") else str(response)
-            raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
-
-            m = re.search(r"\{[\s\S]*\}", raw)
-            if not m:
-                logger.debug("Complexity-Check: Kein JSON gefunden, Fallback zu Tier 2")
-                return None
-
-            result = _json.loads(m.group(0))
-
-            is_complex = bool(result.get("is_complex", False))
-            sub_tasks = (
-                result.get("sub_tasks", []) if isinstance(result.get("sub_tasks"), list) else []
-            )
-            suggested_count = max(1, min(2, int(result.get("suggested_subagent_count", 1))))
-            reasoning = str(result.get("reasoning", ""))[:200]
-
-            logger.info(
-                "Complexity-Check für '%s': is_complex=%s, reasoning='%s'",
-                module,
-                is_complex,
-                reasoning,
-            )
-
-            return {
-                "is_complex": is_complex,
-                "sub_tasks": sub_tasks,
-                "suggested_subagent_count": suggested_count,
-                "reasoning": reasoning,
-            }
-
-        except asyncio.TimeoutError:
-            logger.debug("Complexity-Check Timeout → Fallback zu Tier 2")
-            return None
-        except Exception as e:
-            logger.warning("Complexity-Check Fehler: %s → Fallback zu Tier 2", e)
-            return None
 
     @staticmethod
     def _wants_agent_creation(message: str) -> bool:
@@ -1410,7 +1089,7 @@ Beispiel 1 - Kubernetes Monitoring:
 
 Beispiel 2 - GLPI Ticket Bearbeitung:
 {{
-  "name": "glpi-ticket-assistant", 
+  "name": "glpi-ticket-assistant",
   "description": "Bearbeitet GLPI Tickets automatisch: antwortet, setzt Beobachter, ändert Status",
   "system_prompt": "# GLPI Ticket Assistant\\n\\nDu automatisierst GLPI Ticket-Workflows.\\n\\n## Aufgaben\\n1. Suche neue Tickets (Status=1)\\n2. Füge Beobachter hinzu\\n3. Schreibe professionelle Antworten\\n4. Aktualisiere Status\\n\\n## Arbeitsweise\\n- Nutze call_module_agent('glpi', 'Suche Tickets...')\\n- Für User-Infos: call_module_agent('glpi', 'Suche Benutzer...')\\n- Füge Followups mit Lösungsvorschlägen hinzu\\n\\n## Kritische Aktionen (Bestätigung nötig)\\n- Schließen von Tickets ohne Lösung\\n- Löschen von Tickets\\n\\n## Eskalation\\n→ Bei komplexen technischen Problemen an Ninko zurückgeben"
 }}
@@ -1931,26 +1610,6 @@ JSON-SCHEMA:
     @staticmethod
     def _has_confident_top_module(top_score: int, second_score: int) -> bool:
         return KeywordRouter.has_confident_top_module(top_score, second_score)
-
-    def _detect_module_fast(
-        self,
-        message: str,
-        chat_history: list[dict] | None = None,
-    ) -> tuple[str | None, bool]:
-        module, is_compound, _ = self._router.detect_module(message, chat_history)
-        return module, is_compound
-
-    def apply_embedding_corrections(self, module: str, examples: list[str]) -> None:
-        """Leitet Korrektur-Beispiele an den EmbeddingRouter weiter (Soft-Learning)."""
-        self._embedding_router.incorporate_corrections(module, examples)
-
-    def _classify_tier(
-        self,
-        message: str,
-        chat_history: list[dict] | None,
-        cfg: RoutingConfig | None = None,
-    ) -> tuple[int, str | None, float | None]:
-        return self._router.classify_tier(message, chat_history, cfg)
 
     async def _plan_and_execute_pipeline(
         self,
@@ -2645,48 +2304,6 @@ JSON-SCHEMA:
             )
             return None
 
-        readonly_tools = self._get_readonly_tools_for_module(target_module)
-        if readonly_tools:
-            complexity = await self._check_task_complexity(message, target_module)
-            if complexity and complexity.get("is_complex"):
-                logger.info(
-                    "Tier 2.5: DataAnalysisSubagent für '%s' (Reason: %s)",
-                    target_module,
-                    complexity.get("reasoning", "unknown"),
-                )
-                await status_bus.emit(
-                    session_id,
-                    _t(
-                        de=f"Analysiere komplexe Daten in {target_module}…",
-                        en=f"Analyzing complex data in {target_module}…",
-                    ),
-                )
-
-                subagent = _get_or_create_subagent(
-                    session_id=session_id,
-                    module=target_module,
-                    tools=readonly_tools,
-                )
-                try:
-                    result = await subagent.invoke(
-                        task=message,
-                        chat_history=chat_history,
-                        sub_tasks=complexity.get("sub_tasks"),
-                    )
-                    if isinstance(result, tuple) and len(result) == 2:
-                        response, did_compact = result
-                    else:
-                        logger.warning(
-                            "DataAnalysisSubagent.invoke() hat kein (str, bool)-Tuple "
-                            "zurückgegeben (type=%s) — did_compact=False angenommen.",
-                            type(result).__name__,
-                        )
-                        response = result if isinstance(result, str) else str(result)
-                        did_compact = False
-                finally:
-                    _cleanup_subagent(session_id, target_module)
-                return response, target_module, did_compact
-
         display = self._module_display_name(target_module)
         return await self._invoke_module_agent(
             target_module,
@@ -2927,8 +2544,8 @@ JSON-SCHEMA:
                 cancellation_check=cancellation_check,
             )
 
-        # ── Fallback: 4-Tier-Routing (Keyword + Embedding + ReAct) ────────────
-        return await self._route_legacy_tiered(
+        # ── Fallback: ReAct-Loop ────────────────────────────────────────────────
+        return await self._fallback_to_react_loop(
             message=message,
             chat_history=chat_history,
             session_id=session_id,
@@ -2993,31 +2610,6 @@ JSON-SCHEMA:
                 en=f"Checking {self._module_display_name(target_module)} status…",
             ),
             log_prefix="Status-Fast-Path an Modul",
-            wants_stream=wants_stream,
-            token_callback=token_callback,
-            cancellation_check=cancellation_check,
-        )
-
-    async def _route_legacy_tiered(
-        self,
-        message: str,
-        chat_history: list[dict] | None,
-        session_id: str,
-        confirmed: bool,
-        wants_stream: bool = False,
-        token_callback: Any = None,
-        cancellation_check: Any = None,
-    ) -> tuple[str, str | None, bool]:
-        """Legacy-Fallback wenn Function Calling deaktiviert ist.
-
-        Die alten Evidence-/Prestructure-Komponenten wurden entfernt; der
-        verbleibende robuste Fallback ist die bestehende ReAct-Schleife.
-        """
-        return await self._fallback_to_react_loop(
-            message=message,
-            chat_history=chat_history,
-            session_id=session_id,
-            confirmed=confirmed,
             wants_stream=wants_stream,
             token_callback=token_callback,
             cancellation_check=cancellation_check,

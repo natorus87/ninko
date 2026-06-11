@@ -12,6 +12,7 @@ from fastapi import APIRouter, Request, HTTPException
 
 from core.auth import ROLE_ADMIN, resolve_request_auth, role_allows
 from core.routing_telemetry import get_routing_telemetry
+from schemas.routing import RoutingResetResponse, RoutingStatsResponse
 
 router = APIRouter(prefix="/api/routing", tags=["Routing"])
 
@@ -23,8 +24,8 @@ def _require_admin(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Admin-Zugriff erforderlich.")
 
 
-@router.get("/corrections")
-async def get_routing_corrections(request: Request) -> dict:
+@router.get("/corrections", response_model=RoutingStatsResponse)
+async def get_routing_corrections(request: Request) -> RoutingStatsResponse:
     """Gibt Routing-Korrektur-Statistiken zurück.
 
     Zeigt, welche Auto-Routing-Entscheidungen der User durch force_module
@@ -33,16 +34,17 @@ async def get_routing_corrections(request: Request) -> dict:
     _require_admin(request)
     telemetry = get_routing_telemetry()
     if telemetry is None:
-        return {"total": 0, "by_pair": {}, "recent": []}
-    return await telemetry.get_stats()
+        return RoutingStatsResponse()
+    data = await telemetry.get_stats()
+    return RoutingStatsResponse(**data)
 
 
-@router.delete("/corrections")
-async def reset_routing_corrections(request: Request) -> dict:
+@router.delete("/corrections", response_model=RoutingResetResponse)
+async def reset_routing_corrections(request: Request) -> RoutingResetResponse:
     """Setzt Korrektur-Log und Statistiken zurück (Admin-Aktion)."""
     _require_admin(request)
     telemetry = get_routing_telemetry()
     if telemetry is None:
-        return {"status": "noop"}
+        return RoutingResetResponse(status="noop")
     await telemetry.reset_stats()
-    return {"status": "reset"}
+    return RoutingResetResponse(status="reset")

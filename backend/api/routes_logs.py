@@ -13,6 +13,7 @@ from fastapi import APIRouter, Query, Request
 
 from core.auth import auth_tenant_id, resolve_request_auth
 from core.redis_client import get_redis
+from schemas.logs import LogClearResponse, LogEntry, LogListResponse
 
 logger = logging.getLogger("ninko.api.logs")
 router = APIRouter(prefix="/api/logs", tags=["Logs"])
@@ -21,7 +22,7 @@ REDIS_LOG_KEY = "ninko:logs"
 MAX_LOG_ENTRIES = 10000
 
 
-@router.get("/")
+@router.get("/", response_model=LogListResponse)
 async def get_logs(
     request: Request,
     level: Optional[str] = Query(None, description="Komma-getrennte Level: INFO,WARN,ERROR,CRIT"),
@@ -31,7 +32,7 @@ async def get_logs(
     from_ts: Optional[float] = Query(None, description="Unix-Timestamp von"),
     to_ts: Optional[float] = Query(None, description="Unix-Timestamp bis"),
     limit: int = Query(500, le=2000),
-) -> dict:
+) -> LogListResponse:
     """Log-Einträge mit optionalen Filtern abrufen."""
     redis = get_redis()
     tenant_id = auth_tenant_id(resolve_request_auth(request))
@@ -78,11 +79,14 @@ async def get_logs(
         if len(entries) >= limit:
             break
 
-    return {"entries": entries, "total": len(entries)}
+    return LogListResponse(
+        entries=[LogEntry(**e) for e in entries],
+        total=len(entries),
+    )
 
 
-@router.delete("/")
-async def clear_logs(request: Request) -> dict:
+@router.delete("/", response_model=LogClearResponse)
+async def clear_logs(request: Request) -> LogClearResponse:
     """Log-Einträge des aktuellen Tenants löschen."""
     redis = get_redis()
     tenant_id = auth_tenant_id(resolve_request_auth(request))

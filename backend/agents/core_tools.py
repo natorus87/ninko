@@ -1204,6 +1204,22 @@ async def run_pipeline(steps: list[dict]) -> str:
         skip_on_error=False,
     )
 
+    if result.status == PipelineStatus.AWAITING_CONFIRMATION:
+        awaiting = next((s for s in result.steps if s.status.value == "awaiting_confirmation"), None)
+        module_name = awaiting.module if awaiting else "?"
+        return _t(
+            f"⚠️ **Pipeline-Bestätigung erforderlich**\n\n"
+            f"Die geplante Pipeline enthält einen Schritt, der deine Bestätigung braucht "
+            f"(Modul: `{module_name}`).\n\n"
+            f"Die Pipeline wird noch **nicht** ausgeführt. Antworte mit `ja` / `ok` / "
+            f"`confirmed: true`, um sie zu starten.",
+            f"⚠️ **Pipeline Confirmation Required**\n\n"
+            f"The planned pipeline contains a step that requires your confirmation "
+            f"(module: `{module_name}`).\n\n"
+            f"The pipeline has **not** been executed yet. Reply with `yes` / `ok` / "
+            f"`confirmed: true` to start it.",
+        )
+
     markdown = result.to_markdown()
     if result.status == PipelineStatus.FAILED:
         return _t(
@@ -1535,122 +1551,6 @@ async def speak(text: str, lang: str = "", voice: str = "") -> str:
             f"TTSエラー: {exc}",
             f"TTS错误: {exc}",
         )
-
-
-# ── Self-Adaptive Routing Tools ───────────────────────────────────────────────
-
-
-@tool
-async def configure_routing(
-    preset: str = "",
-    tier1_enabled: bool | None = None,
-    tier2_enabled: bool | None = None,
-    tier4_enabled: bool | None = None,
-) -> str:
-    """Passt das Routing-Verhalten des Orchestrators für die aktuelle Session an.
-
-    Die Änderung gilt NUR für diese Session — nach Session-Ende zurück zu Defaults.
-
-    Drei Routing-Tiers:
-    - Tier 4 (Pipeline-Planner): Compound oder explizit sequentielle Multi-Modul-Anfragen
-      → LLM-Planner erstellt JSON-Plan → run_pipeline führt ihn aus.
-    - Tier 2 (Keyword-Fast-Path): Genau ein Modul eindeutig per Keyword → direkt delegieren.
-    - Tier 1 (ReAct-Loop): Alles andere → LLM entscheidet via call_module_agent / run_pipeline.
-
-    Nutze dieses Tool wenn:
-    - Routing zurückgesetzt werden soll → preset='default'
-    - Pipeline-Planner deaktivieren (schnellere Antworten) → tier4_enabled=False
-    - Keyword-Fast-Path deaktivieren (alles durch ReAct-Loop) → tier2_enabled=False
-    - ReAct-Loop deaktivieren → tier1_enabled=False
-
-    Preset-Kurzformen: 'default' (reset), 'fast' (kein Tier 4), 'module-only'
-    """
-    from agents.orchestrator import (
-        get_orchestrator,
-        RoutingConfig,
-        ROUTING_PRESETS,
-        get_session_routing_config,
-        set_session_routing_config,
-        clear_session_routing_config,
-    )
-
-    get_orchestrator()  # Validierung: Orchestrator muss initialisiert sein
-    session_id = status_bus.get_session_id()
-
-    if preset == "default":
-        await clear_session_routing_config(session_id)
-        return _t(
-            "Routing zurückgesetzt auf Standard-Konfiguration (gilt für diese Session).",
-            "Routing reset to default configuration (for this session).",
-        )
-
-    current = await get_session_routing_config(session_id) or RoutingConfig()
-
-    if preset:
-        if preset not in ROUTING_PRESETS:
-            return _t(
-                f"Unbekanntes Preset '{preset}'. Verfügbar: {', '.join(ROUTING_PRESETS.keys())}",
-                f"Unknown preset '{preset}'. Available: {', '.join(ROUTING_PRESETS.keys())}",
-            )
-        current = RoutingConfig.from_dict(
-            {**RoutingConfig().to_dict(), **ROUTING_PRESETS[preset]}
-        )
-
-    updates = {
-        k: v
-        for k, v in {
-            "tier1_enabled": tier1_enabled,
-            "tier2_enabled": tier2_enabled,
-            "tier4_enabled": tier4_enabled,
-        }.items()
-        if v is not None
-    }
-    if updates:
-        current = RoutingConfig.from_dict({**current.to_dict(), **updates})
-
-    await set_session_routing_config(session_id, current)
-
-    cfg_dict = current.to_dict()
-    lines = [
-        f"  Preset: {cfg_dict['preset']}",
-        f"  Tier 4 (Pipeline-Planner): {'✓' if cfg_dict['tier4_enabled'] else '✗'}",
-        f"  Tier 2 (Keyword-Fast-Path): {'✓' if cfg_dict['tier2_enabled'] else '✗'}",
-        f"  Tier 1 (ReAct-Loop): {'✓' if cfg_dict['tier1_enabled'] else '✗'}",
-    ]
-    return _t(
-        "Routing-Konfiguration aktualisiert:\n" + "\n".join(lines),
-        "Routing configuration updated:\n" + "\n".join(lines),
-    )
-
-
-@tool
-async def get_routing_info() -> str:
-    """Gibt die aktuelle Routing-Konfiguration und das zuletzt genutzte Tier zurück.
-
-    Nützlich um zu prüfen welche Routing-Einstellungen aktiv sind — z.B. bevor
-    configure_routing aufgerufen wird oder um die Routing-Performance zu beurteilen.
-    """
-    from agents.orchestrator import (
-        get_orchestrator,
-        RoutingConfig,
-        get_session_routing_config,
-    )
-
-    orch = get_orchestrator()
-    session_id = status_bus.get_session_id()
-    session_cfg = await get_session_routing_config(session_id)
-    cfg = session_cfg if session_cfg is not None else RoutingConfig()
-    last_tier = getattr(orch, "_last_tier_used", "?") if orch else "?"
-    source = "Session" if session_cfg is not None else "Default"
-
-    return (
-        f"Routing-Konfiguration (Quelle: {source}):\n"
-        f"  Preset: {cfg.preset}\n"
-        f"  Tier 4 (Pipeline-Planner): {'✓' if cfg.tier4_enabled else '✗'}\n"
-        f"  Tier 2 (Keyword-Fast-Path): {'✓' if cfg.tier2_enabled else '✗'}\n"
-        f"  Tier 1 (ReAct-Loop): {'✓' if cfg.tier1_enabled else '✗'}\n"
-        f"  Zuletzt genutztes Tier: {last_tier}"
-    )
 
 
 @tool
@@ -2005,12 +1905,11 @@ async def generate_pdf_report(
     Returns:
         Absoluter Pfad zur erstellten PDF-Datei
     """
-    import os
     from pathlib import Path
 
     try:
         import markdown
-        from weasyprint import HTML, CSS
+        from weasyprint import HTML
     except ImportError as exc:
         logger.error("PDF-Generierung nicht verfügbar: %s", exc)
         return _t(

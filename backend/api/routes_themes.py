@@ -38,6 +38,7 @@ from schemas.theme import (
     ThemeRepo,
     ThemeRepoCreate,
 )
+from schemas.mutations import MutationResponse
 
 logger = logging.getLogger("ninko.api.themes")
 router = APIRouter(prefix="/api/themes", tags=["Themes"])
@@ -180,8 +181,8 @@ async def update_custom_theme(theme_id: str, body: ThemeDefinition) -> ThemeDefi
         raise HTTPException(status_code=400, detail=str(exc))
 
 
-@router.delete("/custom/{theme_id}")
-async def remove_custom_theme(theme_id: str) -> dict:
+@router.delete("/custom/{theme_id}", response_model=MutationResponse)
+async def remove_custom_theme(theme_id: str) -> MutationResponse:
     if theme_id in list_builtin_themes():
         raise HTTPException(status_code=403, detail="Built-in Themes können nicht gelöscht werden.")
     deleted = delete_custom_theme(theme_id)
@@ -190,7 +191,7 @@ async def remove_custom_theme(theme_id: str) -> dict:
     active = await get_active_theme_id()
     if active == theme_id:
         await set_active_theme_id("default")
-    return {"deleted": True, "theme_id": theme_id}
+    return MutationResponse(status="deleted", id=theme_id)
 
 
 @router.post("/custom/{theme_id}/duplicate")
@@ -244,8 +245,8 @@ async def update_theme_repo(repo_id: str, body: ThemeRepoCreate) -> dict:
     return {"repo": _mask_repo(repo)}
 
 
-@router.delete("/repos/{repo_id}")
-async def delete_theme_repo(repo_id: str) -> dict:
+@router.delete("/repos/{repo_id}", response_model=MutationResponse)
+async def delete_theme_repo(repo_id: str) -> MutationResponse:
     if repo_id == _OFFICIAL_REPO_ID:
         raise HTTPException(status_code=403, detail="Official Repo kann nicht gelöscht werden.")
     repos = await _load_repos()
@@ -253,7 +254,7 @@ async def delete_theme_repo(repo_id: str) -> dict:
     if len(filtered) == len(repos):
         raise HTTPException(status_code=404, detail="Repo nicht gefunden.")
     await _save_repos(filtered)
-    return {"deleted": True}
+    return MutationResponse(status="deleted", id=repo_id)
 
 
 @router.get("/repos/{repo_id}/themes")

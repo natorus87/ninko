@@ -28,11 +28,13 @@ from schemas.settings import (
     K8sClusterListResponse,
     BrandingSettings,
     BrandingSettingsResponse,
+    EmbedModelResponse,
     normalize_llm_backend,
 )
 from core.config import get_settings
 from core.redis_client import get_redis
 from agents.base_agent import _t
+from schemas.mutations import MutationResponse
 
 logger = logging.getLogger("ninko.api.settings")
 router = APIRouter(prefix="/api/settings", tags=["Settings"])
@@ -188,8 +190,8 @@ REDIS_KEY_EMBED_MODEL = "ninko:settings:embed_model"
 REDIS_KEY_EMBED_PROVIDER = "ninko:settings:embed_provider"
 
 
-@router.get("/llm/embed-model")
-async def get_embed_model() -> dict:
+@router.get("/llm/embed-model", response_model=EmbedModelResponse)
+async def get_embed_model() -> EmbedModelResponse:
     """Globales Embedding-Modell abrufen."""
     redis = get_redis()
     stored = await redis.connection.get(REDIS_KEY_EMBED_MODEL)
@@ -198,7 +200,7 @@ async def get_embed_model() -> dict:
         if isinstance(stored, str)
         else (stored.decode() if stored else get_settings().EMBED_MODEL)
     )
-    return {"embed_model": model}
+    return EmbedModelResponse(embed_model=model)
 
 
 @router.put("/llm/embed-model")
@@ -577,8 +579,8 @@ async def get_branding_asset(filename: str) -> object:
     return FileResponse(str(path), media_type=media_type, filename=filename)
 
 
-@router.delete("/branding/assets/{filename}")
-async def delete_branding_asset(filename: str) -> dict:
+@router.delete("/branding/assets/{filename}", response_model=MutationResponse)
+async def delete_branding_asset(filename: str) -> MutationResponse:
     """Branding-Asset löschen und ggf. referenzierte URLs im Branding leeren."""
     if ".." in filename or "/" in filename:
         raise HTTPException(
@@ -658,7 +660,7 @@ async def delete_branding_asset(filename: str) -> dict:
                 exc,
             )
 
-    return {"deleted": True, "filename": filename}
+    return MutationResponse(status="deleted", data={"filename": filename})
 
 
 # ═══════════════════════════════════════════════════════
@@ -1162,7 +1164,6 @@ async def get_context_window() -> dict:
     from core.llm_factory import (
         get_model_context_window,
         _cached_context_window,
-        _DEFAULT_CONTEXT_WINDOW,
     )
 
     redis = get_redis()
@@ -1488,8 +1489,8 @@ async def get_tts_settings() -> dict:
     }
 
 
-@router.put("/tts")
-async def update_tts_settings(body: dict) -> dict:
+@router.put("/tts", response_model=MutationResponse)
+async def update_tts_settings(body: dict) -> MutationResponse:
     """TTS-Konfiguration in Redis speichern und sofort in ENV übernehmen."""
     allowed = {
         "TTS_ENABLED",
@@ -1522,7 +1523,7 @@ async def update_tts_settings(body: dict) -> dict:
         )
 
     logger.info("TTS-Settings aktualisiert: %s", data)
-    return {"status": "saved", **data}
+    return MutationResponse(status="saved", data=data)
 
 
 # ═══════════════════════════════════════════════════════
@@ -1584,8 +1585,8 @@ async def get_stt_settings() -> dict:
     }
 
 
-@router.put("/stt")
-async def update_stt_settings(body: dict) -> dict:
+@router.put("/stt", response_model=MutationResponse)
+async def update_stt_settings(body: dict) -> MutationResponse:
     """STT-Konfiguration in Redis speichern und sofort in ENV übernehmen."""
     data = {k: v for k, v in body.items() if k in _STT_ALLOWED}
 
@@ -1620,7 +1621,10 @@ async def update_stt_settings(body: dict) -> dict:
         "STT-Settings aktualisiert: %s",
         {k: v for k, v in data.items() if "KEY" not in k},
     )
-    return {"status": "saved", **{k: v for k, v in data.items() if "KEY" not in k}}
+    return MutationResponse(
+        status="saved",
+        data={k: v for k, v in data.items() if "KEY" not in k},
+    )
 
 
 # ═══════════════════════════════════════════════════════

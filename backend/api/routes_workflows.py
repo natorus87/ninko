@@ -24,6 +24,7 @@ from schemas.workflows import (
     DebateCreateRequest,
     DebateVoteRequest,
 )
+from schemas.mutations import MutationResponse
 
 logger = logging.getLogger("ninko.api.workflows")
 router = APIRouter(prefix="/api/workflows", tags=["Workflows"])
@@ -619,8 +620,8 @@ async def run_debate_round(debate_id: str, request: Request) -> dict:
     }
 
 
-@router.post("/debates/{debate_id}/vote")
-async def vote_in_debate(debate_id: str, body: DebateVoteRequest, request: Request) -> dict:
+@router.post("/debates/{debate_id}/vote", response_model=MutationResponse)
+async def vote_in_debate(debate_id: str, body: DebateVoteRequest, request: Request) -> MutationResponse:
     redis = get_redis()
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     from core.debate_service import DebateService
@@ -632,4 +633,4 @@ async def vote_in_debate(debate_id: str, body: DebateVoteRequest, request: Reque
         target_agent_id=body.target_agent_id,
         tenant_id=tenant_id,
     )
-    return {"success": success}
+    return MutationResponse(status="ok" if success else "noop", id=debate_id, data={"vote_recorded": success})

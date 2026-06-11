@@ -19,6 +19,9 @@ from schemas.chat import (
     ChatResponse,
     ChatHistoryResponse,
     ChatMessage,
+    HistoryUpdateRequest,
+    SessionMessagesResponse,
+    UiHistoryEntry,
 )
 from core.redis_client import get_redis
 from core.context_manager import get_context_manager
@@ -37,6 +40,46 @@ def _tenant_session_id(request: Request, session_id: str) -> str:
     auth_ctx = resolve_request_auth(request)
     tenant_id = auth_tenant_id(auth_ctx)
     return f"{tenant_id}:{session_id}"
+
+
+async def _check_session_access(
+    request: Request, scoped_session_id: str
+) -> None:
+    """Prüft, ob der authentifizierte User Zugriff auf die Session hat (IDOR-Schutz).
+
+    Regeln:
+    - Anonymer Request: nur erlaubt, wenn die Session noch keinen Owner hat
+      (z. B. direkter Erstaufruf vor Login-Set). Sonst 401.
+    - Authentifizierter Request: muss entweder Owner sein, oder die Session
+      hat noch keinen Owner (dann wird der aktuelle User als Owner gesetzt).
+
+    Raises HTTPException 401 (anonymous + existing owner) oder 403 (mismatch).
+    """
+    redis = get_redis()
+    auth_ctx = resolve_request_auth(request)
+    username = str(auth_ctx.get("username")) if auth_ctx else None
+    existing_owner = await redis.get_session_owner(scoped_session_id)
+
+    if username is None:
+        if existing_owner is not None:
+            # Anonymer Request, aber Session ist bereits claimed → blockieren
+            raise HTTPException(
+                status_code=401,
+                detail="Authentifizierung erforderlich für Zugriff auf diese Session.",
+            )
+        return  # Anonym + ownerlos = OK (sollte nicht vorkommen, aber fail-open)
+
+    # Authentifizierter User
+    if existing_owner is None:
+        # Erstzugriff: aktuellen User als Owner setzen
+        await redis.set_session_owner(scoped_session_id, username)
+        return
+    if existing_owner != username:
+        # Owner-Mismatch: IDOR-Versuch
+        raise HTTPException(
+            status_code=403,
+            detail="Kein Zugriff auf diese Session.",
+        )
 
 
 def _parse_sentinel(response_text: str) -> dict:
@@ -97,40 +140,90 @@ def _message_confirmation_text(sg_result) -> str:
     )
 
 
+_OP_JOURNAL_EXCEPTIONS = (
+    KeyError,
+    ValueError,
+    RuntimeError,
+    OSError,
+    asyncio.TimeoutError,
+    json.JSONDecodeError,
+)
+
+
 async def _resolve_confirmed_message(
     body: ChatRequest,
     scoped_session_id: str,
     redis,
     op_journal,
-) -> tuple[str, bool, str | None]:
+) -> tuple[str, bool, str | None, str | None]:
     """
     Akzeptiert kurze Textbestaetigungen wie "ok" nur, wenn fuer die Session
     bereits eine SafeGuard-Aktion pending ist.
+
+    Returns:
+        (effective_message, confirmed, pending_tx_id, pipeline_id)
+        pipeline_id ist gesetzt, wenn eine pausierte Pipeline bestätigt werden soll
+        (source="pipeline_safeguard"). In diesem Fall muss der Aufrufer die Pipeline
+        via engine.resume(pipeline_id) fortsetzen statt den LLM-Pfad zu nehmen.
     """
     if body.confirmed:
-        return body.message, True, None
+        pending_tx_id = await op_journal.get_pending_for_session(scoped_session_id)
+        if pending_tx_id:
+            try:
+                tx = await op_journal.get(pending_tx_id)
+                if tx.get("source") == "chat_safeguard" and tx.get("text"):
+                    return tx["text"], True, pending_tx_id, None
+                if tx.get("source") == "pipeline_safeguard":
+                    pipeline_id = _extract_pipeline_id_from_tx(tx)
+                    if pipeline_id:
+                        return body.message, True, pending_tx_id, pipeline_id
+            except _OP_JOURNAL_EXCEPTIONS as exc:
+                logger.warning("Pending SafeGuard transaction lookup failed: %s", exc)
+        return body.message, True, None, None
 
     if not is_bot_confirmation(body.message):
-        return body.message, False, None
+        return body.message, False, None, None
 
     tool_pending_raw = await redis.connection.get(
         f"ninko:safeguard_tool_pending:{scoped_session_id}"
     )
     pending_tx_id = await op_journal.get_pending_for_session(scoped_session_id)
     if not tool_pending_raw and not pending_tx_id:
-        return body.message, False, None
+        return body.message, False, None, None
 
     effective_message = body.message
+    pipeline_id: str | None = None
     if pending_tx_id and not tool_pending_raw:
         try:
             tx = await op_journal.get(pending_tx_id)
-        except Exception as exc:
+        except _OP_JOURNAL_EXCEPTIONS as exc:
             logger.warning("Pending SafeGuard transaction lookup failed: %s", exc)
             tx = {}
-        if tx.get("source") == "chat_safeguard" and tx.get("text"):
+        source = tx.get("source")
+        if source == "chat_safeguard" and tx.get("text"):
             effective_message = tx["text"]
+        elif source == "pipeline_safeguard":
+            pipeline_id = _extract_pipeline_id_from_tx(tx)
+            if pipeline_id:
+                effective_message = tx.get("text", body.message)
 
-    return effective_message, True, pending_tx_id
+    return effective_message, True, pending_tx_id, pipeline_id
+
+
+def _extract_pipeline_id_from_tx(tx: dict) -> str | None:
+    """Liest pipeline_id aus dem JSON-kodierten metadata-Feld einer op_journal-Transaktion."""
+    import json as _json
+    raw_meta = tx.get("metadata", "")
+    if not raw_meta:
+        return None
+    try:
+        meta = _json.loads(raw_meta)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(meta, dict):
+        return None
+    pid = meta.get("pipeline_id")
+    return str(pid) if pid else None
 
 
 # ── Stream-Frame-Helper ────────────────────────────────────────────────────────
@@ -147,6 +240,174 @@ def _wants_chat_stream(request: Request) -> bool:
     """Prueft robust, ob der Client den Chat als SSE streamen moechte."""
     accept = request.headers.get("accept", "")
     return "text/event-stream" in accept.lower()
+
+
+async def _stream_pipeline_resume(
+    request: Request,
+    body: ChatRequest,
+    scoped_session_id: str,
+    request_id: str,
+    message_id: str,
+    pipeline_id: str,
+    current_tx_id: str | None,
+    effective_message: str,
+    op_journal,
+    redis,
+) -> AsyncGenerator[str, None]:
+    """SSE-Pfad: Setzt eine pausierte Pipeline fort, ohne den LLM zu bemühen."""
+    from core.pipeline_engine import get_pipeline_engine, PipelineStatus
+    from agents.base_agent import _t
+
+    if current_tx_id:
+        await op_journal.mark_confirmed(current_tx_id)
+
+    await status_bus.emit_trace(
+        scoped_session_id,
+        phase="pipeline_resume",
+        label="Pipeline wird fortgesetzt",
+        data={"pipeline_id": pipeline_id},
+        status="running",
+    )
+
+    engine = get_pipeline_engine()
+    try:
+        result = await engine.resume(pipeline_id, scoped_session_id, auto_confirm=True)
+    except ValueError as exc:
+        await status_bus.emit_trace(
+            scoped_session_id,
+            phase="pipeline_resume",
+            label="Pipeline-Resume fehlgeschlagen",
+            detail=str(exc),
+            status="error",
+        )
+        await op_journal.clear_pending_for_session(scoped_session_id)
+        await status_bus.done(scoped_session_id)
+        yield _stream_frame(
+            "final",
+            request_id,
+            message_id,
+            response=_t(
+                f"⚠️ Pipeline-Resume fehlgeschlagen: {exc}",
+                f"⚠️ Pipeline resume failed: {exc}",
+            ),
+            meta={
+                "confirmation_required": False,
+                "session_id": body.session_id,
+            },
+        )
+        return
+
+    markdown = result.to_markdown()
+    if result.status == PipelineStatus.FAILED:
+        response_text = _t(
+            f"Pipeline fehlgeschlagen: {result.error}\n\n{markdown}",
+            f"Pipeline failed: {result.error}\n\n{markdown}",
+        )
+    else:
+        response_text = markdown or _t(
+            "Pipeline abgeschlossen (keine Ausgabe).",
+            "Pipeline completed (no output).",
+        )
+
+    if current_tx_id:
+        await op_journal.mark_executed(
+            current_tx_id,
+            module=result.steps[0].module if result.steps else None,
+            summary=response_text[:600],
+        )
+    await op_journal.clear_pending_for_session(scoped_session_id)
+    await status_bus.done(scoped_session_id)
+
+    yield _stream_frame(
+        "final",
+        request_id,
+        message_id,
+        response=response_text,
+        meta={
+            "confirmation_required": False,
+            "pipeline_id": pipeline_id,
+            "pipeline_status": result.status.value,
+            "session_id": body.session_id,
+            "module_used": None,
+            "routing_confidence": None,
+        },
+    )
+
+
+async def _run_pipeline_resume(
+    body: ChatRequest,
+    scoped_session_id: str,
+    pipeline_id: str,
+    current_tx_id: str | None,
+    effective_message: str,
+    op_journal,
+    redis,
+    request: Request,
+):
+    """JSON-Pfad: Setzt eine pausierte Pipeline fort und gibt ein ChatResponse zurück."""
+    from core.pipeline_engine import get_pipeline_engine, PipelineStatus
+    from core.context_manager import get_context_manager
+    from agents.base_agent import _t
+    from schemas.chat import ChatResponse
+
+    if current_tx_id:
+        await op_journal.mark_confirmed(current_tx_id)
+
+    engine = get_pipeline_engine()
+    try:
+        result = await engine.resume(pipeline_id, scoped_session_id, auto_confirm=True)
+    except ValueError as exc:
+        await op_journal.clear_pending_for_session(scoped_session_id)
+        await status_bus.done(scoped_session_id)
+        return ChatResponse(
+            response=_t(
+                f"⚠️ Pipeline-Resume fehlgeschlagen: {exc}",
+                f"⚠️ Pipeline resume failed: {exc}",
+            ),
+            module_used=None,
+            session_id=body.session_id,
+            timestamp=datetime.now(timezone.utc),
+        )
+
+    markdown = result.to_markdown()
+    if result.status == PipelineStatus.FAILED:
+        response_text = _t(
+            f"Pipeline fehlgeschlagen: {result.error}\n\n{markdown}",
+            f"Pipeline failed: {result.error}\n\n{markdown}",
+        )
+    else:
+        response_text = markdown or _t(
+            "Pipeline abgeschlossen (keine Ausgabe).",
+            "Pipeline completed (no output).",
+        )
+
+    if current_tx_id:
+        await op_journal.mark_executed(
+            current_tx_id,
+            module=result.steps[0].module if result.steps else None,
+            summary=response_text[:600],
+        )
+    await op_journal.clear_pending_for_session(scoped_session_id)
+
+    ctx_mgr = get_context_manager()
+    await redis.store_chat_message(
+        session_id=scoped_session_id, role="user", content=effective_message
+    )
+    await redis.store_chat_message(
+        session_id=scoped_session_id, role="assistant", content=response_text
+    )
+    updated_history = await redis.get_chat_history(scoped_session_id)
+    budget = ctx_mgr.get_budget_info(updated_history)
+
+    await status_bus.done(scoped_session_id)
+    return ChatResponse(
+        response=response_text,
+        module_used=None,
+        session_id=body.session_id,
+        context_budget=budget,
+        compacted=False,
+        timestamp=datetime.now(timezone.utc),
+    )
 
 
 async def _stream_safe_generate(
@@ -172,11 +433,20 @@ async def _stream_safe_generate(
     did_compact = False
     current_tx_id: str | None = None
     token_queue: asyncio.Queue[str] = asyncio.Queue(maxsize=1000)
-    effective_message, confirmed, pending_tx_id = await _resolve_confirmed_message(
+    effective_message, confirmed, pending_tx_id, resume_pipeline_id = await _resolve_confirmed_message(
         body, scoped_session_id, redis, op_journal
     )
     if pending_tx_id:
         current_tx_id = pending_tx_id
+
+    if resume_pipeline_id:
+        async for frame in _stream_pipeline_resume(
+            request, body, scoped_session_id, request_id, message_id,
+            resume_pipeline_id, current_tx_id, effective_message,
+            op_journal, redis,
+        ):
+            yield frame
+        return
 
     async def _emit_live_token(token: str) -> None:
         if token:
@@ -403,14 +673,11 @@ async def _stream_safe_generate(
         # ── R12: Korrektur erkennen ──────────────────────────────────────────
         _telemetry = get_routing_telemetry()
         if not goto_stream_response and body.force_module and _telemetry:
-            _correction = await _telemetry.check_and_record_correction(
+            await _telemetry.check_and_record_correction(
                 session_id=scoped_session_id,
                 force_module=body.force_module,
                 message=effective_message,
             )
-            if _correction and hasattr(orchestrator, "apply_embedding_corrections"):
-                _examples = await _telemetry.get_correction_examples(body.force_module)
-                orchestrator.apply_embedding_corrections(body.force_module, _examples)
 
         # ── Routing ───────────────────────────────────────────────────────────
         if not goto_stream_response:
@@ -451,12 +718,19 @@ async def _stream_safe_generate(
                     yield _stream_frame("token", request_id, message_id, text=token)
 
             route_result = await route_task
-            if not isinstance(route_result, tuple) or len(route_result) != 3:
+            if not isinstance(route_result, tuple):
                 logger.error(
-                    "orchestrator.route() returned invalid type: %s", type(route_result)
+                    "orchestrator.route() returned non-tuple type: %s", type(route_result)
                 )
                 raise TypeError(
-                    f"Expected (str, str|None, bool), got: {type(route_result).__name__}"
+                    f"Expected tuple, got: {type(route_result).__name__}"
+                )
+            if len(route_result) != 3:
+                logger.error(
+                    "orchestrator.route() returned tuple with wrong length: %d", len(route_result)
+                )
+                raise ValueError(
+                    f"Expected 3 elements, got: {len(route_result)}"
                 )
             response_text, module_used, did_compact = route_result
             await status_bus.emit_trace(
@@ -473,7 +747,10 @@ async def _stream_safe_generate(
             # Verbleibende Tokens nach route_task.done() drainen, um Token-Verlust
             # zwischen letztem queue.get()-Timeout und Task-Completion zu vermeiden.
             while not token_queue.empty():
-                token = token_queue.get_nowait()
+                try:
+                    token = token_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
                 if token:
                     live_stream_used = True
                     streamed_text += token
@@ -680,11 +957,17 @@ async def chat(request: Request, body: ChatRequest):
     op_journal = get_operation_journal()
     current_tx_id: str | None = None
     scoped_session_id = _tenant_session_id(request, body.session_id)
-    effective_message, confirmed, pending_tx_id = await _resolve_confirmed_message(
+    effective_message, confirmed, pending_tx_id, resume_pipeline_id = await _resolve_confirmed_message(
         body, scoped_session_id, redis, op_journal
     )
     if pending_tx_id:
         current_tx_id = pending_tx_id
+
+    if resume_pipeline_id:
+        return await _run_pipeline_resume(
+            body, scoped_session_id, resume_pipeline_id, current_tx_id,
+            effective_message, op_journal, redis, request,
+        )
 
     # Status-Queue vorab erstellen (damit SSE-Consumer sofort lesen kann)
     status_bus.get_queue(scoped_session_id)
@@ -850,14 +1133,11 @@ async def chat(request: Request, body: ChatRequest):
     # ── R12: Korrektur erkennen (vor route()) ─────────────────────────────────
     _telemetry = get_routing_telemetry()
     if body.force_module and _telemetry:
-        _correction = await _telemetry.check_and_record_correction(
+        await _telemetry.check_and_record_correction(
             session_id=scoped_session_id,
             force_module=body.force_module,
             message=effective_message,
         )
-        if _correction and hasattr(orchestrator, "apply_embedding_corrections"):
-            _examples = await _telemetry.get_correction_examples(body.force_module)
-            orchestrator.apply_embedding_corrections(body.force_module, _examples)
 
     # Nachricht an Orchestrator routen
     await status_bus.emit_trace(
@@ -1018,6 +1298,8 @@ async def get_history(session_id: str, request: Request) -> ChatHistoryResponse:
     """Gibt die Chat-History einer Session zurück."""
     redis = get_redis()
     scoped_session_id = _tenant_session_id(request, session_id)
+    # IDOR-Mitigation: nur der Owner darf History lesen (CWE-639)
+    await _check_session_access(request, scoped_session_id)
     messages = await redis.get_chat_history(scoped_session_id)
 
     return ChatHistoryResponse(
@@ -1029,49 +1311,38 @@ async def get_history(session_id: str, request: Request) -> ChatHistoryResponse:
     )
 
 
-@router.delete("/history/{session_id}")
-async def clear_history(session_id: str, request: Request) -> dict:
+@router.delete("/history/{session_id}", response_model=SessionMessagesResponse)
+async def clear_history(session_id: str, request: Request) -> SessionMessagesResponse:
     """Löscht die Chat-History einer Session."""
     redis = get_redis()
     scoped_session_id = _tenant_session_id(request, session_id)
+    # IDOR-Mitigation: nur der Owner darf History löschen
+    await _check_session_access(request, scoped_session_id)
     await redis.clear_chat_history(scoped_session_id)
-    return {"status": "ok", "session_id": session_id, "message": "History gelöscht."}
+    await redis.clear_session_owner(scoped_session_id)
+    return SessionMessagesResponse(
+        status="ok", session_id=session_id, message="History gelöscht."
+    )
 
 
-_REPLACE_HISTORY_MAX_MESSAGES = 500
-_REPLACE_HISTORY_MAX_CONTENT_LEN = 32_768
-_REPLACE_HISTORY_ALLOWED_ROLES = frozenset({"user", "assistant"})
-
-
-@router.put("/history/{session_id}")
-async def replace_history(session_id: str, body: dict, request: Request) -> dict:
+@router.put("/history/{session_id}", response_model=SessionMessagesResponse)
+async def replace_history(
+    session_id: str, body: HistoryUpdateRequest, request: Request
+) -> SessionMessagesResponse:
     """Ersetzt die Chat-History einer Session vollständig (für Löschen/Retry)."""
     redis = get_redis()
     scoped_session_id = _tenant_session_id(request, session_id)
-    messages: list[dict] = body.get("messages", [])
-    if not isinstance(messages, list):
-        raise HTTPException(status_code=422, detail="'messages' muss eine Liste sein.")
-    if len(messages) > _REPLACE_HISTORY_MAX_MESSAGES:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Maximal {_REPLACE_HISTORY_MAX_MESSAGES} Nachrichten pro Aufruf.",
-        )
+    # IDOR-Mitigation: nur der Owner darf History ersetzen
+    await _check_session_access(request, scoped_session_id)
     await redis.clear_chat_history(scoped_session_id)
     stored = 0
-    for msg in messages:
-        if not isinstance(msg, dict):
-            continue
-        role = msg.get("role", "user")
-        if role not in _REPLACE_HISTORY_ALLOWED_ROLES:
-            continue
-        content = msg.get("content", "")
-        if not isinstance(content, str):
-            continue
-        content = content[:_REPLACE_HISTORY_MAX_CONTENT_LEN]
-        if content:
-            await redis.store_chat_message(session_id=scoped_session_id, role=role, content=content)
+    for msg in body.messages:
+        if msg.content:  # Leerer Content wird übersprungen (analog zur alten Logik)
+            await redis.store_chat_message(
+                session_id=scoped_session_id, role=msg.role, content=msg.content
+            )
             stored += 1
-    return {"status": "ok", "session_id": session_id, "count": stored}
+    return SessionMessagesResponse(status="ok", session_id=session_id, count=stored)
 
 
 # ── UI History (persistente, geräteübergreifende Konversationsliste) ────────
@@ -1085,19 +1356,21 @@ async def get_ui_history(request: Request) -> dict:
     return {"conversations": entries}
 
 
-@router.post("/ui-history")
-async def save_ui_history(body: dict, request: Request) -> dict:
+@router.post("/ui-history", response_model=SessionMessagesResponse)
+async def save_ui_history(
+    body: UiHistoryEntry, request: Request
+) -> SessionMessagesResponse:
     """Speichert oder aktualisiert einen Konversationseintrag."""
     redis = get_redis()
     tenant_id = auth_tenant_id(resolve_request_auth(request))
-    await redis.ui_history_save(body, tenant_id=tenant_id)
-    return {"status": "ok"}
+    await redis.ui_history_save(body.model_dump(), tenant_id=tenant_id)
+    return SessionMessagesResponse(status="ok")
 
 
-@router.delete("/ui-history/{conv_id}")
-async def delete_ui_history(conv_id: str, request: Request) -> dict:
+@router.delete("/ui-history/{conv_id}", response_model=SessionMessagesResponse)
+async def delete_ui_history(conv_id: str, request: Request) -> SessionMessagesResponse:
     """Löscht einen Konversationseintrag."""
     redis = get_redis()
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     await redis.ui_history_delete(conv_id, tenant_id=tenant_id)
-    return {"status": "ok", "id": conv_id}
+    return SessionMessagesResponse(status="ok", session_id=conv_id)

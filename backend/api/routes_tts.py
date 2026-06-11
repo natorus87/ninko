@@ -17,42 +17,28 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
-from pydantic import BaseModel
 
 from core.config import get_settings
+from schemas.tts import (
+    DownloadRequest,
+    PiperVersionResponse,
+    SynthesizeRequest,
+    VoiceCatalogEntry,
+    VoiceDeleteResponse,
+    VoiceDownloadResponse,
+    VoiceEntry,
+)
 
 logger = logging.getLogger("ninko.api.tts")
 router = APIRouter(prefix="/api/tts", tags=["TTS"])
 
-
-# ─── Schemas ──────────────────────────────────────────────────────────────────
-
-class VoiceEntry(BaseModel):
-    name: str
-    lang: str
-    quality: str
-
-
-class VoiceCatalogEntry(BaseModel):
-    name: str
-    lang: str
-    quality: str
-    installed: bool
-
-
-class SynthesizeRequest(BaseModel):
-    text: str
-    lang: str | None = None
-    voice: str | None = None
-
-
-class DownloadRequest(BaseModel):
-    lang: str
-    voice: str
+if TYPE_CHECKING:
+    from core.tts.voice_manager import VoiceManager
 
 
 # ─── Hilfsfunktionen ──────────────────────────────────────────────────────────
@@ -112,8 +98,8 @@ async def list_voice_catalog(lang: str | None = None) -> list[VoiceCatalogEntry]
     ]
 
 
-@router.get("/piper/version")
-async def get_piper_version() -> dict:
+@router.get("/piper/version", response_model=PiperVersionResponse)
+async def get_piper_version() -> PiperVersionResponse:
     """
     Gibt lokale Piper-Version und das aktuellste GitHub-Release zurück.
     """
@@ -155,14 +141,14 @@ async def get_piper_version() -> dict:
         and _parse_version_tuple(latest_version) > _parse_version_tuple(local_normalized)
     )
 
-    return {
-        "binary": binary,
-        "local_version": local_version,
-        "latest_tag": latest_tag,
-        "latest_version": latest_version,
-        "update_available": update_available,
-        "github_error": github_error,
-    }
+    return PiperVersionResponse(
+        binary=binary,
+        local_version=local_version,
+        latest_tag=latest_tag,
+        latest_version=latest_version,
+        update_available=update_available,
+        github_error=github_error,
+    )
 
 
 @router.post("/synthesize")
@@ -207,8 +193,8 @@ async def synthesize(body: SynthesizeRequest) -> Response:
     )
 
 
-@router.post("/voices/download")
-async def download_voice(body: DownloadRequest) -> dict:
+@router.post("/voices/download", response_model=VoiceDownloadResponse)
+async def download_voice(body: DownloadRequest) -> VoiceDownloadResponse:
     """
     Lädt eine Piper-Stimme von HuggingFace (rhasspy/piper-voices) herunter.
     Die Stimme ist sofort nach dem Download verfügbar (kein Neustart nötig).
@@ -224,7 +210,7 @@ async def download_voice(body: DownloadRequest) -> dict:
     # Bereits installiert?
     existing = vm.list_voices(lang)
     if any(v.name == voice for v in existing):
-        return {"status": "already_installed", "lang": lang, "voice": voice}
+        return VoiceDownloadResponse(status="already_installed", lang=lang, voice=voice)
 
     logger.info("Starte Stimmen-Download: %s/%s", lang, voice)
     success = await vm.download_voice(lang=lang, voice=voice)
@@ -237,11 +223,11 @@ async def download_voice(body: DownloadRequest) -> dict:
         )
 
     logger.info("Stimme erfolgreich installiert: %s/%s", lang, voice)
-    return {"status": "installed", "lang": lang, "voice": voice}
+    return VoiceDownloadResponse(status="installed", lang=lang, voice=voice)
 
 
-@router.delete("/voices/{lang}/{voice}")
-async def delete_voice(lang: str, voice: str) -> dict:
+@router.delete("/voices/{lang}/{voice}", response_model=VoiceDeleteResponse)
+async def delete_voice(lang: str, voice: str) -> VoiceDeleteResponse:
     """
     Löscht eine installierte Piper-Stimme aus dem Voices-Verzeichnis.
     """
@@ -260,4 +246,4 @@ async def delete_voice(lang: str, voice: str) -> dict:
     except (RuntimeError, ValueError, TypeError, KeyError, OSError) as exc:
         raise HTTPException(status_code=500, detail=f"Löschen fehlgeschlagen: {exc}")
 
-    return {"status": "deleted", "lang": lang, "voice": voice}
+    return VoiceDeleteResponse(status="deleted", lang=lang, voice=voice)

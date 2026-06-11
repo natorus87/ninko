@@ -20,7 +20,7 @@ import tarfile
 import zipfile
 from pathlib import Path
 from tempfile import mkdtemp
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 from fastapi import APIRouter, Request, UploadFile, File, HTTPException, Query
@@ -29,9 +29,27 @@ from pydantic import BaseModel, Field
 
 from core.auth import ROLE_ADMIN, resolve_request_auth_async
 from core.redis_client import get_redis
+from schemas.plugin import (
+    InstalledPluginInfo,
+    InstalledPluginListResponse,
+    MarketplaceModuleListResponse,
+    MarketplaceRepo,
+    MarketplaceRepoDeleteResponse,
+    MarketplaceRepoListResponse,
+    MarketplaceRepoResponse,
+    PluginInstallResponse,
+    PluginUninstallResponse,
+    PluginUpdateCheckEntry,
+    PluginUpdateCheckResponse,
+    PluginUpdateResponse,
+    PluginUploadResponse,
+)
 
 logger = logging.getLogger("ninko.api.plugins")
 router = APIRouter(prefix="/api/plugins", tags=["Plugins"])
+
+if TYPE_CHECKING:
+    from cryptography.fernet import Fernet
 
 
 async def _assert_admin(request: Request) -> None:
@@ -452,8 +470,8 @@ def _build_module_list(
     return {"modules": new_modules, "updates": updates}
 
 
-@router.get("/installed")
-async def list_installed_plugins(request: Request) -> JSONResponse:
+@router.get("/installed", response_model=InstalledPluginListResponse)
+async def list_installed_plugins(request: Request) -> InstalledPluginListResponse:
     """Listet installierte Plugins inkl. Versionierungs-/Herkunfts-Metadaten."""
     registry = request.app.state.registry
     plugins_dir = Path(__file__).resolve().parent.parent / "plugins"
@@ -463,26 +481,26 @@ async def list_installed_plugins(request: Request) -> JSONResponse:
     installed_map: dict[str, str] = {
         m.name: m.version for m in registry.list_all_modules()
     }
-    installed = []
+    installed: list[InstalledPluginInfo] = []
     for plugin_dir in sorted(plugins_dir.iterdir()):
         if not plugin_dir.is_dir():
             continue
         name = plugin_dir.name
         meta = plugin_meta.get(name, {})
         installed.append(
-            {
-                "name": name,
-                "version": installed_map.get(name, ""),
-                "installed_at": meta.get("installed_at", 0),
-                "updated_at": meta.get("updated_at", 0),
-                "source": meta.get("source", "unknown"),
-                "repo_id": meta.get("repo_id", ""),
-                "repo_url": meta.get("repo_url", ""),
-                "repo_version": meta.get("repo_version", ""),
-            }
+            InstalledPluginInfo(
+                name=name,
+                version=installed_map.get(name, ""),
+                installed_at=float(meta.get("installed_at", 0)),
+                updated_at=float(meta.get("updated_at", 0)),
+                source=meta.get("source", "unknown"),
+                repo_id=meta.get("repo_id", ""),
+                repo_url=meta.get("repo_url", ""),
+                repo_version=meta.get("repo_version", ""),
+            )
         )
 
-    return JSONResponse(content={"plugins": installed})
+    return InstalledPluginListResponse(plugins=installed)
 
 
 async def _check_module_update_from_repo(
@@ -518,8 +536,8 @@ async def _check_module_update_from_repo(
         return {"update_available": False, "check_failed": True}
 
 
-@router.get("/check-updates")
-async def check_plugin_updates(request: Request) -> JSONResponse:
+@router.get("/check-updates", response_model=PluginUpdateCheckResponse)
+async def check_plugin_updates(request: Request) -> PluginUpdateCheckResponse:
     """Prüft für alle installierten Module (Plugins + Built-in), ob Updates verfügbar sind."""
     registry = request.app.state.registry
     plugins_dir = Path(__file__).resolve().parent.parent / "plugins"
@@ -530,7 +548,7 @@ async def check_plugin_updates(request: Request) -> JSONResponse:
     installed_map: dict[str, str] = {
         m.name: m.version for m in registry.list_all_modules()
     }
-    results = []
+    results: list[PluginUpdateCheckEntry] = []
 
     repo_url = "https://github.com/natorus87/ninko"
     branch = "main"
@@ -561,16 +579,16 @@ async def check_plugin_updates(request: Request) -> JSONResponse:
         )
 
         results.append(
-            {
-                "name": name,
-                "installed_version": installed_version,
-                "repo_version": update_info.get("repo_version", ""),
-                "update_available": update_info.get("update_available", False),
-                "repo_url": module_repo_url,
-            }
+            PluginUpdateCheckEntry(
+                name=name,
+                installed_version=installed_version,
+                repo_version=str(update_info.get("repo_version", "")),
+                update_available=bool(update_info.get("update_available", False)),
+                repo_url=module_repo_url,
+            )
         )
 
-    return JSONResponse(content={"plugins": results})
+    return PluginUpdateCheckResponse(plugins=results)
 
 
 _MAX_UNCOMPRESSED_SIZE = 100 * 1024 * 1024  # 100 MB
@@ -589,7 +607,15 @@ _DANGEROUS_REQ_PATTERNS = (
 
 
 async def install_requirements_if_exist(plugin_dir: Path) -> bool:
-    """Sucht nach einer requirements.txt im Plugin und führt ggf. pip install aus."""
+    """Sucht nach einer requirements.txt im Plugin und führt ggf. pip install aus.
+
+    Verwendet eine **dedizierte venv pro Plugin** (CWE-829 Mitigation):
+    Plugin-Abhängigkeiten landen NICHT im System-Python, sondern in
+    ``backend/.plugin_venvs/<plugin_name>/lib/python3.12/site-packages/``.
+
+    Der Hot-Load-Mechanismus in ``core/module_registry.py`` muss
+    entsprechend ``sys.path`` um diese site-packages erweitern.
+    """
     req_file = plugin_dir / "requirements.txt"
     if not req_file.is_file():
         return True
@@ -603,14 +629,43 @@ async def install_requirements_if_exist(plugin_dir: Path) -> bool:
             logger.error("requirements.txt enthält unerlaubtes Muster: %s", pattern)
             return False
 
-    logger.info("Installiere Abhängigkeiten für Plugin aus: %s", req_file)
-    logger.warning(
-        "pip install ohne venv-Isolation: Plugin-Abhängigkeiten werden in den System-Namespace installiert. "
-        "Sicherstellen, dass requirements.txt aus vertrauenswürdiger Quelle stammt."
-    )
+    plugin_name = plugin_dir.name
+    logger.info("Installiere Abhängigkeiten für Plugin '%s' aus: %s", plugin_name, req_file)
+
+    # venv-Pfad: backend/.plugin_venvs/<plugin_name>/
+    plugins_root = plugin_dir.parent
+    venvs_root = plugins_root.parent / ".plugin_venvs"
+    venv_dir = venvs_root / plugin_name
+
     try:
+        # 1. venv erstellen falls noch nicht vorhanden
+        if not (venv_dir / "pyvenv.cfg").is_file():
+            logger.info("Erstelle Plugin-venv: %s", venv_dir)
+            venvs_root.mkdir(parents=True, exist_ok=True)
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable,
+                "-m",
+                "venv",
+                str(venv_dir),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await proc.communicate()
+            if proc.returncode != 0:
+                logger.error("venv-Erstellung fehlgeschlagen:\n%s", stderr.decode())
+                return False
+
+        # 2. pip-Pfad im venv
+        venv_python = venv_dir / "bin" / "python"
+        if not venv_python.exists():  # Windows-Fallback
+            venv_python = venv_dir / "Scripts" / "python.exe"
+        if not venv_python.exists():
+            logger.error("Konnte venv-Python nicht finden: %s", venv_dir)
+            return False
+
+        # 3. pip install in der venv
         proc = await asyncio.create_subprocess_exec(
-            sys.executable,
+            str(venv_python),
             "-m",
             "pip",
             "install",
@@ -626,7 +681,7 @@ async def install_requirements_if_exist(plugin_dir: Path) -> bool:
             logger.error("pip install fehlgeschlagen:\n%s", stderr.decode())
             return False
 
-        logger.info("Abhängigkeiten erfolgreich installiert:\n%s", stdout.decode())
+        logger.info("Abhängigkeiten erfolgreich installiert in %s:\n%s", venv_dir, stdout.decode())
         return True
     except (
         RuntimeError,
@@ -641,8 +696,10 @@ async def install_requirements_if_exist(plugin_dir: Path) -> bool:
         return False
 
 
-@router.post("/upload")
-async def upload_plugin(request: Request, file: UploadFile = File(...)) -> JSONResponse:
+@router.post("/upload", response_model=PluginUploadResponse, status_code=201)
+async def upload_plugin(
+    request: Request, file: UploadFile = File(...)
+) -> PluginUploadResponse:
     """
     Nimmt ein ZIP-Archiv entgegen, entpackt es unter `backend/plugins/<name>`
     und lädt es per Hot-Load in den Speicher.
@@ -768,12 +825,9 @@ async def upload_plugin(request: Request, file: UploadFile = File(...)) -> JSONR
             },
         )
 
-        return JSONResponse(
-            status_code=201,
-            content={
-                "message": f"Plugin '{plugin_name}' erfolgreich installiert und geladen.",
-                "plugin_name": plugin_name,
-            },
+        return PluginUploadResponse(
+            message=f"Plugin '{plugin_name}' erfolgreich installiert und geladen.",
+            plugin_name=plugin_name,
         )
 
     except HTTPException:
@@ -800,17 +854,19 @@ async def upload_plugin(request: Request, file: UploadFile = File(...)) -> JSONR
 # ─── Marketplace API ─────────────────────────────────────────────────────────
 
 
-@router.get("/marketplace/repos")
-async def list_repos() -> JSONResponse:
+@router.get("/marketplace/repos", response_model=MarketplaceRepoListResponse)
+async def list_repos() -> MarketplaceRepoListResponse:
     """Alle konfigurierten Marketplace-Repos (Token maskiert)."""
     repos = await _load_repos()
-    return JSONResponse(content={"repos": [_mask_repo(r) for r in repos]})
+    return MarketplaceRepoListResponse(
+        repos=[MarketplaceRepo(**_mask_repo(r)) for r in repos]
+    )
 
 
-@router.post("/marketplace/repos")
+@router.post("/marketplace/repos", response_model=MarketplaceRepoResponse, status_code=201)
 async def add_repo(
     request: Request, body: MarketplaceRepoCreateRequest
-) -> JSONResponse:
+) -> MarketplaceRepoResponse:
     """Neues Repo zur Liste hinzufügen."""
     await _assert_admin(request)
     repo_url = body.repo_url.strip()
@@ -838,13 +894,13 @@ async def add_repo(
     }
     repos.append(new_repo)
     await _save_repos(repos)
-    return JSONResponse(status_code=201, content={"repo": _mask_repo(new_repo)})
+    return MarketplaceRepo(**_mask_repo(new_repo))
 
 
-@router.put("/marketplace/repos/{repo_id}")
+@router.put("/marketplace/repos/{repo_id}", response_model=MarketplaceRepoResponse)
 async def update_repo(
     request: Request, repo_id: str, body: MarketplaceRepoUpdateRequest
-) -> JSONResponse:
+) -> MarketplaceRepoResponse:
     """Repo-Konfiguration aktualisieren."""
     await _assert_admin(request)
     repos = await _load_repos()
@@ -880,11 +936,11 @@ async def update_repo(
         repo["github_token"] = token_value
 
     await _save_repos(repos)
-    return JSONResponse(content={"repo": _mask_repo(repo)})
+    return MarketplaceRepo(**_mask_repo(repo))
 
 
-@router.delete("/marketplace/repos/{repo_id}")
-async def delete_repo(repo_id: str, request: Request) -> JSONResponse:
+@router.delete("/marketplace/repos/{repo_id}", response_model=MarketplaceRepoDeleteResponse)
+async def delete_repo(repo_id: str, request: Request) -> MarketplaceRepoDeleteResponse:
     """Repo entfernen (Official-Repo kann nicht gelöscht werden)."""
     await _assert_admin(request)
     if repo_id == _OFFICIAL_REPO_ID:
@@ -896,31 +952,24 @@ async def delete_repo(repo_id: str, request: Request) -> JSONResponse:
     if len(filtered) == len(repos):
         raise HTTPException(status_code=404, detail="Repo nicht gefunden.")
     await _save_repos(filtered)
-    return JSONResponse(content={"message": "Repo entfernt."})
+    return MarketplaceRepoDeleteResponse(message="Repo entfernt.")
 
 
-@router.get("/marketplace/repos/{repo_id}/modules")
-async def list_repo_modules(request: Request, repo_id: str) -> JSONResponse:
+@router.get("/marketplace/repos/{repo_id}/modules", response_model=MarketplaceModuleListResponse)
+async def list_repo_modules(request: Request, repo_id: str) -> MarketplaceModuleListResponse:
     """Verfügbare Module aus einem bestimmten Repo (mit Cache, 5 Min)."""
     repos = await _load_repos()
     repo_cfg = next((r for r in repos if r["id"] == repo_id), None)
     if not repo_cfg:
-        return JSONResponse(
-            content={"modules": [], "updates": [], "error": "Repo nicht gefunden."}
-        )
+        return MarketplaceModuleListResponse(error="Repo nicht gefunden.")
 
     parsed = _parse_github_url(repo_cfg["repo_url"])
     if not parsed:
-        return JSONResponse(
-            content={"modules": [], "updates": [], "error": "Ungültige GitHub-URL."}
-        )
+        return MarketplaceModuleListResponse(error="Ungültige GitHub-URL.")
     try:
         _assert_repo_allowed(repo_cfg["repo_url"])
     except HTTPException as exc:
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={"modules": [], "updates": [], "error": str(exc.detail)},
-        )
+        return MarketplaceModuleListResponse(error=str(exc.detail))
 
     registry = request.app.state.registry
     plugins_dir = Path(__file__).resolve().parent.parent / "plugins"
@@ -1067,16 +1116,14 @@ async def list_repo_modules(request: Request, repo_id: str) -> JSONResponse:
                 )
 
             _marketplace_cache[cache_key] = {"ts": time.time(), "modules": all_modules}
-            return JSONResponse(
-                content=_build_module_list(
+            return MarketplaceModuleListResponse(
+                **_build_module_list(
                     all_modules, registry, plugins_dir, plugin_meta
                 )
             )
 
     except httpx.TimeoutException:
-        return JSONResponse(
-            content={"modules": [], "updates": [], "error": "Timeout beim Abruf."}
-        )
+        return MarketplaceModuleListResponse(error="Timeout beim Abruf.")
     except (
         RuntimeError,
         ValueError,
@@ -1087,17 +1134,15 @@ async def list_repo_modules(request: Request, repo_id: str) -> JSONResponse:
         json.JSONDecodeError,
     ) as e:
         logger.error("Marketplace fetch Fehler [%s]: %s", repo_id, e, exc_info=True)
-        return JSONResponse(
-            content={"modules": [], "updates": [], "error": f"Fehler: {e}"}
-        )
+        return MarketplaceModuleListResponse(error=f"Fehler: {e}")
 
 
-@router.post("/install-from-repo/{module_name}")
+@router.post("/install-from-repo/{module_name}", response_model=PluginInstallResponse, status_code=201)
 async def install_from_repo(
     request: Request,
     module_name: str,
     repo_id: str = Query(default=_OFFICIAL_REPO_ID),
-) -> JSONResponse:
+) -> PluginInstallResponse:
     """Lädt ein Modul aus dem angegebenen Repo herunter und installiert es als Plugin."""
     await _assert_admin(request)
     if not re.fullmatch(r"[a-zA-Z0-9_]+", module_name):
@@ -1245,13 +1290,10 @@ async def install_from_repo(
         )
 
         _marketplace_cache.clear()
-        return JSONResponse(
-            status_code=201,
-            content={
-                "message": f"Modul '{module_name}' erfolgreich installiert.",
-                "module_name": module_name,
-                "repo_version": repo_version,
-            },
+        return PluginInstallResponse(
+            message=f"Modul '{module_name}' erfolgreich installiert.",
+            module_name=module_name,
+            repo_version=repo_version,
         )
 
     except HTTPException:
@@ -1281,8 +1323,8 @@ async def install_from_repo(
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
-@router.delete("/{plugin_name}")
-async def delete_plugin(request: Request, plugin_name: str) -> JSONResponse:
+@router.delete("/{plugin_name}", response_model=PluginUninstallResponse)
+async def delete_plugin(request: Request, plugin_name: str) -> PluginUninstallResponse:
     """
     Deinstalliert ein Plugin vom Dateisystem und entlädt es intern.
     Ein echter Memory-Cleanup erfordert jedoch einen Container-Neustart.
@@ -1305,10 +1347,11 @@ async def delete_plugin(request: Request, plugin_name: str) -> JSONResponse:
         shutil.rmtree(target_dir)
         registry.remove_plugin(plugin_name)
         await _delete_plugin_meta(plugin_name)
-        return JSONResponse(
-            content={
-                "message": f"Plugin '{plugin_name}' deinstalliert. Die Änderungen werden beim nächsten Neustart vollständig aktiv."
-            }
+        return PluginUninstallResponse(
+            message=(
+                f"Plugin '{plugin_name}' deinstalliert. Die Änderungen werden "
+                "beim nächsten Neustart vollständig aktiv."
+            )
         )
     except (
         RuntimeError,
@@ -1325,8 +1368,8 @@ async def delete_plugin(request: Request, plugin_name: str) -> JSONResponse:
         )
 
 
-@router.post("/reinstall/{plugin_name}")
-async def reinstall_plugin(request: Request, plugin_name: str) -> JSONResponse:
+@router.post("/reinstall/{plugin_name}", response_model=PluginUpdateResponse)
+async def reinstall_plugin(request: Request, plugin_name: str) -> PluginUpdateResponse:
     """
     Re-installiert ein Plugin aus dem ursprünglichen Repository (Update).
     """
@@ -1375,7 +1418,7 @@ async def reinstall_plugin(request: Request, plugin_name: str) -> JSONResponse:
     if plugin_dir.exists():
         try:
             shutil.rmtree(plugin_dir, ignore_errors=False)
-        except Exception as e:
+        except Exception:
             return JSONResponse(
                 content={
                     "detail": f"Plugin '{plugin_name}' konnte nicht gelöscht werden. Bitte PVC bereinigen: kubectl delete pvc backend-data -n ninko (alle Plugin-Daten werden gelöscht)."
@@ -1473,10 +1516,10 @@ async def reinstall_plugin(request: Request, plugin_name: str) -> JSONResponse:
 
             _marketplace_cache.clear()
 
-            return JSONResponse(
-                content={
-                    "message": f"Plugin '{plugin_name}' wurde auf Version {repo_version} aktualisiert."
-                }
+            return PluginUpdateResponse(
+                message=(
+                    f"Plugin '{plugin_name}' wurde auf Version {repo_version} aktualisiert."
+                )
             )
 
     except HTTPException:
