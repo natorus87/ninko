@@ -6,12 +6,30 @@ Provides shared fixtures for testing.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
+
+
+# ── Test-Isolation: sichere Settings BEVOR irgendein core-Modul geladen wird ─
+#
+# WICHTIG: Diese Env-Vars MÜSSEN auf Modul-Ebene gesetzt werden, nicht erst
+# in einer Fixture! Viele Tests importieren `core.tool_registry` (oder
+# transitiv `core.config`), was lazy `CoreSettings()` instantiiert. Ohne diese
+# Vars wirft der Security-Validator ein ValueError. Da Test-Module oben im
+# File stehen und beim pytest-Collect geladen werden, MUSS das vor dem ersten
+# `import core.*` passieren — und conftest.py wird genau dort zuerst geladen.
+os.environ.setdefault("SESSION_SECRET", "x" * 32)
+os.environ.setdefault("BOOTSTRAP_ADMIN_PASSWORD", "test-admin-password-for-unit-tests")
+os.environ.setdefault("ADMIN_PASSWORD", "test-admin-password-for-unit-tests")
+os.environ.setdefault("DEPLOYMENT_ENV", "development")
+os.environ.setdefault("API_AUTH_ENABLED", "false")
+os.environ.setdefault("CHROMADB_HOST", "localhost")
+os.environ.setdefault("CHROMADB_PORT", "8000")
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
