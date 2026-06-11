@@ -3534,7 +3534,17 @@ ${messagesHtml}
     },
 
     // --- WebSocket ---
+    _wsReconnectTimer: null,  // Cancelt vorherigen Reconnect, falls connectWebSocket mehrfach aufgerufen wird
+    _wsReconnectAttempts: 0,   // Counter für exponential backoff (cap 6 → max ~32s)
+    _wsMaxReconnectAttempts: 6,
+
     connectWebSocket() {
+        // Vorherigen pending Reconnect canceln, damit nicht mehrere Reconnect-Loops parallel laufen
+        if (this._wsReconnectTimer != null) {
+            clearTimeout(this._wsReconnectTimer);
+            this._wsReconnectTimer = null;
+        }
+
         const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${proto}//${location.host}/ws`;
 
@@ -3542,6 +3552,7 @@ ${messagesHtml}
             this.ws = new WebSocket(wsUrl);
 
             this.ws.onopen = () => {
+                this._wsReconnectAttempts = 0;  // Reset backoff bei erfolgreichem Connect
                 this.setStatus('connected', 'status.connected');
             };
 
@@ -3556,8 +3567,14 @@ ${messagesHtml}
 
             this.ws.onclose = () => {
                 this.setStatus('disconnected', 'status.disconnected');
-                // Reconnect nach 5s
-                setTimeout(() => this.connectWebSocket(), 5000);
+                // Reconnect mit exponential backoff (5s, 10s, 20s, 40s, 80s, 160s, dann aufgeben)
+                if (this._wsReconnectAttempts >= this._wsMaxReconnectAttempts) {
+                    logger.warn('WebSocket reconnect limit reached; user must reload');
+                    return;
+                }
+                const delayMs = Math.min(5000 * Math.pow(2, this._wsReconnectAttempts), 160000);
+                this._wsReconnectAttempts += 1;
+                this._wsReconnectTimer = setTimeout(() => this.connectWebSocket(), delayMs);
             };
 
             this.ws.onerror = () => {

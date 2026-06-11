@@ -672,15 +672,15 @@
                 inEdges.forEach(e => {
                     const src = this._wfNodes.find(n => n.id === e.source_id);
                     html += `<div style="font-size:0.8rem;display:flex;align-items:center;justify-content:space-between;margin-bottom:0.3rem">
-                        <span>↩ ${src?.label || e.source_id}</span>
-                        <button class="btn-icon btn-icon-sm" style="color:var(--error-color)" onclick="Ninko._wfDeleteEdge('${e.id}')" title="Entfernen">✕</button>
+                        <span>↩ ${this._escapeHtml(src?.label || e.source_id)}</span>
+                        <button class="btn-icon btn-icon-sm" style="color:var(--error-color)" onclick="Ninko._wfDeleteEdge('${this._escapeHtml(e.id)}')" title="Entfernen">✕</button>
                     </div>`;
                 });
                 outEdges.forEach(e => {
                     const tgt = this._wfNodes.find(n => n.id === e.target_id);
                     html += `<div style="font-size:0.8rem;display:flex;align-items:center;justify-content:space-between;margin-bottom:0.3rem">
-                        <span>↪ ${tgt?.label || e.target_id}</span>
-                        <button class="btn-icon btn-icon-sm" style="color:var(--error-color)" onclick="Ninko._wfDeleteEdge('${e.id}')" title="Entfernen">✕</button>
+                        <span>↪ ${this._escapeHtml(tgt?.label || e.target_id)}</span>
+                        <button class="btn-icon btn-icon-sm" style="color:var(--error-color)" onclick="Ninko._wfDeleteEdge('${this._escapeHtml(e.id)}')" title="Entfernen">✕</button>
                     </div>`;
                 });
                 html += `</div>`;
@@ -1083,14 +1083,18 @@
                 outputHtml += `<div class="error-box" style="margin-top:1rem; color:var(--error-color);"><strong>Fehler:</strong><br>${this._escapeHtml(step.error)}</div>`;
             }
 
+            const statusClass = this._escapeHtml(String(step.status || ''));
+            const safeStatus = this._escapeHtml(step.status);
+            const safeDuration = (typeof step.duration_ms === 'number' && Number.isFinite(step.duration_ms))
+                ? step.duration_ms + 'ms' : '–';
             content.innerHTML = `
                 <div class="setting-group">
                     <label class="form-label">Status</label>
-                    <div class="run-status-badge run-${step.status}">${step.status}</div>
+                    <div class="run-status-badge run-${statusClass}">${safeStatus}</div>
                 </div>
                 <div class="setting-group">
                     <label class="form-label">Dauer</label>
-                    <span>${step.duration_ms ? step.duration_ms + 'ms' : '–'}</span>
+                    <span>${safeDuration}</span>
                 </div>
                 <div class="setting-group" style="flex:1; display:flex; flex-direction:column; min-height:0;">
                     <label class="form-label">Ausgabe</label>
