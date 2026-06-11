@@ -160,3 +160,84 @@ class WorkflowListResponse(BaseModel):
 class WorkflowRunListResponse(BaseModel):
     runs: list[WorkflowRun] = Field(default_factory=list)
     total: int = 0
+
+
+# ── Generic CRUD / Run Responses ─────────────────────
+
+
+class WorkflowCreateResponse(BaseModel):
+    """Antwort auf POST /api/workflows/."""
+
+    id: str
+    status: str
+
+
+class WorkflowUpdateResponse(BaseModel):
+    """Antwort auf PUT /api/workflows/{workflow_id}."""
+
+    id: str
+    status: str
+    version: int
+
+
+class WorkflowDeleteResponse(BaseModel):
+    """Antwort auf DELETE /api/workflows/{workflow_id}."""
+
+    id: str
+    deleted: bool
+
+
+class WorkflowRunResponse(BaseModel):
+    """Antwort auf POST /api/workflows/{workflow_id}/run."""
+
+    run_id: str
+    status: str
+
+
+class WorkflowStepRetryResponse(BaseModel):
+    """Antwort auf POST /api/workflows/runs/{run_id}/steps/{step_index}/retry."""
+
+    run_id: str
+    step_index: int
+    status: str
+
+
+class WorkflowTemplateListResponse(BaseModel):
+    """Antwort auf GET /api/workflows/templates."""
+
+    templates: list[Any] = Field(default_factory=list)
+
+
+class WorkflowVersionListResponse(BaseModel):
+    """Antwort auf GET /api/workflows/{workflow_id}/versions."""
+
+    workflow_id: str
+    versions: list[dict] = Field(default_factory=list)
+    total: int = 0
+
+
+class WorkflowRestoreResponse(BaseModel):
+    """Antwort auf POST /api/workflows/{workflow_id}/versions/{version}/restore."""
+
+    id: str
+    status: str
+    version: int
+
+
+# ── Debates ──────────────────────────────────────────
+
+
+class DebateListResponse(BaseModel):
+    debates: list[Any] = Field(default_factory=list)
+    total: int = 0
+
+
+class DebateRoundResponse(BaseModel):
+    debate_id: str
+    round_number: int
+    contributions: list[Any] = Field(default_factory=list)
+    consensus_reached: bool = False
+
+
+class DebateVoteResponse(BaseModel):
+    success: bool

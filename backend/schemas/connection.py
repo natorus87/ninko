@@ -53,3 +53,28 @@ class ConnectionListResponse(BaseModel):
     module_id: str
     connections: list[ConnectionRead]
     total: int
+
+
+class ConnectionListItem(BaseModel):
+    """Lightweight connection summary for sub-lists."""
+    id: str
+    name: str
+    environment: EnvironmentLabel
+    is_default: bool
+    status: Optional[str] = None
+
+
+class ConnectionDeleteResponse(BaseModel):
+    """Response after successful connection deletion."""
+    id: str
+    module_id: str
+    deleted: bool = True
+
+
+class ConnectionHealthCheckResponse(BaseModel):
+    """Health check result for a connection."""
+    connection_id: str
+    module_id: str
+    healthy: bool
+    latency_ms: Optional[int] = None
+    error: Optional[str] = None

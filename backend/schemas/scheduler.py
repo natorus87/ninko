@@ -70,3 +70,20 @@ class TaskExecutionLog(BaseModel):
     prompt: str
     response: str
     duration_ms: int = 0
+
+
+class ScheduledTaskDeleteResponse(BaseModel):
+    """Response: Aufgabe erfolgreich gelöscht."""
+
+    id: str
+    deleted: bool
+
+
+class ScheduledTaskRunResponse(BaseModel):
+    """Response: Ergebnis eines manuellen Task-Runs."""
+
+    task_id: str
+    status: str
+    response_preview: str
+    duration_ms: int
+    module_used: Optional[str] = None
