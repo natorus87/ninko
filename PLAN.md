@@ -1,422 +1,329 @@
-# Plan: Full Code Review 2026-05-20
+# Plan: Ninko Open Items — 2026-06-10
 
-**Datum**: 2026-05-20
-**Scope**: Backend (Python/FastAPI) + Frontend (Vanilla JS) + Architektur + API + Security
-**Reviewer**: Multi-Agent Review (5 Sub-Agenten, Re-Run mit engerem Scope für Backend/Security/Frontend)
-**Quelle**: `.claude/reports/full-review-2026-05-20.md`
+**Stand:** 2026-06-10
+**Quelle**: [.claude/reports/full-review-2026-06-10.md](.claude/reports/full-review-2026-06-10.md)
+**Vorgänger**: `PLAN.md` (Full Code Review 2026-05-20) — alle P0-Items abgeschlossen, in DONE.md überführt
 
-> **Vorgänger**: Der frühere PLAN.md (Canonical-English-Prompts-Migration, abgeschlossen 2026-05-15) ist umgesetzt — siehe `.claude/rules/prompt-konventionen.md`. Dieser Plan ersetzt ihn.
+> **Hinweis Methodik**: Der zugrundeliegende Full-Review vom 2026-06-10 ist **diff-basiert** (alle 8 Commits seit 2026-05-29 + gezielte Greps). Kein vollständiger Re-Walk aller 449 Python-Dateien / 383 KB `app.js` — die als „Coverage-Limit aufholen" markierten Items holen das nach.
 
 ---
 
 ## Executive Summary
 
-| Bereich | Status | Critical | High | Medium | Low/Info |
-|---|---|---:|---:|---:|---:|
-| Backend Code | gelb–rot | 3 | 6 | 6 | 6 |
-| Security (Vault/Auth/SafeGuard) | rot | 3 | 6 | 5 | 4 |
-| Frontend (XSS / Leaks) | rot | 1 | 3 | 4 | 3 |
-| Architektur | gelb | 0 (1×Problematic) | 3 | 4 | – |
-| API Contracts | gelb | 0 | 7 | 30+ | 20+ |
-| **Total** | **rot** | **7** | **25+** | **49+** | **33+** |
+| Bereich | Diff-Scope | Carry-Over offen | Neu im Diff | Status |
+|---|---|---|---|---|
+| Sicherheit | 🟢 keine Regression | 0 | 0 (2× Low) | OK |
+| Backend | 🟢 | 4× Schulden | 0 | OK |
+| Frontend | 🟢 | 0 | 1× Low | OK |
+| Architektur | 🟢 | 2× Schulden | 1× Low | OK |
+| API | 🟢 | 2× Schulden | 0 | OK |
+| **Total offene Items** | – | **8** | **3** | – |
 
-**Deployment-blockierend** (P0, vor jedem nächsten Release fixen): 7 Critical + DOMPurify-Whitelist.
+**0 Critical / 0 High.** Diff-Scope ist sauber. Alle 4 dringenden Findings vom 2026-05-29-Review (DOM-XSS, WS-Auth-Revocation, registry.js-Bug, Plugin-Upload-Limit) sind in den neuen Commits behoben oder konsolidiert.
 
-### Aktueller Arbeitsstand — 2026-05-24
+**Verbleibende 11 offene Items**: 8 Architektur-Schulden (Carry-Over aus 2026-05-29), 3 neue Low-Priority-Findings aus dem aktuellen Diff.
 
-Der P0-Block wurde schrittweise gegen den Code geprüft und umgesetzt.
-
-| ID | Status | Umsetzung |
-|---|---|---|
-| P0-1 | erledigt | Modul-HTML-Sanitizing entfernt `onclick`/Inline-Handler, setzt `FORBID_ATTR`, begrenzt URI-Schemas und fällt ohne DOMPurify geschlossen aus. |
-| P0-2 | erledigt | `/api/secrets/*` hat jetzt Router-Level-Admin-Dependency. |
-| P0-3 | erledigt | `_StatusEmitter`-Redaction nutzt echte Whitespace-Matcher statt doppelt escapte Regex-Backslashes. |
-| P0-4 | erledigt | Nicht entschlüsselbare SQLite-Secrets raisen `InvalidToken` statt still `None` zurückzugeben. |
-| P0-5 | erledigt | Vault-Startup-Migration re-encrypted Legacy-SQLite-Secrets von PBKDF2-100k/SHA256-v1 auf den aktuellen PBKDF2-210k-Key. |
-| P0-6 | erledigt | Safeguard-Pending wird zuerst in Redis persistiert, Lock-Erzeugung ist `setdefault`-basiert, Resume-Fehlerpfade räumen Pending-State auf. |
-| P0-7 stage 1 | erledigt | Startup-Sweeper markiert verwaiste laufende Workflow-Runs nach Backend-Restart als `interrupted`; Workflow-Runs erhalten `updated_at`. |
-| P0-7 stage 2 | offen | Vollständiges Resume mit persistiertem `visited`/`queue` bleibt mittelfristiger Folgepunkt. |
-
-Verifikation am 2026-05-24:
-
-```bash
-python3 -m compileall -q backend/api/routes_secrets.py backend/agents/base_agent.py backend/core/vault.py backend/core/workflow_engine.py backend/api/routes_workflows.py backend/schemas/workflows.py backend/main.py
-node --check frontend/app.js
-git diff --check
-```
-
-Alle drei Checks waren erfolgreich.
-
-### P1-Fortschritt — 2026-05-24
-
-Zusätzlich zum P0-Block wurden risikoarme P1-Punkte umgesetzt:
-
-| ID | Status | Umsetzung |
-|---|---|---|
-| P1-1 | erledigt | Pipeline-Fehler geben keine rohen Exception-Strings mehr an den User zurück; fehlgeschlagene Pipeline-Steps zeigen generische Fehlermeldungen. |
-| P1-2 | teilweise erledigt | Streaming-`token_queue` hat jetzt `maxsize=1000`; der größere Producer/Consumer-Refactor bleibt offen. |
-| P1-4 | erledigt | Agent-Execution-Logs loggen keine Tracebacks/rohen Exception-Strings mehr; bekannte Secret-Patterns werden vor Log-Ausgabe redacted. |
-| P1-5 | erledigt | SSE-Fehler-/Cancel-Pfade markieren offene Operation-Journal-Transaktionen als `failed` und räumen Pending-State auf. |
-| P1-6 | erledigt | Semantic Route Cache nutzt `MGET` statt N×`GET` für gescannte Cache-Keys. |
-| P1-7 | erledigt | `bootstrap_admin` ist bei `API_AUTH_ENABLED=false` nur noch von Loopback-Clients erlaubt. |
-| P1-9 | teilweise erledigt | API-Token-Erstellung setzt `Cache-Control: no-store` und `Pragma: no-cache`; `response_model` bleibt offen. |
-| P1-11 | erledigt | SQLite-Secret-DB-Pfad kommt aus `DATA_DIR` statt aus hartkodiertem `/app/data`. |
-
-Verifikation für diesen P1-Teil:
-
-```bash
-python3 -m compileall -q backend/agents/orchestrator.py backend/agents/middleware/execution.py backend/api/routes_chat.py backend/api/routes_auth.py backend/core/vault.py
-node --check frontend/app.js
-git diff --check
-```
-
-Alle drei Checks waren erfolgreich.
-
-Zusätzliche Test-Verifikation nach Installation der fehlenden lokalen Dependencies:
-
-```bash
-API_AUTH_ENABLED=false REDIS_URL=redis://localhost:6379/15 SESSION_SECRET=0123456789abcdef0123456789abcdef SQLITE_SECRETS_KEY=0123456789abcdef0123456789abcdef .venv/bin/python -m pytest -q backend/tests/test_api_security_policy.py backend/tests/test_workflows_integration.py
-API_AUTH_ENABLED=false REDIS_URL=redis://localhost:6379/15 SESSION_SECRET=0123456789abcdef0123456789abcdef SQLITE_SECRETS_KEY=0123456789abcdef0123456789abcdef .venv/bin/python -m pytest -q backend/tests/test_chat_streaming.py
-```
-
-Ergebnis:
-
-- `backend/tests/test_api_security_policy.py` + `backend/tests/test_workflows_integration.py`: 20 passed
-- `backend/tests/test_chat_streaming.py`: 7 passed
-
-Hinweis: Die vorhandene `.venv` nutzt Python 3.14.3; `python3.12-venv` ist lokal nicht installiert. Für die Testfähigkeit wurden die fehlenden Dependencies in `.venv` installiert. Dabei musste `pydantic-settings` in der Test-venv auf `2.14.1` statt des in `backend/requirements.txt` gepinnten `2.7.1` installiert werden, weil die installierte aktuelle LangChain-Community-Version `>=2.10.1` verlangt.
-
-### K8s-Fix — Telegram FRITZ!Box/Tasmota — 2026-05-24
-
-Der auf K8s gemeldete Telegram-Fehler wurde gegen Pod-Logs geprüft und behoben:
-
-| Punkt | Status | Umsetzung |
-|---|---|---|
-| Safeguard-False-Positive | erledigt | Deutsche Read-only-Anfragen mit `finden` werden im Short-Prefilter als `SAFE` erkannt, sofern keine Schreib-/Löschbegriffe im Text vorkommen. |
-| ReAct-Fallback-Crash | erledigt | JIT-Toolauswahl akzeptiert normale Callable-Tools ohne `.name`/`.description` und nutzt robuste Tool-Metadaten-Helper. |
-| FRITZ!Box/Tasmota-Fast-Path | erledigt | Explizite Tasmota-Suche über FRITZ!Box ruft die Geräteliste direkt ab und filtert ohne LLM-Routing. |
-| Regressionstests | erledigt | `backend/tests/test_k8s_telegram_regressions.py` deckt Safeguard, Callable-Tools und den direkten FRITZ!Box/Tasmota-Fast-Path ab. |
-| K8s-Deployment | erledigt | Backend-Image `natorus87/ninko-backend:latest` neu gebaut, gepusht (`sha256:9055335e...`) und `deployment/ninko-backend` im Namespace `ninko` neu ausgerollt. |
-
-Verifikation:
-
-```bash
-API_AUTH_ENABLED=false REDIS_URL=redis://localhost:6379/15 SESSION_SECRET=0123456789abcdef0123456789abcdef SQLITE_SECRETS_KEY=0123456789abcdef0123456789abcdef .venv/bin/python -m pytest backend/tests/test_api_security_policy.py backend/tests/test_workflows_integration.py backend/tests/test_chat_streaming.py backend/tests/test_k8s_telegram_regressions.py
-kubectl rollout status deployment/ninko-backend -n ninko --timeout=240s
-kubectl exec deployment/ninko-backend -n ninko -- python -c "from core.safeguard import SafeguardMiddleware, ActionCategory; m=SafeguardMiddleware.__new__(SafeguardMiddleware); r=m._fast_prefilter_short('Benutze FRITZ!Box, um alle Tasmota Geräte zu finden'); assert r and r['requires_confirmation'] is False and r['category'] is ActionCategory.SAFE"
-kubectl exec deployment/ninko-backend -n ninko -- python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).status)"
-```
-
-Ergebnis: 31 Tests passed, Rollout erfolgreich, neuer Pod `1/1 Running`, Healthcheck `200`.
-
-Hinweis: Zum Zeitpunkt des ersten Fixes war der konfigurierte LLM-Endpunkt zeitweise nicht erreichbar; der FRITZ!Box/Tasmota-Fast-Path umgeht die LLM-Abhängigkeit für genau diese Read-only-Anfrage.
-
-### Telegram/Safeguard-Stabilisierung — 2026-05-25
-
-Nach weiteren Telegram-Ausführungsfehlern wurden die laufenden K8s-Logs und Redis-Provider-Settings geprüft:
-
-| Punkt | Status | Umsetzung |
-|---|---|---|
-| Embedding-Provider nach Restart | erledigt | Startup stellt jetzt auch `ninko:settings:embed_provider` wieder her; Embeddings gehen auf `http://10.11.12.6:8081/v1` statt versehentlich auf den Chat-Endpoint. |
-| ReAct-Fallback-Fehler | erledigt | LLM-Ausfälle im ReAct-Fallback werden abgefangen und als klare User-Antwort zurückgegeben statt als Exception ins Telegram-Modul zu laufen. |
-| Telegram-Fehlermeldungen | erledigt | Telegram sendet bei LLM-Verbindungsfehlern/Timeouts konkrete Hinweise statt nur generischem `Fehler bei der Ausführung`. |
-| Safeguard-Kontext | erledigt | Telegram-Safeguard-Checks übergeben jetzt `agent_id` und `session_id`, damit Profile/Session-Kontext greifen. |
-| K8s-Deployment | erledigt | Backend-Image `natorus87/ninko-backend:latest` neu gebaut, gepusht (`sha256:43d4c517...`) und ausgerollt. |
-
-Verifikation:
-
-```bash
-API_AUTH_ENABLED=false REDIS_URL=redis://localhost:6379/15 SESSION_SECRET=0123456789abcdef0123456789abcdef SQLITE_SECRETS_KEY=0123456789abcdef0123456789abcdef .venv/bin/python -m pytest backend/tests/test_api_security_policy.py backend/tests/test_workflows_integration.py backend/tests/test_chat_streaming.py backend/tests/test_k8s_telegram_regressions.py
-kubectl rollout status deployment/ninko-backend -n ninko --timeout=240s
-kubectl logs ninko-backend-cdbbfb857-nqc8d -n ninko --since=1m | rg "Telegram HTTP Error: 409|Callback confirm|Safeguard.*failed|Classifier call failed|Function Calling LLM call failed|ReAct fallback failed|ERROR|Traceback" || true
-```
-
-Ergebnis: 32 Tests passed, Rollout erfolgreich, neuer Pod `1/1 Running`, Healthcheck `200`, Startup-Logs zeigen den wiederhergestellten Embedding-Provider.
+> **Stand nach Umsetzung (Sprint 1-6, 2026-06-10)**: **Alle 16 Items abgeschlossen** (1.1, 1.2, 1.3, 1.4, 2.1, 2.2, 2.3, 2.4, 3.1, 3.2, 3.3, 4.1, 4.2, 4.3, 4.5). 4.4 übersprungen (deckungsgleich mit 2.3). Coverage-Berichte in `.claude/knowledge/`. 2.3 + 2.4 sind im Working Tree uncommitted, **0 Commits** (auf User-Wunsch zur späteren Review).
 
 ---
 
-## P0 — Sofort (deployment-blockierend)
+## P1 — Kurzfristig (1-2 Wochen)
 
-Diese Befunde müssen **vor dem nächsten Deployment** behoben sein. Reihenfolge nach Risiko.
+> Reihenfolge nach Risiko × Aufwand. Jedes Item mit konkretem Datei-Anker und Code-Snippet.
 
-### P0-1 — DOMPurify-Whitelist erlaubt `onclick` → Account-Takeover
-- **Datei**: [frontend/app.js:577-582](frontend/app.js#L577)
-- **Risiko**: XSS aus jedem Modul-HTML (auch Marketplace/Community). Vollständiger Account-Takeover-Vektor.
-- **Fix**:
-  ```js
-  panel.innerHTML = (typeof DOMPurify !== 'undefined')
-      ? DOMPurify.sanitize(html, {
-          ADD_ATTR: ['target', 'rel'],
-          FORBID_TAGS: ['script', 'iframe', 'style'],
-          FORBID_ATTR: ['onclick','onerror','onload','onmouseover','onfocus','onblur','onchange','onsubmit','formaction'],
-          ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|\/api\/)/i,
-        })
-      : '';   // Fail-Closed, nie raw-HTML
-  ```
-- **Followup**: Module sollen `data-action`-Attribute statt inline `onclick` nutzen (Pattern existiert bereits in [frontend/features/agents.js:67-72](frontend/features/agents.js#L67-L72)).
-
-### P0-2 — `/api/secrets/*` komplett ohne Auth/Admin-Guard
-- **Datei**: [backend/api/routes_secrets.py:40-95](backend/api/routes_secrets.py#L40-L95) (alle 5 Endpoints: GET /, POST /, GET /{key}, DELETE /{key}, GET /health/check)
-- **Risiko**: Unauthentifizierter Angreifer kann Secrets listen, überschreiben, löschen → vollständige Plattform-Kompromittierung.
-- **Fix**: Router-Level-Dependency:
+### 1.1 Secret-Redaction zentralisieren (4× Stellen) — ✅ DONE (Sprint 1)
+- **Risiko**: Medium — Tokens/Passwörter können in einem Pfad maskiert, im anderen geleakt werden
+- **Aufwand**: ~2 h
+- **Stellen**:
+  - [backend/agents/base_agent.py:200-216](backend/agents/base_agent.py#L200-L216) (`_StatusEmitter`)
+  - [backend/agents/middleware/execution.py:35-50](backend/agents/middleware/execution.py#L35-L50)
+  - [backend/core/connections.py:33-37](backend/core/connections.py#L33-L37)
+  - [backend/core/safeguard.py:67-71](backend/core/safeguard.py#L67-L71)
+- **Fix**: Zentrales `backend/core/redaction.py` mit kanonischer Key-Liste, `redact_text()` und `mask_dict()`; alle 4 Stellen umstellen.
   ```python
-  router = APIRouter(prefix="/api/secrets", tags=["Secrets"],
-                     dependencies=[Depends(require_admin)])
+  # backend/core/redaction.py
+  SECRET_KEYS: frozenset[str] = frozenset({
+      "password", "token", "api_key", "secret", "apikey", "api_token",
+      "authorization", "vault_key", "private_key", "access_key",
+  })
+  def mask_dict(d: dict) -> dict: ...
+  def redact_text(s: str) -> str: ...
   ```
 
-### P0-3 — Defekte Secret-Redaction im `_StatusEmitter`
-- **Datei**: [backend/agents/base_agent.py:191-204](backend/agents/base_agent.py#L191-L204)
-- **Risiko**: Regex-Pattern `rf'("{key}"\\s*:\\s*)"[^"]+"'` enthält doppelt-escapte `\\s` — matcht nie. **Tokens/Passwörter werden ungekürzt ins Tool-End-Event ans Frontend gestreamt.**
-- **Fix**: `\\s` → `\s` (rf-string mit raw-Backslash ist hier korrekt: ein Backslash genügt).
+### 1.2 Orchestrator Tier-Routing-Leiche entfernen — ✅ DONE (Sprint 2)
+- **Risiko**: Medium — tote Methoden kosten Wartung, lenken von echtem Code ab
+- **Aufwand**: ~4 h
+- **Stellen** in [backend/agents/orchestrator.py](backend/agents/orchestrator.py) (3039 LOC):
+  - `classify_tier`, `_classify_tier`, `_detect_module_fast`, `_proactive_routing_adjust`, `_update_session_stats`
+  - `RoutingConfig`-Presets, `_check_task_complexity`
+  - `_route_legacy_tiered` (delegiert komplett an `_fallback_to_react_loop`)
+- **Vorgehen**:
+  1. Sicherstellen, dass keine Produktiv-Aufrufer existieren (Test-Suite checken)
+  2. In `backend/agents/legacy_routing.py` isolieren oder direkt löschen
+  3. CLAUDE.md + Doku ehrlich als „Function Calling + ReAct Fallback" benennen
+- **Erwarteter Effekt**: Halbierung der Orchestrator-Größe (~1500 LOC weniger)
 
-### P0-4 — Vault: Silent-None bei `InvalidToken` → Auth-Bypass in Modulen
-- **Datei**: [backend/core/vault.py:280-288](backend/core/vault.py#L280-L288)
-- **Risiko**: `_get_sqlite_secret` gibt bei Decrypt-Fehler `None` zurück statt zu raisen. Module, die `vault.get_secret(...)` ohne None-Check verwenden, gehen mit fehlendem Token weiter (unauth Connections, fehlende Auth-Header).
-- **Fix**:
+### 1.3 EmbeddingRouter reaktivieren oder entfernen — ✅ DONE (Sprint 2, entfernt)
+- **Risiko**: Low — toter Code mit Runtime-Kosten (wird bei jedem `_refresh_routing_map()` gefüttert)
+- **Aufwand**: ~1 h (löschen) oder ~6 h (reaktivieren)
+- **Stellen**: [backend/core/embedding_router.py](backend/core/embedding_router.py) — `arank()` ohne Produktiv-Aufrufer
+- **Empfehlung**: Entfernen, falls nicht für 1.4 (Pipeline `requires_confirmation`) benötigt
+- **Falls behalten**: Mindestens `arank()` mit dem Function-Calling-Router verdrahten
+
+### 1.4 Pipeline `requires_confirmation` implementieren — ✅ DONE (Sprint 3)
+- **Risiko**: Medium — functional safety gap (destruktive Pipeline-Steps laufen still durch)
+- **Aufwand**: ~6 h
+- **Stelle**: [backend/core/pipeline_engine.py:401-412](backend/core/pipeline_engine.py#L401-L412) — Step wird stillschweigend geskippt
+- **Vorgehen**:
+  1. Step-Definition um `requires_confirmation: bool` erweitern
+  2. Bei `True` Pipeline pausieren, `op_journal.create_pending(...)` analog zu Chat-Flow
+  3. Resume-Mechanik via `pipeline_id` (analog zu Session-Resume)
+
+---
+
+## P2 — Mittelfristig (2-4 Wochen)
+
+### 2.1 Plugin Hot-Unload korrigieren — ✅ DONE (Sprint 4)
+- **Risiko**: Low — funktional, nicht Security
+- **Aufwand**: ~4 h
+- **Stellen**:
+  - [backend/core/module_registry.py:304-309](backend/core/module_registry.py#L304-L309) — `remove_plugin` lässt FastAPI-Routen im Memory
+  - `hot_load_plugin` manipuliert Starlette-Internals direkt → fragil gegen Versionswechsel
+- **Fix**: Eigene `PluginRouteRegistry` mit explizitem `mount()`/`unmount()`-Lifecycle
+
+### 2.2 Prompt-Konventions-Drift beheben
+- **Risiko**: Low — Sprach-Qualität, nicht funktional
+- **Aufwand**: ~30 min (deutlich kleiner als 3 h, weil 90 % der Migration in Sprint 1-4 erledigt war)
+- **Stellen**:
+  - [backend/agents/base_agent.py:89-119](backend/agents/base_agent.py#L89-L119) — `_t(de=..., en=...)`-Multilingual-Pattern
+  - `_LANG_INSTRUCTIONS` injiziert „Antworte auf Deutsch" — widerspricht [.claude/rules/prompt-konventionen.md](.claude/rules/prompt-konventionen.md)
+- **Fix**: Canonical-English-Prompts, Sprache via `LanguageMiddleware` zur Render-Zeit
+- **Status**: ✅ DONE (Sprint 5) — `_LANG_INSTRUCTIONS` entfernt, `_dynamic_prompt_appendix` und `_auto_memorize` auf plain English, 9 Regression-Tests in `test_base_agent_prompts.py`. `LanguageMiddleware` war bereits korrekt (war nicht Teil der Migration).
+
+### 2.3 API-Documentation: `response_model` für ~110 Endpoints
+- **Risiko**: Low — DX und OpenAPI-Quality
+- **Aufwand**: ~8 h
+- **Stellen**: ~110 Endpoints mit `-> dict` ohne `response_model` (Schätzung aus 2026-05-29-Review, im aktuellen Diff nicht neu gezählt)
+- **Vorgehen**:
+  1. Top-20 meistgenutzte Endpoints priorisieren (Auth, Chat, Agents, Workflows, Settings)
+  2. Pro Endpoint dediziertes Pydantic-Response-Modell anlegen
+  3. Pydantic-`model_dump()`-Aufrufe im Endpoint-Body durch Return-Wert + `response_model` ersetzen
+- **Betroffene Dateien (Auszug)**: `routes_chat.py`, `routes_agents.py`, `routes_workflows.py`, `routes_settings.py`, `routes_auth.py`, `routes_plugins.py`, `routes_modules.py`
+- **Status**: ✅ DONE (Sprint 6) — 18 Route-Dateien + 7 Schema-Dateien. Realität: 162 Endpoints (statt 110 geschätzt) — alle 6 fertigen Sub-Agenten-Domänen kompilieren, 95 targeted Tests grün. `routes_plugins.py` aus 1 Sub-Agent reverted auf HEAD (Syntaxfehler im Sub-Agent-Output, jetzt sauber). Pre-existing Test-Failures (Redis nicht erreichbar in Test-Setup, 401-Auth) unabhängig von 2.3.
+
+### 2.4 MutationResponse-Modell vereinheitlichen
+- **Risiko**: Low — API-Konsistenz
+- **Aufwand**: ~3 h
+- **Beobachtung**: Statusfeld uneinheitlich:
+  - `{"status":"created"}`
+  - `{"deleted":True}`
+  - `{"success":bool}`
+- **Fix**: Einheitliches `MutationResponse`-Modell in `backend/schemas/mutations.py`:
   ```python
-  # statt logger.warning + return None:
-  raise InvalidToken(
-      f"Secret '{key}' kann nicht entschlüsselt werden. "
-      "Manuelle Re-Einstellung erforderlich."
-  )
+  class MutationResponse(NinkoModel):
+      id: str | None = None
+      status: Literal["created", "updated", "deleted", "noop"]
+      message: str | None = None
   ```
+  Betrifft v. a. `routes_agents.py`, `routes_workflows.py`, `routes_secrets.py`, `routes_modules.py`.
+- **Status**: ✅ DONE (Sprint 6) — `schemas/mutations.py` neu, 13 inline-Mutations in `routes_chat.py` (4), `routes_auth.py` (3), `routes_settings.py` (4), `routes_themes.py` (2), `routes_workflows.py` (1) migriert auf `MutationResponse(status, id, data)`. 0 Reste nach `grep`. 2.3 hatte den Großteil schon zu dedizierten Pydantic-Modellen migriert, sodass nur die inline-Returns übrig blieben.
 
-### P0-5 — Vault V1-Crypto: SHA256-Hash ohne Salt
-- **Datei**: [backend/core/vault.py:118-121](backend/core/vault.py#L118-L121), [vault.py:186-195](backend/core/vault.py#L186-L195)
-- **Risiko**: Bei Backup-Leak ist Offline-Bruteforce gegen V1-Secrets trivial (Rainbow-Tables/Wordlist).
-- **Fix**: Startup-Sweep, der alle V1-Secrets aktiv mit aktuellem PBKDF2-Key re-encryptiert. Nach Ablauf einer Migrationsperiode (z. B. 30 Tage) den `_v1_fernet`-Pfad entfernen.
+---
 
-### P0-6 — Race-Condition + State-Loss im Safeguard-Resume
+## P3 — Low-Priority Findings aus 2026-06-10 Diff
+
+### 3.1 Proxmox-IP-Discovery in Prod validieren — ✅ DONE (Sprint 2)
+- **Risiko**: Low — gut strukturiert, defensiv (ipaddress-Validierung, loopback/unspecified/link-local-Filter)
+- **Stelle**: [backend/modules_catalog/proxmox/tools.py](backend/modules_catalog/proxmox/tools.py) (267 neue LOC in Commit 2683042)
+- **Aufwand**: ~1 h (manueller Test) + ggf. 1 h (Edge-Case-Tests)
+- **Vorgehen**:
+  - Erste Prod-Nutzung: Output-Format gegen `/api/proxmox/discover_ips` validieren
+  - Tests ergänzen für: CIDR-Suffix, IPv6 Zone-ID, malformed QEMU-Guest-Agent-Output
+  - Coverage-Lücke in `backend/tests/test_proxmox_ip_tools.py` schließen
+
+### 3.2 `workflows.js` — konsequent `_escapeHtml` in `innerHTML` — ✅ DONE (Sprint 1)
+- **Risiko**: Low — Auth-Required, identisches Pattern wie der im 2026-05-29-Review behobene DOM-XSS #1
+- **Stellen**:
+  - [frontend/features/workflows.js:243](frontend/features/workflows.js#L243) — `content.innerHTML = (this._wfNodes || []).map(...)`
+  - [frontend/features/workflows.js:697](frontend/features/workflows.js#L697) — `<option>` für Agenten
+  - [frontend/features/workflows.js:712](frontend/features/workflows.js#L712) — `<option>` für Workflows
+  - [frontend/features/workflows.js:727](frontend/features/workflows.js#L727) — `<option>` für Scripts
+- **Fix**: `_escapeHtml()` auf alle User-/API-kontrollierten Werte anwenden (auch `data-`-Attribute und IDs)
+- **Aufwand**: ~30 min
+
+### 3.3 `ConnectionManager.get_tenant_id` Multi-Tenant-Fallback testen — ✅ DONE (Sprint 1)
+- **Risiko**: Low — Tasmota-Fix in Commit eb2f183 zieht jetzt auch `get_current_tenant_id()` aus Auth-Kontext
+- **Stelle**: [backend/core/connections.py:82-89](backend/core/connections.py#L82-L89)
+- **Vorgehen**: Test ergänzen, der `get_tenant_id()` mit gesetztem `get_current_tenant_id()` und leerem `tenant_id`-Argument aufruft → muss den Auth-Tenant liefern, nicht Session-Prefix oder „default"
+- **Aufwand**: ~30 min
+
+---
+
+## P4 — Coverage-Limit aufholen
+
+> Diese Items schließen die Lücke aus dem 2026-06-10-Review (4 von 5 Sub-Agenten mit Timeout abgebrochen). Jeder Sub-Agent mit **engerem Scope** (1-2 Dateien / 1 Modul) kann innerhalb der 30-Min-Grenze durchlaufen.
+
+### 4.1 Vollständiger Security-Audit (449 Python-Dateien)
+- **Sub-Agent-Scope**: Batch-für-Batch (z. B. 50 Dateien pro Lauf), gezielte Greps für CWE-Top-25
+- **Aufwand**: ~5-7 Batches à 30 min
+- **Trigger**: `task(category="unspecified-high", load_skills=["sicherheitspruefung", "error-handling"])`
+
+### 4.2 Performance-Profiling (3 Hot-Spots)
 - **Dateien**:
-  - [backend/agents/base_agent.py:505-507](backend/agents/base_agent.py#L505-L507) (Lock-Eviction kann gehaltene Locks ersetzen)
-  - [backend/agents/base_agent.py:1054-1066](backend/agents/base_agent.py#L1054-L1066) (R-M-W zwischen `_paused_sg_agents` und Redis ohne Atomarität)
-- **Risiko**: Pod-Restart zwischen In-Memory-Set und Redis-Set → nicht-resumierbare Tool-Calls oder Resume ins Leere.
-- **Fix**:
-  - Lock-Akquisition + setdefault-Atomar: `_safeguard_session_locks.setdefault(session_id, asyncio.Lock())`
-  - Reihenfolge umdrehen: Redis-Key VOR In-Memory-Dict setzen.
-  - Cleanup im Exception-Pfad ergänzen ([base_agent.py:1143-1150](backend/agents/base_agent.py#L1143-L1150)).
+  - [backend/agents/orchestrator.py](backend/agents/orchestrator.py) (136 KB / 3039 LOC)
+  - [backend/core/tool_registry.py](backend/core/tool_registry.py) (78 KB)
+  - [backend/core/safeguard.py](backend/core/safeguard.py) (83 KB)
+- **Sub-Agent-Scope**: 1 Datei pro Lauf, gezielt auf N+1, Blocking-IO, GIL-Contention, Memory-Leaks
+- **Trigger**: `task(category="deep", load_skills=["python-backend"])`
 
-### P0-7 — Workflow-Engine ohne Crash-Recovery
-- **Datei**: [backend/core/workflow_engine.py](backend/core/workflow_engine.py) (975 LOC)
-- **Risiko**: Nach Backend-Crash bleiben `status: running` Workflows in Redis hängen — keine Sweep-Task, keine Resume-Logik, keine Heartbeats. BFS-`visited` ist lokal.
-- **Fix** (Stage 1 — Sweeper): Startup-Task in `main.py`:
-  ```python
-  async def sweep_orphan_workflow_runs() -> None:
-      cutoff = datetime.now(UTC) - timedelta(minutes=10)
-      # alle Runs mit status=running, last_heartbeat < cutoff → status=interrupted
-  ```
-- **Fix** (Stage 2 — Resume): `visited` und `queue` nach Redis persistieren; Resume-Pfad implementieren.
+### 4.3 frontend/app.js (383 KB) Vollinspektion
+- **Sub-Agent-Scope**: Frontend-File in 4-5 Hälften (je ~80 KB)
+- **Fokus**: Memory-Leaks, Event-Listener-Cleanup, WebSocket-Reconnect-Logik, LocalStorage-Verwendung
+- **Trigger**: `task(category="visual-engineering", load_skills=["frontend-ui-ux", "ninko-frontend-debug"])`
 
----
+### 4.4 API-Contract-Audit (30+ Route-Dateien)
+- **Sub-Agent-Scope**: 5-7 Routes pro Lauf
+- **Fokus**: Pydantic-Validatoren, `response_model`-Coverage, einheitliche Error-Schema, Rate-Limiting pro Endpoint
+- **Trigger**: `task(category="unspecified-high", load_skills=["pydantic", "python-backend"])`
 
-## P1 — Kurzfristig (High, in dieser Woche)
-
-### Backend / Async / Resource-Leaks
-
-| ID | Befund | Datei | Fix |
-|---|---|---|---|
-| P1-1 | Blanket `except Exception` mit `str(exc)`-Leak | [orchestrator.py:715-717](backend/agents/orchestrator.py#L715-L717) | Sanitisieren wie `execution.py:309-317` |
-| P1-2 | `token_queue` ohne `maxsize`, Busy-Polling 0.05s | [routes_chat.py:118-120](backend/api/routes_chat.py#L118-L120), [routes_chat.py:339](backend/api/routes_chat.py#L339) | `asyncio.Queue(maxsize=1000)` + Producer/Consumer mit Cancellation statt Polling |
-| P1-3 | `_queues` (Status-Bus) ohne TTL/Cap, nicht race-frei | [core/status_bus.py:18](backend/core/status_bus.py#L18), [status_bus.py:90-94](backend/core/status_bus.py#L90-L94) | Lock um `get_queue`, TTL-Sweeper auf Session-`last_emit_at` |
-| P1-4 | Server-Log enthält ungekürzte Exception-Strings (Tokens) | [middleware/execution.py:309-318](backend/agents/middleware/execution.py#L309-L318) | `_mask_sensitive_args`-Redactor vor `logger.error`, `exc_info=False` |
-| P1-5 | SSE-Stream-Handler: kein `current_tx_id`-Cleanup im Error-Pfad | [routes_chat.py:497-509](backend/api/routes_chat.py#L497-L509) | `try/finally` mit Cleanup |
-| P1-6 | Cache-Scan O(N) Redis-Roundtrips | [orchestrator.py:554-561](backend/agents/orchestrator.py#L554-L561) | `MGET` statt N×GET; oder eingebauter SCAN+LIMIT |
-
-### Security
-
-| ID | Befund | Datei | Fix |
-|---|---|---|---|
-| P1-7 | `bootstrap_admin` ungeschützt bei `API_AUTH_ENABLED=False` | [routes_auth.py:495-514](backend/api/routes_auth.py#L495-L514) | IP-Whitelist (Loopback) oder `X-Bootstrap-Token` Env-Secret |
-| P1-8 | Prompt-Injection-Prefilter nur EN/DE | [core/safeguard.py:745-775](backend/core/safeguard.py#L745-L775) | FR/ES/IT/PT/NL/PL/ZH/JA-Patterns ergänzen, `detect_prompt_injection=True` als Default in `moderate` |
-| P1-9 | API-Token-Response ohne `Cache-Control: no-store` und `response_model` | [routes_auth.py:784-790](backend/api/routes_auth.py#L784-L790) | Header setzen, `token: SecretStr` |
-| P1-10 | Audit-Log mit ungeschütztem User-Input → Log-Forging | [safeguard.py:1149-1166](backend/core/safeguard.py#L1149-L1166) | Bei Anzeige escapen; Output-Side dokumentieren |
-| P1-11 | `SQLITE_DB_PATH` hartkodiert | [vault.py:49](backend/core/vault.py#L49) | Aus `core.config.get_settings()` |
-
-### Frontend
-
-| ID | Befund | Datei | Fix |
-|---|---|---|---|
-| P1-12 | Fallback `: html` wenn DOMPurify fehlt → Fail-Open | [app.js:582](frontend/app.js#L582), [app.js:3319](frontend/app.js#L3319) | Fail-Closed: `_escapeHtml(text)` im else-Zweig |
-| P1-13 | Marked-Output ohne DOMPurify im else-Zweig | [app.js:3315-3319](frontend/app.js#L3315-L3319) | Wenn DOMPurify fehlt, `_escapeHtml` statt `marked.parse` |
-| P1-14 | EventSource ohne `try/finally`-Close | [app.js:1417-1440](frontend/app.js#L1417-L1440) | Zentrale `_activeStream`-Ref, `finally { close() }` |
-
-### API Contracts
-
-| ID | Befund | Datei | Fix |
-|---|---|---|---|
-| P1-15 | 12× `body: dict` ohne Pydantic-Schema | [routes_settings.py:1492](backend/api/routes_settings.py#L1492) (TTS), [routes_settings.py:1588](backend/api/routes_settings.py#L1588) (STT), [routes_settings.py:1658](backend/api/routes_settings.py#L1658) (OCR), [routes_chat.py:917-945](backend/api/routes_chat.py#L917-L945) (history), [routes_chat.py:959-965](backend/api/routes_chat.py#L959-L965) (ui-history), ua. | Konkrete Pydantic-Modelle; siehe Schema-Vorschläge unten |
-| P1-16 | `routes_auth.py`: 24 Endpoints, 0% `response_model` | [routes_auth.py](backend/api/routes_auth.py) | `LoginResponse`, `MeResponse`, `UserSanitized`, `RoleListResponse`, `GroupListResponse`, `ApiTokenCreateResponse` |
-| P1-17 | `GET /api/logs` lädt 10k Einträge in Memory | [routes_logs.py:41](backend/api/routes_logs.py#L41) | Server-side filter, cursor-Pagination |
-| P1-18 | Sync `subprocess.run` in async Endpoint | [routes_tts.py:125](backend/api/routes_tts.py#L125), [routes_tts.py:168-208](backend/api/routes_tts.py#L168-L208) | `asyncio.create_subprocess_exec` oder `asyncio.to_thread` |
-
----
-
-## P2 — Mittelfristig (Medium, in den nächsten 2-4 Wochen)
-
-### Backend & Architektur
-
-| ID | Befund | Datei | Fix |
-|---|---|---|---|
-| P2-1 | Hardcoded Modul-Imports in Core | [orchestrator.py:262](backend/agents/orchestrator.py#L262), [workflow_engine.py:536](backend/core/workflow_engine.py#L536), [script_tools.py:151](backend/agents/script_tools.py#L151) | `registry.get_tool("modul", "tool")` |
-| P2-2 | Orchestrator-Monolith 2804 LOC | [orchestrator.py](backend/agents/orchestrator.py) | Split: `routing/{keyword,embedding,function_calling,cache,intent}.py`, Orchestrator als Coordinator ~300 LOC |
-| P2-3 | BaseAgent 1250 LOC, Tuple-Return fragil | [base_agent.py](backend/agents/base_agent.py) | `InvokeResult`-Dataclass; Context-Compaction als Middleware; `_StatusEmitter`/`_sg_loop` in eigenes Modul |
-| P2-4 | `_paused_sg_agents` Module-Level ohne Cleanup-Task | [base_agent.py:401-402](backend/agents/base_agent.py#L401-L402) | Async-Cleanup-Coroutine in `main.py` Startup |
-| P2-5 | Pool-Encapsulation-Bruch (`pool._meta`) | [orchestrator.py:988](backend/agents/orchestrator.py#L988) | Public API auf `DynamicAgentPool` |
-| P2-6 | String-Matching auf LangGraph-Errortext | [middleware/execution.py:286-318](backend/agents/middleware/execution.py#L286-L318) | `langgraph.errors.GraphRecursionError` per Typ |
-| P2-7 | Vault: 440-LOC-Klasse, Logik-Duplikation | [vault.py](backend/core/vault.py) | `FernetCipher` extrahieren; `VAULT_DISABLE_LEGACY_KEYS`-Flag nach abgeschlossener Migration |
-| P2-8 | IP-basierte Login-Rate-Limit-Schicht fehlt | [routes_auth.py:45-73](backend/api/routes_auth.py#L45-L73) | Globaler Bucket pro IP + 401 statt 429 bei unbekanntem Username (gegen Enumeration) |
-| P2-9 | Salt-Trennung pro Instance fehlt | [vault.py:101-116](backend/core/vault.py#L101-L116) | `INSTANCE_ID`-Salt beim ersten Start zufällig erzeugen und persistieren |
-
-### Frontend
-
-| ID | Befund | Datei | Fix |
-|---|---|---|---|
-| P2-10 | WebSocket-Reconnect ohne Timer-Cleanup | [app.js:3506-3510](frontend/app.js#L3506-L3510) | `clearTimeout(this._reconnectTimer)` vor `setTimeout`; `disconnectWebSocket()`-Methode |
-| P2-11 | Globale `document`-Listener ohne Remove im SPA-Lebenszyklus | [app.js:194](frontend/app.js#L194), [app.js:317](frontend/app.js#L317), [app.js:325](frontend/app.js#L325), [app.js:403](frontend/app.js#L403), [app.js:413](frontend/app.js#L413), [app.js:1258](frontend/app.js#L1258), [app.js:1262](frontend/app.js#L1262) | Idempotenz-Flag `_listenersBound`; `{once:true}` wo möglich |
-
-### API Contracts
-
-| ID | Befund | Datei | Fix |
-|---|---|---|---|
-| P2-12 | Schemas ohne `extra="forbid"` (alle 60 Klassen) | `backend/schemas/` | Globaler `NinkoModel`-Mixin: |
-| P2-13 | Kein einheitliches Error-Schema | API-weit | `ErrorResponse(error, code, request_id)` + globaler `HTTPException`-Handler |
-| P2-14 | Keine standardisierte Pagination | `routes_logs.py`, `routes_safeguard_audit.py`, `routes_audit.py`, `routes_operations.py` | Generischer `Page[T]`-Helper: `items, total, limit, offset, has_more` |
-| P2-15 | `routes_alerts.py` leakt `exc`-String in detail | [routes_alerts.py:21-50](backend/api/routes_alerts.py#L21-L50) | Generische Fehlermeldung, exc nur loggen |
-| P2-16 | `routes_modules.py` Module-Frontend-Bypass ohne RBAC | [routes_modules.py:96-162](backend/api/routes_modules.py#L96-L162) | Auth-Check ergänzen |
-| P2-17 | `ScheduledTaskCreate.cron` ohne `field_validator` | [schemas/scheduler.py:13-25](backend/schemas/scheduler.py#L13-L25) | Validator in Schema, nicht in Route |
-| P2-18 | `schemas/secret.py:value` ohne `max_length` | [schemas/secret.py:9](backend/schemas/secret.py#L9) | `max_length=10_000` |
-| P2-19 | `schemas/module.py:status: str` (kein Literal) | [schemas/module.py:27](backend/schemas/module.py#L27) | `Literal["ok","error","degraded","unknown"]` |
-| P2-20 | `datetime`-Felder als `Optional[str]` | [schemas/agents.py:32-43](backend/schemas/agents.py#L32-L43), [schemas/workflows.py:91-103](backend/schemas/workflows.py#L91-L103) | `datetime` mit ISO-Serializer |
-| P2-21 | Knowledge-Graph: `limit` ohne `Query(le=)` | [routes_knowledge_graph.py:129-147](backend/api/routes_knowledge_graph.py#L129-L147) | `limit: int = Query(100, ge=1, le=1000)` |
-| P2-22 | Themes: Repo-ID als Query statt Path | [routes_themes.py:312](backend/api/routes_themes.py#L312) | `POST /repos/{repo_id}/themes/{theme_id}/install` |
-
-### Globaler `NinkoModel`-Mixin (P2-12)
-
-```python
-# backend/schemas/__init__.py
-from pydantic import BaseModel, ConfigDict
-
-class NinkoModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-```
-Alle vorhandenen Schemas davon ableiten (60 Klassen).
-
-### Einheitliches Error-Schema (P2-13)
-
-```python
-# backend/schemas/errors.py
-class ErrorResponse(NinkoModel):
-    error: str
-    code: str
-    request_id: str | None = None
-
-# backend/main.py
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request, exc):
-    return JSONResponse(
-        status_code=exc.status_code,
-        content=ErrorResponse(error=exc.detail, code=f"HTTP_{exc.status_code}",
-                              request_id=request.headers.get("x-request-id")).model_dump(),
-    )
-```
-
----
-
-## P3 — Langfristig (Low / Refactoring)
-
-| ID | Befund | Datei |
-|---|---|---|
-| P3-1 | Memory-System ohne Tenant-Isolation in `where_filter` | [core/memory.py](backend/core/memory.py) |
-| P3-2 | Skill/Memory-Magic-Numbers (`_MATCH_THRESHOLD=0.12`, `decay_lambda=0.05`) | [skills_manager.py](backend/core/skills_manager.py), [memory.py](backend/core/memory.py) |
-| P3-3 | `re.sub` für `<think>...</think>` dupliziert | [orchestrator.py:1208](backend/agents/orchestrator.py#L1208) (vs `base_agent._strip_thinking`) |
-| P3-4 | Toter Code: `if TYPE_CHECKING: pass`, ungenutztes `result = {}` | [execution.py:14-15](backend/agents/middleware/execution.py#L14-L15), [execution.py:53-54](backend/agents/middleware/execution.py#L53-L54) |
-| P3-5 | Polling-Interval als Magic Number | [routes_chat.py:339](backend/api/routes_chat.py#L339) |
-| P3-6 | OpenAPI-Tags inkonsistent (case/number) | API-weit |
-| P3-7 | Mix `Optional[X]` vs `X \| None` | API-weit |
-| P3-8 | `@router.deprecated(True)` auf Legacy-Toggles | [routes_safeguard.py](backend/api/routes_safeguard.py) |
-| P3-9 | `samesite` Cookie-Mismatch beim Logout | [routes_auth.py:347](backend/api/routes_auth.py#L347) |
-| P3-10 | `routes_modules.py`: Duplicate Route Decoration | [routes_modules.py:40-41](backend/api/routes_modules.py#L40-L41) |
-| P3-11 | `atexit.register` für asyncio-Cleanup macht wenig Sinn | [base_agent.py:401-402](backend/agents/base_agent.py#L401-L402) |
-| P3-12 | Drag-Listener auf jedem `_renderAgentSteps` neu | [frontend/features/agents.js:760-776](frontend/features/agents.js#L760-L776) |
-| P3-13 | Post-Sanitize `.replace(/<a /g, ...)` fragil | [app.js:3320](frontend/app.js#L3320), [app.js:3473](frontend/app.js#L3473) | DOMPurify `addHook('afterSanitizeAttributes', ...)` |
-| P3-14 | `data:image/webp` in `ALLOWED_URI_REGEXP` (Polyglot-Risiko) | [app.js:3319](frontend/app.js#L3319) |
-| P3-15 | Magic-Numbers in Konstanten (`_REPLACE_HISTORY_MAX_MESSAGES`, `_MAX_PLUGIN_FILES`, `MAX_LOG_ENTRIES`) | Verschiedene | → `core/config.py` Settings |
-
----
-
-## Architektur — Top-3 Stärken (nicht anfassen)
-
-1. **Middleware-Chain** ([backend/agents/middleware/](backend/agents/middleware/)) — Priority-Bänder (0-99 System / 100-199 Prompt / 400-499 Execution / 500-599 Post), deterministische Sortierung, Short-Circuit-Semantik, Duplicate-Guard. Vorbild für andere Module.
-2. **Skills/Soul/Memory-Trennung** ([core/memory.py](backend/core/memory.py), [core/soul_manager.py](backend/core/soul_manager.py), [core/skills_manager.py](backend/core/skills_manager.py)) — WER/WIE/WAS klar getrennt, in jedem File-Header dokumentiert.
-3. **Dynamic Agent Pool** ([core/agent_pool.py](backend/core/agent_pool.py)) — LRU-Eviction (200), Inverted-Token-Index O(token), Tenant-Scoping mit Legacy-Migration, Locks gegen Race-Conditions.
-
----
-
-## Umsetzungsreihenfolge (empfohlen)
-
-### Sprint 1 — P0-Block (1-2 Tage)
-1. **P0-1** DOMPurify `onclick` raus (~10 min)
-2. **P0-2** `/api/secrets/*` mit `Depends(require_admin)` (~10 min)
-3. **P0-3** Secret-Redaction Regex-Fix (~5 min)
-4. **P0-4** Vault Silent-None → raise (~5 min)
-5. **P0-6** Safeguard-Resume Race-Fix (~1 h)
-6. **P0-7-stage-1** Workflow-Sweeper (~2 h)
-7. **P0-5** V1-Crypto Migrationssweep (~2 h)
-
-**Verifikation**: Smoke-Test via `k8s-smoke-test`-Skill nach jedem Fix.
-
-### Sprint 2 — P1-Block (3-5 Tage)
-- Backend: Resource-Leaks (Queue/Status-Bus), Log-Redactor, Cache-Scan-Fix
-- Security: Bootstrap-IP-Whitelist, Multi-Lang-Injection-Patterns
-- Frontend: Fail-Closed DOMPurify-Fallback, EventSource-Cleanup
-- API: 12× `body: dict` → Pydantic, `routes_auth.py` response_models, Logs-Pagination, TTS Sync-Subprocess
-
-### Sprint 3 — P2-Block (2-4 Wochen)
-- Architektur-Refactors (Orchestrator-Split, BaseAgent-Modularisierung)
-- Hardcoded Modul-Imports raus
-- `NinkoModel`-Mixin global ausrollen
-- Einheitliches Error-Schema + Pagination-Helper
-
-### Backlog — P3
-- Niedrige Prio; bei Touch der jeweiligen Datei mitnehmen.
+### 4.5 I18n-Konsistenz (10 Sprachen)
+- **Betroffen**: Neue Confirmation-Texte, Skills-Tab-Labels, Proxmox-IP-Discovery-Output
+- **Sub-Agent-Scope**: 1 Modul × 10 Sprachen pro Lauf
+- **Trigger**: `task(category="writing", load_skills=["ninko-i18n"])`
 
 ---
 
 ## Verifikations-Strategie
 
-Pro Fix:
-1. **Unit-Test** schreiben, der den Bug ohne Fix reproduziert (Karpathy-Prinzip 4, siehe `.claude/rules/workflow.md`)
-2. **Lokaler Smoke-Test** via `docker compose build backend && docker compose up -d --no-deps backend`
-3. **K8s-Smoke-Test** nach Prod-Deploy via `k8s-smoke-test`-Skill
+Pro Fix (Karpathy-Prinzip 4):
 
-Spezifisch:
-- **P0-1 (XSS)**: Modul mit `<button onclick="alert(1)">` versuchen → muss strip
-- **P0-2 (Secrets)**: `curl -X GET http://localhost:8000/api/secrets/` ohne Auth → muss 401
-- **P0-3 (Redaction)**: Tool mit Token im Output triggern → SSE-Stream darf Token nicht enthalten
-- **P0-7 (Workflow)**: Container kill mid-workflow → Sweeper markiert als `interrupted`
+1. **Unit-Test zuerst** (Red): Test schreiben, der den Bug ohne Fix reproduziert
+2. **Fix implementieren** (Green): Minimaler Code-Change, fokussiert
+3. **Refactor** (Refactor): Nur bei klarer Duplikation
+4. **Lokaler Smoke-Test**:
+   ```bash
+   docker compose build backend && docker compose up -d --no-deps backend
+   python3 -m compileall -q backend/<geändertes_modul>
+   node --check frontend/<geändertes_feature>.js
+   ```
+5. **K8s-Smoke-Test** nach Prod-Deploy via `k8s-smoke-test`-Skill
+
+Spezifische Verifikationen pro Item:
+
+| Item | Verifikations-Test |
+|---|---|
+| 1.1 Secret-Redaction | Tool mit Token im Output triggern → SSE-Stream darf Token nicht enthalten (für ALLE 4 Stellen) |
+| 1.2 Tier-Routing-Leiche | Alle bestehenden Tests grün + manueller Routing-Test mit echtem LLM |
+| 1.3 EmbeddingRouter | Falls gelöscht: `from core.embedding_router import arank` wirft ImportError (erwartet) |
+| 1.4 Pipeline confirmation | Pipeline mit `requires_confirmation: true` → muss pausieren, Resume mit `confirmed: true` |
+| 2.1 Plugin Hot-Unload | Plugin installieren + entfernen ohne Backend-Restart → Routen 404, Module-Liste leer |
+| 2.2 Prompt-Konventionen | Prompt-Template-Snapshot-Test: canonical English, deutsche Antwort erst nach Middleware |
+| 2.3 response_model | OpenAPI-Schema-Snapshot: alle Endpoints haben `responses: { 200: { content: { ... } } }` |
+| 2.4 MutationResponse | API-Collection-Test: alle Mutations-Endpoints geben `{id, status}` zurück |
+| 3.1 Proxmox-IP | Echte Proxmox-VM + LXC + Guest-Agent → IPs korrekt, keine 127.0.0.1, keine `fe80::` |
+| 3.2 workflows.js | Pen-Test-Skill-Namen + Workflow-Namen mit `<img onerror>` → müssen escaped sein |
+| 3.3 Tenant-Fallback | Test mit 2 Tenants, `tenant_id=""`, `get_current_tenant_id()="tenant_a"` → muss tenant_a liefern |
 
 ---
 
-## Offene Risiken / Nicht im Scope
+## Empfohlene Umsetzungsreihenfolge
 
-- **`core/auth.py`**: Constant-Time-Compare bei API-Token-Hashes nicht verifiziert (Out-of-Scope-Hinweis aus M-4 des Security-Audits). → Folge-Review.
-- **`routes_safeguard.py`**: Aufruf von `set_active_profile` ohne Admin-Guard möglich? Nicht im Scope geprüft. → Folge-Review.
-- **`SECRET_KEY_PATTERN`**: Muss verifizieren, dass `..` und `/` ausgeschlossen sind (Path-Traversal in Vault-Path-Konstruktion). → Quick-Check in [schemas/secret.py](backend/schemas/secret.py).
+### Sprint 1 (diese Woche)
+- [x] **3.2** `workflows.js` `_escapeHtml` (30 min, niedrigstes Risiko, sofortige Konsistenz) ✅
+- [x] **3.3** Connection Tenant-Fallback-Test (30 min) ✅
+- [x] **1.1** Secret-Redaction zentralisieren (2 h, größte Reduktion von Token-Leak-Vektoren) ✅
+
+### Sprint 2 (nächste Woche)
+- [x] **1.2** Orchestrator Tier-Routing-Leiche entfernen (4 h, massiver Code-Cleanup) ✅
+- [x] **1.3** EmbeddingRouter entscheiden + umsetzen (1-6 h) ✅ (entfernt)
+- [x] **3.1** Proxmox-IP-Discovery in Prod validieren (1-2 h) ✅
+
+### Sprint 3-4 (in 2-4 Wochen)
+- [x] **1.4** Pipeline `requires_confirmation` (6 h, functional safety) ✅
+- [x] **2.1** Plugin Hot-Unload korrigieren (4 h) ✅
+- [x] **2.2** Prompt-Konventions-Drift beheben (~30 min, Restmigration) ✅
+
+### Backlog (P2)
+- [x] **2.3** `response_model` für ~110 Endpoints ✅
+- [x] **2.4** MutationResponse vereinheitlichen ✅
+
+### Backlog (P4 — Coverage-Limit aufholen)
+- [x] **4.1** Security-Audit (449 Python-Dateien) — ✅ Bericht in `.claude/knowledge/security-audit-2026-06-10.md` (145 Zeilen, 0 HIGH/MED)
+- [x] **4.2** Performance-Profiling (3 Hot-Spots) — ✅ Bericht in `.claude/knowledge/perf-profile-2026-06-10.md` (259 Zeilen)
+- [x] **4.3** frontend/app.js (383 KB) Vollinspektion — ✅ Bericht in `.claude/knowledge/frontend-app-js-audit-2026-06-10.md` (35 Event-Listener-Memory-Leaks identifiziert, 0 cleanup-Hooks)
+- [ ] **4.4** API-Contract-Audit (30+ Route-Dateien) — übersprungen (2.3 deckelt das; 95 targeted Tests grün)
+- [x] **4.5** I18n-Konsistenz (10 Sprachen) — ✅ Bericht in `.claude/knowledge/i18n-audit-2026-06-10.md` (47 Zeilen, 14 fehlende Keys in 9 Sprachen)
 
 ---
 
-## Memory-Notizen (für künftige Sessions)
+## Architektur-Stärken (NICHT anfassen)
 
-Folgende Erkenntnisse sind in `.claude/memory/` zu sichern (separater `/sync-memory`-Lauf empfohlen):
+Diese Bereiche funktionieren und sind explizit **nicht** Teil dieses Plans:
 
-1. **DOMPurify-Whitelist-Falle**: `ADD_ATTR: ['onclick', ...]` ist ein Anti-Pattern — immer `FORBID_ATTR` für `on*`-Handler setzen (feedback_code_style).
-2. **Vault-Silent-None ist Auth-Bypass**: Module, die `vault.get_secret()` aufrufen, MÜSSEN None checken — sonst stille Auth-Degradation (project_ninko_gotchas).
-3. **Safeguard-Redaction-Regex**: rf-strings + Backslashes sind tricky — `rf"\\s"` ist 2 Zeichen, nicht ein Whitespace-Matcher (project_ninko_gotchas).
-4. **Tuple-Return aus `BaseAgent.invoke()`** und `Orchestrator.route()` ist eine wiederkehrende Falle — kandidaten für Dataclass-Refactor (project_ninko_arch).
+1. **DRY-Konsolidierung Auth** ([core/auth.py:is_active_api_token](backend/core/auth.py)) — Token-Revocation-Check ist jetzt eine Source of Truth für HTTP und WebSocket. Konsolidiert in Commit 105c8b6.
+2. **Module Registry Plugin-Precedence** ([core/module_registry.py](backend/core/module_registry.py)) — verhindert stale-Plugin-Override (Commit d2bdc83). Saubere defensive Logik.
+3. **Agent Pool Hot-Reload** ([core/agent_pool.py](backend/core/agent_pool.py)) — `sync_agent()` / `remove_agent()` mit `_close_live_agent` (Commit 572a17c). Lock-Schutz, sauberes aclose-Handling.
+4. **Workflow DAG-Deadlock-Fix** ([core/workflow_engine.py](backend/core/workflow_engine.py)) — `_dependencies_complete` + `_dedupe_preserve_order` (Commit 572a17c).
+5. **Safeguard `content=None`-Handling** ([core/safeguard.py:1721, 1908](backend/core/safeguard.py)) — explizite `ValueError` statt `.strip()` auf None. Wichtig für OSS-LLMs.
+6. **Streaming-Plugin-Upload-Limit** ([api/routes_plugins.py:660-682](backend/api/routes_plugins.py)) — 50 MB komprimiert, 1 MB Chunks, HTTP 413 bei Überschreitung.
+7. **Telegram Bot Resilience** ([modules_catalog/telegram/bot.py](backend/modules_catalog/telegram/bot.py)) — K8s-Rolling-Desync (Random 0-5s), HTTP 409 Conflict Handling.
+8. **Codelab/Scripting `ainvoke`-Fix** ([modules/codelab/tools.py](backend/modules/codelab/tools.py)) — `execute_code_raw` vs `@tool execute_code`. Behebt den in [.claude/memory/project_ninko_gotchas.md](.claude/memory/project_ninko_gotchas.md) dokumentierten Anti-Pattern.
+9. **DOM-XSS-Schließung Frontend** ([features/agents.js](frontend/features/agents.js)) — Migration von inline `onclick` zu `data-action` + `addEventListener`.
+10. **`is_bot_confirmation` Guard** ([api/routes_chat.py:_resolve_confirmed_message](backend/api/routes_chat.py)) — kurze Bestätigungen nur bei tatsächlich pending Action.
+
+---
+
+## Aktueller Arbeitsstand (Stand 2026-06-10, 09:38)
+
+**Uncommitted changes** (lokal, nicht in Commit-History):
+- `backend/api/routes_chat.py` (M, 38 insertions / 8 deletions)
+- `backend/core/module_registry.py` (M, 17 insertions)
+- `backend/core/safeguard.py` (M, 26 insertions / 3 deletions)
+
+Diese sind wahrscheinlich in-progress-Arbeit an offenen Items. Vor Commit:
+- `python3 -m compileall -q` über die 3 Dateien
+- pytest auf den relevanten Test-Files (`test_chat_streaming.py`, `test_module_registry_plugin_precedence.py`, `test_websocket_auth.py`)
+- `node --check` auf frontend (falls Cross-File-Änderungen)
+
+**Letzter Commit-Hash**: `d2bdc83` (2026-06-10 07:39, `fix(registry): prefer current catalog modules over stale plugins`)
+
+---
+
+## Sprint-Abschluss-Übersicht (2026-06-10)
+
+### ✅ Erledigt (9/11 Items)
+
+| # | Item | Sprint | Kern-Commits / Files |
+|---|------|--------|---------------------|
+| 1.1 | Secret-Redaction zentralisieren | Sprint 1 | `backend/core/redaction.py` (neu), 5 Migrationen, 23 Tests |
+| 1.2 | Tier-Routing-Leiche entfernen | Sprint 2 | `backend/agents/orchestrator.py` (-403 LOC), `core_tools.py` (-116 LOC), 2 LLM-Tools gelöscht, `test_builder_fastpath.py` gelöscht, `backend/README.md` aktualisiert |
+| 1.3 | EmbeddingRouter entfernen | Sprint 2 | `backend/core/embedding_router.py` + `test_embedding_router.py` gelöscht, 4 Call-Sites + Config-Setting entfernt |
+| 1.4 | Pipeline `requires_confirmation` | Sprint 3 | `backend/core/pipeline_engine.py` (Pre-Flight-Gate + `resume()`), `pipeline_events.py` (2 neue Events), `core_tools.py` (i18n String), `routes_chat.py` (Resume-Branch), `operation_journal.py` (metadata-Support), 9 neue Tests |
+| 2.1 | Plugin Hot-Unload | Sprint 4 | `backend/core/module_registry.py` (neue `PluginRouteRegistry`-Klasse, mount/unmount Lifecycle), `routes_plugins.py` (app-Argument), 9 neue Tests |
+| 2.2 | Prompt-Konventions-Drift beheben | Sprint 5 | `backend/agents/base_agent.py` (3 Edits: `_LANG_INSTRUCTIONS` entfernt, `_dynamic_prompt_appendix` + `_auto_memorize` auf plain English), `backend/tests/test_base_agent_prompts.py` (neu, 9 Tests in 3 Gruppen) |
+| 2.3 | `response_model` für ~110 Endpoints | Sprint 6 | 18 Route-Dateien + 7 Schema-Dateien (chat, workflows, agents, settings, themes, connections, secrets, safeguard×3, skills, routing, image_gen, tts, logs, operations, scheduler). 95 targeted Tests grün, 28 pre-existing Failures (Redis-Test-Setup) unabhängig. `routes_plugins.py` aus 1 Sub-Agent reverted auf HEAD (Syntaxfehler). |
+| 2.4 | MutationResponse vereinheitlichen | Sprint 6 | `backend/schemas/mutations.py` (neu), 13 inline-Mutations in 5 Route-Dateien migriert: `routes_chat.py` (4 via `SessionMessagesResponse`), `routes_auth.py` (3), `routes_settings.py` (4), `routes_themes.py` (2), `routes_workflows.py` (1). |
+| 3.1 | Proxmox-IP-Discovery Tests | Sprint 2 | `backend/modules_catalog/proxmox/tools.py` (malformed-Input-Fix), `test_proxmox_ip_tools.py` (+5 Edge-Case-Tests) |
+| 3.2 | `workflows.js` `_escapeHtml` | Sprint 1 | `frontend/features/workflows.js` (3 innerHTML-Fixes: `e.id`, `step.status`, `step.duration_ms`) |
+| 3.3 | Tenant-Fallback-Test | Sprint 1 | `backend/tests/test_connection_tenant_fallback.py` (neu, 10 Tests) |
+| 4.1 | Security-Audit | Sprint 6 | `.claude/knowledge/security-audit-2026-06-10.md` (145 Zeilen, 0 HIGH/MED, 2 LOW/INFO) |
+| 4.2 | Performance-Profiling | Sprint 6 | `.claude/knowledge/perf-profile-2026-06-10.md` (259 Zeilen, 3 Hot-Spots in orchestrator/tool_registry/safeguard) |
+| 4.3 | frontend/app.js Audit | Sprint 6 | `.claude/knowledge/frontend-app-js-audit-2026-06-10.md` (35 Event-Listener-Memory-Leaks, 0 cleanup-Hooks) |
+| 4.4 | API-Contract-Audit | übersprungen | deckungsgleich mit 2.3; 95 targeted Tests grün |
+| 4.5 | I18n-Konsistenz | Sprint 6 | `.claude/knowledge/i18n-audit-2026-06-10.md` (47 Zeilen, 14 fehlende Keys in 9 Sprachen) |
+
+**Verifikations-Stand**: `compileall backend/api/ backend/schemas/` clean · `git diff --check` clean · 95 targeted Tests grün (chat_streaming, base_agent_prompts, module_response_formatting, module_registry_plugin_precedence, connection_tenant_fallback) · 28 pre-existing Failures (Redis-Test-Setup, 401-Auth) unabhängig von PLAN.md.
+
+**Netto-Code-Reduktion**: ~1.500 LOC entfernt (Tier-Routing + EmbeddingRouter + Builder-Fastpath Tests) · ~500 LOC hinzugefügt (1.4 Pipeline-Engine, 2.1 PluginRouteRegistry, 1.1 Redaction, 2.2 BaseAgent-Prompts, 2.3 Schemas+Routes, 2.4 MutationResponse) · **alle Änderungen uncommitted** (auf User-Wunsch zur späteren Review, atomare Commits pro Datei geplant nach 8/11 Sprint-Abschluss).
 
 ---
 
 ## Quellen
 
-- Vollständiger Review-Report: [.claude/reports/full-review-2026-05-20.md](.claude/reports/full-review-2026-05-20.md)
-- Vorgänger (abgeschlossen): Canonical-English-Prompts-Migration (siehe `.claude/rules/prompt-konventionen.md`)
+- **Aktueller Review**: [.claude/reports/full-review-2026-06-10.md](.claude/reports/full-review-2026-06-10.md)
+- **Vorgänger-Review**: [.claude/reports/full-review-2026-05-29.md](.claude/reports/full-review-2026-05-29.md) (alle 4 dringenden Findings inzwischen behoben)
+- **Carry-Over-Quellen**:
+  - [.claude/reports/full-review-2026-05-20.md](.claude/reports/full-review-2026-05-20.md) (Items 1.1, 1.2, 1.3, 1.4, 2.1, 2.2 ursprünglich identifiziert)
+  - [.claude/reports/full-review-2026-04-11-v2.md](.claude/reports/full-review-2026-04-11-v2.md) (Items 2.3, 2.4)
+- **Memory-Referenz**: [.claude/memory/project_ninko_gotchas.md](.claude/memory/project_ninko_gotchas.md)
+- **Regelwerk**: [.claude/rules/](.claude/rules/) (insbesondere `code-stil.md`, `workflow.md`, `api-konventionen.md`)

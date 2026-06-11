@@ -97,7 +97,7 @@ Primary mechanism: **LLM-native Function Calling** on tool definitions auto-gene
 3. **Dynamic agent** — spec generated and registered at runtime when no static module fits
 4. **`run_pipeline` / `run_parallel_pipeline`** — typed multi-step workflow with per-step retry and Redis checkpoints
 
-The legacy keyword `core/router.py` was removed in 2026-05; a small `KeywordRouter` shim in `orchestrator.py` keeps backwards-compatible telemetry (`classify_tier` returning 1/2/4) and `routing_keywords`-driven fallback for sessions that disable function calling via `ROUTING_PRESETS`.
+The legacy keyword `core/router.py` was removed in 2026-05. A small `KeywordRouter` shim in `orchestrator.py` provides keyword-based fast-path detection (`routing_keywords`) used as a tie-breaker in ambiguous cases; routing is otherwise LLM-native Function Calling. The historical tier-routing system (`RoutingConfig`, `ROUTING_PRESETS`, `configure_routing`/`get_routing_info` tools, `classify_tier`) was removed in 2026-06 as part of PLAN.md item 1.2.
 
 ### Skills System
 - SKILL.md format with YAML frontmatter (name, description, modules)
