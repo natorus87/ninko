@@ -16,12 +16,15 @@ Verwendung:
 from __future__ import annotations
 
 import ast
+import logging
 import os
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class ToolTier(str, Enum):
@@ -664,7 +667,6 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
         ToolMetadata("list_tasks", "core", readonly=True),
         ToolMetadata("task_output", "core", readonly=True),
         ToolMetadata("list_scheduled_tasks", "core", readonly=True),
-        ToolMetadata("get_routing_info", "core", readonly=True),
         ToolMetadata("kg_find_related", "core", readonly=True),
         ToolMetadata("kg_find_path", "core", readonly=True),
         ToolMetadata("kg_analyze_dependencies", "core", readonly=True),
@@ -676,7 +678,6 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
         ToolMetadata("confirm_forget", "core", tier=ToolTier.WRITE_DATA),
         ToolMetadata("create_custom_agent", "core", tier=ToolTier.WRITE_DATA),
         ToolMetadata("update_custom_agent", "core", tier=ToolTier.WRITE_DATA),
-        ToolMetadata("configure_routing", "core", tier=ToolTier.WRITE_DATA),
         ToolMetadata("install_skill", "core", tier=ToolTier.WRITE_DATA),
         ToolMetadata("create_dag_workflow", "core", tier=ToolTier.WRITE_DATA),
         ToolMetadata("create_linear_workflow", "core", tier=ToolTier.WRITE_DATA),
@@ -904,6 +905,18 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
         ToolMetadata("list_vm_ip_addresses", "proxmox", readonly=True),
         ToolMetadata("get_vm_config", "proxmox", readonly=True),
         ToolMetadata("get_recent_tasks", "proxmox", readonly=True),
+        # Power-Operationen: STATE_CHANGING → require user confirmation
+        # via the safeguard system. stop/reboot/reset = WRITE_SYSTEM tier
+        # (graceful ACPI vs hard reset), suspend/resume = WRITE_SYSTEM tier.
+        ToolMetadata("start_vm", "proxmox", tier=ToolTier.WRITE_SYSTEM),
+        ToolMetadata("stop_vm", "proxmox", tier=ToolTier.WRITE_SYSTEM),
+        ToolMetadata("reboot_vm", "proxmox", tier=ToolTier.WRITE_SYSTEM),
+        ToolMetadata("reset_vm", "proxmox", tier=ToolTier.WRITE_SYSTEM),
+        ToolMetadata("suspend_vm", "proxmox", tier=ToolTier.WRITE_SYSTEM),
+        ToolMetadata("resume_vm", "proxmox", tier=ToolTier.WRITE_SYSTEM),
+        ToolMetadata("start_container", "proxmox", tier=ToolTier.WRITE_SYSTEM),
+        ToolMetadata("stop_container", "proxmox", tier=ToolTier.WRITE_SYSTEM),
+        ToolMetadata("reboot_container", "proxmox", tier=ToolTier.WRITE_SYSTEM),
     ]
     registry.register_many(proxmox_tools)
 
@@ -1530,11 +1543,7 @@ def _infer_destructive(tool_name: str) -> bool:
 # ── ToolSpec: Erweitertes Schema für die Pipeline Engine ─────────────────────
 
 
-from dataclasses import dataclass as _dataclass, field as _field
-from typing import Any as _Any
-
-
-@_dataclass(slots=True, frozen=True)
+@dataclass(slots=True, frozen=True)
 class ToolSpec:
     """
     Vollständige Spezifikation eines Tools für die Pipeline Engine.
@@ -1551,8 +1560,8 @@ class ToolSpec:
     requires_confirmation: bool = False
     timeout_s: float = 120.0
     max_retries: int = 2
-    input_schema: dict[str, _Any] = _field(default_factory=dict)
-    output_schema: dict[str, _Any] = _field(default_factory=dict)
+    input_schema: dict[str, Any] = field(default_factory=dict)
+    output_schema: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_metadata(cls, meta: "ToolMetadata") -> "ToolSpec":
