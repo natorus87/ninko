@@ -452,11 +452,16 @@ class WorkflowEngine:
                     force_target = None
 
                 # Wenn ein konkreter Agent/Modul gesetzt ist, route direkt dorthin.
+                # confirmed=True: Der Workflow selbst wurde bereits über das
+                # execute_workflow-Tool (WRITE_SYSTEM) oder per UI-Trigger
+                # bestätigt — STATE_CHANGING-Aufrufe innerhalb des Workflows
+                # sollen NICHT erneut pausieren, sonst hängt der Step.
                 response_text, _, _ = await self.orchestrator.route(
                     message=prompt,
                     chat_history=[],
                     session_id=workflow_session_id,
                     force_module=force_target,
+                    confirmed=True,
                 )
                 variables["previous_output"] = response_text
                 return response_text, None
