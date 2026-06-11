@@ -11,6 +11,12 @@ import logging
 import uuid
 from typing import List, Optional
 
+from core import status_bus
+from core.redaction import is_sensitive_key
+from core.redis_client import get_redis
+from core.vault import get_vault
+from schemas.connection import ConnectionCreate, ConnectionRead, ConnectionUpdate
+
 # Per-module asyncio locks prevent concurrent R-M-W races on connections
 _connection_locks: dict[str, asyncio.Lock] = {}
 
@@ -20,48 +26,17 @@ def _get_connection_lock(module_id: str) -> asyncio.Lock:
         _connection_locks[module_id] = asyncio.Lock()
     return _connection_locks[module_id]
 
-from schemas.connection import ConnectionCreate, ConnectionRead, ConnectionUpdate
-from core.redis_client import get_redis
-from core import status_bus
-from core.vault import get_vault
-
 
 logger = logging.getLogger("ninko.core.connections")
 
 
-# CWE-312 & CWE-200: Sensitive field patterns for detection and redaction
-_SENSITIVE_FIELD_PATTERNS = frozenset({
-    "api_key", "apikey", "api_token", "access_token", "secret",
-    "password", "passwd", "token", "auth_token", "bearer",
-    "private_key", "secret_key", "client_secret",
-})
-
-
 def _has_sensitive_config_fields(config: dict) -> list[str]:
-    """
-    Prüft ob ein config-Dict verdächtige Feldnamen enthält (case-insensitive).
-
-    Returns:
-        Liste verdächtiger Feldnamen, die wahrscheinlich Secrets enthalten.
-    """
     if not config:
         return []
-    found = []
-    for key in config:
-        key_lower = str(key).lower().replace("-", "_").replace(" ", "_")
-        if any(pat in key_lower for pat in _SENSITIVE_FIELD_PATTERNS):
-            found.append(key)
-    return found
+    return [key for key in config if is_sensitive_key(key)]
 
 
 def _redact_connection_data(data: dict) -> dict:
-    """
-    Redaktiert sensitive Felder in Connection-Daten für sicheres Logging (CWE-200).
-    Vault-Keys sind nur Schlüssel-Namen, keine Secrets — diese werden nicht redaktiert.
-
-    Returns:
-        Kopie des Dict mit redaktierten sensitive Feldern (***REDACTED***).
-    """
     result = dict(data)
     config = result.get("config") or {}
     if config:

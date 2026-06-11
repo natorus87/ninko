@@ -101,6 +101,32 @@ class RedisClient:
         key = f"{self.CHAT_HISTORY_PREFIX}{session_id}"
         await self._redis.delete(key)
 
+    # ── Session-Owner (IDOR-Mitigation) ──────────────────
+    SESSION_OWNER_PREFIX = "ninko:session_owner:"
+
+    def _session_owner_key(self, session_id: str) -> str:
+        return f"{self.SESSION_OWNER_PREFIX}{session_id}"
+
+    async def set_session_owner(self, session_id: str, owner: str) -> None:
+        """Markiert eine Session mit ihrem Eigentümer (Username). Verhindert IDOR (CWE-639).
+
+        TTL entspricht CHAT_HISTORY_TTL_SECONDS, sodass der Owner-Eintrag
+        automatisch mit der Session verfällt.
+        """
+        key = self._session_owner_key(session_id)
+        await self._redis.set(key, owner)
+        settings = get_settings()
+        ttl = getattr(settings, "CHAT_HISTORY_TTL_SECONDS", 86400)
+        await self._redis.expire(key, ttl)
+
+    async def get_session_owner(self, session_id: str) -> str | None:
+        """Gibt den Owner (Username) einer Session zurück, oder None wenn nicht gesetzt."""
+        return await self._redis.get(self._session_owner_key(session_id))
+
+    async def clear_session_owner(self, session_id: str) -> None:
+        """Entfernt den Owner-Eintrag (z. B. beim Session-Delete)."""
+        await self._redis.delete(self._session_owner_key(session_id))
+
     # ── PubSub Events ──────────────────────────────────
     async def publish_event(self, event: dict) -> None:
         """Publisht ein Event auf dem Events-Channel."""

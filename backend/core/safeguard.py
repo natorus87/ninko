@@ -61,29 +61,24 @@ _SAFEGUARD_EXCEPTIONS_COMMON = (
     *_SAFEGUARD_EXCEPTIONS_TIMEOUT,
 )
 
-# Sensitive tool-arg keys die vor dem LLM-Classifier maskiert werden
-# Modul-Level-Konstante (nicht per Aufruf neu erzeugen)
-# "key" und "auth" bewusst als vollständige Suffixe/_-Präfixe um false positives zu reduzieren
-_TOOL_SENSITIVE_KEYS: frozenset[str] = frozenset({
-    "password", "passwd", "token", "secret",
-    "_key", "apikey", "api_key",
-    "auth_", "oauth", "credential", "private",
-})
-
 
 def _mask_sensitive_args(obj: object, _depth: int = 0) -> object:
     """Rekursiv sensitive Keys in tool_args-Dicts maskieren (max. 5 Ebenen tief)."""
-    if _depth > 5:
-        return obj
-    if isinstance(obj, dict):
-        return {
-            k: "***" if any(s in k.lower() for s in _TOOL_SENSITIVE_KEYS)
-            else _mask_sensitive_args(v, _depth + 1)
-            for k, v in obj.items()
-        }
-    if isinstance(obj, list):
-        return [_mask_sensitive_args(item, _depth + 1) for item in obj]
-    return obj
+    from core.redaction import mask_dict
+
+    return mask_dict(obj, _depth=_depth)
+
+
+def _redact_audit_text(text: str) -> str:
+    """Redact secrets/passwords/tokens aus User-Text vor dem Audit-Log (CWE-532).
+
+    Wendet das zentrale ``redact_text`` aus ``core.redaction`` an, sodass
+    sensitive Inhalte (API-Keys, Tokens, Passwörter) nicht im Klartext in
+    Redis-Audit-Logs landen.
+    """
+    from core.redaction import redact_text
+
+    return redact_text(text)
 
 
 # ─── Compiled regex constants ─────────────────────────────────────────────────
@@ -1170,7 +1165,7 @@ class SafeguardMiddleware:
             "timestamp": time.time(),
             "action": action,
             "category": category.value,
-            "text": text[:self.AUDIT_TEXT_MAX_CHARS],
+            "text": _redact_audit_text(text)[:self.AUDIT_TEXT_MAX_CHARS],
             "session_id": session_id or "",
             "agent_id": agent_id or "",
             "tool_name": tool_name or "",
@@ -1494,6 +1489,10 @@ class SafeguardMiddleware:
             "terraform destroy",
             "destroy",
             "wipe",
+        )
+        # For single-word destructive terms, use word boundary to avoid false positives
+        # e.g., "odelete" should not match "delete"
+        destructive_words = (
             "delete",
             "remove",
             "purge",
@@ -1504,7 +1503,10 @@ class SafeguardMiddleware:
             "efface",
             "enlever",
         )
-        if any(pat in lower for pat in destructive_patterns):
+        if any(pat in lower for pat in destructive_patterns) or any(
+            f" {pat} " in lower or lower.endswith(f" {pat}") or f" {pat}," in lower or f" {pat}." in lower
+            for pat in destructive_words
+        ):
             return {
                 "requires_confirmation": True,
                 "category": ActionCategory.DESTRUCTIVE,
@@ -1721,6 +1723,11 @@ class SafeguardMiddleware:
                 max_tokens=max_tokens,
                 timeout=self.timeout,
             )
+            if not response.choices:
+                raise ValueError(
+                    "LLM classifier returned empty choices. "
+                    "The provider may be misconfigured or rate-limited."
+                )
             content = response.choices[0].message.content
             if content is None:
                 raise ValueError(
@@ -1820,7 +1827,7 @@ class SafeguardMiddleware:
         # call_module_agent und execute_cli_command sind Durchreicher — der
         # eigentliche Inhalt bestimmt die Kategorie, nicht der Tool-Name.
         if tool_name == "call_module_agent":
-            text = tool_args.get("message", tool_name)
+            text = tool_args.get("task", tool_name)
             return await self.check(text, agent_id=agent_id, session_id=session_id)
 
         if tool_name == "execute_cli_command":
@@ -1894,8 +1901,11 @@ class SafeguardMiddleware:
             if profile.auto_mode_policy.strip()
             else ""
         )
+        # Escape any curly braces in policy_section before .format() call
+        # to prevent KeyError from nested placeholder syntax
+        policy_section_escaped = policy_section.replace("{", "{{").replace("}", "}}")
         prompt = _AUTO_DECISION_SYSTEM_PROMPT.format(
-            policy_section=policy_section,
+            policy_section=policy_section_escaped,
             category=category.value,
             rationale=rationale,
             text=text[:500],  # cap to avoid token bloat
@@ -1908,6 +1918,11 @@ class SafeguardMiddleware:
                 max_tokens=100,
                 timeout=self.timeout,
             )
+            if not response.choices:
+                raise ValueError(
+                    "LLM auto-decision returned empty choices. "
+                    "Falling back to fail-safe."
+                )
             content = response.choices[0].message.content
             if content is None:
                 raise ValueError(

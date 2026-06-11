@@ -8,9 +8,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import json
-import re
 from typing import Any
 from contextvars import ContextVar
+
+from core.redaction import is_sensitive_key, redact_text
 
 logger = logging.getLogger("ninko.core.status_bus")
 
@@ -20,36 +21,10 @@ _queues: dict[str, asyncio.Queue] = {}
 # Async-sicherer Context-Variable: aktuelle session_id im laufenden Task
 _session_id_var: ContextVar[str] = ContextVar("ninko_session_id", default="")
 
-_SENSITIVE_KEYS = (
-    "password",
-    "secret",
-    "token",
-    "api_key",
-    "apikey",
-    "bearer",
-    "auth",
-    "private",
-    "credential",
-)
-
 
 def _redact_text(value: str, limit: int = 1200) -> str:
     """Redacts obvious secret assignments before sending status data to clients."""
-    text = value[:limit]
-    for key in _SENSITIVE_KEYS:
-        text = re.sub(
-            rf'("{key}"\s*:\s*)"[^"]+"',
-            r'\1"***"',
-            text,
-            flags=re.IGNORECASE,
-        )
-        text = re.sub(
-            rf"({key}\s*[=:]\s*)[^\s,;]{{1,200}}",
-            r"\1***",
-            text,
-            flags=re.IGNORECASE,
-        )
-    return text
+    return redact_text(value, limit=limit)
 
 
 def _sanitize_value(value: Any, *, depth: int = 0) -> Any:
@@ -66,7 +41,7 @@ def _sanitize_value(value: Any, *, depth: int = 0) -> Any:
         cleaned: dict[str, Any] = {}
         for key, item in list(value.items())[:50]:
             safe_key = str(key)[:120]
-            if any(s in safe_key.lower() for s in _SENSITIVE_KEYS):
+            if is_sensitive_key(safe_key):
                 cleaned[safe_key] = "***"
             else:
                 cleaned[safe_key] = _sanitize_value(item, depth=depth + 1)

@@ -62,7 +62,6 @@ class CoreSettings(BaseSettings):
     SQLITE_SECRETS_KEY: str = ""
 
     # ── Routing ────────────────────────────────────────
-    ROUTING_EMBEDDING_ENABLED: bool = True  # Embedding-Tie-Breaker (R11)
     # Native Function Calling Routing (LLM routet direkt auf Module)
     LLM_ENABLE_FUNCTION_CALLING: bool = True
     LLM_TOOL_CHOICE: Literal["auto", "required", "none"] = "auto"

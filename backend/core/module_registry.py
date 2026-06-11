@@ -8,6 +8,7 @@ niemals direkt Module importieren.
 
 from __future__ import annotations
 
+import asyncio
 import importlib
 import logging
 import os
@@ -73,6 +74,103 @@ class RegisteredModule:
 
 
 # ── Registry ────────────────────────────────────────────────
+class PluginRouteRegistry:
+    """Trackt FastAPI-Routen, die von Plugins zur Laufzeit gemountet wurden.
+
+    Kapselt die fragile Starlette-`app.router.routes`-Manipulation, damit
+    ModuleRegistry ein sauberes mount()/unmount()-API bekommt. So bleibt
+    die Starlette-Internals-Abhängigkeit auf eine Klasse beschränkt
+    (austauschbar bei FastAPI/Starlette-Versionswechseln).
+    """
+
+    def __init__(self) -> None:
+        self._plugin_routes: dict[str, list[Any]] = {}
+        self._app: FastAPI | None = None
+
+    def set_app(self, app: FastAPI) -> None:
+        """Setzt die FastAPI-App-Referenz (für späteres unmount ohne app-Argument)."""
+        self._app = app
+
+    def get_app(self) -> FastAPI | None:
+        """Gibt die gespeicherte App-Referenz zurück (oder None)."""
+        return self._app
+
+    def mount(
+        self,
+        app: FastAPI,
+        modname: str,
+        router: Any,
+        *,
+        prefix: str,
+        tags: list[str] | None = None,
+    ) -> list[Any]:
+        """Mounted Router in app und trackt die hinzugefügten Routen pro Plugin.
+
+        Liefert die Liste der hinzugefügten Starlette-Routen zurück.
+        """
+        if self._app is None:
+            self._app = app
+
+        routes_before = len(app.router.routes)
+        app.include_router(
+            router,
+            prefix=prefix,
+            tags=tags or [],
+        )
+        added = list(app.router.routes[routes_before:])
+        self._move_before_static_catchall(app, added, routes_before)
+        self._plugin_routes[modname] = added
+        app.middleware_stack = app.build_middleware_stack()
+        return added
+
+    def unmount(self, app: FastAPI, modname: str) -> int:
+        """Entfernt alle getrackten Routen eines Plugins aus app. Liefert Anzahl entfernter Routen."""
+        tracked = self._plugin_routes.pop(modname, [])
+        if not tracked:
+            return 0
+        tracked_ids = {id(r) for r in tracked}
+        original_len = len(app.router.routes)
+        app.router.routes = [r for r in app.router.routes if id(r) not in tracked_ids]
+        removed = original_len - len(app.router.routes)
+        if removed:
+            app.middleware_stack = app.build_middleware_stack()
+        return removed
+
+    def get_tracked(self, modname: str) -> list[Any]:
+        """Liefert eine Kopie der getrackten Routen (read-only)."""
+        return list(self._plugin_routes.get(modname, []))
+
+    def tracked_count(self) -> int:
+        """Anzahl getrackter Plugins (für Diagnostics/Tests)."""
+        return len(self._plugin_routes)
+
+    @staticmethod
+    def _move_before_static_catchall(
+        app: FastAPI, new_routes: list[Any], routes_before: int
+    ) -> None:
+        """Verschiebt neu gemountete Routen vor den StaticFiles-Catch-all-Mount,
+        damit sie nicht vom Mount("/") abgefangen werden."""
+        if not new_routes:
+            return
+        from starlette.routing import Mount
+        from fastapi.staticfiles import StaticFiles
+
+        static_idx = next(
+            (
+                i
+                for i, r in enumerate(app.router.routes)
+                if isinstance(r, Mount)
+                and isinstance(getattr(r, "app", None), StaticFiles)
+            ),
+            None,
+        )
+        if static_idx is None:
+            return
+        del app.router.routes[routes_before:]
+        for route in reversed(new_routes):
+            app.router.routes.insert(static_idx, route)
+
+
 class ModuleRegistry:
     """
     Zentrale Registry. Wird beim App-Start einmalig befüllt.
@@ -83,6 +181,8 @@ class ModuleRegistry:
     def __init__(self) -> None:
         self._modules: dict[str, RegisteredModule] = {}
         self._disabled_manifests: dict[str, ModuleManifest] = {}
+        self._hot_load_lock = asyncio.Lock()
+        self._route_registry = PluginRouteRegistry()
 
     # ── Discovery ───────────────────────────────────────
     def discover_and_load(self) -> None:
@@ -155,6 +255,13 @@ class ModuleRegistry:
         if manifest is None:
             logger.warning(
                 "Modul '%s' hat kein 'module_manifest' – übersprungen.", modname
+            )
+            return
+        if not isinstance(manifest, ModuleManifest):
+            logger.warning(
+                "Modul '%s' hat ungültiges 'module_manifest' (Typ: %s) – übersprungen.",
+                modname,
+                type(manifest).__name__,
             )
             return
         if is_plugin:
@@ -258,10 +365,31 @@ class ModuleRegistry:
         Lädt ein Plugin dynamisch zur Laufzeit nach und hängt seinen Router an die laufende FastAPI-Instanz.
         Entfernt zuerst das alte Plugin falls vorhanden, um sauberes Update zu gewährleisten.
         """
+        async with self._hot_load_lock:
+            return await self._hot_load_plugin_unlocked(modname, app)
+
+    async def _hot_load_plugin_unlocked(self, modname: str, app: FastAPI) -> bool:
+        """Internal hot-load without lock. Caller must hold _hot_load_lock."""
         plugins_dir = Path(__file__).resolve().parent.parent / "plugins"
         backend_dir = str(plugins_dir.parent)
         if backend_dir not in sys.path:
             sys.path.insert(0, backend_dir)
+
+        # venv-Site-Packages des Plugins in sys.path einsetzen (CWE-829 Mitigation).
+        # Dadurch findet der Python-Importer die Plugin-Dependencies (die in
+        # einer dedizierten venv pro Plugin installiert wurden) ohne den
+        # System-Namespace zu kontaminieren.
+        venvs_root = plugins_dir.parent / ".plugin_venvs" / modname
+        venv_site_packages = venvs_root / "lib"
+        if venv_site_packages.is_dir():
+            # Python 3.12+: lib/python3.X/site-packages (X variiert pro Build)
+            for sub in venv_site_packages.iterdir():
+                sp = sub / "site-packages"
+                if sp.is_dir():
+                    sp_str = str(sp)
+                    if sp_str not in sys.path:
+                        sys.path.insert(0, sp_str)
+                    break
 
         # Erst altes Plugin entfernen falls vorhanden (für sauberes Update)
         if modname in self._modules:
@@ -294,35 +422,13 @@ class ModuleRegistry:
         # Wenn erfolgreich geladen, Route direkt an app hängen
         mod = self._modules.get(modname)
         if mod and mod.router and mod.manifest.api_prefix:
-            # Merke aktuelle Route-Anzahl, um neu hinzugefügte Routen zu identifizieren
-            routes_before = len(app.router.routes)
-            app.include_router(
+            self._route_registry.mount(
+                app,
+                modname,
                 mod.router,
                 prefix=mod.manifest.api_prefix,
                 tags=[mod.manifest.display_name],
             )
-            # Neu hinzugefügte Routen vor den StaticFiles-Catch-all-Mount verschieben,
-            # damit sie nicht vom Mount("/") abgefangen werden.
-            new_routes = app.router.routes[routes_before:]
-            if new_routes:
-                from starlette.routing import Mount
-                from fastapi.staticfiles import StaticFiles
-
-                static_idx = next(
-                    (
-                        i
-                        for i, r in enumerate(app.router.routes)
-                        if isinstance(r, Mount)
-                        and isinstance(getattr(r, "app", None), StaticFiles)
-                    ),
-                    None,
-                )
-                if static_idx is not None:
-                    del app.router.routes[routes_before:]
-                    for route in reversed(new_routes):
-                        app.router.routes.insert(static_idx, route)
-            # Rebuild Middleware Stack to force FastAPI to notice runtime changes
-            app.middleware_stack = app.build_middleware_stack()
             logger.info("Hot-Load Router registriert: %s", mod.manifest.api_prefix)
 
         # Soul für das neue Plugin generieren (falls noch keine existiert)
@@ -348,13 +454,33 @@ class ModuleRegistry:
 
         return True
 
-    def remove_plugin(self, modname: str) -> None:
+    def remove_plugin(self, modname: str, app: FastAPI | None = None) -> None:
         """
-        Entfernt das Plugin intern aus der Registry.
-        Achtung: Die FastAPI Routen bleiben im Memory der laufenden App aktiv,
-        geben aber idealerweise Fehler oder werden ignoriert.
-        Ein echter Neustart ist für sauberen Garbage Collect nötig.
+        Entfernt das Plugin intern aus der Registry und unmountet die zugehörigen
+        FastAPI-Routen aus `app`.
+
+        Args:
+            modname: Name des zu entfernenden Plugins.
+            app: Optionale FastAPI-App. Wenn nicht angegeben, wird die App aus
+                `_route_registry.get_app()` verwendet (gesetzt durch vorherigen
+                hot_load). Wenn auch dort None, werden nur Registry/sys.modules
+                bereinigt – ein Routen-Leak ist dann unvermeidbar.
         """
+        if app is None:
+            app = self._route_registry.get_app()
+        if app is not None:
+            removed = self._route_registry.unmount(app, modname)
+            if removed:
+                logger.info(
+                    "Plugin '%s': %d FastAPI-Routen aus app entfernt.", modname, removed,
+                )
+        elif modname in self._route_registry.get_tracked(modname) or self._route_registry.tracked_count() > 0:
+            logger.warning(
+                "Plugin '%s' hat getrackte Routen, aber keine App-Referenz verfügbar. "
+                "Routen-Leak möglich – restart erforderlich.",
+                modname,
+            )
+
         if modname in self._modules:
             del self._modules[modname]
         if modname in self._disabled_manifests:

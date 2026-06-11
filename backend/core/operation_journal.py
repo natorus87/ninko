@@ -48,6 +48,7 @@ class OperationJournal:
         source: str,
         module: str | None = None,
         tool_name: str | None = None,
+        metadata: dict | None = None,
     ) -> str:
         tx_id = uuid.uuid4().hex
         now = time.time()
@@ -71,6 +72,7 @@ class OperationJournal:
             "rollback_notes": "",
             "result_summary": "",
             "error": "",
+            "metadata": json.dumps(metadata) if metadata else "",
         }
         await self._store(entry)
         redis = get_redis()

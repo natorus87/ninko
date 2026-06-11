@@ -192,6 +192,31 @@ def get_llm_generation() -> int:
     return _llm_generation
 
 
+def get_verify_ssl() -> bool:
+    """Gibt zurück, ob LLM-HTTP-Connections SSL-Zertifikate verifizieren sollen.
+
+    In Production-Mode (``DEPLOYMENT_ENV == "production"``) wird SSL-Verifikation
+    IMMER erzwungen (CWE-295 Mitigation), unabhängig vom ``LLM_VERIFY_SSL``-Setting.
+    Bei ``verify_ssl=False`` (z. B. lokales LM Studio mit Self-Signed-Cert) wird
+    ein Warn-Log ausgegeben.
+    """
+    settings = get_settings()
+    configured = bool(settings.LLM_VERIFY_SSL)
+    if settings.DEPLOYMENT_ENV == "production" and not configured:
+        logger.warning(
+            "DEPLOYMENT_ENV=production erzwingt LLM_VERIFY_SSL=True — "
+            "LLM_VERIFY_SSSL=False wird ignoriert (CWE-295 Mitigation)."
+        )
+        return True
+    if not configured:
+        logger.debug(
+            "LLM_VERIFY_SSL=False: SSL-Zertifikate werden NICHT verifiziert. "
+            "Anfällig für MITM-Attacken — nur für lokales Development mit "
+            "Self-Signed-Certificates verwenden."
+        )
+    return configured
+
+
 async def get_model_context_window() -> int:
     """
     Fragt die LLM API nach der Context-Window-Größe des geladenen Modells.
@@ -229,7 +254,7 @@ async def get_model_context_window() -> int:
         elif settings.LLM_BACKEND == "litellm" and settings.LITELLM_API_KEY:
             headers["Authorization"] = f"Bearer {settings.LITELLM_API_KEY}"
 
-        verify_ssl = get_settings().LLM_VERIFY_SSL
+        verify_ssl = get_verify_ssl()
         async with httpx.AsyncClient(timeout=5.0, verify=verify_ssl) as client:
             resp = await client.get(f"{base_url}/models", headers=headers)
             resp.raise_for_status()
@@ -303,7 +328,7 @@ def get_llm() -> BaseChatModel:
     elif settings.LLM_BACKEND == "mlx_server":
         base_url = _get_lmstudio_base_url(settings.MLX_BASE_URL)
         api_key = settings.MLX_API_KEY or "mlx-server"
-        verify_ssl = settings.LLM_VERIFY_SSL
+        verify_ssl = get_verify_ssl()
         logger.info(
             "LLM-Backend: MLX Server – URL=%s, Modell=%s, verify_ssl=%s",
             base_url, settings.MLX_MODEL, verify_ssl,
@@ -324,7 +349,7 @@ def get_llm() -> BaseChatModel:
         # OpenAI-kompatibel mit API-Key (OpenRouter, Groq, Together, etc.)
         base_url = _get_lmstudio_base_url(settings.OPENAI_BASE_URL)
         api_key = settings.OPENAI_API_KEY or "sk-placeholder"
-        verify_ssl = settings.LLM_VERIFY_SSL
+        verify_ssl = get_verify_ssl()
         logger.info(
             "LLM-Backend: OpenAI-kompatibel – URL=%s, Modell=%s, verify_ssl=%s",
             base_url, settings.OPENAI_MODEL, verify_ssl,
@@ -345,7 +370,7 @@ def get_llm() -> BaseChatModel:
         # LiteLLM Proxy – self-hosted OpenAI-compatible proxy, requires API key
         base_url = _get_lmstudio_base_url(settings.LITELLM_BASE_URL)
         api_key = settings.LITELLM_API_KEY or "sk-litellm"
-        verify_ssl = settings.LLM_VERIFY_SSL
+        verify_ssl = get_verify_ssl()
         logger.info(
             "LLM-Backend: LiteLLM Proxy – URL=%s, Modell=%s, verify_ssl=%s",
             base_url, settings.LITELLM_MODEL, verify_ssl,
@@ -365,7 +390,7 @@ def get_llm() -> BaseChatModel:
     else:
         # Standard: LM Studio / OpenAI-kompatibler Endpoint (lokal, kein API-Key)
         base_url = _get_lmstudio_base_url(settings.LMSTUDIO_BASE_URL)
-        verify_ssl = settings.LLM_VERIFY_SSL
+        verify_ssl = get_verify_ssl()
         logger.info(
             "LLM-Backend: LM Studio – URL=%s, Modell=%s, verify_ssl=%s",
             base_url, settings.LMSTUDIO_MODEL, verify_ssl,
@@ -374,7 +399,9 @@ def get_llm() -> BaseChatModel:
         http_async_client = httpx.AsyncClient(verify=verify_ssl)
         return _LMStudioChatOpenAI(
             base_url=base_url,
-            api_key="lm-studio",
+            # LM Studio ignoriert api_key (lokales Backend ohne Auth) — Sentinel-Wert
+            # zur Klarstellung, dass dies KEIN Production-Key ist.
+            api_key="lm-studio_PLACEHOLDER",
             model=settings.LMSTUDIO_MODEL,
             temperature=settings.LLM_TEMPERATURE,
             max_tokens=settings.MAX_OUTPUT_TOKENS,
@@ -487,7 +514,9 @@ def get_embeddings() -> Embeddings:
         )
         return OpenAIEmbeddings(
             base_url=base_url,
-            api_key="lm-studio",
+            # LM Studio ignoriert api_key (lokales Backend ohne Auth) — Sentinel-Wert
+            # zur Klarstellung, dass dies KEIN Production-Key ist.
+            api_key="lm-studio_PLACEHOLDER",
             model=embed_model,
             check_embedding_ctx_length=False,
         )
@@ -525,7 +554,7 @@ def get_safeguard_openai_client() -> tuple[Any, str]:
         api_key = "lm-studio"
         model = settings.LMSTUDIO_MODEL
 
-    verify_ssl = settings.LLM_VERIFY_SSL
+    verify_ssl = get_verify_ssl()
     http_client = httpx.AsyncClient(verify=verify_ssl)
     client = AsyncOpenAI(base_url=base_url, api_key=api_key, http_client=http_client)
     return client, model

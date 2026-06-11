@@ -57,6 +57,7 @@ class StepStatus(str, Enum):
 class PipelineStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"
+    AWAITING_CONFIRMATION = "awaiting_confirmation"
     COMPLETED = "completed"
     FAILED = "failed"
     PARTIAL = "partial"  # mindestens ein Step fehlgeschlagen, Rest OK
@@ -257,20 +258,42 @@ class PipelineEngine:
         Args:
             steps: Typisierte Pipeline-Schritte (bereits validiert)
             session_id: Session-ID für Events und Status-Bus
-            pipeline_id: Optionale ID (wird generiert falls None)
+            pipeline_id: Optionale ID (wird generiert falls None). Wenn ein Checkpoint
+                für diese ID existiert, wird die Pipeline fortgesetzt (Resume-Modus)
             auto_confirm: Bestätigung für gefährliche Steps automatisch erteilen
             skip_on_error: Fehlgeschlagene Steps überspringen statt Pipeline abbrechen
+
+        Pre-Flight Confirmation:
+            Wenn auto_confirm=False und irgendein Step requires_confirmation=True hat,
+            wird die Pipeline VOR dem ersten Step pausiert (PipelineStatus.AWAITING_CONFIRMATION),
+            ein op_journal-Pending-Entry wird erstellt und ein Checkpoint gespeichert.
+            Fortsetzung via resume(pipeline_id, session_id).
         """
         from core.pipeline_events import emit_pipeline_event, PipelineEvent
 
         pipeline_id = pipeline_id or f"pipe_{uuid.uuid4().hex[:12]}"
         start_time = time.monotonic()
+        is_resume = bool(pipeline_id) and await self._has_checkpoint(pipeline_id)
+
+        # Pre-Flight Confirmation Gate: pausiere VOR dem ersten Step
+        if not is_resume and not auto_confirm:
+            awaiting_idx = next(
+                (i for i, s in enumerate(steps) if s.requires_confirmation),
+                None,
+            )
+            if awaiting_idx is not None:
+                return await self._pause_for_confirmation(
+                    steps, session_id, pipeline_id, awaiting_idx,
+                )
 
         result = PipelineResult(
             pipeline_id=pipeline_id,
             session_id=session_id,
             status=PipelineStatus.RUNNING,
         )
+
+        # Initialer Checkpoint mit Steps (für späteres Resume)
+        await self._checkpoint(pipeline_id, session_id, result, steps=steps)
 
         await emit_pipeline_event(PipelineEvent.pipeline_created(
             pipeline_id=pipeline_id,
@@ -397,20 +420,6 @@ class PipelineEngine:
             idx=idx,
         ))
 
-        # SafeGuard-Bestätigungscheck
-        if step.requires_confirmation and not auto_confirm:
-            sr.status = StepStatus.AWAITING_CONFIRMATION
-            await emit_pipeline_event(PipelineEvent.confirmation_required(
-                step_id=step.step_id,
-                session_id=session_id,
-                module=step.module,
-            ))
-            # Für diesen Flow: Step wird übersprungen und User muss neu auslösen.
-            # Produktiv wird hier eine Bestätigungs-Queue bedient.
-            sr.status = StepStatus.SKIPPED
-            sr.error = f"Bestätigung erforderlich für Step '{step.module}' – Aktion verlangt User-Bestätigung."
-            return sr
-
         # Task mit Kontext aus Abhängigkeiten anreichern
         full_task = self._build_task_with_context(step, idx, prior_results)
 
@@ -533,16 +542,147 @@ class PipelineEngine:
         pipeline_id: str,
         session_id: str,
         result: PipelineResult,
+        steps: list[PipelineStep] | None = None,
     ) -> None:
-        """Schreibt einen Checkpoint in Redis für Resume-Support."""
+        """Schreibt einen Checkpoint in Redis für Resume-Support.
+
+        Bei nachfolgenden Updates werden die originalen Steps aus dem bestehenden
+        Checkpoint übernommen (read-modify-write), damit resume() sie rekonstruieren kann.
+        """
         try:
             import json
             from core.redis_client import get_redis
             key = f"ninko:pipeline:checkpoint:{pipeline_id}"
-            payload = result.model_dump()
+            payload: dict[str, Any] = {}
+            existing_raw = await get_redis().connection.get(key)
+            if existing_raw:
+                try:
+                    payload = json.loads(existing_raw)
+                    if not isinstance(payload, dict):
+                        payload = {}
+                except Exception:
+                    payload = {}
+            payload["result"] = result.model_dump()
+            payload["session_id"] = session_id
+            if steps is not None:
+                payload["steps"] = [s.model_dump() for s in steps]
             await get_redis().connection.set(key, json.dumps(payload), ex=3600)
         except Exception as exc:
             logger.debug("Checkpoint für Pipeline '%s' fehlgeschlagen: %s", pipeline_id, exc)
+
+    async def _load_checkpoint(self, pipeline_id: str) -> dict[str, Any]:
+        """Lädt den Checkpoint einer Pipeline aus Redis. Gibt {} zurück wenn nicht vorhanden."""
+        try:
+            import json
+            from core.redis_client import get_redis
+            raw = await get_redis().connection.get(f"ninko:pipeline:checkpoint:{pipeline_id}")
+            if not raw:
+                return {}
+            try:
+                data = json.loads(raw)
+                return data if isinstance(data, dict) else {}
+            except Exception:
+                return {}
+        except Exception as exc:
+            logger.debug("Checkpoint-Load für Pipeline '%s' fehlgeschlagen: %s", pipeline_id, exc)
+            return {}
+
+    async def _has_checkpoint(self, pipeline_id: str) -> bool:
+        return bool(await self._load_checkpoint(pipeline_id))
+
+    async def _pause_for_confirmation(
+        self,
+        steps: list[PipelineStep],
+        session_id: str,
+        pipeline_id: str,
+        step_idx: int,
+    ) -> PipelineResult:
+        """Pausiert die Pipeline VOR der Ausführung und erstellt einen Pending-Confirmation-Eintrag."""
+        from core.pipeline_events import emit_pipeline_event, PipelineEvent
+        from core.operation_journal import get_operation_journal
+
+        first_step = steps[step_idx]
+        result = PipelineResult(
+            pipeline_id=pipeline_id,
+            session_id=session_id,
+            status=PipelineStatus.AWAITING_CONFIRMATION,
+        )
+        result.steps.append(StepResult(
+            step_id=first_step.step_id,
+            step_index=step_idx,
+            module=first_step.module,
+            status=StepStatus.AWAITING_CONFIRMATION,
+            error=f"Bestätigung erforderlich: {first_step.module}",
+        ))
+
+        op_journal = get_operation_journal()
+        await op_journal.create_pending(
+            session_id=session_id,
+            text=(
+                f"Pipeline '{pipeline_id}' wartet auf Bestätigung für "
+                f"Step {step_idx + 1}/{len(steps)}: {first_step.module} – "
+                f"{first_step.task[:200]}"
+            ),
+            category="STATE_CHANGING",
+            rationale=f"Pipeline-Step '{first_step.module}' verlangt explizite Bestätigung",
+            source="pipeline_safeguard",
+            module=first_step.module,
+            metadata={
+                "pipeline_id": pipeline_id,
+                "step_count": len(steps),
+                "awaiting_step_index": step_idx,
+            },
+        )
+
+        await self._checkpoint(pipeline_id, session_id, result, steps=steps)
+
+        await emit_pipeline_event(PipelineEvent.pipeline_awaiting_confirmation(
+            pipeline_id=pipeline_id,
+            session_id=session_id,
+            step_id=first_step.step_id,
+            module=first_step.module,
+            step_count=len(steps),
+        ))
+
+        logger.info(
+            "Pipeline '%s' pausiert vor Step %d/%d (%s) – User-Bestätigung erforderlich.",
+            pipeline_id, step_idx + 1, len(steps), first_step.module,
+        )
+        return result
+
+    async def resume(
+        self,
+        pipeline_id: str,
+        session_id: str,
+        *,
+        auto_confirm: bool = True,
+    ) -> PipelineResult:
+        """Setzt eine pausierte Pipeline nach User-Bestätigung fort.
+
+        Lädt den Checkpoint, rekonstruiert die Steps und ruft execute() mit
+        auto_confirm=True auf. Das Pre-Flight-Gate wird übersprungen, weil
+        ein Checkpoint vorhanden ist (is_resume=True).
+        """
+        from core.pipeline_events import emit_pipeline_event, PipelineEvent
+
+        checkpoint = await self._load_checkpoint(pipeline_id)
+        if not checkpoint:
+            raise ValueError(f"Kein Checkpoint für Pipeline '{pipeline_id}'")
+        steps_raw = checkpoint.get("steps", [])
+        if not steps_raw:
+            raise ValueError(
+                f"Checkpoint für Pipeline '{pipeline_id}' enthält keine Steps "
+                f"(zu alt oder von älterer Engine-Version erstellt)"
+            )
+        try:
+            steps = [PipelineStep.model_validate(s) for s in steps_raw]
+        except Exception as exc:
+            raise ValueError(f"Checkpoint-Steps für Pipeline '{pipeline_id}' ungültig: {exc}") from exc
+
+        await emit_pipeline_event(PipelineEvent.pipeline_resumed(pipeline_id, session_id))
+        return await self.execute(
+            steps, session_id, pipeline_id=pipeline_id, auto_confirm=auto_confirm,
+        )
 
     # ── Validation-Hilfsmethoden ─────────────────────────────────────────────
 

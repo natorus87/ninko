@@ -29,6 +29,8 @@ class PipelineEventType(str, Enum):
     STEP_COMPLETED = "step_completed"
     STEP_FAILED = "step_failed"
     CONFIRMATION_REQUIRED = "confirmation_required"
+    PIPELINE_AWAITING_CONFIRMATION = "pipeline_awaiting_confirmation"
+    PIPELINE_RESUMED = "pipeline_resumed"
     PIPELINE_COMPLETED = "pipeline_completed"
     PIPELINE_FAILED = "pipeline_failed"
 
@@ -142,6 +144,38 @@ class PipelineEvent:
             pipeline_id="",
             session_id=session_id,
             data={"step_id": step_id, "module": module},
+        )
+
+    @classmethod
+    def pipeline_awaiting_confirmation(
+        cls,
+        pipeline_id: str,
+        session_id: str,
+        step_id: str,
+        module: str,
+        step_count: int,
+    ) -> "PipelineEvent":
+        return cls(
+            type=PipelineEventType.PIPELINE_AWAITING_CONFIRMATION,
+            pipeline_id=pipeline_id,
+            session_id=session_id,
+            data={
+                "step_id": step_id,
+                "module": module,
+                "step_count": step_count,
+            },
+        )
+
+    @classmethod
+    def pipeline_resumed(
+        cls,
+        pipeline_id: str,
+        session_id: str,
+    ) -> "PipelineEvent":
+        return cls(
+            type=PipelineEventType.PIPELINE_RESUMED,
+            pipeline_id=pipeline_id,
+            session_id=session_id,
         )
 
     @classmethod
