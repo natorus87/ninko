@@ -885,5 +885,11 @@
   "chat.welcome.message.period.night.7": "Moon is shining, LEDs are blinking – beautiful!",
   "chat.welcome.message.period.night.8": "Midnight emergency? Ninko doesn't sleep!",
   "chat.welcome.message.period.night.9": "Shutdown? Not with us – we're the night shift!",
-  "chat.welcome.message.period.night.10": "Zzz... *server hums along* ...Zzz"
+  "chat.welcome.message.period.night.10": "Zzz... *server hums along* ...Zzz",
+  "chat.cancelled": "Response was cancelled.",
+  "settings.testFnCall": "Test Function Calling",
+  "settings.fnCallToolChoice": "Tool Choice",
+  "settings.routingTitle": "Module Routing",
+  "settings.fnCallEnabled": "Module routing via Function Calling (recommended)",
+  "settings.routingDesc": "LLM-based routing via Native Function Calling. Requires a model with tool support (Qwen, Llama 3.1+, Mistral 7B v0.3+)."
 }

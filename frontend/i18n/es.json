@@ -877,5 +877,15 @@
   "chat.welcome.message.period.night.7": "La luna brilla, los LEDs parpadean – ¡hermoso!",
   "chat.welcome.message.period.night.8": "¿Emergencia de medianoche? ¡Ninko no duerme!",
   "chat.welcome.message.period.night.9": "¿Shutdown? No con nosotros – ¡somos el turno de noche!",
-  "chat.welcome.message.period.night.10": "Zzz... *el servidor ronronea* ...Zzz"
+  "chat.welcome.message.period.night.10": "Zzz... *el servidor ronronea* ...Zzz",
+  "chat.cancelled": "La respuesta fue cancelada.",
+  "settings.testFnCall": "Probar Function Calling",
+  "settings.fnCallToolChoice": "Selección de herramienta",
+  "settings.routingTitle": "Enrutamiento de módulo",
+  "settings.sttProvider": "Proveedor",
+  "settings.stt": "Entrada de voz (STT)",
+  "settings.sttSpellcheck": "Activar corrección LLM",
+  "settings.tts": "Salida de voz",
+  "settings.fnCallEnabled": "Enrutamiento vía Function Calling (recomendado)",
+  "settings.routingDesc": "Enrutamiento basado en LLM vía Function Calling nativo. Requiere un modelo con soporte de herramientas (Qwen, Llama 3.1+, Mistral 7B v0.3+)."
 }
