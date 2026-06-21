@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from agents.base_agent import BaseAgent
@@ -32,6 +33,8 @@ from .tools import (
     stop_vm,
     suspend_vm,
 )
+
+logger = logging.getLogger("ninko.modules.proxmox.agent")
 
 PROXMOX_SYSTEM_PROMPT = """You are Ninko's Proxmox specialist.
 
@@ -216,6 +219,7 @@ class ProxmoxAgent(BaseAgent):
     ) -> tuple[str, bool]:
         if _is_simple_proxmox_status_request(message):
             from core import status_bus
+            from core.connections import ConnectionManager
 
             await status_bus.emit_trace(
                 session_id,
@@ -225,8 +229,30 @@ class ProxmoxAgent(BaseAgent):
                 data={"agent": self.name, "tools": ["get_nodes", "list_all_vms"]},
                 status="running",
             )
-            nodes = await get_nodes.ainvoke({"connection_id": ""})
-            vms = await list_all_vms.ainvoke({"connection_id": ""})
+            # Vorab prüfen, ob eine Proxmox-Connection konfiguriert ist.
+            # Sonst liefert get_nodes einen irreführenden "leeren" Status
+            # statt einer klaren Fehlermeldung.
+            try:
+                _conns = await ConnectionManager.list_connections("proxmox")
+                if not _conns:
+                    return (
+                        "⚠️ Keine Proxmox-Verbindung konfiguriert. "
+                        "Bitte im UI unter Einstellungen → Module → Proxmox "
+                        "eine Verbindung (Host, Token, Vault-Secret) anlegen.",
+                        False,
+                    )
+            except (RuntimeError, ValueError, TypeError, KeyError, OSError) as exc:
+                logger.warning("Connection-Lookup für Proxmox fehlgeschlagen: %s", exc)
+            try:
+                nodes = await get_nodes.ainvoke({"connection_id": ""})
+                vms = await list_all_vms.ainvoke({"connection_id": ""})
+            except (RuntimeError, ValueError, TypeError, KeyError, OSError) as exc:
+                logger.warning("Proxmox Fast-Path fehlgeschlagen: %s", exc)
+                return (
+                    f"⚠️ Proxmox-Status konnte nicht geladen werden: {exc}. "
+                    "Bitte prüfe die Connection-Konfiguration im UI.",
+                    False,
+                )
             await status_bus.emit_trace(
                 session_id,
                 phase="agent",
