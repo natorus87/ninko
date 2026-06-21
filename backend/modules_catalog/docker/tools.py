@@ -206,7 +206,7 @@ async def inspect_container(container_id: str, connection_id: str = "") -> dict:
 
 @tool
 async def start_container(container_id: str, connection_id: str = "") -> dict:
-    """Start a Docker container."""
+    """Start a Docker container. Use for 'Container starten' or 'starte Container'."""
     await _docker_api("POST", f"/containers/{container_id}/start", connection_id)
     logger.info("Started container %s", container_id)
     return {
@@ -221,7 +221,11 @@ async def start_container(container_id: str, connection_id: str = "") -> dict:
 async def stop_container(
     container_id: str, timeout: int = 10, connection_id: str = ""
 ) -> dict:
-    """Stop a Docker container. timeout is the wait time in seconds before SIGKILL."""
+    """Stop a Docker container.
+
+    Use for 'Container stoppen', 'stoppe Container', or 'Container herunterfahren'.
+    timeout is the wait time in seconds before SIGKILL.
+    """
     await _docker_api(
         "POST", f"/containers/{container_id}/stop", connection_id, params={"t": timeout}
     )
@@ -238,7 +242,7 @@ async def stop_container(
 async def restart_container(
     container_id: str, timeout: int = 10, connection_id: str = ""
 ) -> dict:
-    """Restart a Docker container."""
+    """Restart a Docker container. Use for 'Container Neustart', 'neustarten', or 'neu starten'."""
     await _docker_api(
         "POST",
         f"/containers/{container_id}/restart",

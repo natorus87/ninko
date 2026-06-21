@@ -603,7 +603,11 @@ async def check_last_logins(count: int = 10, connection_id: str = "") -> str:
 
 @tool
 async def reboot_server(connection_id: str = "") -> dict:
-    """Reboot the server. DESTRUCTIVE — requires explicit confirmation."""
+    """Reboot/restart the server.
+
+    Use for 'Server Neustart', 'Server neustarten', or 'Server neu starten'.
+    DESTRUCTIVE — requires explicit confirmation.
+    """
     return {
         "action": "reboot",
         "status": "confirmation_required",
@@ -616,7 +620,11 @@ async def reboot_server(connection_id: str = "") -> dict:
 
 @tool
 async def confirm_reboot(connection_id: str = "") -> dict:
-    """Confirmed server reboot. Only call after explicit user confirmation."""
+    """Confirmed server reboot/restart.
+
+    Use for confirmed 'Server Neustart', 'Server neustarten', or 'Server neu starten'.
+    Only call after explicit user confirmation.
+    """
     try:
         await _run_ssh_command("reboot", connection_id, timeout=5)
         return {

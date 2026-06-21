@@ -78,7 +78,8 @@ module_manifest = ModuleManifest(
     display_name="Cisco",
     description=(
         "Cisco network devices: IOS / Nexus / Catalyst switches and routers. "
-        "Interface status, VLANs, routing, port management."
+        "Interface status, VLANs, routing, port management. "
+        "Enable/disable ports and set or change VLAN membership."
     ),
     version="1.0.2",
     author="Ninko",
@@ -97,6 +98,14 @@ module_manifest = ModuleManifest(
         "catalyst",
         "network port",
         "vlan",
+        "port aktivieren",
+        "port deaktivieren",
+        "port einschalten",
+        "port ausschalten",
+        "interface aktivieren",
+        "interface deaktivieren",
+        "vlan setzen",
+        "vlan schalten",
     ],
     api_prefix="/api/cisco",
     dashboard_tab={

@@ -33,7 +33,7 @@ module_manifest = ModuleManifest(
     description=(
         "Kubernetes / k8s cluster management: cluster-wide queries across all namespaces. "
         "Workloads (Deployments, StatefulSets, DaemonSets, Jobs, CronJobs, ReplicaSets), "
-        "Pods (list, describe, logs, restart), Nodes (list, describe, top), "
+        "Pods (list, describe, logs, restart/neustart), Nodes (list, describe, top), "
         "Services, Ingresses, Endpoints, NetworkPolicies, ConfigMaps, Secrets (metadata only), "
         "PVCs, PersistentVolumes, StorageClasses, HPAs, Events. "
         "Create/apply via YAML, patch deployments, scale, rollout restart. Metrics via metrics-server. "
@@ -55,6 +55,8 @@ module_manifest = ModuleManifest(
         "cluster",
         "kubectl",
         "neustart",
+        "neustarten",
+        "neu starten",
         "skalieren",
         "replicas",
         "ingress",
@@ -68,6 +70,11 @@ module_manifest = ModuleManifest(
         "logs",
         "log",
         "node",
+        "pod neustarten",
+        "pod neu starten",
+        "rollout neustart",
+        "rollout neustarten",
+        "deployment neu starten",
         "nodes",
         "configmap",
         "configmaps",

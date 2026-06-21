@@ -72,7 +72,8 @@ module_manifest = ModuleManifest(
     description=(
         "Tasmota smart home devices on ESP8266 / ESP32 (Sonoff, Shelly): "
         "switches, plugs, relays, sensors. Read temperature, humidity, power "
-        "and energy consumption; MQTT, smart meters."
+        "and energy consumption; MQTT, smart meters. Switch relays/devices on "
+        "or off."
     ),
     version="1.1.4",
     author="Ninko",
@@ -84,7 +85,9 @@ module_manifest = ModuleManifest(
     routing_keywords=[
         "tasmota", "esp8266", "esp32", "sonoff", "smart home", "shelly",
         "schalter", "steckdose", "relais", "sensor", "temperatur", "feuchtigkeit",
-        "leistung", "stromverbrauch", "mqtt", "smartmeter"
+        "leistung", "stromverbrauch", "mqtt", "smartmeter",
+        "einschalten", "ausschalten", "schalten", "gerät einschalten",
+        "gerät ausschalten", "gruppe einschalten", "gruppe ausschalten",
     ],
 
     api_prefix="/api/tasmota",

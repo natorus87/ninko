@@ -114,10 +114,11 @@ class RedisClient:
         automatisch mit der Session verfällt.
         """
         key = self._session_owner_key(session_id)
-        await self._redis.set(key, owner)
         settings = get_settings()
         ttl = getattr(settings, "CHAT_HISTORY_TTL_SECONDS", 86400)
-        await self._redis.expire(key, ttl)
+        # Atomar: SET key value EX ttl — verhindert verwaiste Keys ohne TTL,
+        # falls der Task zwischen SET und EXPIRE gecancelt wird.
+        await self._redis.set(key, owner, ex=ttl)
 
     async def get_session_owner(self, session_id: str) -> str | None:
         """Gibt den Owner (Username) einer Session zurück, oder None wenn nicht gesetzt."""

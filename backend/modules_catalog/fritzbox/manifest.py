@@ -56,7 +56,9 @@ module_manifest = ModuleManifest(
         "AVM FritzBox / fritz!box router control: WiFi/WLAN, smart home (AHA), "
         "TR-064 / DECT, telephony and calls, network bandwidth, DSL/WAN status, "
         "external IP, internet connection, router client list, connected network "
-        "devices, WLAN/LAN clients and device counts."
+        "devices, WLAN/LAN clients and device counts. "
+        "Control WLAN and smart home devices, switch devices on/off, and reboot "
+        "or restart the router."
     ),
     version="1.1.4",
     author="Ninko",
@@ -86,6 +88,19 @@ module_manifest = ModuleManifest(
         "ip-adresse",
         "fritz!box",
         "fritz",
+        "wlan aktivieren",
+        "wlan deaktivieren",
+        "wlan einschalten",
+        "wlan ausschalten",
+        "gast wlan aktivieren",
+        "gast wlan deaktivieren",
+        "smart home einschalten",
+        "smart home ausschalten",
+        "schalten",
+        "temperatur setzen",
+        "fritzbox neustart",
+        "fritzbox neustarten",
+        "fritzbox neu starten",
     ],
     api_prefix="/api/fritzbox",
     dashboard_tab={

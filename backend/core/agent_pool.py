@@ -493,25 +493,33 @@ class DynamicAgentPool:
             else:
                 await self._close_live_agent(scoped_id)
 
-        # Soul MD neu generieren wenn name oder description geändert wurde
-        if name is not None or description is not None:
-            try:
-                from core.soul_manager import get_soul_manager
+            # Soul MD neu generieren wenn name oder description geändert wurde.
+            # Muss unter _register_lock laufen, weil self._meta[scoped_id] sonst
+            # von einem parallelen remove_agent entfernt werden kann.
+            if name is not None or description is not None:
+                try:
+                    from core.soul_manager import get_soul_manager
 
-                sm = get_soul_manager()
-                meta = self._meta[scoped_id]
-                caps = _extract_capabilities(meta.get("system_prompt", ""))
-                soul_md = sm.generate_soul(
-                    name=meta["name"],
-                    purpose=meta.get("description")
-                    or f"Spezialisierter Agent für: {meta['name']}",
-                    capabilities=caps or None,
-                )
-                await sm.save_soul(meta["name"], soul_md)
-            except _AGENT_POOL_EXCEPTIONS as exc:
-                logger.warning(
-                    "Soul-Update für Agent '%s' fehlgeschlagen: %s", agent_id, exc
-                )
+                    sm = get_soul_manager()
+                    meta = self._meta.get(scoped_id)
+                    if meta is None:
+                        logger.debug(
+                            "Soul-Update für '%s' übersprungen (Agent nicht im Pool).",
+                            agent_id,
+                        )
+                    else:
+                        caps = _extract_capabilities(meta.get("system_prompt", ""))
+                        soul_md = sm.generate_soul(
+                            name=meta["name"],
+                            purpose=meta.get("description")
+                            or f"Spezialisierter Agent für: {meta['name']}",
+                            capabilities=caps or None,
+                        )
+                        await sm.save_soul(meta["name"], soul_md)
+                except _AGENT_POOL_EXCEPTIONS as exc:
+                    logger.warning(
+                        "Soul-Update für Agent '%s' fehlgeschlagen: %s", agent_id, exc
+                    )
 
         logger.info("DynamicAgentPool: Agent '%s' aktualisiert.", agent_id)
         return True

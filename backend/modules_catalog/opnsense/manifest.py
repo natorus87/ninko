@@ -34,7 +34,8 @@ module_manifest = ModuleManifest(
     description=(
         "OPNsense firewall management: firewall rules, NAT rules, port forwarding, "
         "packet filter, interfaces, gateways, DHCP, DNS, VPN (IPsec, OpenVPN, "
-        "WireGuard), firewall logs. Create, modify, allow, block, or delete rules."
+        "WireGuard), firewall logs. Create, modify, allow, block, or delete rules. "
+        "Restart services and configure/set interfaces or DHCP."
     ),
     version="1.2.2",
     author="Ninko",
@@ -56,6 +57,11 @@ module_manifest = ModuleManifest(
         "nat regel erstellen", "nat regel löschen",
         "firewall regel anlegen", "firewall regel entfernen",
         "nat regel anlegen", "nat regel entfernen",
+        "dienst neustart", "dienst neustarten", "dienst neu starten",
+        "service neustart", "service neustarten", "service neu starten",
+        "interface setzen", "interface schalten", "interface aktivieren",
+        "interface deaktivieren", "dhcp setzen", "dhcp aktivieren",
+        "dhcp deaktivieren",
     ],
 
     api_prefix="/api/opnsense",

@@ -80,7 +80,8 @@ module_manifest = ModuleManifest(
     display_name="Netgear",
     description=(
         "Netgear network devices: ProSafe switches (GS108, GS110, GS116), "
-        "routers, access points. Port status, VLANs, traffic management."
+        "routers, access points. Port status, VLANs, traffic management. "
+        "Enable/disable ports and reboot/restart devices."
     ),
     version="1.0.2",
     author="Ninko",
@@ -98,6 +99,13 @@ module_manifest = ModuleManifest(
         "gs110",
         "gs116",
         "prosafe",
+        "port aktivieren",
+        "port deaktivieren",
+        "port einschalten",
+        "port ausschalten",
+        "netgear neustart",
+        "netgear neustarten",
+        "netgear neu starten",
     ],
     api_prefix="/api/netgear",
     dashboard_tab={

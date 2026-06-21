@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 import agents.orchestrator as orchestrator
-from agents.orchestrator import OrchestratorAgent
+from agents.orchestrator import KeywordRouter, OrchestratorAgent
 
 
 def _agent_with_manifests(manifests: list[SimpleNamespace]) -> OrchestratorAgent:
@@ -155,7 +155,10 @@ class TestRoutingContext:
         context = OrchestratorAgent._recent_routing_context(
             [
                 {"role": "user", "content": "Wie ist der Status meiner FritzBox?"},
-                {"role": "assistant", "content": "Hier ist der aktuelle Status deiner FRITZ!Box 7590 AX."},
+                {
+                    "role": "assistant",
+                    "content": "Hier ist der aktuelle Status deiner FRITZ!Box 7590 AX.",
+                },
             ]
         )
 
@@ -175,10 +178,29 @@ class TestRoutingContext:
         assert "wieviele geräte" in context
 
 
+class TestKeywordRouter:
+    def test_short_keywords_do_not_match_inside_words(self) -> None:
+        router = KeywordRouter({"vm": "proxmox", "top": "linux_server", "ip": "fritzbox"})
+
+        assert router.get_scores("vmware host status") == {}
+        assert router.get_scores("zeige mir die topologie") == {}
+        assert router.get_scores("api status") == {}
+
+    def test_short_keywords_still_match_as_tokens(self) -> None:
+        router = KeywordRouter({"vm": "proxmox", "top": "linux_server", "ip": "fritzbox"})
+
+        assert router.get_scores("status vm 104") == {"proxmox": 1}
+        assert router.get_scores("top prozesse anzeigen") == {"linux_server": 1}
+        assert router.get_scores("externe ip anzeigen") == {"fritzbox": 1}
+
+
 class TestPipelineStepGeneration:
     def test_single_tool_call_generates_single_step(self) -> None:
         tool_calls = [{"name": "kubernetes", "arguments": {"query": "show pods"}}]
-        steps = [{"module": tc["name"], "task": tc["arguments"].get("query", "")} for tc in tool_calls]
+        steps = [
+            {"module": tc["name"], "task": tc["arguments"].get("query", "")}
+            for tc in tool_calls
+        ]
         assert len(steps) == 1
         assert steps[0]["module"] == "kubernetes"
 
@@ -187,7 +209,10 @@ class TestPipelineStepGeneration:
             {"name": "kubernetes", "arguments": {"query": "check pods"}},
             {"name": "telegram", "arguments": {"query": "notify"}},
         ]
-        steps = [{"module": tc["name"], "task": tc["arguments"].get("query", "")} for tc in tool_calls]
+        steps = [
+            {"module": tc["name"], "task": tc["arguments"].get("query", "")}
+            for tc in tool_calls
+        ]
         assert len(steps) == 2
 
     def test_compound_intent_step_order_preserved(self) -> None:
@@ -195,6 +220,9 @@ class TestPipelineStepGeneration:
             {"name": "kubernetes", "arguments": {"query": "restart nginx"}},
             {"name": "telegram", "arguments": {"query": "notify team"}},
         ]
-        steps = [{"module": tc["name"], "task": tc["arguments"].get("query", "")} for tc in tool_calls]
+        steps = [
+            {"module": tc["name"], "task": tc["arguments"].get("query", "")}
+            for tc in tool_calls
+        ]
         assert steps[0]["module"] == "kubernetes"
         assert steps[1]["module"] == "telegram"

@@ -83,7 +83,8 @@ module_manifest = ModuleManifest(
     display_name="Lenovo XClarity",
     description=(
         "Lenovo XClarity Administrator: ThinkSystem and ThinkBlade server "
-        "management, BMC, monitoring, firmware updates."
+        "management, BMC, monitoring, firmware updates, power on/off and "
+        "server reboot/restart."
     ),
     version="1.0.2",
     author="Ninko",
@@ -99,6 +100,14 @@ module_manifest = ModuleManifest(
         "thinkblade",
         "lenovo server",
         "lenovo bmc",
+        "server einschalten",
+        "server anschalten",
+        "server ausschalten",
+        "server herunterfahren",
+        "server abschalten",
+        "server neustart",
+        "server neustarten",
+        "server neu starten",
     ],
     api_prefix="/api/lenovo_xclarity",
     dashboard_tab={

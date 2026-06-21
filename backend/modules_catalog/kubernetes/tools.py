@@ -254,7 +254,11 @@ async def get_failing_pods(namespace: str = "", connection_id: str = "") -> list
 
 @tool
 async def restart_pod(namespace: str, pod_name: str, connection_id: str = "") -> dict:
-    """Restarts a single pod (deletes it — controller creates a new one)."""
+    """Restarts a single pod.
+
+    Use for 'Pod Neustart', 'Pod neustarten', or 'Pod neu starten'.
+    Deletes the pod; the controller creates a new one.
+    """
     v1, _, _ = await _get_k8s_client(connection_id)
 
     try:
@@ -336,7 +340,10 @@ async def scale_deployment(
 async def rollout_restart(
     namespace: str, deployment_name: str, connection_id: str = ""
 ) -> dict:
-    """Performs a rollout restart of a deployment."""
+    """Performs a rollout restart of a deployment.
+
+    Use for 'Rollout Neustart', 'Deployment neustarten', or 'Deployment neu starten'.
+    """
     _, apps_v1, _ = await _get_k8s_client(connection_id)
 
     try:

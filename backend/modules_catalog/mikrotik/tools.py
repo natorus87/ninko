@@ -360,6 +360,7 @@ async def enable_mikrotik_interface(interface: str, connection_id: str = "") -> 
     """
     Enable an interface.
     Use this to enable a port.
+    German: Interface aktivieren/einschalten, Port aktivieren/einschalten.
     """
     try:
         client = await _get_api_client(connection_id)
@@ -387,6 +388,7 @@ async def disable_mikrotik_interface(interface: str, connection_id: str = "") ->
     """
     Disable an interface.
     Use this to disable a port.
+    German: Interface deaktivieren/ausschalten, Port deaktivieren/ausschalten.
     """
     try:
         client = await _get_api_client(connection_id)
@@ -414,6 +416,7 @@ async def reboot_mikrotik(connection_id: str = "") -> str:
     """
     Reboot the MikroTik router.
     Use this to restart the device.
+    German: MikroTik Neustart, Router neustarten, Router neu starten.
     """
     try:
         client = await _get_api_client(connection_id)

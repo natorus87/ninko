@@ -233,12 +233,9 @@ class ConnectionManager:
                 logger.info("Target connection %s not found during delete. Existing: %s", connection_id, [c.id for c in connections])
                 return False
 
-            # Secrets aus Vault löschen
-            vault = get_vault()
-            for v_key in target.vault_keys.values():
-                await vault.delete_secret(v_key)
-
-            # Aus Redis-Liste entfernen
+            # Erst Redis aktualisieren, DANN Vault-Secrets löschen.
+            # Sonst: Wenn _save_connections crasht (Redis-Disconnect etc.),
+            # sind die Secrets bereits gelöscht → unwiederbringlich weg.
             connections = [c for c in connections if c.id != connection_id]
 
             # Wenn wir den Default gelöscht haben, ersten verbliebenen zum Default machen
@@ -246,6 +243,12 @@ class ConnectionManager:
                 connections[0].is_default = True
 
             await ConnectionManager._save_connections(module_id, connections, tenant)
+
+            # Secrets aus Vault löschen (erst nachdem Redis-Update erfolgreich war)
+            vault = get_vault()
+            for v_key in target.vault_keys.values():
+                await vault.delete_secret(v_key)
+
             logger.info("Verbindung gelöscht: %s im Modul %s", target.name, module_id)
             return True
 

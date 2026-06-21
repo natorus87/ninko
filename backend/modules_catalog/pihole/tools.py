@@ -327,6 +327,7 @@ async def get_top_clients(count: int = 10, connection_id: str = "") -> dict:
 async def toggle_blocking(enable: bool = True, duration: int = 0, connection_id: str = "") -> str:
     """
     Enable or disable DNS blocking.
+    Use for 'Blocking umschalten', 'aktivieren', or 'deaktivieren'.
     When disabling, a duration in seconds can be specified (0 = permanent).
 
     Args:

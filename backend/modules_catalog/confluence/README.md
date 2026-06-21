@@ -31,6 +31,6 @@ Atlassian Confluence Wiki – Spaces, Pages, Blog Posts, Labels und Suche.
 | `get_confluence_spaces` | List spaces |
 | `get_confluence_space` | Get space details |
 | `get_confluence_page` | Get page content |
-| `search_confluence_pages` | Search pages |
+| `search_confluence` | Search pages |
 | `create_confluence_page` | Create page |
 | `update_confluence_page` | Update page |

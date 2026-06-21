@@ -932,12 +932,12 @@ _TIER_TO_CATEGORY: dict[ToolTier, ActionCategory] = {
 }
 
 
-def _get_tool_tier(tool_name: str) -> ToolTier | None:
+def _get_tool_tier(tool_name: str, module: str | None = None) -> ToolTier | None:
     """
     Gibt den ToolTier eines registrierten Tools zurück.
     Returns None wenn nicht in der Registry (→ LLM-Fallback).
     """
-    return get_tool_registry().tier_of(tool_name)
+    return get_tool_registry().tier_of(tool_name, module)
 
 
 # High-confidence CLI/SQL patterns that are unambiguously destructive/state-changing.
@@ -1289,23 +1289,39 @@ class SafeguardMiddleware:
         Remove stale entries from _paused_sg_agents whose Redis pending key
         has expired. Returns the number of cleaned entries.
         """
-        from agents.base_agent import _paused_sg_agents
+        from agents.base_agent import (
+            _paused_sg_agents,
+            _paused_sg_agents_lock,
+            _paused_sg_agents_ts,
+        )
         from core.redis_client import get_redis
 
         redis = get_redis()
+        # Snapshot der Keys vor dem await — sonst kann ein paralleler
+        # resume_safeguard_tool zwischen exists() und pop() einen Eintrag
+        # erzeugen, den wir dann fälschlich entfernen.
+        snapshot = list(_paused_sg_agents.keys())
         stale_keys = []
-        for session_id in list(_paused_sg_agents.keys()):
+        for session_id in snapshot:
             pending = await redis.connection.exists(
                 f"ninko:safeguard_tool_pending:{session_id}"
             )
             if not pending:
                 stale_keys.append(session_id)
-        for sid in stale_keys:
-            _paused_sg_agents.pop(sid, None)
-        if stale_keys:
-            logger.info(
-                "[Safeguard] Cleaned %d stale paused-agent entries.", len(stale_keys)
-            )
+        if not stale_keys:
+            return 0
+        # Mutationen unter dem gleichen Lock wie resume_safeguard_tool
+        async with _paused_sg_agents_lock:
+            for sid in stale_keys:
+                # Re-check: vielleicht hat in der Zwischenzeit ein Resume stattgefunden
+                if sid in _paused_sg_agents and not await redis.connection.exists(
+                    f"ninko:safeguard_tool_pending:{sid}"
+                ):
+                    _paused_sg_agents.pop(sid, None)
+                    _paused_sg_agents_ts.pop(sid, None)
+        logger.info(
+            "[Safeguard] Cleaned %d stale paused-agent entries.", len(stale_keys)
+        )
         return len(stale_keys)
 
     # ── Profile management ─────────────────────────────────────────────────────
@@ -1834,7 +1850,7 @@ class SafeguardMiddleware:
             text = tool_args.get("command", tool_name)
             return await self.check(text, agent_id=agent_id, session_id=session_id)
 
-        tier = _get_tool_tier(tool_name)
+        tier = _get_tool_tier(tool_name, agent_id)
 
         if tier is not None:
             # Bekanntes Tool → deterministisch, kein LLM

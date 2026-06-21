@@ -741,6 +741,7 @@ async def restart_opnsense_service(service_name: str, connection_id: str = "") -
     """
     Restarts an OPNsense service (e.g. 'unbound', 'dhcpd', 'openvpn').
     Use this tool to restart a service on OPNsense.
+    German: Dienst/Service Neustart, neustarten or neu starten.
     """
     try:
         service_name = _validate_service_name(service_name)
@@ -830,6 +831,7 @@ async def set_opnsense_interface(
     """
     Configure network interface settings on OPNsense.
     Use this tool to enable/disable an interface or set its IP address.
+    German: Interface setzen/schalten, aktivieren or deaktivieren.
 
     Args:
         interface: Interface name (e.g., 'opt1', 'opt2', 'lan', 'wan')
@@ -949,6 +951,7 @@ async def set_opnsense_dhcp(
     """
     Configure DHCP server on OPNsense.
     Use this tool to enable/disable DHCP and set the IP range.
+    German: DHCP setzen, aktivieren or deaktivieren.
     """
     try:
         interface = _validate_interface(interface)

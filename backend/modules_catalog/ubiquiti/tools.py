@@ -566,6 +566,7 @@ async def restart_ubiquiti_device(device_name: str, connection_id: str = "") -> 
     """
     Restart a UniFi device.
     Use this to reboot an AP, switch, or router.
+    German: UniFi Neustart, Gerät neustarten, Gerät neu starten.
     """
     try:
         client = await _get_api_client(connection_id)
@@ -630,6 +631,7 @@ async def enable_ubiquiti_wlan(wlan_name: str, connection_id: str = "") -> str:
     """
     Enable a wireless network.
     Use this to enable a WiFi SSID.
+    German: WLAN aktivieren/einschalten.
     """
     try:
         client = await _get_api_client(connection_id)
@@ -694,6 +696,7 @@ async def disable_ubiquiti_wlan(wlan_name: str, connection_id: str = "") -> str:
     """
     Disable a wireless network.
     Use this to disable a WiFi SSID.
+    German: WLAN deaktivieren/ausschalten.
     """
     try:
         client = await _get_api_client(connection_id)

@@ -91,7 +91,8 @@ module_manifest = ModuleManifest(
     display_name="Microsoft Intune",
     description=(
         "Microsoft Intune / MEM (Endpoint Manager): mobile device management (MDM), "
-        "policies, apps, compliance, device management for endpoints."
+        "policies, apps, compliance, device management for endpoints. Trigger "
+        "device sync/synchronization."
     ),
     version="1.0.2",
     author="Ninko",
@@ -109,6 +110,10 @@ module_manifest = ModuleManifest(
         "endpoint management",
         "device compliance",
         "device policy",
+        "gerät synchronisieren",
+        "device synchronisieren",
+        "intune sync",
+        "device sync",
     ],
     api_prefix="/api/microsoft_intune",
     dashboard_tab={

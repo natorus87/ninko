@@ -59,7 +59,8 @@ module_manifest = ModuleManifest(
         "Pi-hole DNS server management: ad and tracker blocking, blocklists "
         "(Gravity), whitelist and blacklist domains, query log and domain "
         "statistics, custom DNS records (A, CNAME, local DNS), DHCP leases, "
-        "cache flush, network table, system messages and warnings."
+        "cache flush, network table, system messages and warnings. Toggle, "
+        "enable or disable DNS blocking."
     ),
     version="1.1.3",
     author="Ninko Team",
@@ -75,6 +76,8 @@ module_manifest = ModuleManifest(
         "a-record", "pihole a record", "dns-eintrag", "local dns",
         "dhcp", "lease", "cache", "flush", "leeren", "netzwerktabelle",
         "messages", "warnungen", "hinweise",
+        "blocking umschalten", "blocking aktivieren", "blocking deaktivieren",
+        "dns blocking aktivieren", "dns blocking deaktivieren",
     ],
     api_prefix="/api/pihole",
     dashboard_tab={"id": "pihole", "label": "Pi-hole", "icon": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>'},

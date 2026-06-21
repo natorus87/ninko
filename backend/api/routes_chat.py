@@ -815,6 +815,8 @@ async def _stream_safe_generate(
 
         # ── Komprimierung ────────────────────────────────────────────────────
         if did_compact:
+            if await request.is_disconnected():
+                raise asyncio.CancelledError()
             summary = None
             if hasattr(orchestrator, "get_last_compaction_summary"):
                 summary = orchestrator.get_last_compaction_summary()
@@ -832,6 +834,8 @@ async def _stream_safe_generate(
             )
 
         # ── History speichern ────────────────────────────────────────────────
+        if await request.is_disconnected():
+            raise asyncio.CancelledError()
         await redis.store_chat_message(
             session_id=scoped_session_id,
             role="user",

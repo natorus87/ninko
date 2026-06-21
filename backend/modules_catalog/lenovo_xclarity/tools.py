@@ -590,6 +590,7 @@ async def power_on_xclarity_server(server_name: str, connection_id: str = "") ->
     """
     Power on a server.
     Use this to power on a managed server.
+    German: Server einschalten/anschalten.
     """
     try:
         client = await _get_api_client(connection_id)
@@ -645,6 +646,7 @@ async def power_off_xclarity_server(server_name: str, connection_id: str = "") -
     """
     Power off a server.
     Use this to power off a managed server.
+    German: Server ausschalten, herunterfahren or abschalten.
     """
     try:
         client = await _get_api_client(connection_id)
@@ -700,6 +702,7 @@ async def restart_xclarity_server(server_name: str, connection_id: str = "") -> 
     """
     Restart a server (reboot).
     Use this to restart a managed server.
+    German: Server Neustart, Server neustarten, Server neu starten.
     """
     try:
         client = await _get_api_client(connection_id)

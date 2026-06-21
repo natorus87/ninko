@@ -522,6 +522,7 @@ async def enable_netgear_port(port: str, connection_id: str = "") -> str:
     """
     Enable a port.
     Use this to enable a switch port.
+    German: Port aktivieren/einschalten.
     """
     try:
         client = await _get_api_client(connection_id)
@@ -559,6 +560,7 @@ async def disable_netgear_port(port: str, connection_id: str = "") -> str:
     """
     Disable a port.
     Use this to disable a switch port.
+    German: Port deaktivieren/ausschalten.
     """
     try:
         client = await _get_api_client(connection_id)
@@ -596,6 +598,7 @@ async def reboot_netgear(connection_id: str = "") -> str:
     """
     Reboot the Netgear device.
     Use this to restart the device.
+    German: Netgear Neustart, Gerät neustarten, Gerät neu starten.
     """
     try:
         client = await _get_api_client(connection_id)

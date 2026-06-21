@@ -20,9 +20,9 @@ Das Modul regelt den Anmeldevorgang automatisch, cacht den Sitzungstoken in Redi
 
 Der AI Orchestrator nutzt folgende Funktionen:
 - `get_pihole_summary`: Übersicht der Netzwerkstatistiken (geblockte Anfragen, Prozentwerte, Domänen).
-- `get_pihole_recent_blocked`: Listet die zuletzt blockierten Domains und ihre Clients auf.
-- `block_domain`: Setzt eine Domain auf die DNS-Sperrliste (Regex oder Exact).
-- `unblock_domain`: Hebt die Sperrung einer Domain auf.
+- `get_query_log`: Listet DNS-Anfragen inklusive blockierter Domains und Clients auf.
+- `add_domain_to_list`: Setzt eine Domain auf die DNS-Sperrliste (Regex oder Exact).
+- `remove_domain_from_list`: Hebt die Sperrung einer Domain auf.
 - Custom DNS: `get_custom_dns_records`, `add_custom_dns_record` und `remove_custom_dns_record` zur Verwaltung manueller CNAMEs oder lokaler DNS-A-Records.
 
 ## Beispiel-Prompt (Chat)

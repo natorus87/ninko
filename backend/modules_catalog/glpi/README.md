@@ -23,11 +23,12 @@ Damit das Modul funktioniert, muss die REST-API in GLPI aktiviert sein:
 ## Features & Tools
 
 Der AI Orchestrator nutzt folgende Funktionen:
-- `get_tickets`: Ruft eine Liste von Tickets ab (optional gefiltert nach Status, z.B. nur aktive Tickets).
-- `get_ticket_details`: Zeigt den kompletten Inhalt und Verlauf eines spezifischen Tickets.
+- `search_tickets`: Ruft eine Liste von Tickets ab (optional gefiltert nach Status, z.B. nur aktive Tickets).
+- `get_ticket`: Zeigt den kompletten Inhalt eines spezifischen Tickets.
 - `create_ticket`: Erstellt neue Incident- oder Request-Tickets.
-- `add_ticket_followup`: Fügt einem bestehenden Ticket einen Kommentar hinzu.
-- `solve_ticket`: Markiert ein Ticket als "Gelöst" mit entsprechender Begründung.
+- `add_followup`: Fügt einem bestehenden Ticket einen Kommentar hinzu.
+- `add_solution`: Fügt einem Ticket eine Lösung hinzu.
+- `close_ticket`: Schließt ein Ticket.
 - `get_ticket_attachments`: Listet Anhänge eines Tickets.
 - `get_ticket_image_ocr`: Führt OCR auf einem Bildanhang aus (z.B. Screenshots).
 
@@ -35,9 +36,9 @@ Der AI Orchestrator nutzt folgende Funktionen:
 
 Die OCR-Engine wird zentral in **Einstellungen -> TTS/STT -> OCR / Vision** konfiguriert:
 - `python` (pytesseract lokal)
-- `llm_vision` (OpenAI-kompatible Vision API)
+- OpenAI-kompatible Vision API
 
-Für `llm_vision` müssen URL, API-Key und Modell gesetzt sein.
+Für die Vision API müssen URL, API-Key und Modell gesetzt sein.
 Für `python` sind `pytesseract` + `Pillow` sowie das Systempaket `tesseract-ocr` erforderlich.
 
 ## Beispiel-Prompt (Chat)

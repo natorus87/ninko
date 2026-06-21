@@ -69,6 +69,24 @@ def _log_background_task_exception(task: asyncio.Task) -> None:
         logger.warning("persist_evidence_trace fehlgeschlagen: %s", exc)
 
 
+async def _should_safeguard_auto_confirm(session_id: str) -> bool:
+    """Gibt True zurück, wenn der Safeguard-Auto-Modus für die Session aktiv ist.
+
+    Vereinheitlicht die Auto-Confirm-Logik über alle Pipeline-Pfade, damit
+    deterministisch geplante und LLM-dispatched Pipelines konsistent laufen.
+    """
+    from agents.base_agent import _global_safeguard
+
+    if _global_safeguard is None or not _global_safeguard.enabled:
+        return True
+    try:
+        profile = await _global_safeguard.resolve_profile(session_id=session_id)
+    except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
+        logger.debug("Safeguard-Profil konnte nicht geladen werden: %s", exc)
+        return False
+    return bool(getattr(profile, "auto_mode", False)) if profile is not None else False
+
+
 _ORCH_RECOVERABLE_EXCEPTIONS = (
     ImportError,
     AttributeError,
@@ -158,12 +176,28 @@ class KeywordRouter:
         return message
 
     def get_scores(self, text: str) -> dict[str, int]:
-        lowered = text.lower()
+        lowered = text.casefold()
         scores: dict[str, int] = {}
         for keyword, module in self._routing_map.items():
-            if keyword and keyword.lower() in lowered:
+            if keyword and self._keyword_matches(lowered, keyword):
                 scores[module] = scores.get(module, 0) + 1
         return scores
+
+    @staticmethod
+    def _keyword_matches(lowered_text: str, keyword: str) -> bool:
+        """Match routing keywords without letting short aliases hit inside words."""
+        normalized = keyword.strip().casefold()
+        if not normalized:
+            return False
+        if len(normalized) <= 3 and re.fullmatch(r"[\w+-]+", normalized, re.UNICODE):
+            return bool(
+                re.search(
+                    rf"(?<![\w+-]){re.escape(normalized)}(?![\w+-])",
+                    lowered_text,
+                    re.UNICODE,
+                )
+            )
+        return normalized in lowered_text
 
     @staticmethod
     def has_confident_top_module(top_score: int, second_score: int) -> bool:
@@ -447,7 +481,7 @@ class OrchestratorAgent(BaseAgent):
             embeddings = get_embeddings()
             query_vec = embeddings.embed_query(query)
             redis = get_redis()
-            sem_key = f"{self._TOOL_CALL_CACHE_PREFIX}sem:{hashlib.sha256(query[:100].encode()).hexdigest()}"
+            sem_key = f"{self._TOOL_CALL_CACHE_PREFIX}sem:{hashlib.sha256(query.encode()).hexdigest()}"
             payload = _json.dumps({
                 "tool_calls": tool_calls,
                 "embedding": [float(v) for v in query_vec],
@@ -566,10 +600,11 @@ class OrchestratorAgent(BaseAgent):
             )
             engine = get_pipeline_engine()
             typed_steps = [PipelineStep.from_dict(s) for s in steps]
+            auto_confirm = confirmed or await _should_safeguard_auto_confirm(session_id)
             result = await engine.execute(
                 typed_steps,
                 session_id=session_id,
-                auto_confirm=confirmed,
+                auto_confirm=auto_confirm,
                 skip_on_error=False,
             )
             status = result.status
@@ -1897,20 +1932,8 @@ JSON-SCHEMA:
         engine = get_pipeline_engine()
 
         # SafeGuard-Profil für auto-confirm auswerten
-        from agents.base_agent import _global_safeguard
-        _safeguard_auto = False
-        if _global_safeguard is not None and _global_safeguard.enabled:
-            try:
-                _profile = await _global_safeguard.resolve_profile(session_id=session_id)
-                _safeguard_auto = bool(getattr(_profile, "auto_mode", False)) if _profile is not None else False
-            except _ORCH_RECOVERABLE_EXCEPTIONS:
-                _safeguard_auto = False
-        auto_confirm = (
-            confirmed
-            or _global_safeguard is None
-            or not _global_safeguard.enabled
-            or _safeguard_auto
-        )
+        _safeguard_auto = await _should_safeguard_auto_confirm(session_id)
+        auto_confirm = confirmed or _safeguard_auto
 
         pipeline_result = await engine.execute(
             valid_typed_steps,
@@ -1954,7 +1977,8 @@ JSON-SCHEMA:
 
         try:
             pending = _json.loads(pending_raw)
-        except _ORCH_RECOVERABLE_EXCEPTIONS:
+        except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
+            logger.warning("Safeguard pending-payload unlesbar: %s", exc)
             pending = {}
 
         agent_name = pending.get("agent", "orchestrator")
@@ -1971,7 +1995,8 @@ JSON-SCHEMA:
                     pool = get_agent_pool()
                     pool_agent, _ = pool.get_agent_by_id(agent_name)
                     agent = pool_agent
-                except _ORCH_RECOVERABLE_EXCEPTIONS:
+                except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
+                    logger.debug("Agent-Pool Lookup fehlgeschlagen für '%s': %s", agent_name, exc)
                     agent = None
 
         if agent is None:
@@ -2367,7 +2392,11 @@ JSON-SCHEMA:
 
         from modules_catalog.fritzbox.tools import get_fritz_devices
 
-        devices = await get_fritz_devices.ainvoke({"connection_id": ""})
+        try:
+            devices = await get_fritz_devices.ainvoke({"connection_id": ""})
+        except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
+            logger.debug("FRITZ!Box Fast-Pfad fehlgeschlagen: %s", exc)
+            return None
         if not isinstance(devices, list):
             return (
                 _t(

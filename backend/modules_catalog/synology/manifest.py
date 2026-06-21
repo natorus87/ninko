@@ -27,7 +27,8 @@ module_manifest = ModuleManifest(
     display_name="Synology NAS",
     description=(
         "Synology NAS / DiskStation / DSM: system status, storage, RAID, services, "
-        "packages and apps, scheduled tasks, Hyper Backup and other backups."
+        "packages and apps, scheduled tasks, Hyper Backup and other backups. "
+        "Restart services, reboot, shutdown or power off the NAS."
     ),
     version="1.0.2",
     author="Ninko Team",
@@ -48,6 +49,16 @@ module_manifest = ModuleManifest(
         "apps",
         "backup",
         "hyper backup",
+        "dienst neustart",
+        "dienst neustarten",
+        "service neustart",
+        "service neustarten",
+        "nas neustart",
+        "nas neustarten",
+        "nas neu starten",
+        "nas herunterfahren",
+        "nas abschalten",
+        "nas ausschalten",
     ],
     api_prefix="/api/synology",
     dashboard_tab={

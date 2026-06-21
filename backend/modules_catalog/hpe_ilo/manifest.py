@@ -86,7 +86,7 @@ module_manifest = ModuleManifest(
     display_name="HPE iLO",
     description=(
         "HPE Integrated Lights-Out (iLO4 / iLO5): server management, "
-        "BMC, IPMI for HPE servers via REST API."
+        "BMC, IPMI for HPE servers via REST API. Power on/off and reset iLO."
     ),
     version="1.0.2",
     author="Ninko",
@@ -102,6 +102,14 @@ module_manifest = ModuleManifest(
         "server-management",
         "bmc",
         "ipmi",
+        "server einschalten",
+        "server anschalten",
+        "server ausschalten",
+        "server herunterfahren",
+        "server abschalten",
+        "ilo neustart",
+        "ilo reset",
+        "ilo zurücksetzen",
     ],
     api_prefix="/api/hpe_ilo",
     dashboard_tab={

@@ -1858,7 +1858,7 @@ async def reset_redmine_user_password(
     Reset/change a user's password in Redmine.
     Use this for password resets or forced password changes.
 
-    DE: Passwort zurücksetzen/ändern
+    DE: Passwort zurücksetzen/zuruecksetzen/ändern, Reset
     EN: Reset/change password
     FR: Réinitialiser le mot de passe
     ES: Restablecer contraseña

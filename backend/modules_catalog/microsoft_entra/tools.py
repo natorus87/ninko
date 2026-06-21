@@ -743,6 +743,7 @@ async def disable_entra_user(user_principal_name: str, connection_id: str = "") 
     """
     Disable a user account.
     Use this to disable a user's access.
+    German: Benutzer deaktivieren or ausschalten.
     """
     try:
         token = await _get_token(connection_id)
@@ -790,6 +791,7 @@ async def reset_entra_user_password(
     """
     Reset a user's password.
     Use this to reset a user's password.
+    German: Passwort zurücksetzen/zuruecksetzen or reset.
     """
     try:
         token = await _get_token(connection_id)

@@ -197,7 +197,11 @@ async def get_fritz_wlan_status(connection_id: str = "") -> List[Dict]:
 async def set_fritz_wlan_state(
     state: bool, service: int = 1, connection_id: str = ""
 ) -> str:
-    """Enable or disable WLAN. service=1 (2.4GHz), service=2 (5GHz), service=3 (guest)."""
+    """Enable or disable WLAN.
+
+    Use for 'WLAN aktivieren/deaktivieren' or 'WLAN einschalten/ausschalten'.
+    service=1 (2.4GHz), service=2 (5GHz), service=3 (guest).
+    """
 
     def _exec(fc) -> object:
         fc.call_action(f"WLANConfiguration:{service}", "SetEnable", Enable=int(state))
@@ -235,7 +239,10 @@ async def set_fritz_wlan_state(
 
 @tool
 async def set_fritz_guest_wlan_state(state: bool, connection_id: str = "") -> str:
-    """Enable or disable the guest WLAN specifically."""
+    """Enable or disable the guest WLAN.
+
+    Use for 'Gast-WLAN aktivieren/deaktivieren' or 'einschalten/ausschalten'.
+    """
     # Guest WLAN is usually service 3
     return await set_fritz_wlan_state.ainvoke(
         {"state": state, "service": 3, "connection_id": connection_id}
@@ -321,7 +328,10 @@ async def get_fritz_smarthome_devices(connection_id: str = "") -> List[Dict]:
 async def set_fritz_smarthome_switch(
     ain: str, state: bool, connection_id: str = ""
 ) -> str:
-    """Switch a smart home device on or off by its AIN."""
+    """Switch a smart home device on or off by its AIN.
+
+    Use for 'einschalten', 'ausschalten', or 'schalten'.
+    """
 
     def _exec(fh) -> object:
         dev = fh.get_device_by_ain(ain)
@@ -366,7 +376,10 @@ async def set_fritz_smarthome_switch(
 async def set_fritz_smarthome_temperature(
     ain: str, temperature: float, connection_id: str = ""
 ) -> str:
-    """Set the target temperature (in °C) of a radiator controller by its AIN."""
+    """Set the target temperature (in °C) of a radiator controller by its AIN.
+
+    Use for 'Temperatur setzen' or 'Thermostat setzen'.
+    """
 
     def _exec(fh) -> object:
         dev = fh.get_device_by_ain(ain)
@@ -475,7 +488,10 @@ async def get_fritz_system_info(connection_id: str = "") -> Dict:
 
 @tool
 async def reboot_fritzbox(connection_id: str = "") -> str:
-    """Trigger a complete reboot of the FritzBox."""
+    """Trigger a complete reboot/restart of the FritzBox.
+
+    Use for 'FritzBox Neustart', 'neustarten', or 'neu starten'.
+    """
 
     def _exec(fc) -> object:
         fc.call_action("DeviceConfig1", "Reboot")

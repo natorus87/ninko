@@ -151,6 +151,7 @@ async def set_tasmota_power(
     state: True = on, False = off.
     relay: relay number (1-4), default is 1.
     Use this tool to turn switches or outlets on or off.
+    German: Gerät/Relais einschalten, ausschalten or schalten.
     """
     try:
         host = await _get_tasmota_host(connection_id)
@@ -380,6 +381,7 @@ async def set_tasmota_group_power(
     """
     Control all devices in a Tasmota group (Broadcast).
     Use this tool to turn all devices in a group on/off.
+    German: Gruppe einschalten, ausschalten or schalten.
     """
     try:
         host = await _get_tasmota_host(connection_id)

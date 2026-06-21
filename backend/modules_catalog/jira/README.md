@@ -30,6 +30,6 @@ Create a connection via the Ninko dashboard with:
 | `get_jira_issue` | Get issue details |
 | `create_jira_issue` | Create issue |
 | `update_jira_issue` | Update issue |
-| `search_jira_issues` | Search issues |
+| `search_jira` | Search issues |
 | `get_jira_sprints` | Get sprints |
 | `get_jira_boards` | Get boards |

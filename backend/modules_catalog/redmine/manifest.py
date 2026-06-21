@@ -29,7 +29,7 @@ module_manifest = ModuleManifest(
     description=(
         "Redmine project management: tickets, issues, projects, tasks, bugs, "
         "milestones, workflows. Time tracking, HRM, resource planning, attendance, "
-        "leave management, reporting (alphanodes plugins)."
+        "leave management, reporting (alphanodes plugins). Reset passwords."
     ),
     version="1.1.2",
     author="Ninko Team",
@@ -53,6 +53,10 @@ module_manifest = ModuleManifest(
         "hrm",
         "resource planning",
         "attendance",
+        "passwort zurücksetzen",
+        "passwort zuruecksetzen",
+        "password reset",
+        "reset",
         "leave management",
         "reporting",
         "report",

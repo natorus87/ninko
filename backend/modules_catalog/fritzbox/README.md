@@ -20,9 +20,9 @@ Dieses Modul fügt Support für AVM FRITZ!Box Router hinzu. Es nutzt das TR-064 
 Der AI Orchestrator nutzt folgende intelligente Tools (basierend auf `fritzconnection`):
 - `get_fritz_wan_status`: Prüft die bestehende Internetverbindung, Uptime und ermittelt die **öffentliche, externe IP-Adresse**.
 - `get_fritz_bandwidth`: Ruft die aktuelle Up- and Downloadgeschwindigkeit der Verbindung ab.
-- `get_fritz_wlan_status` / `set_fritz_guest_wlan`: Prüft den WLAN-Zustand und aktiviert/deaktiviert das Gästenetz (inkl. Option zur sofortigen Neu-Vergabe eines Gast-WLAN-Passworts).
+- `get_fritz_wlan_status` / `set_fritz_guest_wlan_state`: Prüft den WLAN-Zustand und aktiviert/deaktiviert das Gästenetz.
 - `get_fritz_devices`: Listet im LAN/WLAN angemeldete Geräte auf (MAC, IP, aktiv/inaktiv).
-- Smart Home (DECT) Steuerung: `get_smart_home_devices`, `set_smart_socket`.
+- Smart Home (DECT) Steuerung: `get_fritz_smarthome_devices`, `set_fritz_smarthome_switch`, `set_fritz_smarthome_temperature`.
 
 ## Routing Erkennung
 Das System ist "fehlertolerant" und erkennt Anfragen auch an alternative Schreibweisen wie "Fritz!Box", "ipadresse" oder "fritz-box".

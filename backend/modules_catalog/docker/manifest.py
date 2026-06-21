@@ -43,7 +43,8 @@ module_manifest = ModuleManifest(
     display_name="Docker",
     description=(
         "Docker host management: containers, images, volumes, compose stacks. "
-        "Pull, build, push to dockerhub or private registry; system info."
+        "Start/stop/restart containers, pull, build, push to dockerhub or "
+        "private registry; system info."
     ),
     version="1.1.3",
     author="Ninko Team",
@@ -54,6 +55,9 @@ module_manifest = ModuleManifest(
     routing_keywords=[
         "docker", "container", "image", "volume", "compose",
         "dockerhub", "pull", "build", "registry",
+        "container starten", "container stoppen", "container neustart",
+        "container neustarten", "container neu starten", "starte container",
+        "stoppe container", "container herunterfahren", "restart container",
     ],
     api_prefix="/api/docker",
     dashboard_tab={"id": "docker", "label": "Docker", "icon": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg>'},

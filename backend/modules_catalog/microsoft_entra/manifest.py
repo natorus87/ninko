@@ -98,7 +98,8 @@ module_manifest = ModuleManifest(
     display_name="Microsoft Entra",
     description=(
         "Microsoft Entra ID (formerly Azure AD) / O365 / M365: users, groups, "
-        "applications, identity management for Microsoft cloud."
+        "applications, identity management for Microsoft cloud. Disable users "
+        "and reset passwords."
     ),
     version="1.0.2",
     author="Ninko",
@@ -115,6 +116,12 @@ module_manifest = ModuleManifest(
         "o365",
         "azure portal",
         "ms identity",
+        "benutzer deaktivieren",
+        "user deaktivieren",
+        "benutzer ausschalten",
+        "passwort zurücksetzen",
+        "passwort zuruecksetzen",
+        "password reset",
     ],
     api_prefix="/api/microsoft_entra",
     dashboard_tab={

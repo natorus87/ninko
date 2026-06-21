@@ -478,6 +478,7 @@ async def server_power_on(connection_id: str = "") -> str:
     """
     Power on the server.
     Use this when the user wants to power on the server.
+    German: Server einschalten/anschalten.
     """
     try:
         client = await _get_api_client(connection_id)
@@ -536,6 +537,7 @@ async def server_power_off(connection_id: str = "") -> str:
     """
     Power off the server (graceful shutdown).
     Use this when the user wants to shut down the server.
+    German: Server ausschalten, herunterfahren or abschalten.
     """
     try:
         client = await _get_api_client(connection_id)
@@ -594,6 +596,7 @@ async def server_reset_ilo(connection_id: str = "") -> str:
     """
     Reset iLO (reboot the iLO management processor).
     Use this when iLO is unresponsive or has stale data.
+    German: iLO Neustart, iLO reset, iLO zurücksetzen.
     """
     try:
         client = await _get_api_client(connection_id)

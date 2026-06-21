@@ -81,7 +81,8 @@ module_manifest = ModuleManifest(
     display_name="Ubiquiti",
     description=(
         "Ubiquiti UniFi / EdgeRouter / EdgeSwitch / AirMax: switches, routers, "
-        "access points. Device status, clients, traffic, WLAN management."
+        "access points. Device status, clients, traffic, WLAN management. "
+        "Restart devices and enable/disable WLANs."
     ),
     version="1.0.2",
     author="Ninko",
@@ -99,6 +100,14 @@ module_manifest = ModuleManifest(
         "edgerouter",
         "edgeswitch",
         "airmax",
+        "ubiquiti neustart",
+        "unifi neustart",
+        "gerät neustarten",
+        "gerät neu starten",
+        "wlan aktivieren",
+        "wlan deaktivieren",
+        "wlan einschalten",
+        "wlan ausschalten",
     ],
     api_prefix="/api/ubiquiti",
     dashboard_tab={

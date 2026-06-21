@@ -731,6 +731,7 @@ async def sync_intune_device(device_name: str, connection_id: str = "") -> str:
     """
     Trigger a remote sync on a managed device.
     Use this to force a device to check in with Intune.
+    German: Gerät synchronisieren or Intune Sync.
     """
     try:
         token = await _get_token(connection_id)

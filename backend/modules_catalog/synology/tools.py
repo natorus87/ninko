@@ -429,6 +429,7 @@ async def restart_synology_service(service_name: str, connection_id: str = "") -
     """
     Restart a Synology service (e.g., 'active-directory', 'dnsserver', 'dhcpserver').
     Use this when the user asks to restart a specific service.
+    German: Dienst/Service Neustart, neustarten or neu starten.
     """
     try:
         client = await _get_api_client(connection_id)
@@ -943,6 +944,7 @@ async def shutdown_synologyNAS(confirm: bool = False, connection_id: str = "") -
     """
     Shutdown the Synology NAS.
     Use this when the user asks to shutdown the NAS.
+    German: NAS herunterfahren, abschalten or ausschalten.
     WARNING: This will power off the entire device!
     Requires confirm=True to actually shutdown.
     """
@@ -1003,6 +1005,7 @@ async def reboot_synologyNAS(confirm: bool = False, connection_id: str = "") -> 
     """
     Reboot the Synology NAS.
     Use this when the user asks to restart or reboot the NAS.
+    German: NAS Neustart, neustarten or neu starten.
     Requires confirm=True to actually reboot.
     """
     if not confirm:

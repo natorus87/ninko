@@ -184,6 +184,22 @@ class ModuleRegistry:
         self._hot_load_lock = asyncio.Lock()
         self._route_registry = PluginRouteRegistry()
 
+    def _resolve_module_key(self, name: str) -> str | None:
+        """Mappt modname (Verzeichnisname) auf den Registry-Key (manifest.name).
+
+        Behebt die Asymmetrie zwischen Hot-Load (modname als Key) und
+        discover_and_load (manifest.name als Key). Gibt None zurück, wenn
+        kein Modul unter irgendeinem der beiden Namen gefunden wurde.
+        """
+        if name in self._modules:
+            return name
+        for key, mod in self._modules.items():
+            if mod.manifest.name == name:
+                return key
+            if mod.package == name or mod.package.endswith(f".{name}"):
+                return key
+        return None
+
     # ── Discovery ───────────────────────────────────────
     def discover_and_load(self) -> None:
         """
@@ -394,7 +410,9 @@ class ModuleRegistry:
         # Erst altes Plugin entfernen falls vorhanden (für sauberes Update)
         if modname in self._modules:
             logger.info("Entferne altes Plugin '%s' vor Hot-Reload...", modname)
-            self.remove_plugin(modname)
+            # Direkt _remove_plugin_locked statt remove_plugin-Wrapper, weil
+            # wir den Lock bereits halten (Lock ist nicht-reentrant).
+            self._remove_plugin_locked(modname)
             # Auch aus sys.modules alle Submodule entfernen
             package_path = f"plugins.{modname}"
             modules_to_remove = [
@@ -420,7 +438,7 @@ class ModuleRegistry:
             return False
 
         # Wenn erfolgreich geladen, Route direkt an app hängen
-        mod = self._modules.get(modname)
+        mod = self._modules.get(self._resolve_module_key(modname) or modname)
         if mod and mod.router and mod.manifest.api_prefix:
             self._route_registry.mount(
                 app,
@@ -456,16 +474,23 @@ class ModuleRegistry:
 
     def remove_plugin(self, modname: str, app: FastAPI | None = None) -> None:
         """
-        Entfernt das Plugin intern aus der Registry und unmountet die zugehörigen
-        FastAPI-Routen aus `app`.
-
-        Args:
-            modname: Name des zu entfernenden Plugins.
-            app: Optionale FastAPI-App. Wenn nicht angegeben, wird die App aus
-                `_route_registry.get_app()` verwendet (gesetzt durch vorherigen
-                hot_load). Wenn auch dort None, werden nur Registry/sys.modules
-                bereinigt – ein Routen-Leak ist dann unvermeidbar.
+        Synchroner Wrapper — hält den _hot_load_lock für die Dauer der Mutation.
+        Damit sind parallele Aufrufe von remove_plugin + hot_load_plugin
+        serialisiert (sonst Race auf _modules, _plugin_routes, sys.modules).
+        Lock kann in single-threaded asyncio nicht awaiten, daher sync-Implementierung.
         """
+        if self._hot_load_lock.locked():
+            # Hot-Load läuft gerade — _hot_load_lock ist nicht-reentrant.
+            # In dem Fall übernimmt der Hot-Load den Cleanup, nichts tun.
+            logger.debug(
+                "remove_plugin('%s') übersprungen — Hot-Load hält bereits den Lock.",
+                modname,
+            )
+            return
+        self._remove_plugin_locked(modname, app)
+
+    def _remove_plugin_locked(self, modname: str, app: FastAPI | None = None) -> None:
+        """Interner Remove-Pfad. Muss unter _hot_load_lock aufgerufen werden."""
         if app is None:
             app = self._route_registry.get_app()
         if app is not None:
@@ -481,8 +506,9 @@ class ModuleRegistry:
                 modname,
             )
 
-        if modname in self._modules:
-            del self._modules[modname]
+        resolved_key = self._resolve_module_key(modname)
+        if resolved_key and resolved_key in self._modules:
+            del self._modules[resolved_key]
         if modname in self._disabled_manifests:
             del self._disabled_manifests[modname]
 
@@ -585,7 +611,9 @@ class ModuleRegistry:
     async def get_health(self) -> dict[str, dict]:
         """Health-Status aller Module abfragen."""
         results: dict[str, dict] = {}
-        for name, mod in self._modules.items():
+        # list()-Kopie: ein health_check könnte (böswillig oder fehlerhaft)
+        # ein Modul deregistrieren → "dictionary changed size during iteration"
+        for name, mod in list(self._modules.items()):
             if mod.manifest.health_check is not None:
                 try:
                     results[name] = await mod.manifest.health_check()

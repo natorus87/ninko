@@ -624,6 +624,7 @@ async def enable_cisco_interface(interface: str, connection_id: str = "") -> str
     """
     Enable a network interface.
     Use this to bring up a port.
+    German: Interface aktivieren/einschalten, Port aktivieren/einschalten.
     """
     try:
         client = await _get_api_client(connection_id)
@@ -666,6 +667,7 @@ async def disable_cisco_interface(interface: str, connection_id: str = "") -> st
     """
     Disable a network interface.
     Use this to shut down a port.
+    German: Interface deaktivieren/ausschalten, Port deaktivieren/ausschalten.
     """
     try:
         client = await _get_api_client(connection_id)
@@ -754,6 +756,7 @@ async def set_cisco_interface_vlan(
     """
     Assign a port to a VLAN.
     Use this to set port VLAN membership.
+    German: VLAN setzen, Port-VLAN setzen or schalten.
     """
     try:
         client = await _get_api_client(connection_id)

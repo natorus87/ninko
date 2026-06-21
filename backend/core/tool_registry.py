@@ -529,21 +529,25 @@ class ToolRegistry:
     def __init__(self) -> None:
         """Initialisiert die Registry."""
         self._tools: dict[str, ToolMetadata] = {}
+        self._tools_by_module: dict[tuple[str, str], ToolMetadata] = {}
 
     def register(self, meta: ToolMetadata) -> None:
         """Registriert ein einzelnes Tool."""
         self._tools[meta.name] = meta
+        self._tools_by_module[(meta.module, meta.name)] = meta
 
     def register_many(self, tools: list[ToolMetadata]) -> None:
         """Registriert mehrere Tools."""
         for tool in tools:
             self.register(tool)
 
-    def get(self, name: str) -> Optional[ToolMetadata]:
+    def get(self, name: str, module: str | None = None) -> Optional[ToolMetadata]:
         """Ruft Metadaten für ein Tool auf."""
+        if module:
+            return self._tools_by_module.get((module, name))
         return self._tools.get(name)
 
-    def is_readonly(self, name: str) -> bool | None:
+    def is_readonly(self, name: str, module: str | None = None) -> bool | None:
         """Prüft ob ein Tool readonly ist.
 
         Returns:
@@ -551,12 +555,12 @@ class ToolRegistry:
             False wenn Tool registriert und nicht readonly.
             None wenn Tool nicht registriert (Caller soll entscheiden).
         """
-        meta = self.get(name)
+        meta = self.get(name, module)
         return meta.readonly if meta else None
 
-    def is_destructive(self, name: str) -> bool:
+    def is_destructive(self, name: str, module: str | None = None) -> bool:
         """Prüft ob ein Tool destructive ist."""
-        meta = self.get(name)
+        meta = self.get(name, module)
         return meta.destructive if meta else False
 
     def is_available(self, name: str) -> bool:
@@ -591,14 +595,14 @@ class ToolRegistry:
         """
         return frozenset(name for name, meta in self._tools.items() if meta.readonly)
 
-    def tier_of(self, name: str) -> ToolTier | None:
+    def tier_of(self, name: str, module: str | None = None) -> ToolTier | None:
         """
         Gibt den effektiven Tier eines Tools zurück.
 
         Returns None wenn das Tool nicht registriert ist (→ LLM-Fallback).
         Bevorzugt explizites meta.tier, leitet sonst aus readonly/destructive ab.
         """
-        meta = self.get(name)
+        meta = self.get(name, module)
         if meta is None:
             return None
         return _infer_tier(meta.name, meta.readonly, meta.destructive, meta.tier)
@@ -627,11 +631,11 @@ class ToolRegistry:
 
     def by_module(self, module: str) -> list[ToolMetadata]:
         """Alle Tools eines bestimmten Moduls."""
-        return [meta for meta in self._tools.values() if meta.module == module]
+        return [meta for (mod, _), meta in self._tools_by_module.items() if mod == module]
 
     def all_tools(self) -> list[ToolMetadata]:
         """Alle registrierten Tools."""
-        return list(self._tools.values())
+        return list(self._tools_by_module.values())
 
 
 # Singleton-Instanz
@@ -904,6 +908,7 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
         ToolMetadata("get_vm_ip_addresses", "proxmox", readonly=True),
         ToolMetadata("list_vm_ip_addresses", "proxmox", readonly=True),
         ToolMetadata("get_vm_config", "proxmox", readonly=True),
+        ToolMetadata("list_containers", "proxmox", readonly=True),
         ToolMetadata("get_recent_tasks", "proxmox", readonly=True),
         # Power-Operationen: STATE_CHANGING → require user confirmation
         # via the safeguard system. stop/reboot/reset = WRITE_SYSTEM tier
@@ -1257,7 +1262,7 @@ def _discover_module_tools(registry: ToolRegistry) -> None:
                 continue
 
             for tool_name in _find_tool_functions(tree):
-                if registry.get(tool_name):
+                if registry.get(tool_name, module_id):
                     continue
 
                 override = overrides.get(tool_name, {})

@@ -81,7 +81,8 @@ module_manifest = ModuleManifest(
     display_name="MikroTik",
     description=(
         "MikroTik RouterOS / RouterBoard: switches, routers, wireless. "
-        "Interface status, routing, firewall, queues, WireGuard, CAPsMAN."
+        "Interface status, routing, firewall, queues, WireGuard, CAPsMAN. "
+        "Enable/disable interfaces and reboot/restart devices."
     ),
     version="1.0.2",
     author="Ninko",
@@ -98,6 +99,13 @@ module_manifest = ModuleManifest(
         "wireguard",
         "wireless",
         "capsman",
+        "interface aktivieren",
+        "interface deaktivieren",
+        "interface einschalten",
+        "interface ausschalten",
+        "mikrotik neustart",
+        "mikrotik neustarten",
+        "mikrotik neu starten",
     ],
     api_prefix="/api/mikrotik",
     dashboard_tab={

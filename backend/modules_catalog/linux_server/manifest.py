@@ -25,7 +25,7 @@ module_manifest = ModuleManifest(
     display_name="Linux Server",
     description=(
         "Linux server management via SSH: shell commands, systemd services, cron, "
-        "apt, journalctl, df, top, reboot, hostname, users, iptables. "
+        "apt, journalctl, df, top, reboot/restart/neustart, hostname, users, iptables. "
         "Manage apache, nginx, mysql, postgres, samba."
     ),
     version="1.1.3",
@@ -39,6 +39,7 @@ module_manifest = ModuleManifest(
         "cron", "apt", "journalctl", "df", "top",
         "reboot", "hostname", "useradd", "iptables",
         "apache", "nginx", "mysql", "postgres", "samba",
+        "server neustart", "server neustarten", "server neu starten",
     ],
     api_prefix="/api/linux_server",
     dashboard_tab={"id": "linux_server", "label": "Linux", "icon": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>'},

@@ -22,6 +22,18 @@ import time
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
+
+# Recoverable exceptions for non-critical pipeline operations (e.g. persist
+# compaction summary). Schwere Fehler hier dürfen den Step nicht abbrechen.
+_PIPELINE_RECOVERABLE_EXCEPTIONS = (
+    ImportError,
+    AttributeError,
+    TypeError,
+    ValueError,
+    OSError,
+    ConnectionError,
+    TimeoutError,
+)
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
@@ -199,9 +211,19 @@ def _build_execution_groups(steps: list[PipelineStep]) -> list[list[int]]:
 
     for i, step in enumerate(steps):
         for dep in step.depends_on:
-            if 0 <= dep < n and dep != i:
-                in_degree[i] += 1
-                dependents[dep].append(i)
+            if dep == i:
+                continue
+            if not (0 <= dep < n):
+                logger.warning(
+                    "Step %d '%s' hat ungültige depends_on=%d (gültig: 0..%d) – Abhängigkeit wird ignoriert",
+                    i,
+                    getattr(step, "step_id", "?"),
+                    dep,
+                    n - 1,
+                )
+                continue
+            in_degree[i] += 1
+            dependents[dep].append(i)
 
     has_explicit_deps = any(s.depends_on for s in steps)
     if not has_explicit_deps:
@@ -362,6 +384,22 @@ class PipelineEngine:
                     result.error = f"Step fehlgeschlagen: {failed[0].error}"
                     break  # Status wird nach der Schleife einmalig gesetzt
 
+        except asyncio.CancelledError:
+            # CancelledError ist BaseException, nicht Exception (Python 3.8+).
+            # Muss explizit behandelt werden, sonst bleibt die Pipeline
+            # geisterhaft als RUNNING in Redis hängen.
+            logger.info("Pipeline '%s' abgebrochen (Client-Disconnect/Cancel).", pipeline_id)
+            result.status = PipelineStatus.FAILED
+            result.error = "Abgebrochen"
+            try:
+                await self._checkpoint(pipeline_id, session_id, result)
+            except _PIPELINE_RECOVERABLE_EXCEPTIONS as ckpt_exc:
+                logger.debug("Final-Checkpoint nach Cancel fehlgeschlagen: %s", ckpt_exc)
+            await emit_pipeline_event(PipelineEvent.pipeline_failed(
+                pipeline_id=pipeline_id, session_id=session_id, error="cancelled",
+            ))
+            raise
+
         except Exception as exc:
             logger.error("Pipeline '%s' unerwarteter Fehler: %s", pipeline_id, exc, exc_info=True)
             result.status = PipelineStatus.FAILED
@@ -469,6 +507,25 @@ class PipelineEngine:
                 sr.retries_used = attempt
                 sr.duration_ms = (time.monotonic() - step_start) * 1000
                 sr.completed_at = datetime.now(timezone.utc).isoformat()
+                # Compaction-Summary persistieren, sonst geht sie zwischen
+                # Pipeline-Steps verloren und der nächste Step sieht den
+                # ungekürzten Context → Token-Limit-Überschreitung.
+                if _did_compact and hasattr(agent, "get_last_compaction_summary"):
+                    _summary = agent.get_last_compaction_summary()
+                    if _summary:
+                        try:
+                            from core.redis_client import get_redis
+
+                            await get_redis().store_chat_message(
+                                session_id=session_id,
+                                role="system_compaction",
+                                content=_summary,
+                            )
+                        except _PIPELINE_RECOVERABLE_EXCEPTIONS as exc:
+                            logger.debug(
+                                "Compaction-Summary konnte nicht persistiert werden: %s",
+                                exc,
+                            )
                 await emit_pipeline_event(PipelineEvent.step_completed(
                     step_id=step.step_id,
                     session_id=session_id,

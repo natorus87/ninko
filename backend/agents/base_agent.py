@@ -205,7 +205,7 @@ class _StatusEmitter(AsyncCallbackHandler):
         self._tool_start_times.pop(run_id, None)
 
         # is_readonly: Registry bevorzugt, Heuristik als Fallback
-        registry_result = get_tool_registry().is_readonly(tool_name)
+        registry_result = get_tool_registry().is_readonly(tool_name, self.agent_name)
         if registry_result is not None:
             is_readonly = registry_result
         else:
@@ -420,10 +420,14 @@ _TOOL_SAFEGUARD_SENTINEL = "__TOOL_SAFEGUARD__"
 
 # Paused safeguard agents: session_id → (sg_agent, thread_config)
 # Hält den unterbrochenen LangGraph-Agenten für den Resume-Aufruf am Leben.
-_paused_sg_agents: dict[str, tuple] = {}
+_paused_sg_agents: dict[str, tuple[Any, dict]] = {}
 _paused_sg_agents_ts: dict[
     str, float
 ] = {}  # session_id → Erstellungszeitpunkt (monotonic)
+# Schutz gegen race zwischen resume_safeguard_tool und cleanup_paused_agents:
+# Cleanup läuft als periodischer Background-Task und könnte pausierte Agents
+# entfernen, während der User gerade den Confirm-Button klickt.
+_paused_sg_agents_lock = asyncio.Lock()
 _PAUSED_SG_AGENT_TTL_SECS: float = (
     300.0  # Gleicher TTL wie Redis-Key ninko:safeguard_tool_pending
 )
@@ -495,9 +499,12 @@ def _get_safeguard_session_lock(session_id: str) -> asyncio.Lock:
         _safeguard_session_locks.pop(oldest_sid, None)
         _safeguard_session_locks_ts.pop(oldest_sid, None)
 
+    # Reihenfolge: erst Lock holen/erstellen, dann Timestamp setzen.
+    # Sonst hat _safeguard_session_locks_ts einen Eintrag, der auf einen
+    # Lock zeigt, der gleich wieder evicted wurde.
+    lock = _safeguard_session_locks.setdefault(session_id, asyncio.Lock())
     _safeguard_session_locks_ts[session_id] = now
-    _safeguard_session_locks.setdefault(session_id, asyncio.Lock())
-    return _safeguard_session_locks[session_id]
+    return lock
 
 
 def _get_agent_timeout_seconds() -> int:
@@ -1100,17 +1107,20 @@ class BaseAgent:
                     exc,
                 )
 
-        if session_id not in _paused_sg_agents:
-            logger.warning(
-                "[Safeguard] Resume angefragt, aber kein pausierter Agent für Session '%s'.",
-                session_id,
-            )
-            return _t(
-                "Fehler: Kein ausstehender Tool-Aufruf für diese Session.",
-                "Error: No pending tool call for this session.",
-            ), False
+        async with _paused_sg_agents_lock, _get_safeguard_session_lock(session_id):
+            # Beide Locks halten: _paused_sg_agents_lock schützt vor
+            # cleanup_paused_agents (global, per-session-agnostisch), das
+            # per-session-Lock serialisiert Resumes derselben Session.
+            if session_id not in _paused_sg_agents:
+                logger.warning(
+                    "[Safeguard] Resume angefragt, aber kein pausierter Agent für Session '%s'.",
+                    session_id,
+                )
+                return _t(
+                    "Fehler: Kein ausstehender Tool-Aufruf für diese Session.",
+                    "Error: No pending tool call for this session.",
+                ), False
 
-        async with _get_safeguard_session_lock(session_id):
             # Nicht poppen bevor Resume erfolgreich ist — sonst State-Verlust bei Fehlern.
             paused = _paused_sg_agents.get(session_id)
             if paused is None:
@@ -1197,8 +1207,12 @@ class BaseAgent:
                     fact_text = parsed.get("fact", "").strip()
                     importance = float(parsed.get("importance", 0.5))
             except json.JSONDecodeError:
-                # Fallback: Altes Format (nur Text)
-                fact_text = content
+                # Kein JSON: nur übernehmen, wenn es ein knapper, sauberer Fakt ist.
+                # Sonst landet LLM-Rohtext (Erklärungen, think-Blöcke, Markdown)
+                # im permanenten Memory und verschmutzt recall_memory.
+                stripped = content.strip().strip('*_ \n"\'')
+                if len(stripped) <= 200 and "\n" not in stripped:
+                    fact_text = stripped
 
             # Validierung und Speicherung
             if (
