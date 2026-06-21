@@ -514,7 +514,7 @@ async def list_vm_ip_addresses(connection_id: str = "") -> list[dict]:
 
 @tool
 async def start_vm(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Starts a VM."""
+    """Starts a VM. Use for German requests like 'VM starten' or 'starte VM'."""
     proxmox = await _get_proxmox_client(connection_id)
     try:
         proxmox.nodes(node).qemu(vmid).status.start.post()
@@ -526,40 +526,92 @@ async def start_vm(node: str, vmid: int, connection_id: str = "") -> dict:
             "detail": f"VM {vmid} on node '{node}' is being started.",
         }
     except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
-        return {"action": "start", "target": f"VM {vmid}", "node": node, "status": "error", "detail": str(e)}
+        return {
+            "action": "start",
+            "target": f"VM {vmid}",
+            "node": node,
+            "status": "error",
+            "detail": str(e),
+        }
 
 
 @tool
 async def stop_vm(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Graceful ACPI shutdown of a VM."""
+    """Graceful ACPI shutdown of a VM.
+
+    Use for 'VM stoppen', 'stoppe VM', or 'VM herunterfahren'.
+    """
     proxmox = await _get_proxmox_client(connection_id)
     try:
         proxmox.nodes(node).qemu(vmid).status.stop.post()
-        return {"action": "stop", "target": f"VM {vmid}", "node": node, "status": "success", "detail": f"VM {vmid} is being stopped."}
+        return {
+            "action": "stop",
+            "target": f"VM {vmid}",
+            "node": node,
+            "status": "success",
+            "detail": f"VM {vmid} is being stopped.",
+        }
     except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
-        return {"action": "stop", "target": f"VM {vmid}", "node": node, "status": "error", "detail": str(e)}
+        return {
+            "action": "stop",
+            "target": f"VM {vmid}",
+            "node": node,
+            "status": "error",
+            "detail": str(e),
+        }
 
 
 @tool
 async def reboot_vm(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Graceful ACPI reboot of a VM."""
+    """Graceful ACPI reboot/restart of a VM.
+
+    Use for 'VM neustarten', 'VM neu starten', or 'VM Neustart'.
+    """
     proxmox = await _get_proxmox_client(connection_id)
     try:
         proxmox.nodes(node).qemu(vmid).status.reboot.post()
-        return {"action": "reboot", "target": f"VM {vmid}", "node": node, "status": "success", "detail": f"VM {vmid} is being restarted."}
+        return {
+            "action": "reboot",
+            "target": f"VM {vmid}",
+            "node": node,
+            "status": "success",
+            "detail": f"VM {vmid} is being restarted.",
+        }
     except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
-        return {"action": "reboot", "target": f"VM {vmid}", "node": node, "status": "error", "detail": str(e)}
+        return {
+            "action": "reboot",
+            "target": f"VM {vmid}",
+            "node": node,
+            "status": "error",
+            "detail": str(e),
+        }
 
 
 @tool
 async def reset_vm(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Hard power-cut of a VM (no graceful shutdown — may cause data loss)."""
+    """Hard power-cut/reset of a VM.
+
+    Use only for 'hart resetten', 'zurücksetzen', 'zuruecksetzen', or forced reset.
+    May cause data loss.
+    """
     proxmox = await _get_proxmox_client(connection_id)
     try:
         proxmox.nodes(node).qemu(vmid).status.reset.post()
-        return {"action": "reset", "target": f"VM {vmid}", "node": node, "status": "success", "detail": f"VM {vmid} is being reset."}
+        return {
+            "action": "reset",
+            "target": f"VM {vmid}",
+            "node": node,
+            "status": "success",
+            "detail": f"VM {vmid} is being reset.",
+        }
     except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
-        return {"action": "reset", "target": f"VM {vmid}", "node": node, "status": "error", "detail": str(e)}
+        return {
+            "action": "reset",
+            "target": f"VM {vmid}",
+            "node": node,
+            "status": "error",
+            "detail": str(e),
+        }
 
 
 @tool
@@ -568,9 +620,21 @@ async def suspend_vm(node: str, vmid: int, connection_id: str = "") -> dict:
     proxmox = await _get_proxmox_client(connection_id)
     try:
         proxmox.nodes(node).qemu(vmid).status.suspend.post()
-        return {"action": "suspend", "target": f"VM {vmid}", "node": node, "status": "success", "detail": f"VM {vmid} has been suspended."}
+        return {
+            "action": "suspend",
+            "target": f"VM {vmid}",
+            "node": node,
+            "status": "success",
+            "detail": f"VM {vmid} has been suspended.",
+        }
     except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
-        return {"action": "suspend", "target": f"VM {vmid}", "node": node, "status": "error", "detail": str(e)}
+        return {
+            "action": "suspend",
+            "target": f"VM {vmid}",
+            "node": node,
+            "status": "error",
+            "detail": str(e),
+        }
 
 
 @tool
@@ -579,9 +643,21 @@ async def resume_vm(node: str, vmid: int, connection_id: str = "") -> dict:
     proxmox = await _get_proxmox_client(connection_id)
     try:
         proxmox.nodes(node).qemu(vmid).status.resume.post()
-        return {"action": "resume", "target": f"VM {vmid}", "node": node, "status": "success", "detail": f"VM {vmid} has been resumed."}
+        return {
+            "action": "resume",
+            "target": f"VM {vmid}",
+            "node": node,
+            "status": "success",
+            "detail": f"VM {vmid} has been resumed.",
+        }
     except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
-        return {"action": "resume", "target": f"VM {vmid}", "node": node, "status": "error", "detail": str(e)}
+        return {
+            "action": "resume",
+            "target": f"VM {vmid}",
+            "node": node,
+            "status": "error",
+            "detail": str(e),
+        }
 
 
 @tool
@@ -606,35 +682,253 @@ async def list_containers(node: str, connection_id: str = "") -> list[dict]:
 
 @tool
 async def start_container(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Starts an LXC container."""
+    """Starts an LXC container.
+
+    Use for German requests like 'Container starten' or 'starte Container'.
+    """
     proxmox = await _get_proxmox_client(connection_id)
     try:
         proxmox.nodes(node).lxc(vmid).status.start.post()
-        return {"action": "start", "target": f"CT {vmid}", "node": node, "status": "success", "detail": f"Container {vmid} is being started."}
+        return {
+            "action": "start",
+            "target": f"CT {vmid}",
+            "node": node,
+            "status": "success",
+            "detail": f"Container {vmid} is being started.",
+        }
     except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
-        return {"action": "start", "target": f"CT {vmid}", "node": node, "status": "error", "detail": str(e)}
+        return {
+            "action": "start",
+            "target": f"CT {vmid}",
+            "node": node,
+            "status": "error",
+            "detail": str(e),
+        }
 
 
 @tool
 async def stop_container(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Graceful shutdown of an LXC container."""
+    """Graceful shutdown of an LXC container.
+
+    Use for 'Container stoppen', 'stoppe Container', or 'Container herunterfahren'.
+    """
     proxmox = await _get_proxmox_client(connection_id)
     try:
         proxmox.nodes(node).lxc(vmid).status.stop.post()
-        return {"action": "stop", "target": f"CT {vmid}", "node": node, "status": "success", "detail": f"Container {vmid} is being stopped."}
+        return {
+            "action": "stop",
+            "target": f"CT {vmid}",
+            "node": node,
+            "status": "success",
+            "detail": f"Container {vmid} is being stopped.",
+        }
     except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
-        return {"action": "stop", "target": f"CT {vmid}", "node": node, "status": "error", "detail": str(e)}
+        return {
+            "action": "stop",
+            "target": f"CT {vmid}",
+            "node": node,
+            "status": "error",
+            "detail": str(e),
+        }
 
 
 @tool
 async def reboot_container(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Graceful reboot of an LXC container."""
+    """Graceful reboot/restart of an LXC container.
+
+    Use for 'Container neustarten', 'Container Neustart', or 'Container neu starten'.
+    """
     proxmox = await _get_proxmox_client(connection_id)
     try:
         proxmox.nodes(node).lxc(vmid).status.reboot.post()
-        return {"action": "reboot", "target": f"CT {vmid}", "node": node, "status": "success", "detail": f"Container {vmid} is being restarted."}
+        return {
+            "action": "reboot",
+            "target": f"CT {vmid}",
+            "node": node,
+            "status": "success",
+            "detail": f"Container {vmid} is being restarted.",
+        }
     except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
-        return {"action": "reboot", "target": f"CT {vmid}", "node": node, "status": "error", "detail": str(e)}
+        return {
+            "action": "reboot",
+            "target": f"CT {vmid}",
+            "node": node,
+            "status": "error",
+            "detail": str(e),
+        }
+
+
+async def _detect_target_type(proxmox: object, node: str, vmid: int) -> str | None:
+    """Erkennt, ob eine VMID ein QEMU-VM ('qemu') oder LXC-Container ('lxc') ist.
+
+    Nutzt die Proxmox cluster-resources API (single source of truth) und
+    fällt auf direkten qemu/lxc-Endpoint-Check zurück, wenn die
+    cluster-resources API nicht verfügbar ist.
+
+    Returns None wenn weder VM noch LXC gefunden.
+    """
+    try:
+        resources = proxmox.cluster.resources.get(type="vm")
+        for r in resources:
+            if int(r.get("vmid", -1)) == vmid and r.get("node") == node:
+                return "qemu"
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, AttributeError):
+        pass
+    try:
+        resources = proxmox.cluster.resources.get(type="lxc")
+        for r in resources:
+            if int(r.get("vmid", -1)) == vmid and r.get("node") == node:
+                return "lxc"
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, AttributeError):
+        pass
+
+    # Fallback: direkter Endpoint-Probe. Wir versuchen zuerst qemu; wenn
+    # das mit 404 endet, probieren wir lxc. Reihenfolge ist egal da
+    # Proxmoxer saubere Exceptions wirft.
+    try:
+        proxmox.nodes(node).qemu(vmid).status.current.get()
+        return "qemu"
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, AttributeError):
+        pass
+    try:
+        proxmox.nodes(node).lxc(vmid).status.current.get()
+        return "lxc"
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, AttributeError):
+        return None
+
+
+@tool
+async def smart_reboot(node: str, vmid: int, connection_id: str = "") -> dict:
+    """Reboot/restart a VM or LXC container, auto-detecting the type.
+
+    Prefer this tool over reboot_vm / reboot_container — it picks the correct
+    API endpoint based on whether the VMID belongs to a QEMU VM or an LXC
+    container, so the LLM does not have to remember which one it is.
+    """
+    proxmox = await _get_proxmox_client(connection_id)
+    target_type = await _detect_target_type(proxmox, node, vmid)
+    if target_type is None:
+        return {
+            "action": "reboot",
+            "target": f"VMID {vmid}",
+            "node": node,
+            "status": "error",
+            "detail": (
+                f"VMID {vmid} existiert weder als QEMU-VM noch als LXC-Container "
+                f"auf Node '{node}'."
+            ),
+        }
+    if target_type == "qemu":
+        target_label = f"VM {vmid}"
+        api_call = proxmox.nodes(node).qemu(vmid).status.reboot.post
+    else:
+        target_label = f"CT {vmid}"
+        api_call = proxmox.nodes(node).lxc(vmid).status.reboot.post
+    try:
+        api_call()
+        return {
+            "action": "reboot",
+            "target": target_label,
+            "target_type": target_type,
+            "node": node,
+            "status": "success",
+            "detail": f"{target_label} (Node '{node}') wird neugestartet.",
+        }
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+        return {
+            "action": "reboot",
+            "target": target_label,
+            "target_type": target_type,
+            "node": node,
+            "status": "error",
+            "detail": str(e),
+        }
+
+
+@tool
+async def smart_start(node: str, vmid: int, connection_id: str = "") -> dict:
+    """Start a VM or LXC container, auto-detecting the type."""
+    proxmox = await _get_proxmox_client(connection_id)
+    target_type = await _detect_target_type(proxmox, node, vmid)
+    if target_type is None:
+        return {
+            "action": "start",
+            "target": f"VMID {vmid}",
+            "node": node,
+            "status": "error",
+            "detail": (
+                f"VMID {vmid} existiert weder als QEMU-VM noch als LXC-Container "
+                f"auf Node '{node}'."
+            ),
+        }
+    if target_type == "qemu":
+        target_label = f"VM {vmid}"
+        api_call = proxmox.nodes(node).qemu(vmid).status.start.post
+    else:
+        target_label = f"CT {vmid}"
+        api_call = proxmox.nodes(node).lxc(vmid).status.start.post
+    try:
+        api_call()
+        return {
+            "action": "start",
+            "target": target_label,
+            "target_type": target_type,
+            "node": node,
+            "status": "success",
+            "detail": f"{target_label} (Node '{node}') wird gestartet.",
+        }
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+        return {
+            "action": "start",
+            "target": target_label,
+            "target_type": target_type,
+            "node": node,
+            "status": "error",
+            "detail": str(e),
+        }
+
+
+@tool
+async def smart_stop(node: str, vmid: int, connection_id: str = "") -> dict:
+    """Stop a VM or LXC container (graceful), auto-detecting the type."""
+    proxmox = await _get_proxmox_client(connection_id)
+    target_type = await _detect_target_type(proxmox, node, vmid)
+    if target_type is None:
+        return {
+            "action": "stop",
+            "target": f"VMID {vmid}",
+            "node": node,
+            "status": "error",
+            "detail": (
+                f"VMID {vmid} existiert weder als QEMU-VM noch als LXC-Container "
+                f"auf Node '{node}'."
+            ),
+        }
+    if target_type == "qemu":
+        target_label = f"VM {vmid}"
+        api_call = proxmox.nodes(node).qemu(vmid).status.stop.post
+    else:
+        target_label = f"CT {vmid}"
+        api_call = proxmox.nodes(node).lxc(vmid).status.stop.post
+    try:
+        api_call()
+        return {
+            "action": "stop",
+            "target": target_label,
+            "target_type": target_type,
+            "node": node,
+            "status": "success",
+            "detail": f"{target_label} (Node '{node}') wird heruntergefahren.",
+        }
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+        return {
+            "action": "stop",
+            "target": target_label,
+            "target_type": target_type,
+            "node": node,
+            "status": "error",
+            "detail": str(e),
+        }
 
 
 @tool

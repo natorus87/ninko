@@ -23,6 +23,9 @@ from .tools import (
     reboot_vm,
     reset_vm,
     resume_vm,
+    smart_reboot,
+    smart_start,
+    smart_stop,
     start_container,
     start_vm,
     stop_container,
@@ -49,9 +52,14 @@ Tool execution rules:
   - "Which IP address does node X have?" → call `get_node_ip_addresses`.
   - "Which IP address does VM/CT Y have?" → call `get_vm_ip_addresses`.
   - "Show all Proxmox IP addresses" → call `list_node_ip_addresses` and `list_vm_ip_addresses`.
-  - "Reboot/restart VM with VMID X" → call `reboot_vm(node=<node>, vmid=X)`. If you do not know the node, look it up first via `list_all_vms` or `get_vm_status`.
-  - "Start/stop VM with VMID X" → call `start_vm` / `stop_vm`. Use `stop_vm` for graceful shutdown; use `reset_vm` only if the user explicitly asks for a hard reset.
-  - "Reboot/start/stop container with VMID X" → call `reboot_container` / `start_container` / `stop_container`.
+  - **Reboot/start/stop when you are NOT sure whether VMID X is a QEMU VM or LXC container:**
+    → ALWAYS use `smart_reboot` / `smart_start` / `smart_stop`. These tools detect
+    the target type automatically and pick the correct Proxmox API endpoint.
+    Calling `reboot_vm` on an LXC or `reboot_container` on a QEMU will fail
+    with a 500 error.
+  - "Reboot/restart VM with VMID X (known QEMU)" → call `reboot_vm(node=<node>, vmid=X)`. If you do not know the node, look it up first via `list_all_vms` or `get_vm_status`.
+  - "Start/stop VM with VMID X (known QEMU)" → call `start_vm` / `stop_vm`. Use `stop_vm` for graceful shutdown; use `reset_vm` only if the user explicitly asks for a hard reset.
+  - "Reboot/start/stop container with VMID X (known LXC)" → call `reboot_container` / `start_container` / `stop_container`.
   - "Hard reset VM with VMID X" → call `reset_vm` (cuts power — may cause data loss; warn the user).
   - "Suspend/resume VM with VMID X" → call `suspend_vm` / `resume_vm`.
 
@@ -188,6 +196,9 @@ class ProxmoxAgent(BaseAgent):
                 start_container,
                 stop_container,
                 reboot_container,
+                smart_start,
+                smart_stop,
+                smart_reboot,
                 get_recent_tasks,
                 get_vm_config,
             ],

@@ -43,9 +43,18 @@ async def check_proxmox_health() -> dict:
             token_secret = await vault.get_secret("PROXMOX_TOKEN_SECRET")
             if not token_secret:
                 return {"status": "error", "detail": "PROXMOX_TOKEN_SECRET not found in Vault"}
-            proxmox = ProxmoxAPI(host, user=user, token_name=token_id, token_value=token_secret, verify_ssl=verify_ssl)
+            proxmox = ProxmoxAPI(
+                host,
+                user=user,
+                token_name=token_id,
+                token_value=token_secret,
+                verify_ssl=verify_ssl,
+            )
             version = proxmox.version.get()
-            return {"status": "ok", "detail": f"Proxmox VE {version.get('version', '?')} reachable (Env)"}
+            return {
+                "status": "ok",
+                "detail": f"Proxmox VE {version.get('version', '?')} reachable (Env)",
+            }
 
         # Connection-based health check
         vault = get_vault()
@@ -67,10 +76,20 @@ async def check_proxmox_health() -> dict:
             return {"status": "error", "detail": f"No token credentials for '{conn.name}'"}
 
         host_addr = host.replace("https://", "").replace("http://", "").split(":")[0]
-        proxmox = ProxmoxAPI(host_addr, port=8006, user=base_user, token_name=token_id, token_value=token_secret, verify_ssl=verify_ssl)
+        proxmox = ProxmoxAPI(
+            host_addr,
+            port=8006,
+            user=base_user,
+            token_name=token_id,
+            token_value=token_secret,
+            verify_ssl=verify_ssl,
+        )
         version = proxmox.version.get()
 
-        return {"status": "ok", "detail": f"Proxmox VE {version.get('version', '?')} reachable ({conn.name})"}
+        return {
+            "status": "ok",
+            "detail": f"Proxmox VE {version.get('version', '?')} reachable ({conn.name})",
+        }
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": f"Proxmox not reachable: {exc}"}
 
@@ -80,10 +99,11 @@ module_manifest = ModuleManifest(
     display_name="Proxmox",
     description=(
         "Proxmox VE / PVE virtualization: virtual machines (VMs), LXC containers, "
-        "cluster nodes, snapshots, backups. Diagnose hung or stuck VMs and "
-        "dev environments."
+        "cluster nodes, snapshots, backups, and VM/LXC power management "
+        "(start, stop, reboot/restart/neustart, reset). Diagnose hung or stuck "
+        "VMs and dev environments."
     ),
-    version="1.1.5",
+    version="1.1.6",
     author="Ninko Team",
     enabled_by_default=True,
     env_prefix="PROXMOX_",
@@ -93,8 +113,26 @@ module_manifest = ModuleManifest(
         "vm", "virtuell", "proxmox", "promox", "proxmox status",
         "proxmox node", "pve", "pve node", "lxc", "virtual machine",
         "snapshot", "hängt", "aufgehangen", "entwicklungsumgebung",
+        "neustart", "neustarten", "neu starten", "restart", "reboot",
+        "start vm", "stop vm", "vm starten", "vm stoppen",
+        "starte vm", "stoppe vm", "vm herunterfahren",
+        "vm reset", "vm zurücksetzen", "vm zuruecksetzen",
+        "container starten", "starte container", "container stoppen",
+        "stoppe container", "container herunterfahren",
+        "container neustart", "container neustarten", "container neu starten",
     ],
     api_prefix="/api/proxmox",
-    dashboard_tab={"id": "proxmox", "label": "Proxmox", "icon": '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>'},
+    dashboard_tab={
+        "id": "proxmox",
+        "label": "Proxmox",
+        "icon": (
+            '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" '
+            'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+            'stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" '
+            'rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" '
+            'rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6">'
+            '</line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>'
+        ),
+    },
     health_check=check_proxmox_health,
 )

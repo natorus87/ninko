@@ -12,6 +12,7 @@ so we don't need to set env vars here.
 """
 from __future__ import annotations
 
+import ast
 import importlib.util
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -26,6 +27,7 @@ assert SPEC is not None
 proxmox_tools = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 SPEC.loader.exec_module(proxmox_tools)
+MANIFEST_PATH = Path(__file__).resolve().parents[1] / "modules_catalog" / "proxmox" / "manifest.py"
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -49,12 +51,9 @@ def _mock_proxmox_chain() -> MagicMock:
 def _post_method(tool_name: str, guest_type: str) -> MagicMock:
     """Return the MagicMock for the relevant .post() endpoint."""
     chain = _mock_proxmox_chain()
-    return getattr(
-        getattr(
-            getattr(chain.nodes("pve-1"), guest_type)(130), "status"
-        ),
-        tool_name.replace("_vm", "").replace("_container", ""),
-    ).post
+    guest = getattr(chain.nodes("pve-1"), guest_type)(130)
+    action_name = tool_name.replace("_vm", "").replace("_container", "")
+    return getattr(guest.status, action_name).post
 
 
 # ── Power-tool endpoint tests ────────────────────────────────────────────────
@@ -252,11 +251,11 @@ POWER_TOOLS = (
 def test_power_tool_is_registered_as_write_system(tool_name: str) -> None:
     """All 9 Proxmox power-tools must be WRITE_SYSTEM tier (→ STATE_CHANGING)."""
     registry = get_tool_registry()
-    tier = registry.tier_of(tool_name)
+    tier = registry.tier_of(tool_name, "proxmox")
     assert tier == ToolTier.WRITE_SYSTEM, (
         f"{tool_name} must be WRITE_SYSTEM tier for safeguard, got {tier}"
     )
-    assert registry.is_readonly(tool_name) is False
+    assert registry.is_readonly(tool_name, "proxmox") is False
     assert tool_name not in registry.readonly_names()
 
 
@@ -276,5 +275,61 @@ def test_readonly_proxmox_tools_remain_readonly() -> None:
         "get_vm_config",
         "get_recent_tasks",
     ):
-        assert registry.is_readonly(name) is True, f"{name} must be read-only"
-        assert registry.tier_of(name) == ToolTier.READONLY
+        assert registry.is_readonly(name, "proxmox") is True, f"{name} must be read-only"
+        assert registry.tier_of(name, "proxmox") == ToolTier.READONLY
+
+
+def test_duplicate_tool_names_resolve_with_module_context() -> None:
+    """Docker and Proxmox both expose container tools; module context must disambiguate."""
+    registry = get_tool_registry()
+
+    assert registry.get("list_containers", "docker").module == "docker"
+    assert registry.get("list_containers", "proxmox").module == "proxmox"
+    assert registry.is_readonly("list_containers", "docker") is True
+    assert registry.is_readonly("list_containers", "proxmox") is True
+
+    assert registry.get("start_container", "docker").module == "docker"
+    assert registry.get("start_container", "proxmox").module == "proxmox"
+    assert registry.tier_of("start_container", "docker") == ToolTier.WRITE_SYSTEM
+    assert registry.tier_of("start_container", "proxmox") == ToolTier.WRITE_SYSTEM
+
+
+def test_proxmox_power_tool_descriptions_include_german_restart_synonyms() -> None:
+    """
+    Regression: Proxmox has more tools than the JIT threshold. German restart
+    requests must still match the reboot tools before the LLM plans the action.
+    """
+    vm_description = str(proxmox_tools.reboot_vm.description).lower()
+    container_description = str(proxmox_tools.reboot_container.description).lower()
+
+    assert "restart" in vm_description
+    assert "neustart" in vm_description
+    assert "neustarten" in vm_description
+    assert "neu starten" in vm_description
+    assert "restart" in container_description
+    assert "neustart" in container_description
+    assert "neustarten" in container_description
+
+
+def test_proxmox_manifest_routes_restart_intents_to_proxmox() -> None:
+    """Regression: generic VM restart wording must be enough to select Proxmox."""
+    tree = ast.parse(MANIFEST_PATH.read_text(encoding="utf-8"))
+    routing_keywords: list[str] = []
+    description = ""
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if getattr(node.func, "id", "") != "ModuleManifest":
+            continue
+        for keyword in node.keywords:
+            if keyword.arg == "routing_keywords":
+                routing_keywords = ast.literal_eval(keyword.value)
+            if keyword.arg == "description":
+                description = ast.literal_eval(keyword.value)
+
+    assert "neustart" in routing_keywords
+    assert "neustarten" in routing_keywords
+    assert "restart" in routing_keywords
+    assert "reboot" in routing_keywords
+    assert "power management" in description.lower()
