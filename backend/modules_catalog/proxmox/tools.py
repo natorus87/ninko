@@ -9,8 +9,22 @@ import logging
 from ipaddress import ip_address, ip_network
 
 from langchain_core.tools import tool
+from proxmoxer.core import ResourceException
 
 logger = logging.getLogger("ninko.modules.proxmox.tools")
+
+# Proxmox-API wirft ResourceException bei HTTP-Fehlern (404 für falsche
+# VMID, 401 für ungültige Tokens, 500 für Server-Fehler). Wir fangen sie
+# zusammen mit den üblichen Python-Exceptions ab, damit der LLM-Agent
+# nicht durch unbehandelte Tool-Exceptions crasht.
+_PROXMOX_EXCEPTIONS = (
+    RuntimeError,
+    ValueError,
+    TypeError,
+    KeyError,
+    OSError,
+    ResourceException,
+)
 
 
 def _warn_if_insecure_verify(source: str, verify_ssl: bool) -> None:
@@ -215,7 +229,7 @@ async def get_nodes(connection_id: str = "") -> list[dict]:
             mem_total = mem_info.get("total", 0)
             mem_used = mem_info.get("used", 0)
             mem_usage = round(mem_used / max(mem_total, 1) * 100, 1)
-        except (RuntimeError, ValueError, TypeError, KeyError, OSError):
+        except _PROXMOX_EXCEPTIONS:
             cpu_usage = 0
             mem_total = 0
             mem_used = 0
@@ -291,7 +305,7 @@ async def list_node_ip_addresses(connection_id: str = "") -> list[dict]:
                     {"node": node, "connection_id": connection_id}
                 )
             )
-        except (RuntimeError, ValueError, TypeError, KeyError, OSError) as exc:
+        except _PROXMOX_EXCEPTIONS as exc:
             logger.warning("Failed to read node IP addresses on %s: %s", node, exc)
     return results
 
@@ -320,7 +334,7 @@ async def list_all_vms(connection_id: str = "") -> list[dict]:
                     "mem_used": vm.get("mem", 0),
                     "uptime": vm.get("uptime", 0),
                 })
-        except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+        except _PROXMOX_EXCEPTIONS as e:
             logger.warning("Failed to read VMs on %s: %s", node, e)
 
         # LXC Container
@@ -338,7 +352,7 @@ async def list_all_vms(connection_id: str = "") -> list[dict]:
                     "mem_used": ct.get("mem", 0),
                     "uptime": ct.get("uptime", 0),
                 })
-        except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+        except _PROXMOX_EXCEPTIONS as e:
             logger.warning("Failed to read containers on %s: %s", node, e)
 
     return sorted(all_vms, key=lambda x: x["vmid"])
@@ -385,7 +399,7 @@ async def get_vm_status(node: str, vmid: int, connection_id: str = "") -> dict:
             "net_out": status.get("netout", 0),
             "uptime": status.get("uptime", 0),
         }
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError):
+    except _PROXMOX_EXCEPTIONS:
         # Maybe it's an LXC container
         status = proxmox.nodes(node).lxc(vmid).status.current.get()
         return {
@@ -408,7 +422,7 @@ async def get_vm_ip_addresses(node: str, vmid: int, connection_id: str = "") -> 
     try:
         status = proxmox.nodes(node).qemu(vmid).status.current.get()
         config = proxmox.nodes(node).qemu(vmid).config.get()
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as qemu_exc:
+    except _PROXMOX_EXCEPTIONS as qemu_exc:
         return await _get_lxc_ip_addresses(proxmox, node, vmid, qemu_exc)
 
     try:
@@ -429,7 +443,7 @@ async def get_vm_ip_addresses(node: str, vmid: int, connection_id: str = "") -> 
             "source": "qemu_guest_agent",
             "note": "" if ips else "No IPs reported by the QEMU guest agent.",
         }
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as agent_exc:
+    except _PROXMOX_EXCEPTIONS as agent_exc:
         ips = _parse_proxmox_net_config(config)
         return {
             "vmid": vmid,
@@ -450,7 +464,7 @@ async def _get_lxc_ip_addresses(proxmox: object, node: str, vmid: int, qemu_exc:
     try:
         status = proxmox.nodes(node).lxc(vmid).status.current.get()
         config = proxmox.nodes(node).lxc(vmid).config.get()
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as lxc_exc:
+    except _PROXMOX_EXCEPTIONS as lxc_exc:
         return {
             "vmid": vmid,
             "node": node,
@@ -465,7 +479,7 @@ async def _get_lxc_ip_addresses(proxmox: object, node: str, vmid: int, qemu_exc:
         interfaces = proxmox.nodes(node).lxc(vmid).interfaces.get()
         ips = _extract_lxc_interface_ips(interfaces)
         source = "lxc_interfaces"
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError):
+    except _PROXMOX_EXCEPTIONS:
         ips = []
         source = "lxc_config"
 
@@ -501,7 +515,7 @@ async def list_vm_ip_addresses(connection_id: str = "") -> list[dict]:
                     }
                 )
             )
-        except (RuntimeError, ValueError, TypeError, KeyError, OSError) as exc:
+        except _PROXMOX_EXCEPTIONS as exc:
             logger.warning(
                 "Failed to read IP addresses for %s %s on %s: %s",
                 vm.get("type", "guest"),
@@ -525,7 +539,7 @@ async def start_vm(node: str, vmid: int, connection_id: str = "") -> dict:
             "status": "success",
             "detail": f"VM {vmid} on node '{node}' is being started.",
         }
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+    except _PROXMOX_EXCEPTIONS as e:
         return {
             "action": "start",
             "target": f"VM {vmid}",
@@ -551,7 +565,7 @@ async def stop_vm(node: str, vmid: int, connection_id: str = "") -> dict:
             "status": "success",
             "detail": f"VM {vmid} is being stopped.",
         }
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+    except _PROXMOX_EXCEPTIONS as e:
         return {
             "action": "stop",
             "target": f"VM {vmid}",
@@ -577,7 +591,7 @@ async def reboot_vm(node: str, vmid: int, connection_id: str = "") -> dict:
             "status": "success",
             "detail": f"VM {vmid} is being restarted.",
         }
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+    except _PROXMOX_EXCEPTIONS as e:
         return {
             "action": "reboot",
             "target": f"VM {vmid}",
@@ -604,7 +618,7 @@ async def reset_vm(node: str, vmid: int, connection_id: str = "") -> dict:
             "status": "success",
             "detail": f"VM {vmid} is being reset.",
         }
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+    except _PROXMOX_EXCEPTIONS as e:
         return {
             "action": "reset",
             "target": f"VM {vmid}",
@@ -627,7 +641,7 @@ async def suspend_vm(node: str, vmid: int, connection_id: str = "") -> dict:
             "status": "success",
             "detail": f"VM {vmid} has been suspended.",
         }
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+    except _PROXMOX_EXCEPTIONS as e:
         return {
             "action": "suspend",
             "target": f"VM {vmid}",
@@ -650,7 +664,7 @@ async def resume_vm(node: str, vmid: int, connection_id: str = "") -> dict:
             "status": "success",
             "detail": f"VM {vmid} has been resumed.",
         }
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+    except _PROXMOX_EXCEPTIONS as e:
         return {
             "action": "resume",
             "target": f"VM {vmid}",
@@ -696,7 +710,7 @@ async def start_container(node: str, vmid: int, connection_id: str = "") -> dict
             "status": "success",
             "detail": f"Container {vmid} is being started.",
         }
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+    except _PROXMOX_EXCEPTIONS as e:
         return {
             "action": "start",
             "target": f"CT {vmid}",
@@ -722,7 +736,7 @@ async def stop_container(node: str, vmid: int, connection_id: str = "") -> dict:
             "status": "success",
             "detail": f"Container {vmid} is being stopped.",
         }
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+    except _PROXMOX_EXCEPTIONS as e:
         return {
             "action": "stop",
             "target": f"CT {vmid}",
@@ -748,7 +762,7 @@ async def reboot_container(node: str, vmid: int, connection_id: str = "") -> dic
             "status": "success",
             "detail": f"Container {vmid} is being restarted.",
         }
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+    except _PROXMOX_EXCEPTIONS as e:
         return {
             "action": "reboot",
             "target": f"CT {vmid}",
@@ -772,14 +786,14 @@ async def _detect_target_type(proxmox: object, node: str, vmid: int) -> str | No
         for r in resources:
             if int(r.get("vmid", -1)) == vmid and r.get("node") == node:
                 return "qemu"
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, AttributeError):
+    except (*_PROXMOX_EXCEPTIONS, AttributeError):
         pass
     try:
         resources = proxmox.cluster.resources.get(type="lxc")
         for r in resources:
             if int(r.get("vmid", -1)) == vmid and r.get("node") == node:
                 return "lxc"
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, AttributeError):
+    except (*_PROXMOX_EXCEPTIONS, AttributeError):
         pass
 
     # Fallback: direkter Endpoint-Probe. Wir versuchen zuerst qemu; wenn
@@ -788,12 +802,12 @@ async def _detect_target_type(proxmox: object, node: str, vmid: int) -> str | No
     try:
         proxmox.nodes(node).qemu(vmid).status.current.get()
         return "qemu"
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, AttributeError):
+    except (*_PROXMOX_EXCEPTIONS, AttributeError):
         pass
     try:
         proxmox.nodes(node).lxc(vmid).status.current.get()
         return "lxc"
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, AttributeError):
+    except (*_PROXMOX_EXCEPTIONS, AttributeError):
         return None
 
 
@@ -834,7 +848,7 @@ async def smart_reboot(node: str, vmid: int, connection_id: str = "") -> dict:
             "status": "success",
             "detail": f"{target_label} (Node '{node}') wird neugestartet.",
         }
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+    except _PROXMOX_EXCEPTIONS as e:
         return {
             "action": "reboot",
             "target": target_label,
@@ -877,7 +891,7 @@ async def smart_start(node: str, vmid: int, connection_id: str = "") -> dict:
             "status": "success",
             "detail": f"{target_label} (Node '{node}') wird gestartet.",
         }
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+    except _PROXMOX_EXCEPTIONS as e:
         return {
             "action": "start",
             "target": target_label,
@@ -920,7 +934,7 @@ async def smart_stop(node: str, vmid: int, connection_id: str = "") -> dict:
             "status": "success",
             "detail": f"{target_label} (Node '{node}') wird heruntergefahren.",
         }
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+    except _PROXMOX_EXCEPTIONS as e:
         return {
             "action": "stop",
             "target": target_label,
@@ -977,7 +991,7 @@ async def get_vm_config(node: str, vmid: int, connection_id: str = "") -> dict:
             "networks": networks,
             "ip_hints": _parse_proxmox_net_config(config),
         }
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError):
+    except _PROXMOX_EXCEPTIONS:
         config = proxmox.nodes(node).lxc(vmid).config.get()
         networks = {
             key: value
