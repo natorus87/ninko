@@ -33,6 +33,71 @@ from core.safeguard import ActionCategory, is_bot_confirmation
 from core.routing_telemetry import get_routing_telemetry
 
 logger = logging.getLogger("ninko.api.chat")
+
+
+# Multilinguale Hints für Confirm/Cancel-Erkennung. Wird im Web-Chat
+# Fallback genutzt, wenn is_bot_confirmation() (für Bot-Channels, max.
+# 3 Wörter) nicht greift — z.B. "Ja, starte die VM neu" oder
+# "Oui, redémarre USR-VM-05". Deckt alle 10 Ninko-Sprachen ab.
+_MULTILINGUAL_CONFIRM_HINTS: tuple[str, ...] = (
+    # Deutsch
+    "ja", "jo", "jep", "jup", "jawohl", "klar", "natürlich",
+    "bestätig", "starte", "start", "neustart", "neustarten",
+    "neu starten", "restart", "reboot", "ausführen", "durchführen",
+    "weiter", "los", "mach",
+    # English
+    "yes", "yep", "yup", "y", "sure", "absolutely", "confirm",
+    "proceed", "continue", "run", "go", "do it",
+    "restart", "reboot", "start it",
+    # Français
+    "oui", "ouais", "bien sûr", "d'accord", "vas-y", "lance",
+    "redémarre", "redémarrage", "démarre", "exécute", "fais-le",
+    # Español
+    "sí", "claro", "por supuesto", "vale", "adelante",
+    "reinicia", "reiniciar", "arranca", "ejecuta", "hazlo",
+    # Italiano
+    "sì", "certo", "ovviamente", "d'accordo", "vai", "avvia",
+    "riavvia", "riavvio", "esegui", "fallo",
+    # Nederlands
+    "ja", "jawel", "natuurlijk", "akkoord", "doorgaan", "ga",
+    "herstart", "herstarten", "starten", "voer uit", "doe het",
+    # Polski
+    "tak", "jasne", "oczywiście", "zgoda", "dalej", "uruchom",
+    "zrestartuj", "restartuj", "wykonaj", "rób to",
+    # Português
+    "sim", "claro", "com certeza", "concordo", "avançar", "vai",
+    "reiniciar", "reinicia", "executa", "faça",
+    # 日本語
+    "はい", "うん", "もちろん", "お願いします", "どうぞ",
+    "再起動", "リスタート", "実行", "やり直し",
+    # 中文
+    "是", "好", "当然", "确认", "继续", "可以",
+    "重启", "重新启动", "执行", "开始",
+)
+
+_MULTILINGUAL_CANCEL_HINTS: tuple[str, ...] = (
+    # Deutsch
+    "nein", "nicht", "abbrech", "abbruch", "stopp", "halt", "stop",
+    "lass", "lieber nicht", "kein",
+    # English
+    "no", "nope", "cancel", "abort", "stop", "halt", "don't",
+    # Français
+    "non", "annul", "arrêt", "arrête", "stop", "pas",
+    # Español
+    "no", "cancel", "anul", "para", "deten", "alto", "parar",
+    # Italiano
+    "no", "annull", "ferm", "stop", "basta", "non farlo",
+    # Nederlands
+    "nee", "annuleer", "afbrek", "stop", "halt", "niet doen",
+    # Polski
+    "nie", "anuluj", "przerwij", "stop", "zatrzymaj", "nie rób",
+    # Português
+    "não", "cancelar", "anular", "parar", "pare", "interromp",
+    # 日本語
+    "いいえ", "キャンセル", "中止", "停止", "やめて",
+    # 中文
+    "不", "不要", "取消", "中止", "停止", "算了",
+)
 router = APIRouter(prefix="/api/chat", tags=["Chat"])
 
 
@@ -185,21 +250,15 @@ async def _resolve_confirmed_message(
         # Fallback: Wenn eine chat_safeguard-tx pending ist und die User-Antwort
         # wie eine Bestätigung wirkt (z.B. "Ja, starte USR-VM-05 neu"), behandle
         # sie als Confirm-Versuch. Sonst verliert der LLM den Kontext.
-        # Nur triggern wenn der Text confirm-relevante Wörter enthält.
+        # Multilingual abgedeckt für alle 10 Ninko-Sprachen.
         _lower = body.message.strip().lower()
         _has_confirm_word = any(
             w in _lower
-            for w in (
-                "ja", "yes", "ok", "okay", "klar", "bestätig", "starte", "start",
-                "neustart", "restart", "reboot", "führe aus", "ausführen",
-                "durchführen", "weiter", "go", "proceed", "run", "do it",
-            )
+            for w in _MULTILINGUAL_CONFIRM_HINTS
         )
         _has_cancel_word = any(
             w in _lower
-            for w in (
-                "nein", "no", "abbrech", "cancel", "stop", "halt", "nicht",
-            )
+            for w in _MULTILINGUAL_CANCEL_HINTS
         )
         if _has_confirm_word and not _has_cancel_word:
             pending_tx_id_fb = await op_journal.get_pending_for_session(scoped_session_id)

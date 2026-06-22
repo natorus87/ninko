@@ -2101,40 +2101,30 @@ SAFEGUARD_PENDING_KEY = "ninko:safeguard_pending:{session_id}"
 _CONFIRMATION_WORDS: frozenset[str] = frozenset(
     {
         # German
-        "ja",
-        "jo",
-        "jep",
-        "jup",
-        "jawohl",
-        "klar",
-        "natürlich",
-        "bestätige",
-        "bestätigen",
-        "bestätigt",
-        "weiter",
-        "ausführen",
-        "durchführen",
-        "ok",
-        "okay",
+        "ja", "jo", "jep", "jup", "jawohl", "klar", "natürlich",
+        "bestätige", "bestätigen", "bestätigt", "weiter",
+        "ausführen", "durchführen", "ok", "okay",
         # English
-        "yes",
-        "yep",
-        "yup",
-        "y",
-        "sure",
-        "absolutely",
-        "confirm",
-        "confirm:true",
-        "confirm: true",
-        "confirm true",
-        "confirmed",
-        "confirmed:true",
-        "confirmed: true",
-        "confirmed true",
-        "proceed",
-        "continue",
-        "run",
-        "go",
+        "yes", "yep", "yup", "y", "sure", "absolutely",
+        "confirm", "confirm:true", "confirm: true", "confirm true",
+        "confirmed", "confirmed:true", "confirmed: true", "confirmed true",
+        "proceed", "continue", "run", "go",
+        # Français
+        "oui", "ouais", "bien sûr", "d'accord", "vas-y",
+        # Español
+        "sí", "claro", "por supuesto", "vale", "adelante",
+        # Italiano
+        "sì", "certo", "ovviamente", "d'accordo", "vai",
+        # Nederlands (ja ist bereits unter Deutsch)
+        "jawel", "natuurlijk", "akkoord", "doorgaan", "ga",
+        # Polski
+        "tak", "jasne", "oczywiście", "zgoda", "dalej",
+        # Português (claro, vai bereits unter ES/IT)
+        "sim", "com certeza", "concordo", "avançar",
+        # 日本語
+        "はい", "うん", "もちろん", "お願いします", "どうぞ",
+        # 中文
+        "是", "好", "当然", "确认", "继续", "可以",
     }
 )
 
