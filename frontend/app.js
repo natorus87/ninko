@@ -1453,6 +1453,13 @@ const Ninko = {
         this.showTyping();
         this._setChatBusy(true);
 
+        // Snapshot der Identifiers ZUM START des Requests. Wenn der User
+        // während des laufenden Requests auf einen anderen Chat wechselt,
+        // nutzen wir diese gemerkten Werte, damit _saveToHistory nicht in
+        // den falschen Chat speichert (Race-Condition-Bug).
+        const _reqHistoryId = this.currentHistoryId;
+        const _reqSessionId = this.sessionId;
+
         // AbortController für Stop-Funktion
         this._abortController = new AbortController();
 
@@ -1504,7 +1511,7 @@ const Ninko = {
             if (useStreaming && res.ok && res.headers.get('content-type')?.includes('text/event-stream')) {
                 // Status-SSE und Typing-Bubble bleiben absichtlich offen — der
                 // Streaming-Pfad schliesst sie via finalizeBubble() am Ende.
-                await this._streamResponse(text, res);
+                await this._streamResponse(text, res, _reqHistoryId);
                 evtSource?.close();
                 this._abortController = null;
                 this._setChatBusy(false);
@@ -1553,8 +1560,10 @@ const Ninko = {
                     this._updateCtxIndicator(data.context_budget);
                 }
 
-                // Save conversation to localStorage history
-                this._saveToHistory(text, data.response);
+                // Save conversation to localStorage history.
+                // _reqHistoryId ist der Snapshot zum Zeitpunkt des Requests,
+                // um Race-Conditions bei schnellem Chat-Switching zu vermeiden.
+                this._saveToHistory(text, data.response, _reqHistoryId);
             } else {
                 this.addChatMessage('ai', t('chat.errorProcessing'));
             }
@@ -1622,8 +1631,14 @@ const Ninko = {
         if (label) label.textContent = emoji + userMsg.slice(0, 58);
     },
 
-    _saveToHistory(userMsg, aiMsg) {
-        const existing = this.chatHistory.find(h => h.id === this.currentHistoryId);
+    _saveToHistory(userMsg, aiMsg, historyIdOverride = null) {
+        // historyIdOverride: wenn der Caller einen request-lokalen Snapshot
+        // hat (z.B. sendMessage), nutze diesen, um Race-Conditions bei
+        // schnellem Chat-Switching zu vermeiden.
+        const targetId = historyIdOverride !== null
+            ? historyIdOverride
+            : this.currentHistoryId;
+        const existing = this.chatHistory.find(h => h.id === targetId);
         if (existing) {
             existing.messages.push({ role: 'user', text: userMsg }, { role: 'ai', text: aiMsg });
             existing.updatedAt = Date.now();
@@ -3371,7 +3386,7 @@ ${messagesHtml}
         return sanitized.replace(/<a /g, '<a target="_blank" rel="noopener noreferrer" ');
     },
 
-    async _streamResponse(text, res) {
+    async _streamResponse(text, res, historyIdOverride = null) {
         let aiBubble = null, aiTextEl = null, buffer = '', msgId = null, meta = null, done = false;
         let lastRender = 0;
         const COOLDOWN = 40;
@@ -3465,7 +3480,7 @@ ${messagesHtml}
                             if (meta.compacted) { this.addCompactionNotice(); const ctxEl = document.getElementById('ctx-indicator'); if (ctxEl) { ctxEl.classList.remove('ctx-flash'); void ctxEl.offsetWidth; ctxEl.classList.add('ctx-flash'); setTimeout(() => ctxEl.classList.remove('ctx-flash'), 1000); } }
                             if (meta.context_budget) this._updateCtxIndicator(meta.context_budget);
                             if (meta.routing_confidence !== null && meta.routing_confidence < 0.7) this.addChatMeta(`⚠️ Unsicheres Routing (${Math.round(meta.routing_confidence * 100)} % Konfidenz) – Modul-Zuweisung könnte ungenau sein.`);
-                            if (frame.response || buffer) this._saveToHistory(text, frame.response || buffer);
+                            if (frame.response || buffer) this._saveToHistory(text, frame.response || buffer, historyIdOverride);
                             break;
                         case 'cancelled':
                             done = true;

@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ChatMessage(BaseModel):
@@ -102,12 +102,33 @@ class SessionMessagesResponse(BaseModel):
 
 
 class HistoryMessage(BaseModel):
-    """Eine einzelne Nachricht in der Chat-History (PUT /api/chat/history)."""
+    """Eine einzelne Nachricht in der Chat-History (PUT /api/chat/history).
 
-    model_config = {"extra": "forbid"}
+    Akzeptiert sowohl ``content`` (kanonisch) als auch ``text`` (Frontend-Alias),
+    weil das Frontend beide Schemata parallel nutzt. Bei ``text`` wird der Wert
+    intern als ``content`` normalisiert, damit nachgelagerte Komponenten nur
+    ein Feld prüfen müssen.
+
+    Ebenso wird ``role="ai"`` (Frontend-Alias) zu ``role="assistant"`` (kanonisch).
+    """
+
+    model_config = {"extra": "ignore"}
 
     role: Literal["user", "assistant"]
-    content: str = Field(..., max_length=32_768)
+    content: str = Field(default="", max_length=32_768)
+    text: str | None = Field(default=None, max_length=32_768)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_aliases(cls, data: object) -> object:
+        if isinstance(data, dict):
+            # 'text' (Frontend) -> 'content' (kanonisch), wenn 'content' leer
+            if not data.get("content") and data.get("text"):
+                data["content"] = data["text"]
+            # 'ai' (Frontend) -> 'assistant' (kanonisch)
+            if data.get("role") == "ai":
+                data["role"] = "assistant"
+        return data
 
 
 class HistoryUpdateRequest(BaseModel):
@@ -125,15 +146,18 @@ class UiHistoryEntry(BaseModel):
     """Persistenter UI-History-Eintrag (POST /api/chat/ui-history).
 
     Felder mit ``Optional[...]`` sind optional, weil das Frontend je nach
-    Conversation-Typ unterschiedliche Felder sendet. ``extra="forbid"``
-    fängt Schema-Drift früh ab (z. B. wenn das Frontend neue Felder einführt
-    ohne Server-Migration).
+    Conversation-Typ unterschiedliche Felder sendet. ``extra="ignore"``
+    akzeptiert zusätzliche Felder wie ``sessionId`` (vom Frontend gesendet),
+    damit Schema-Drift nicht 422-Fehler verursacht.
     """
 
-    model_config = {"extra": "forbid"}
+    model_config = {"extra": "ignore"}
 
     id: str = Field(..., min_length=1, max_length=128)
     title: str = Field(default="", max_length=512)
     messages: list[HistoryMessage] = Field(default_factory=list)
     createdAt: float = 0.0
     updatedAt: float = 0.0
+    # Optional: vom Frontend gesendete Backend-Session-ID. Wird in Redis
+    # mitgespeichert, ist aber für die UI-Persistenz nicht zwingend nötig.
+    sessionId: str | None = Field(default=None, max_length=256)
