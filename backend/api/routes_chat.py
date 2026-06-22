@@ -182,6 +182,34 @@ async def _resolve_confirmed_message(
         return body.message, True, None, None
 
     if not is_bot_confirmation(body.message):
+        # Fallback: Wenn eine chat_safeguard-tx pending ist und die User-Antwort
+        # wie eine Bestätigung wirkt (z.B. "Ja, starte USR-VM-05 neu"), behandle
+        # sie als Confirm-Versuch. Sonst verliert der LLM den Kontext.
+        # Nur triggern wenn der Text confirm-relevante Wörter enthält.
+        _lower = body.message.strip().lower()
+        _has_confirm_word = any(
+            w in _lower
+            for w in (
+                "ja", "yes", "ok", "okay", "klar", "bestätig", "starte", "start",
+                "neustart", "restart", "reboot", "führe aus", "ausführen",
+                "durchführen", "weiter", "go", "proceed", "run", "do it",
+            )
+        )
+        _has_cancel_word = any(
+            w in _lower
+            for w in (
+                "nein", "no", "abbrech", "cancel", "stop", "halt", "nicht",
+            )
+        )
+        if _has_confirm_word and not _has_cancel_word:
+            pending_tx_id_fb = await op_journal.get_pending_for_session(scoped_session_id)
+            if pending_tx_id_fb:
+                try:
+                    tx = await op_journal.get(pending_tx_id_fb)
+                    if tx.get("source") == "chat_safeguard" and tx.get("text"):
+                        return tx["text"], True, pending_tx_id_fb, None
+                except _OP_JOURNAL_EXCEPTIONS as exc:
+                    logger.warning("Pending SafeGuard fallback lookup failed: %s", exc)
         return body.message, False, None, None
 
     tool_pending_raw = await redis.connection.get(
