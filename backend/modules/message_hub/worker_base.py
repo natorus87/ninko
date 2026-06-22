@@ -184,7 +184,7 @@ class ChannelWorker(ABC):
             history = await redis.get_chat_history(route.session_id)
 
             full_text = f"{context_prefix}\n{text}".strip() if context_prefix else text
-            response_text, _, did_compact = await orchestrator.route(
+            response_text, _, did_compact, route_meta = await orchestrator.route(
                 message=full_text,
                 chat_history=history,
                 session_id=route.session_id,
@@ -198,8 +198,8 @@ class ChannelWorker(ABC):
                 session_id=route.session_id, role="assistant", content=response_text
             )
 
-            if did_compact and hasattr(orchestrator, "get_last_compaction_summary"):
-                summary = orchestrator.get_last_compaction_summary()
+            if did_compact:
+                summary = (route_meta or {}).get("compaction_summary")
                 await redis.store_chat_message(
                     session_id=route.session_id,
                     role="system_compaction",

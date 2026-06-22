@@ -16,6 +16,7 @@ Beispiel:
 from __future__ import annotations
 
 import logging
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,6 +25,7 @@ import httpx
 
 logger = logging.getLogger("ninko.core.tts.voices")
 
+_VOICE_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 _VOICE_DOWNLOAD_EXCEPTIONS = (
     httpx.HTTPError,
     OSError,
@@ -31,6 +33,23 @@ _VOICE_DOWNLOAD_EXCEPTIONS = (
     TypeError,
     ValueError,
 )
+
+
+def _safe_voice_path(voices_dir: Path, lang: str, voice: str) -> Path:
+    """Baut einen sicheren Pfad zu <voices_dir>/<lang>/<voice>.
+
+    Wirft ValueError bei ungültigen Namen oder Path-Traversal-Versuchen.
+    """
+    if not isinstance(lang, str) or not _VOICE_NAME_RE.match(lang):
+        raise ValueError(f"ungültiger Sprachcode: {lang!r}")
+    if not isinstance(voice, str) or not _VOICE_NAME_RE.match(voice):
+        raise ValueError(f"ungültiger Stimmenname: {voice!r}")
+    base = Path(voices_dir).resolve()
+    target = (base / lang / voice).resolve()
+    if not target.is_relative_to(base):
+        raise ValueError(f"Pfad außerhalb von voices_dir: {target}")
+    return target
+
 
 _HUGGINGFACE_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
 _HUGGINGFACE_TREE_API = "https://huggingface.co/api/models/rhasspy/piper-voices/tree/main"
@@ -98,8 +117,9 @@ class VoiceManager:
 
         Raises:
             FileNotFoundError: Stimme nicht gefunden oder .onnx.json fehlt.
+            ValueError: ungültiger Sprach- oder Stimmenname.
         """
-        voice_dir = self.voices_dir / lang / voice
+        voice_dir = _safe_voice_path(self.voices_dir, lang, voice)
         if not voice_dir.exists():
             available = self.list_languages()
             raise FileNotFoundError(
@@ -135,7 +155,7 @@ class VoiceManager:
         Returns:
             True wenn erfolgreich heruntergeladen.
         """
-        voice_dir = self.voices_dir / lang / voice
+        voice_dir = _safe_voice_path(self.voices_dir, lang, voice)
         voice_dir.mkdir(parents=True, exist_ok=True)
 
         lang_short = lang[:2].lower()

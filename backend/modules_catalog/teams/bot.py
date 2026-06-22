@@ -370,7 +370,7 @@ async def handle_teams_turn(app: FastAPI, activity: dict[str, Any]) -> None:
             lang_hint = f"[Erkannte Sprache: {detected_lang}] "
         routed_text = f"{lang_hint}{clean_text}"
 
-        response_text, module_used, _ = await orchestrator.route(
+        response_text, module_used, _, _ = await orchestrator.route(
             message=routed_text,
             chat_history=history,
             session_id=session_id,

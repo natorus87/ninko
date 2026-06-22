@@ -1030,6 +1030,7 @@ class BaseAgent:
             for tool_call in last_ai.tool_calls:
                 tool_name = tool_call["name"]
                 tool_args = tool_call.get("args", {})
+
                 if _global_safeguard is None or not _global_safeguard.enabled:
                     logger.warning(
                         "[Safeguard] Instanz während Lauf verloren/deaktiviert "
@@ -1040,12 +1041,30 @@ class BaseAgent:
                     dangerous_call = None
                     break
 
+                iter_confirmed = confirmed
+                if iter_confirmed:
+                    try:
+                        from core.redis_client import get_redis as _get_redis_scoped
+
+                        _redis_scoped = _get_redis_scoped()
+                        _pending_raw = await _redis_scoped.connection.get(
+                            f"ninko:safeguard_tool_pending:{session_id}"
+                        )
+                        if _pending_raw:
+                            _pending = json.loads(_pending_raw)
+                            if _pending.get("tool_name") != tool_name:
+                                iter_confirmed = False
+                        else:
+                            iter_confirmed = False
+                    except Exception:
+                        iter_confirmed = False
+
                 sg_result = await _global_safeguard.check_tool_call(
                     tool_name,
                     tool_args,
                     agent_id=self.name,
                     session_id=session_id,
-                    confirmed=confirmed,
+                    confirmed=iter_confirmed,
                 )
                 if sg_result.requires_confirmation:
                     dangerous_call = (tool_name, tool_args, sg_result)

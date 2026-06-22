@@ -1451,7 +1451,6 @@ class SafeguardMiddleware:
             or lower.endswith("?")
         ) and not _contains_write_or_destructive_intent(lower):
             return {
-                "requires_confirmation": False,
                 "category": ActionCategory.SAFE,
                 "rationale": "Simple question pattern detected (safe).",
                 "path": "prefilter_short_safe",
@@ -1483,7 +1482,6 @@ class SafeguardMiddleware:
             kw in lower for kw in search_keywords
         ) and not _contains_write_or_destructive_intent(lower):
             return {
-                "requires_confirmation": False,
                 "category": ActionCategory.SAFE,
                 "rationale": "Web search intent detected (safe).",
                 "path": "prefilter_short_safe",
@@ -1524,7 +1522,6 @@ class SafeguardMiddleware:
             for pat in destructive_words
         ):
             return {
-                "requires_confirmation": True,
                 "category": ActionCategory.DESTRUCTIVE,
                 "rationale": "Destructive action detected (pre-filter short).",
                 "path": "prefilter_short_block",
@@ -1550,7 +1547,6 @@ class SafeguardMiddleware:
         )
         if any(pat in lower for pat in state_patterns):
             return {
-                "requires_confirmation": True,
                 "category": ActionCategory.STATE_CHANGING,
                 "rationale": "State-changing action detected (pre-filter short).",
                 "path": "prefilter_short_block",
@@ -1602,17 +1598,55 @@ class SafeguardMiddleware:
         # Stage 1.5 — Ultra-fast pre-filter for very short messages (<100 chars)
         # Reduces latency by ~40-50% for common short queries
         if len(user_input) < 100:
+            if profile.detect_prompt_injection:
+                inj = _check_injection_prefilter(user_input)
+                if inj is not None:
+                    req_conf = (
+                        ActionCategory.PROMPT_INJECTION.value
+                        in profile.confirm_categories
+                    )
+                    latency = (time.monotonic() - t0) * 1000
+                    result = SafeguardResult(
+                        requires_confirmation=req_conf,
+                        category=ActionCategory.PROMPT_INJECTION,
+                        rationale=inj.rationale,
+                        profile_id=profile.id,
+                        latency_ms=latency,
+                        path_used="injection_prefilter",
+                    )
+                    result = await self._apply_auto_mode(user_input, result, profile)
+                    await self._audit_log(
+                        action="user_message",
+                        category=result.category,
+                        text=user_input,
+                        session_id=session_id,
+                        agent_id=agent_id,
+                        outcome="auto_approved"
+                        if result.auto_decided
+                        else (
+                            "confirmed"
+                            if not result.requires_confirmation
+                            else "pending"
+                        ),
+                        rationale=result.rationale,
+                        profile_id=profile.id,
+                    )
+                    await self._record_latency(latency, "injection_prefilter")
+                    return result
             short_result = self._fast_prefilter_short(user_input)
             if short_result is not None:
                 latency = (time.monotonic() - t0) * 1000
+                category = short_result["category"]
+                req_conf = category.value in profile.confirm_categories
                 result = SafeguardResult(
-                    requires_confirmation=short_result["requires_confirmation"],
-                    category=short_result["category"],
+                    requires_confirmation=req_conf,
+                    category=category,
                     rationale=short_result["rationale"],
                     profile_id=profile.id,
                     latency_ms=latency,
                     path_used=short_result["path"],
                 )
+                result = await self._apply_auto_mode(user_input, result, profile)
                 if result.category != ActionCategory.SAFE:
                     await self._audit_log(
                         action="user_message",
@@ -1620,9 +1654,13 @@ class SafeguardMiddleware:
                         text=user_input,
                         session_id=session_id,
                         agent_id=agent_id,
-                        outcome="confirmed"
-                        if not result.requires_confirmation
-                        else "pending",
+                        outcome="auto_approved"
+                        if result.auto_decided
+                        else (
+                            "confirmed"
+                            if not result.requires_confirmation
+                            else "pending"
+                        ),
                         rationale=result.rationale,
                         profile_id=profile.id,
                     )
@@ -1667,6 +1705,43 @@ class SafeguardMiddleware:
                 return result
 
             if pre.category == ActionCategory.SAFE:
+                if profile.detect_prompt_injection:
+                    inj = _check_injection_prefilter(user_input)
+                    if inj is not None:
+                        req_conf = (
+                            ActionCategory.PROMPT_INJECTION.value
+                            in profile.confirm_categories
+                        )
+                        latency = (time.monotonic() - t0) * 1000
+                        result = SafeguardResult(
+                            requires_confirmation=req_conf,
+                            category=ActionCategory.PROMPT_INJECTION,
+                            rationale=inj.rationale,
+                            profile_id=profile.id,
+                            latency_ms=latency,
+                            path_used="injection_prefilter",
+                        )
+                        result = await self._apply_auto_mode(
+                            user_input, result, profile
+                        )
+                        await self._audit_log(
+                            action="user_message",
+                            category=result.category,
+                            text=user_input,
+                            session_id=session_id,
+                            agent_id=agent_id,
+                            outcome="auto_approved"
+                            if result.auto_decided
+                            else (
+                                "confirmed"
+                                if not result.requires_confirmation
+                                else "pending"
+                            ),
+                            rationale=result.rationale,
+                            profile_id=profile.id,
+                        )
+                        await self._record_latency(latency, "injection_prefilter")
+                        return result
                 # Safe prefilter hit — no LLM needed
                 latency = (time.monotonic() - t0) * 1000
                 result = SafeguardResult(
@@ -1887,6 +1962,7 @@ class SafeguardMiddleware:
                 profile_id=profile.id,
                 path_used=f"tier_{tier.value.lower()}",
             )
+            result = await self._apply_auto_mode(tool_name, result, profile)
             # Audit: immer loggen wenn Bestätigung nötig ODER COMMUNICATE-Tier
             # (externe Nachrichten müssen immer nachverfolgbar sein, auch ohne req_conf)
             if req_conf or tier == ToolTier.COMMUNICATE:
@@ -2008,7 +2084,7 @@ class SafeguardMiddleware:
             text, result.category, result.rationale, profile
         )
         return SafeguardResult(
-            requires_confirmation=False,
+            requires_confirmation=not allowed,
             category=result.category,
             rationale=reason,
             raw_response=result.raw_response,

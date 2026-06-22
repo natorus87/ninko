@@ -135,7 +135,25 @@ const DataVizTab = {
                     if (format === 'png') {
                         outputDiv.innerHTML = `<img src="${result.data}" alt="${this.escapeHtml(title)}" style="max-width:100%; border-radius: 4px;">`;
                     } else if (format === 'svg') {
-                        outputDiv.innerHTML = `<div style="background: white; padding: 1rem; border-radius: 4px;">${result.data}</div>`;
+                        const wrapper = document.createElement('div');
+                        wrapper.style.background = 'white';
+                        wrapper.style.padding = '1rem';
+                        wrapper.style.borderRadius = '4px';
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(result.data, 'image/svg+xml');
+                        const svgEl = doc.documentElement;
+                        if (svgEl && svgEl.nodeName.toLowerCase() === 'svg') {
+                            const scripts = svgEl.querySelectorAll('script');
+                            scripts.forEach(s => s.remove());
+                            svgEl.querySelectorAll('*').forEach(el => {
+                                Array.from(el.attributes).forEach(attr => {
+                                    if (/^on/i.test(attr.name)) el.removeAttribute(attr.name);
+                                });
+                            });
+                            wrapper.appendChild(document.importNode(svgEl, true));
+                        }
+                        outputDiv.innerHTML = '';
+                        outputDiv.appendChild(wrapper);
                     }
                     this.saveToHistory(title || 'Chart', type, result.data, format);
                     this.refreshStats();

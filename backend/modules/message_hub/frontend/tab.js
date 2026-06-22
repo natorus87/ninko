@@ -1,5 +1,15 @@
 // Message Hub Tab — Vanilla JS (kein ES-Module-Syntax)
 
+function esc(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
+
 const MessageHubTab = {
   _routes: [],
 
@@ -112,22 +122,22 @@ const MessageHubTab = {
       const icon = typeIcons[r.channel_type] || '📡';
       return `
         <tr style="border-bottom: 1px solid var(--border-color); ${!enabled ? 'opacity:0.5;' : ''}">
-          <td style="padding: 0.6rem 0.75rem; font-size: 0.875rem;">${icon} ${r.channel_type}</td>
-          <td style="padding: 0.6rem 0.75rem; font-size: 0.875rem; font-family: monospace;">${r.channel_id}</td>
-          <td style="padding: 0.6rem 0.75rem; font-size: 0.875rem;">${r.label || '—'}</td>
-          <td style="padding: 0.6rem 0.75rem; font-size: 0.8rem; font-family: monospace;">${r.session_id}</td>
+          <td style="padding: 0.6rem 0.75rem; font-size: 0.875rem;">${icon} ${esc(r.channel_type)}</td>
+          <td style="padding: 0.6rem 0.75rem; font-size: 0.875rem; font-family: monospace;">${esc(r.channel_id)}</td>
+          <td style="padding: 0.6rem 0.75rem; font-size: 0.875rem;">${esc(r.label) || '—'}</td>
+          <td style="padding: 0.6rem 0.75rem; font-size: 0.8rem; font-family: monospace;">${esc(r.session_id)}</td>
           <td style="padding: 0.6rem 0.75rem;">
             <span style="font-size:0.75rem; padding:0.2rem 0.5rem; border-radius:3px; background:${capColor}22; color:${capColor}; font-weight:600;">
-              ${r.permission_cap}
+              ${esc(r.permission_cap)}
             </span>
           </td>
           <td style="padding: 0.6rem 0.75rem; text-align:center;">
             <button class="btn btn-outline btn-sm" style="padding:0.2rem 0.5rem; font-size:0.75rem;"
-              onclick="MessageHubTab.toggleRoute('${r.id}', ${!enabled})">
+              onclick="MessageHubTab.toggleRoute('${esc(r.id)}', ${!enabled})">
               ${enabled ? 'Deaktivieren' : 'Aktivieren'}
             </button>
             <button class="btn btn-sm" style="padding:0.2rem 0.5rem; font-size:0.75rem; background:#f4433622; color:#f44336; border:1px solid #f44336; border-radius:4px; margin-left:0.25rem;"
-              onclick="MessageHubTab.deleteRoute('${r.id}', '${r.channel_type}', '${r.channel_id}')">
+              onclick="MessageHubTab.deleteRoute('${esc(r.id)}', '${esc(r.channel_type)}', '${esc(r.channel_id)}')">
               Löschen
             </button>
           </td>

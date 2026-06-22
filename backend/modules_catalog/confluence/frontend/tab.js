@@ -72,7 +72,7 @@
 
                 if (data.connections && data.connections.length > 0) {
                     dropdown.innerHTML = data.connections.map(c =>
-                        '<div class="cl-select-option" data-id="' + c.id + '">' + c.name + '</div>'
+                        '<div class="cl-select-option" data-id="' + esc(c.id) + '">' + esc(c.name) + '</div>'
                     ).join('');
                     dropdown.querySelectorAll('.cl-select-option').forEach(opt => {
                         opt.addEventListener('click', (e) => {

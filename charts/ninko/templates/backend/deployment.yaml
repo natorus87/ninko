@@ -21,6 +21,12 @@ spec:
       {{- if .Values.serviceAccount.create }}
       serviceAccountName: {{ include "ninko.serviceAccountName" . }}
       {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.backend.securityContext.runAsUser | default 1000 }}
+        runAsGroup: {{ .Values.backend.securityContext.runAsGroup | default 1000 }}
+        fsGroup: {{ .Values.backend.securityContext.fsGroup | default 1000 }}
+        fsGroupChangePolicy: OnRootMismatch
       {{- $corsOrigins := .Values.backend.cors.allowOrigins | default "" }}
       {{- if not $corsOrigins }}
       {{- $originList := list "http://localhost:8000" "http://127.0.0.1:8000" }}

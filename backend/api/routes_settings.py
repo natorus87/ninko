@@ -237,6 +237,15 @@ async def set_embed_model(body: dict) -> dict:
     return {"embed_model": model, "status": "saved"}
 
 
+def _sanitize_embed_provider(payload: dict) -> dict:
+    """Entfernt Secrets aus Embed-Provider-Read-Responses."""
+    clean = dict(payload or {})
+    secret = (clean.get("api_key") or "").strip()
+    clean["api_key"] = ""
+    clean["api_key_set"] = bool(secret)
+    return clean
+
+
 @router.get("/llm/embed-provider")
 async def get_embed_provider() -> dict:
     """Embedding-Provider-Konfiguration abrufen."""
@@ -247,18 +256,20 @@ async def get_embed_provider() -> dict:
     if stored:
         raw = stored if isinstance(stored, str) else stored.decode()
         try:
-            return _json.loads(raw)
+            return _sanitize_embed_provider(_json.loads(raw))
         except Exception:
             pass
     # Defaults: kein eigener Provider (Fallback auf LLM-Provider)
     settings = get_settings()
-    return {
-        "use_custom": False,
-        "backend": "lmstudio",
-        "base_url": "",
-        "api_key": "",
-        "model": settings.EMBED_MODEL,
-    }
+    return _sanitize_embed_provider(
+        {
+            "use_custom": False,
+            "backend": "lmstudio",
+            "base_url": "",
+            "api_key": "",
+            "model": settings.EMBED_MODEL,
+        }
+    )
 
 
 @router.put("/llm/embed-provider")
@@ -328,7 +339,7 @@ async def set_embed_provider(body: dict) -> dict:
         "Embedding-Provider geändert: use_custom=%s backend=%s model=%s url=%s",
         use_custom, backend, model, base_url,
     )
-    return {**payload, "status": "saved"}
+    return {**_sanitize_embed_provider(payload), "status": "saved"}
 
 
 def _reconfigure_llm(settings: LlmSettings) -> None:

@@ -112,11 +112,15 @@ def fake_telemetry() -> MagicMock:
 def fake_orchestrator() -> MagicMock:
     """Defaultverhalten: liefert eine einfache Textantwort, kein Compaction."""
     orch = MagicMock()
-    orch._last_routing_confidence = 0.9
-    orch._last_tier_used = 1
-    orch._last_compaction_summary = None
     orch.resume_tool_execution = AsyncMock(return_value=("resumed text", False))
-    orch.route = AsyncMock(return_value=("Hello world response.", "test_module", False))
+    orch.route = AsyncMock(
+        return_value=(
+            "Hello world response.",
+            "test_module",
+            False,
+            {"compaction_summary": None, "routing_confidence": 0.9, "tier_used": 1},
+        )
+    )
     return orch
 
 
@@ -220,7 +224,12 @@ async def test_final_meta_contains_required_fields(
     client: AsyncClient, fake_orchestrator: MagicMock
 ) -> None:
     """`final.meta` enthaelt context_budget, compacted, routing_confidence, safeguard."""
-    fake_orchestrator._last_routing_confidence = 0.42
+    fake_orchestrator.route.return_value = (
+        "Hello world response.",
+        "test_module",
+        False,
+        {"compaction_summary": None, "routing_confidence": 0.42, "tier_used": 1},
+    )
     frames = await _collect_streaming_response(
         client, {"message": "hi", "session_id": "stream-meta"}
     )

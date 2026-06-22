@@ -16,6 +16,7 @@ import hashlib
 import hmac
 import json
 import time
+import uuid
 from typing import Any
 
 from fastapi import Request
@@ -76,6 +77,7 @@ def create_session_token(
         "tid": tenant_id or "default",
         "mods": module_permissions or {},
         "pcr": bool(password_change_required),
+        "jti": uuid.uuid4().hex,
         "iat": now,
         "exp": now + max(1, int(cfg.SESSION_TTL_HOURS)) * 3600,
     }
@@ -110,6 +112,7 @@ def create_api_access_token(
         "role": role,
         "tid": tenant_id or "default",
         "mods": module_permissions or {},
+        "jti": uuid.uuid4().hex,
         "iat": now,
         "exp": now + max(1, int(expires_hours)) * 3600,
     }
@@ -302,6 +305,35 @@ async def is_active_api_token(username: str, raw_token: str) -> bool:
         return False
 
 
+async def is_active_session_user(username: str) -> bool:
+    """
+    Check whether the user backing a session token is still allowed to authenticate.
+
+    Honors the user's ``active`` flag in the RBAC state. This is the synchronous
+    counterpart to the per-token ``revoked`` check and lets the resolver reject
+    tokens when a user has been disabled or downgraded without waiting for
+    ``exp`` (CWE-613).
+    """
+    if not username:
+        return False
+    try:
+        from core.rbac import RBAC_REDIS_KEY
+        from core.redis_client import get_redis
+
+        redis = get_redis()
+        raw = await redis.connection.get(RBAC_REDIS_KEY)
+        if not raw:
+            return False
+        state = json.loads(raw if isinstance(raw, str) else raw.decode("utf-8"))
+        users = state.get("users", {}) if isinstance(state, dict) else {}
+        user = users.get(username, {}) if isinstance(users, dict) else {}
+        if not isinstance(user, dict):
+            return False
+        return bool(user.get("active", True))
+    except Exception:
+        return False
+
+
 def _session_context(session_token: str) -> dict[str, Any] | None:
     payload = _parse_session_token(session_token)
     if not payload:
@@ -368,6 +400,10 @@ async def resolve_request_auth_async(request: Request) -> dict[str, Any] | None:
         key = _extract_key_from_request(request)
         if key:
             auth_ctx = _api_key_context(key)
+            if auth_ctx is not None and str(auth_ctx.get("auth_source", "")) == "api_token":
+                username = str(auth_ctx.get("username", "")).strip()
+                if not await is_active_api_token(username, key):
+                    auth_ctx = None
 
         if auth_ctx is None:
             session_token = _extract_session_from_request(request)
@@ -376,6 +412,10 @@ async def resolve_request_auth_async(request: Request) -> dict[str, Any] | None:
                     auth_ctx = None
                 else:
                     auth_ctx = _session_context(session_token)
+                    if auth_ctx is not None and not await is_active_session_user(
+                        str(auth_ctx.get("username", "")).strip()
+                    ):
+                        auth_ctx = None
 
     setattr(request.state, _REQUEST_AUTH_CACHE_ATTR, auth_ctx)
     setattr(request.state, _REQUEST_AUTH_CACHE_FILLED_ATTR, True)

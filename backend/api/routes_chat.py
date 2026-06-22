@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import AsyncGenerator
@@ -98,6 +99,57 @@ _MULTILINGUAL_CANCEL_HINTS: tuple[str, ...] = (
     # 中文
     "不", "不要", "取消", "中止", "停止", "算了",
 )
+
+
+_STRONG_CONFIRM_WORDS: frozenset[str] = frozenset({
+    "yes", "ja", "jo", "jep", "jup", "jawohl", "klar", "ok", "okay",
+    "bestätige", "bestätig", "confirm", "proceed", "sure", "absolutely",
+    "go", "mach", "los", "yep", "yup", "y", "d'accord", "vas-y", "oui",
+    "claro", "vale", "sì", "certo", "vai", "jawel", "natuurlijk",
+    "akkoord", "doorgaan", "tak", "jasne", "zgoda", "dalej", "sim",
+    "はい", "好", "可以",
+})
+
+_WEAK_CONFIRM_KEYWORDS: frozenset[str] = frozenset({
+    "starte", "start", "restart", "reboot", "neustart", "neustarten",
+    "run", "execute", "do", "doit", "esegui", "hazlo", "执行",
+    "weiter", "continue", "avançar", "continuar",
+})
+
+_CANCEL_WORDS: frozenset[str] = frozenset({
+    "no", "nope", "nein", "abbrech", "cancel", "stop", "halt",
+    "non", "nie", "annuleer", "anuluj", "いいえ", "不要",
+})
+
+_FACTUAL_TERMS: frozenset[str] = frozenset({
+    "policy", "config", "log", "logs", "show", "list", "status",
+    "describe", "what", "why", "how", "explain", "wo", "was", "wie",
+    "warum", "erkläre", "zeig", "liste", "get", "fetch",
+    "retrieve", "hol", "finde",
+})
+
+
+def _is_affirmative_confirmation(message: str) -> bool:
+    if not message:
+        return False
+    text = message.strip()
+    lower = text.lower()
+    tokens = set(re.findall(r"[\w'-]+", lower))
+
+    if tokens & _STRONG_CONFIRM_WORDS:
+        if tokens & _CANCEL_WORDS:
+            return False
+        return True
+
+    if not (tokens & _WEAK_CONFIRM_KEYWORDS):
+        return False
+    if len(text) > 50:
+        return False
+    if tokens & _FACTUAL_TERMS:
+        return False
+    return True
+
+
 router = APIRouter(prefix="/api/chat", tags=["Chat"])
 
 
@@ -244,23 +296,19 @@ async def _resolve_confirmed_message(
                         return body.message, True, pending_tx_id, pipeline_id
             except _OP_JOURNAL_EXCEPTIONS as exc:
                 logger.warning("Pending SafeGuard transaction lookup failed: %s", exc)
-        return body.message, True, None, None
+        raise HTTPException(
+            status_code=400,
+            detail="Ungültige Bestätigung: Keine ausstehende Aktion für diese Session.",
+        )
 
     if not is_bot_confirmation(body.message):
         # Fallback: Wenn eine chat_safeguard-tx pending ist und die User-Antwort
         # wie eine Bestätigung wirkt (z.B. "Ja, starte USR-VM-05 neu"), behandle
         # sie als Confirm-Versuch. Sonst verliert der LLM den Kontext.
-        # Multilingual abgedeckt für alle 10 Ninko-Sprachen.
-        _lower = body.message.strip().lower()
-        _has_confirm_word = any(
-            w in _lower
-            for w in _MULTILINGUAL_CONFIRM_HINTS
-        )
-        _has_cancel_word = any(
-            w in _lower
-            for w in _MULTILINGUAL_CANCEL_HINTS
-        )
-        if _has_confirm_word and not _has_cancel_word:
+        # Strikt wortgrenzenbasiert, um False-Positives bei langen fachlichen
+        # Fragen zu vermeiden (z.B. "What's the restart policy?" darf KEIN
+        # Confirm für "delete pod xyz?" triggern).
+        if _is_affirmative_confirmation(body.message):
             pending_tx_id_fb = await op_journal.get_pending_for_session(scoped_session_id)
             if pending_tx_id_fb:
                 try:
@@ -812,14 +860,15 @@ async def _stream_safe_generate(
                 raise TypeError(
                     f"Expected tuple, got: {type(route_result).__name__}"
                 )
-            if len(route_result) != 3:
+            if len(route_result) != 4:
                 logger.error(
                     "orchestrator.route() returned tuple with wrong length: %d", len(route_result)
                 )
                 raise ValueError(
-                    f"Expected 3 elements, got: {len(route_result)}"
+                    f"Expected 4 elements, got: {len(route_result)}"
                 )
-            response_text, module_used, did_compact = route_result
+            response_text, module_used, did_compact, route_meta = route_result
+            route_meta = route_meta or {}
             await status_bus.emit_trace(
                 scoped_session_id,
                 phase="routing",
@@ -867,7 +916,7 @@ async def _stream_safe_generate(
                 "context_budget": None,
                 "compacted": False,
                 "module_used": module_used,
-                "routing_confidence": getattr(orchestrator, "_last_routing_confidence", None),
+                "routing_confidence": route_meta.get("routing_confidence"),
             }
             yield _stream_frame(
                 "final",
@@ -904,9 +953,7 @@ async def _stream_safe_generate(
         if did_compact:
             if await request.is_disconnected():
                 raise asyncio.CancelledError()
-            summary = None
-            if hasattr(orchestrator, "get_last_compaction_summary"):
-                summary = orchestrator.get_last_compaction_summary()
+            summary = route_meta.get("compaction_summary")
             await redis.store_chat_message(
                 session_id=scoped_session_id,
                 role="system_compaction",
@@ -946,14 +993,14 @@ async def _stream_safe_generate(
             )
             await op_journal.clear_pending_for_session(scoped_session_id)
 
-        routing_confidence = getattr(orchestrator, "_last_routing_confidence", None)
+        routing_confidence = route_meta.get("routing_confidence")
 
         # ── R12: Auto-Routing-Telemetrie ─────────────────────────────────────
         if not body.force_module and module_used and _telemetry:
             await _telemetry.record_auto_routing(
                 session_id=scoped_session_id,
                 module=module_used,
-                tier=getattr(orchestrator, "_last_tier_used", 0),
+                tier=route_meta.get("tier_used", 0),
                 confidence=routing_confidence,
                 message=effective_message,
             )
@@ -1019,6 +1066,8 @@ async def chat(request: Request, body: ChatRequest):
     # Streaming-Pfad: Client wants SSE
     if _wants_chat_stream(request):
         scoped_session_id = _tenant_session_id(request, body.session_id)
+        # IDOR-Mitigation: nur der Owner darf Stream/History anfassen
+        await _check_session_access(request, scoped_session_id)
         status_bus.get_queue(scoped_session_id)  # Ensure queue exists for SSE consumer
         request_id = str(uuid.uuid4())
         message_id = str(uuid.uuid4())
@@ -1048,6 +1097,8 @@ async def chat(request: Request, body: ChatRequest):
     op_journal = get_operation_journal()
     current_tx_id: str | None = None
     scoped_session_id = _tenant_session_id(request, body.session_id)
+    # IDOR-Mitigation: nur der Owner darf History/Ops lesen oder schreiben
+    await _check_session_access(request, scoped_session_id)
     effective_message, confirmed, pending_tx_id, resume_pipeline_id = await _resolve_confirmed_message(
         body, scoped_session_id, redis, op_journal
     )
@@ -1238,13 +1289,14 @@ async def chat(request: Request, body: ChatRequest):
         data={"force_module": body.force_module},
         status="running",
     )
-    response_text, module_used, did_compact = await orchestrator.route(
+    response_text, module_used, did_compact, route_meta = await orchestrator.route(
         message=effective_message,
         chat_history=history,
         session_id=scoped_session_id,
         confirmed=confirmed,
         force_module=body.force_module,
     )
+    route_meta = route_meta or {}
     await status_bus.emit_trace(
         scoped_session_id,
         phase="routing",
@@ -1286,9 +1338,7 @@ async def chat(request: Request, body: ChatRequest):
 
     # Bei Komprimierung: System-Nachricht sichtbar in History ablegen
     if did_compact:
-        summary = None
-        if hasattr(orchestrator, "get_last_compaction_summary"):
-            summary = orchestrator.get_last_compaction_summary()
+        summary = route_meta.get("compaction_summary")
         await redis.store_chat_message(
             session_id=scoped_session_id,
             role="system_compaction",
@@ -1325,14 +1375,14 @@ async def chat(request: Request, body: ChatRequest):
         )
         await op_journal.clear_pending_for_session(scoped_session_id)
 
-    routing_confidence = getattr(orchestrator, "_last_routing_confidence", None)
+    routing_confidence = route_meta.get("routing_confidence")
 
     # ── R12: Auto-Routing-Ergebnis für Korrektur-Erkennung speichern ──────────
     if not body.force_module and module_used and _telemetry:
         await _telemetry.record_auto_routing(
             session_id=scoped_session_id,
             module=module_used,
-            tier=getattr(orchestrator, "_last_tier_used", 0),
+            tier=route_meta.get("tier_used", 0),
             confidence=routing_confidence,
             message=effective_message,
         )
@@ -1358,6 +1408,8 @@ async def chat_stream(session_id: str, request: Request) -> StreamingResponse:
     if not auth_ctx:
         raise HTTPException(status_code=401, detail="Unauthorized")
     scoped_session_id = _tenant_session_id(request, session_id)
+    # IDOR-Mitigation: nur der Owner darf den Status-Stream dieser Session lesen
+    await _check_session_access(request, scoped_session_id)
     q = status_bus.get_queue(scoped_session_id)
 
     async def event_generator() -> AsyncGenerator[str, None]:

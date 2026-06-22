@@ -181,7 +181,7 @@ class SchedulerAgent:
 
             else:
                 # Orchestrator ausführen (Prompt)
-                response_text, module_used, _ = await self.orchestrator.route(
+                response_text, module_used, _, _ = await self.orchestrator.route(
                     message=task["prompt"],
                     chat_history=None,
                 )

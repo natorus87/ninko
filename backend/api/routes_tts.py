@@ -199,13 +199,21 @@ async def download_voice(body: DownloadRequest) -> VoiceDownloadResponse:
     Lädt eine Piper-Stimme von HuggingFace (rhasspy/piper-voices) herunter.
     Die Stimme ist sofort nach dem Download verfügbar (kein Neustart nötig).
     """
+    from core.tts.voice_manager import _safe_voice_path
+
     vm = _get_voice_manager()
+    cfg = get_settings()
 
-    lang = body.lang.strip().lower()
-    voice = body.voice.strip().lower()
-
-    if not lang or not voice:
+    if not body.lang or not body.voice:
         raise HTTPException(status_code=400, detail="lang und voice sind Pflichtfelder.")
+
+    try:
+        _safe_voice_path(Path(cfg.VOICES_DIR), body.lang, body.voice)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    lang = body.lang.lower()
+    voice = body.voice.lower()
 
     # Bereits installiert?
     existing = vm.list_voices(lang)
@@ -231,8 +239,13 @@ async def delete_voice(lang: str, voice: str) -> VoiceDeleteResponse:
     """
     Löscht eine installierte Piper-Stimme aus dem Voices-Verzeichnis.
     """
+    from core.tts.voice_manager import _safe_voice_path
+
     cfg = get_settings()
-    voice_dir = Path(cfg.VOICES_DIR) / lang / voice
+    try:
+        voice_dir = _safe_voice_path(Path(cfg.VOICES_DIR), lang, voice)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if not voice_dir.exists():
         raise HTTPException(

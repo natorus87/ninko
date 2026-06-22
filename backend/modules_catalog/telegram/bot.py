@@ -858,7 +858,7 @@ class TelegramBot:
             reply_to_message_id=message_id,
         )
         if not preview_msg_id:
-            response_text, module_used, did_compact = await orchestrator.route(
+            response_text, module_used, did_compact, _ = await orchestrator.route(
                 message=contextualized_text,
                 chat_history=history,
                 session_id=session_id,
@@ -949,7 +949,7 @@ class TelegramBot:
                     last_sent_len = len(buffer)
                     last_sent_preview = preview
 
-            response_text, module_used, did_compact = await route_task
+            response_text, module_used, did_compact, _ = await route_task
             status_bus.cleanup(session_id)
             return response_text, module_used, did_compact, preview_msg_id
         except Exception:
@@ -1004,7 +1004,7 @@ class TelegramBot:
                 orchestrator = self.app.state.orchestrator
                 history = await redis.get_chat_history(session_id)
                 contextualized_text = f"[Telegram Chat-ID: {chat_id}]\n{original_text}"
-                response_text, _, did_compact = await orchestrator.route(
+                response_text, _, did_compact, route_meta = await orchestrator.route(
                     message=contextualized_text,
                     chat_history=history,
                     session_id=session_id,
@@ -1021,9 +1021,7 @@ class TelegramBot:
                     session_id=session_id, role="assistant", content=response_text
                 )
                 if did_compact:
-                    summary = None
-                    if hasattr(orchestrator, "get_last_compaction_summary"):
-                        summary = orchestrator.get_last_compaction_summary()
+                    summary = (route_meta or {}).get("compaction_summary")
                     await redis.store_chat_message(
                         session_id=session_id,
                         role="system_compaction",
@@ -1085,9 +1083,7 @@ class TelegramBot:
                     session_id=session_id, role="assistant", content=response_text
                 )
                 if did_compact:
-                    summary = None
-                    if hasattr(orchestrator, "get_last_compaction_summary"):
-                        summary = orchestrator.get_last_compaction_summary()
+                    summary = (route_meta or {}).get("compaction_summary")
                     await redis.store_chat_message(
                         session_id=session_id,
                         role="system_compaction",
@@ -1447,7 +1443,7 @@ class TelegramBot:
                     confirmed=confirmed,
                 )
             else:
-                response_text, module_used, did_compact = await orchestrator.route(
+                response_text, module_used, did_compact, route_meta = await orchestrator.route(
                     message=contextualized_text,
                     chat_history=history,
                     session_id=session_id,
@@ -1467,9 +1463,7 @@ class TelegramBot:
                 )
             else:
                 if did_compact:
-                    summary = None
-                    if hasattr(orchestrator, "get_last_compaction_summary"):
-                        summary = orchestrator.get_last_compaction_summary()
+                    summary = (route_meta or {}).get("compaction_summary")
                     await redis.store_chat_message(
                         session_id=session_id,
                         role="system_compaction",

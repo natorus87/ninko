@@ -456,7 +456,7 @@ class WorkflowEngine:
                 # execute_workflow-Tool (WRITE_SYSTEM) oder per UI-Trigger
                 # bestätigt — STATE_CHANGING-Aufrufe innerhalb des Workflows
                 # sollen NICHT erneut pausieren, sonst hängt der Step.
-                response_text, _, _ = await self.orchestrator.route(
+                response_text, _, _, _ = await self.orchestrator.route(
                     message=prompt,
                     chat_history=[],
                     session_id=workflow_session_id,
@@ -477,7 +477,7 @@ class WorkflowEngine:
             async def _run_prompt(p: Any) -> str:
                 prompt = self._interpolate(str(p), variables)
                 if self.orchestrator:
-                    resp, _, _ = await self.orchestrator.route(
+                    resp, _, _, _ = await self.orchestrator.route(
                         message=prompt,
                         chat_history=[],
                         session_id=workflow_session_id,
@@ -561,7 +561,7 @@ class WorkflowEngine:
                     variables["loop_index"] = str(i)
                     prompt = self._interpolate(prompt_template, variables)
                     if self.orchestrator:
-                        resp, _, _ = await self.orchestrator.route(
+                        resp, _, _, _ = await self.orchestrator.route(
                             message=prompt,
                             chat_history=[],
                             session_id=workflow_session_id,
@@ -582,7 +582,7 @@ class WorkflowEngine:
                         break
                     prompt = self._interpolate(prompt_template, variables)
                     if self.orchestrator:
-                        resp, _, _ = await self.orchestrator.route(
+                        resp, _, _, _ = await self.orchestrator.route(
                             message=prompt,
                             chat_history=[],
                             session_id=workflow_session_id,

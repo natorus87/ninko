@@ -280,7 +280,7 @@ Round: {round_number}/{debate.max_rounds}
                     else None
                 )
 
-                response_text, _, _ = await self.orchestrator.route(
+                response_text, _, _, _ = await self.orchestrator.route(
                     message=prompt,
                     chat_history=chat_history,
                     session_id=f"{debate.debate_id}_{participant.agent_id}",
@@ -464,7 +464,7 @@ Please render your verdict:
                     chat_history.append({"role": "user", "content": msg.get("content", "")})
 
             if self.orchestrator:
-                response_text, _, _ = await self.orchestrator.route(
+                response_text, _, _, _ = await self.orchestrator.route(
                     message=prompt,
                     chat_history=chat_history,
                     session_id=f"{debate.debate_id}_{judge.agent_id}_decision",

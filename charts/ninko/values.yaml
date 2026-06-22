@@ -96,6 +96,16 @@ backend:
     storageClass: ""
     accessMode: ReadWriteOnce
 
+  # ── Pod Security Context ──
+  # Matches the non-root `ninko` user (uid/gid 1000) baked into the image.
+  # `fsGroup` ensures the PVC is writable when mounted at /app/data and
+  # /app/plugins. If you change runAsUser/runAsGroup, also update fsGroup
+  # accordingly (must be a group the user belongs to).
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+
   resources:
     requests:
       memory: "256Mi"
@@ -137,9 +147,11 @@ chromadb:
   enabled: true
   image:
     repository: chromadb/chroma
-    # IMPORTANT: Ninko requires exactly 0.4.24. Do not upgrade without
-    # testing – the client library is pinned to the same version.
-    tag: "0.4.24"
+    # IMPORTANT: Ninko requires chromadb==1.5.8 on both server and client
+    # (matches backend/requirements.txt). Do not upgrade without testing –
+    # major version bumps change the HTTP API (e.g. /api/v1/heartbeat →
+    # /api/v2/heartbeat in 1.x).
+    tag: "1.5.8"
 
   persistence:
     size: 5Gi

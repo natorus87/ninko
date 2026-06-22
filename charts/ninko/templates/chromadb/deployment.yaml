@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
         - name: chromadb
-          # PINNED: Ninko requires chromadb==0.4.24 on both server and client.
+          # PINNED: Ninko requires chromadb==1.5.8 on both server and client.
           # Do not upgrade without updating backend/requirements.txt accordingly.
           image: "{{ .Values.chromadb.image.repository }}:{{ .Values.chromadb.image.tag }}"
           imagePullPolicy: IfNotPresent
@@ -34,17 +34,19 @@ spec:
               value: "TRUE"
             - name: ANONYMIZED_TELEMETRY
               value: "FALSE"
+            - name: ALLOW_RESET
+              value: "TRUE"
           resources:
             {{- toYaml .Values.chromadb.resources | nindent 12 }}
           livenessProbe:
             httpGet:
-              path: /api/v1/heartbeat
+              path: /api/v2/heartbeat
               port: 8000
             initialDelaySeconds: 15
             periodSeconds: 30
           readinessProbe:
             httpGet:
-              path: /api/v1/heartbeat
+              path: /api/v2/heartbeat
               port: 8000
             initialDelaySeconds: 5
             periodSeconds: 10

@@ -13,7 +13,7 @@ import json as _json
 import logging
 import re
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 import numpy as np
 
@@ -407,34 +407,34 @@ class OrchestratorAgent(BaseAgent):
         normalized = re.sub(r"\s+", " ", re.sub(r"[^\w\s]", "", query.lower())).strip()
         return hashlib.sha256(normalized.encode()).hexdigest()
 
-    async def _route_cache_exact_get(self, query: str) -> list[dict] | None:
-        """Exact-Cache Lookup (sha256). Returns tool_calls list or None."""
+    async def _route_cache_exact_get(self, query: str) -> list[str] | None:
+        """Exact-Cache Lookup (sha256). Returns module names list or None."""
         try:
             redis = get_redis()
             key = f"{self._TOOL_CALL_CACHE_PREFIX}exact:{self._normalize_query_for_cache(query)}"
             raw = await redis.connection.get(key)
             if raw:
                 data = _json.loads(raw)
-                return data.get("tool_calls")
+                return data.get("module_names")
         except Exception as exc:
             logger.debug("Exact cache miss: %s", exc)
         return None
 
-    async def _route_cache_exact_set(self, query: str, tool_calls: list[dict]) -> None:
-        """Speichert tool_calls im Exact-Cache (24h TTL)."""
+    async def _route_cache_exact_set(self, query: str, module_names: list[str]) -> None:
+        """Speichert Modul-Namen im Exact-Cache (24h TTL)."""
         try:
             redis = get_redis()
             key = f"{self._TOOL_CALL_CACHE_PREFIX}exact:{self._normalize_query_for_cache(query)}"
             payload = _json.dumps({
-                "tool_calls": tool_calls,
+                "module_names": module_names,
                 "ts": datetime.now(timezone.utc).isoformat(),
             })
             await redis.connection.set(key, payload, ex=self._EXACT_CACHE_TTL)
         except Exception as exc:
             logger.debug("Exact cache set failed: %s", exc)
 
-    async def _route_cache_semantic_get(self, query: str) -> list[dict] | None:
-        """Semantic-Cache Lookup (cos > 0.92). Returns tool_calls or None."""
+    async def _route_cache_semantic_get(self, query: str) -> list[str] | None:
+        """Semantic-Cache Lookup (cos > 0.92). Returns module names or None."""
         try:
             redis_client = get_redis()
             embeddings = get_embeddings()
@@ -470,20 +470,20 @@ class OrchestratorAgent(BaseAgent):
                     if score > best_score:
                         best_score, best_key = score, key
             if best_key and best_score >= self._SEMANTIC_THRESHOLD:
-                return module_payloads.get(best_key, {}).get("tool_calls")
+                return module_payloads.get(best_key, {}).get("module_names")
         except Exception as exc:
             logger.debug("Semantic cache miss: %s", exc)
         return None
 
-    async def _route_cache_semantic_set(self, query: str, tool_calls: list[dict]) -> None:
-        """Speichert tool_calls im Semantic-Cache (7d TTL) mit Embedding."""
+    async def _route_cache_semantic_set(self, query: str, module_names: list[str]) -> None:
+        """Speichert Modul-Namen im Semantic-Cache (7d TTL) mit Embedding."""
         try:
             embeddings = get_embeddings()
             query_vec = embeddings.embed_query(query)
             redis = get_redis()
             sem_key = f"{self._TOOL_CALL_CACHE_PREFIX}sem:{hashlib.sha256(query.encode()).hexdigest()}"
             payload = _json.dumps({
-                "tool_calls": tool_calls,
+                "module_names": module_names,
                 "embedding": [float(v) for v in query_vec],
                 "ts": datetime.now(timezone.utc).isoformat(),
             })
@@ -517,7 +517,7 @@ class OrchestratorAgent(BaseAgent):
         wants_stream: bool = False,
         token_callback: Any = None,
         cancellation_check: Any = None,
-    ) -> tuple[str, str | None, bool]:
+    ) -> tuple[str, str | None, bool, str | None]:
         """Führt einen einzelnen tool_call aus."""
         tool_name = tool_call.get("name", "")
         tool_args = tool_call.get("arguments", {})
@@ -558,7 +558,7 @@ class OrchestratorAgent(BaseAgent):
         wants_stream: bool = False,
         token_callback: Any = None,
         cancellation_check: Any = None,
-    ) -> tuple[str, str | None, bool]:
+    ) -> tuple[str, str | None, bool, str | None]:
         """Führt mehrere tool_calls sequenziell aus (Pipeline-Sequenz)."""
         if len(tool_calls) == 1:
             return await self._dispatch_tool_call(
@@ -626,12 +626,13 @@ class OrchestratorAgent(BaseAgent):
                 return (
                     "Pipeline fehlgeschlagen: Ein interner Schritt konnte nicht abgeschlossen werden."
                     f"\n\n{safe_markdown}"
-                ), None, False
+                ), None, False, None
             markdown = result.to_markdown()
             return (
                 markdown if markdown else _t("Pipeline abgeschlossen.", "Pipeline completed."),
                 None,
                 False,
+                None,
             )
         except Exception as exc:
             logger.error(
@@ -642,7 +643,7 @@ class OrchestratorAgent(BaseAgent):
             return _t(
                 "Pipeline-Fehler: Bei der Verarbeitung ist ein interner Fehler aufgetreten.",
                 "Pipeline error: An internal error occurred while processing the request.",
-            ), None, False
+            ), None, False, None
 
     # ── LLM Function Calling Route ──────────────────────────────────────────────
 
@@ -655,8 +656,17 @@ class OrchestratorAgent(BaseAgent):
         wants_stream: bool = False,
         token_callback: Any = None,
         cancellation_check: Any = None,
-    ) -> tuple[str, str | None, bool]:
+        _meta_factory: Callable[[], dict] | None = None,
+    ) -> tuple[str, str | None, bool, dict]:
         """Führt LLM-Native Function Calling Routing durch."""
+        if _meta_factory is None:
+
+            def _meta_factory(summary=None, *, tier=None, confidence=None):
+                return {
+                    "compaction_summary": summary,
+                    "routing_confidence": confidence,
+                    "tier_used": tier if tier is not None else 2,
+                }
         function_calling_enabled, tool_choice = await self._get_routing_mode()
         if not function_calling_enabled or tool_choice == "none":
             await status_bus.emit_trace(
@@ -667,7 +677,8 @@ class OrchestratorAgent(BaseAgent):
                 data={"function_calling_enabled": function_calling_enabled, "tool_choice": tool_choice},
             )
             return await self._fallback_to_react_loop(
-                message, chat_history, session_id, confirmed, wants_stream, token_callback, cancellation_check
+                message, chat_history, session_id, confirmed, wants_stream, token_callback, cancellation_check,
+                _meta_factory=_meta_factory,
             )
 
         await status_bus.emit_trace(
@@ -685,7 +696,8 @@ class OrchestratorAgent(BaseAgent):
         routing_context = self._recent_routing_context(chat_history)
         cache_text = f"{routing_context}\nCURRENT: {message}" if routing_context else message
 
-        if hit := await self._route_cache_exact_get(cache_text):
+        if hit_names := await self._route_cache_exact_get(cache_text):
+            hit = [{"name": name, "arguments": {"query": message}} for name in hit_names]
             await status_bus.emit_trace(
                 session_id,
                 phase="routing",
@@ -693,10 +705,12 @@ class OrchestratorAgent(BaseAgent):
                 detail="Exact Cache",
                 data={"tool_calls": hit},
             )
-            return await self._dispatch_tool_calls(
+            response, module_used, did_compact, summary = await self._dispatch_tool_calls(
                 hit, message, chat_history, session_id, confirmed, wants_stream, token_callback, cancellation_check
             )
-        if hit := await self._route_cache_semantic_get(cache_text):
+            return response, module_used, did_compact, _meta_factory(summary, tier=3, confidence=1.0)
+        if hit_names := await self._route_cache_semantic_get(cache_text):
+            hit = [{"name": name, "arguments": {"query": message}} for name in hit_names]
             await status_bus.emit_trace(
                 session_id,
                 phase="routing",
@@ -704,9 +718,10 @@ class OrchestratorAgent(BaseAgent):
                 detail="Semantic Cache",
                 data={"tool_calls": hit},
             )
-            return await self._dispatch_tool_calls(
+            response, module_used, did_compact, summary = await self._dispatch_tool_calls(
                 hit, message, chat_history, session_id, confirmed, wants_stream, token_callback, cancellation_check
             )
+            return response, module_used, did_compact, _meta_factory(summary, tier=3, confidence=1.0)
 
         tools = self._build_module_tools_schema()
         if not tools:
@@ -717,7 +732,8 @@ class OrchestratorAgent(BaseAgent):
                 detail="Fallback auf ReAct-Orchestrator",
             )
             return await self._fallback_to_react_loop(
-                message, chat_history, session_id, confirmed, wants_stream, token_callback, cancellation_check
+                message, chat_history, session_id, confirmed, wants_stream, token_callback, cancellation_check,
+                _meta_factory=_meta_factory,
             )
 
         llm = get_llm()
@@ -762,7 +778,8 @@ class OrchestratorAgent(BaseAgent):
                 status="error",
             )
             return await self._fallback_to_react_loop(
-                message, chat_history, session_id, confirmed, wants_stream, token_callback, cancellation_check
+                message, chat_history, session_id, confirmed, wants_stream, token_callback, cancellation_check,
+                _meta_factory=_meta_factory,
             )
 
         tool_calls = self._extract_tool_calls(response)
@@ -775,7 +792,12 @@ class OrchestratorAgent(BaseAgent):
                 detail="Keine Modul-Tool-Calls erzeugt.",
                 data={"response_length": len(str(text or ""))},
             )
-            return str(text) if text else _t("Keine Antwort.", "No response."), None, False
+            return (
+                str(text) if text else _t("Keine Antwort.", "No response."),
+                None,
+                False,
+                _meta_factory(tier=2, confidence=0.0),
+            )
 
         await status_bus.emit_trace(
             session_id,
@@ -784,12 +806,15 @@ class OrchestratorAgent(BaseAgent):
             detail=f"{len(tool_calls)} Tool-Call(s)",
             data={"tool_calls": tool_calls},
         )
-        await self._route_cache_exact_set(cache_text, tool_calls)
-        await self._route_cache_semantic_set(cache_text, tool_calls)
+        module_names = [tc["name"] for tc in tool_calls if tc.get("name")]
+        if module_names:
+            await self._route_cache_exact_set(cache_text, module_names)
+            await self._route_cache_semantic_set(cache_text, module_names)
 
-        return await self._dispatch_tool_calls(
+        response_text, module_used, did_compact, summary = await self._dispatch_tool_calls(
             tool_calls, message, chat_history, session_id, confirmed, wants_stream, token_callback, cancellation_check
         )
+        return response_text, module_used, did_compact, _meta_factory(summary, tier=2)
 
     async def _smoke_test_function_calling(self) -> dict:
         """Testet ob das aktuelle LLM Function Calling unterstützt."""
@@ -844,8 +869,17 @@ class OrchestratorAgent(BaseAgent):
         wants_stream: bool = False,
         token_callback: Any = None,
         cancellation_check: Any = None,
-    ) -> tuple[str, str | None, bool]:
+        _meta_factory: Callable[[], dict] | None = None,
+    ) -> tuple[str, str | None, bool, dict]:
         """Fallback auf ReAct-Loop wenn Function Calling deaktiviert oder fehlschlägt."""
+        if _meta_factory is None:
+
+            def _meta_factory(summary=None, *, tier=None, confidence=None):
+                return {
+                    "compaction_summary": summary,
+                    "routing_confidence": confidence,
+                    "tier_used": tier if tier is not None else 4,
+                }
         await status_bus.emit_trace(
             session_id,
             phase="routing",
@@ -885,6 +919,7 @@ class OrchestratorAgent(BaseAgent):
                 ),
                 None,
                 False,
+                _meta_factory(tier=4),
             )
         await status_bus.emit_trace(
             session_id,
@@ -892,7 +927,7 @@ class OrchestratorAgent(BaseAgent):
             label="ReAct-Fallback abgeschlossen",
             data={"agent": self.name, "compacted": did_compact, "response_length": len(response or "")},
         )
-        return response, None, did_compact
+        return response, None, did_compact, _meta_factory(tier=4)
 
     async def _dynamic_prompt_appendix(self) -> str:
         """Fügt eine Übersicht aller verfügbaren Module und konfigurierten Verbindungen an."""
@@ -2035,8 +2070,12 @@ JSON-SCHEMA:
         wants_stream: bool = False,
         token_callback: Any = None,
         cancellation_check: Any = None,
-    ) -> tuple[str, str | None, bool]:
-        """Führt einen Modul-Agenten mit einheitlichem Status-/Fehlerhandling aus."""
+    ) -> tuple[str, str | None, bool, str | None]:
+        """Führt einen Modul-Agenten mit einheitlichem Status-/Fehlerhandling aus.
+
+        Returns:
+            (response, module_name, did_compact, compaction_summary_or_None)
+        """
         agent = self.registry.get_agent(module_name)
         if agent is None:
             await status_bus.emit_trace(
@@ -2062,6 +2101,7 @@ JSON-SCHEMA:
                 ),
                 module_name,
                 False,
+                None,
             )
 
         await status_bus.emit_trace(
@@ -2084,8 +2124,9 @@ JSON-SCHEMA:
                 token_callback=token_callback,
                 cancellation_check=cancellation_check,
             )
+            summary: str | None = None
             if did_compact and hasattr(agent, "get_last_compaction_summary"):
-                self._last_compaction_summary = agent.get_last_compaction_summary()
+                summary = agent.get_last_compaction_summary()
             await status_bus.emit_trace(
                 session_id,
                 phase="agent",
@@ -2093,7 +2134,7 @@ JSON-SCHEMA:
                 detail=module_name,
                 data={"module": module_name, "compacted": did_compact, "response_length": len(response or "")},
             )
-            return response, module_name, did_compact
+            return response, module_name, did_compact, summary
         except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
             logger.error(
                 "%s '%s' Fehler: %s",
@@ -2125,6 +2166,7 @@ JSON-SCHEMA:
                 ),
                 module_name,
                 False,
+                None,
             )
 
     async def _route_forced_target(
@@ -2138,7 +2180,7 @@ JSON-SCHEMA:
         wants_stream: bool = False,
         token_callback: Any = None,
         cancellation_check: Any = None,
-    ) -> tuple[str, str | None, bool]:
+    ) -> tuple[str, str | None, bool, str | None]:
         """Direktes Routing an Modul oder Custom-Agent anhand force_module."""
         # Special-case: orchestrator ist kein Modul im Registry-Sinne.
         if force_module.strip().lower() == "orchestrator":
@@ -2168,6 +2210,7 @@ JSON-SCHEMA:
                             ),
                             "orchestrator",
                             False,
+                            None,
                         )
                     tenant_id = get_current_tenant_id() or "default"
                     result = await execute_script_tool(
@@ -2185,6 +2228,7 @@ JSON-SCHEMA:
                             ),
                             "orchestrator",
                             False,
+                            None,
                         )
                     err = result.get("stderr") or result.get("error") or "Unknown error"
                     return (
@@ -2194,6 +2238,7 @@ JSON-SCHEMA:
                         ),
                         "orchestrator",
                         False,
+                        None,
                     )
 
             response, did_compact = await self.invoke(
@@ -2205,7 +2250,7 @@ JSON-SCHEMA:
                 token_callback=token_callback,
                 cancellation_check=cancellation_check,
             )
-            return response, "orchestrator", did_compact
+            return response, "orchestrator", did_compact, None
 
         agent = self.registry.get_agent(force_module)
         if agent is None:
@@ -2246,7 +2291,7 @@ JSON-SCHEMA:
                             token_callback=token_callback,
                             cancellation_check=cancellation_check,
                         )
-                        return response, force_module, did_compact
+                        return response, force_module, did_compact, None
                     except _ORCH_RECOVERABLE_EXCEPTIONS as exc:
                         logger.error(
                             "Direktes Routing Custom-Agent '%s' Fehler: %s",
@@ -2261,6 +2306,7 @@ JSON-SCHEMA:
                             ),
                             force_module,
                             False,
+                            None,
                         )
             except _ORCH_RECOVERABLE_EXCEPTIONS as pool_exc:
                 logger.warning(
@@ -2319,7 +2365,7 @@ JSON-SCHEMA:
         wants_stream: bool = False,
         token_callback: Any = None,
         cancellation_check: Any = None,
-    ) -> tuple[str, str | None, bool] | None:
+    ) -> tuple[str, str | None, bool, str | None] | None:
         """Tier-2 Fast-Path: direktes Modulrouting inkl. Readonly-Subagent-Fallback."""
         agent = self.registry.get_agent(target_module)
         if agent is None:
@@ -2370,7 +2416,7 @@ JSON-SCHEMA:
         self,
         message: str,
         session_id: str,
-    ) -> tuple[str, str | None, bool] | None:
+    ) -> tuple[str, str | None, bool, str | None] | None:
         """Handle explicit FRITZ!Box Tasmota discovery without LLM routing."""
         if not self._wants_fritzbox_tasmota_discovery(message):
             return None
@@ -2405,6 +2451,7 @@ JSON-SCHEMA:
                 ),
                 "fritzbox",
                 False,
+                None,
             )
 
         if devices and isinstance(devices[0], dict) and devices[0].get("error"):
@@ -2415,6 +2462,7 @@ JSON-SCHEMA:
                 ),
                 "fritzbox",
                 False,
+                None,
             )
 
         matches = [
@@ -2432,6 +2480,7 @@ JSON-SCHEMA:
                 ),
                 "fritzbox",
                 False,
+                None,
             )
 
         rows = ["| Name | IP | MAC | Status |", "|---|---|---|---|"]
@@ -2451,6 +2500,7 @@ JSON-SCHEMA:
             ),
             "fritzbox",
             False,
+            None,
         )
 
     async def route(
@@ -2463,7 +2513,7 @@ JSON-SCHEMA:
         wants_stream: bool = False,
         token_callback: Any = None,
         cancellation_check: Any = None,
-    ) -> tuple[str, str | None, bool]:
+    ) -> tuple[str, str | None, bool, dict]:
         """
         LLM-Native Function Calling Routing (primär) mit 4-Tier-Fallback.
 
@@ -2471,10 +2521,15 @@ JSON-SCHEMA:
         Fallback: 4-Tier-Routing (Keyword + Embedding + ReAct).
 
         Returns:
-            tuple[str, str | None, bool]: (Antwort, Modul oder None, did_compact)
+            tuple[str, str | None, bool, dict]:
+                (Antwort, Modul oder None, did_compact, routing_meta)
+                routing_meta enthält:
+                  - compaction_summary: str | None
+                  - routing_confidence: float | None
+                  - tier_used: int
         """
-        self._last_tier_used = 0
-        self._last_routing_confidence = None
+        tier_used = 2
+        routing_confidence: float | None = None
         status_bus.set_session_id(session_id)
         await status_bus.emit_trace(
             session_id,
@@ -2497,9 +2552,21 @@ JSON-SCHEMA:
 
         self._refresh_routing_map()
 
+        def _build_meta(
+            summary: str | None = None,
+            *,
+            tier: int | None = None,
+            confidence: float | None = None,
+        ) -> dict:
+            return {
+                "compaction_summary": summary,
+                "routing_confidence": confidence if confidence is not None else routing_confidence,
+                "tier_used": tier if tier is not None else tier_used,
+            }
+
         # ── Deterministische Fast-Paths (kein LLM-Routing nötig) ────────────
         if force_module:
-            self._last_tier_used = 2
+            tier_used = 0
             await status_bus.emit_trace(
                 session_id,
                 phase="routing",
@@ -2507,7 +2574,7 @@ JSON-SCHEMA:
                 detail=force_module,
                 data={"force_module": force_module},
             )
-            return await self._route_forced_target(
+            response, module_used, did_compact, summary = await self._route_forced_target(
                 force_module,
                 message=message,
                 chat_history=chat_history,
@@ -2517,6 +2584,7 @@ JSON-SCHEMA:
                 token_callback=token_callback,
                 cancellation_check=cancellation_check,
             )
+            return response, module_used, did_compact, _build_meta(summary, tier=0, confidence=1.0)
 
         if self._wants_agent_creation(message):
             logger.info("Explizite Agent-Erstellungs-Intention → Auto-Create-Fast-Path.")
@@ -2527,8 +2595,9 @@ JSON-SCHEMA:
                 detail="Deterministischer Fast-Path",
             )
             response, did_compact = await self._auto_create_custom_agent(message, session_id)
-            self._last_tier_used = 1
-            return response, "orchestrator", did_compact
+            tier_used = 1
+            routing_confidence = 1.0
+            return response, "orchestrator", did_compact, _build_meta(tier=1, confidence=1.0)
 
         if self._wants_workflow_creation(message):
             logger.info("Explizite Workflow-Erstellungs-Intention → Auto-Create-Fast-Path.")
@@ -2539,13 +2608,16 @@ JSON-SCHEMA:
                 detail="Deterministischer Fast-Path",
             )
             response, did_compact = await self._auto_create_workflow(message, session_id)
-            self._last_tier_used = 1
-            return response, "orchestrator", did_compact
+            tier_used = 1
+            routing_confidence = 1.0
+            return response, "orchestrator", did_compact, _build_meta(tier=1, confidence=1.0)
 
         fast_path = await self._try_fritzbox_tasmota_fast_path(message, session_id)
         if fast_path is not None:
-            self._last_tier_used = 1
-            return fast_path
+            tier_used = 1
+            routing_confidence = 1.0
+            response, module_used, did_compact, summary = fast_path
+            return response, module_used, did_compact, _build_meta(summary, tier=1, confidence=1.0)
 
         status_fast_path = await self._try_infra_status_fast_path(
             message=message,
@@ -2557,8 +2629,10 @@ JSON-SCHEMA:
             cancellation_check=cancellation_check,
         )
         if status_fast_path is not None:
-            self._last_tier_used = 1
-            return status_fast_path
+            tier_used = 1
+            routing_confidence = 1.0
+            response, module_used, did_compact, summary = status_fast_path
+            return response, module_used, did_compact, _build_meta(summary, tier=1, confidence=1.0)
 
         # ── LLM-Native Function Calling Routing (primär) ────────────────────
         function_calling_enabled, _ = await self._get_routing_mode()
@@ -2571,6 +2645,7 @@ JSON-SCHEMA:
                 wants_stream=wants_stream,
                 token_callback=token_callback,
                 cancellation_check=cancellation_check,
+                _meta_factory=_build_meta,
             )
 
         # ── Fallback: ReAct-Loop ────────────────────────────────────────────────
@@ -2582,6 +2657,7 @@ JSON-SCHEMA:
             wants_stream=wants_stream,
             token_callback=token_callback,
             cancellation_check=cancellation_check,
+            _meta_factory=_build_meta,
         )
 
     async def _try_infra_status_fast_path(
@@ -2594,7 +2670,7 @@ JSON-SCHEMA:
         wants_stream: bool = False,
         token_callback: Any = None,
         cancellation_check: Any = None,
-    ) -> tuple[str, str | None, bool] | None:
+    ) -> tuple[str, str | None, bool, str | None] | None:
         """Route simple infra status questions without LLM routing."""
         text = (message or "").casefold()
         has_status_intent = any(

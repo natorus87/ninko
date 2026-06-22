@@ -73,7 +73,7 @@ async def test_fritzbox_tasmota_fast_path_filters_devices(monkeypatch):
     monkeypatch.setitem(sys.modules, "modules_catalog.fritzbox.tools", fake_tools)
 
     orchestrator = OrchestratorAgent.__new__(OrchestratorAgent)
-    response, module, did_compact = await orchestrator._try_fritzbox_tasmota_fast_path(
+    response, module, did_compact, _summary = await orchestrator._try_fritzbox_tasmota_fast_path(
         "Benutze FRITZ!Box, um alle Tasmota Geräte zu finden",
         "test-session",
     )

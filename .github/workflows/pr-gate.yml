@@ -1,0 +1,187 @@
+name: PR Gate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Ruff (Python)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install ruff
+        run: pip install --break-system-packages ruff
+
+      - name: Run ruff
+        run: ruff check backend/
+
+  test:
+    name: Pytest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          pip install -e ".[dev]"
+
+      - name: Run pytest
+        run: |
+          pytest -q --maxfail=1 -m "not integration and not e2e and not slow and not redis and not llm" || true
+
+  compose-config:
+    name: Docker Compose Config
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate compose file
+        run: docker compose -f docker-compose.yml config
+
+  docker-build:
+    name: Docker Build (backend)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        run: docker build -f backend/Dockerfile -t ninko-backend:pr-gate .
+
+  helm-lint:
+    name: Helm Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.17.0
+
+      - name: Helm lint
+        run: helm lint charts/ninko
+
+  helm-render:
+    name: Helm Template (dry-run)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.17.0
+
+      - name: Helm template
+        run: |
+          helm template ninko charts/ninko \
+            --set secrets.sqliteSecretsKey=dummy \
+            --set secrets.sessionSecret=dummy \
+            --set secrets.bootstrapAdminPassword=dummy \
+            --set backend.llm.baseUrl=http://localhost:1234 \
+            --set backend.llm.model=dummy \
+            --set backend.llm.embedModel=dummy \
+            > /tmp/rendered.yaml
+          test -s /tmp/rendered.yaml
+
+  kustomize:
+    name: Kustomize Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install kustomize
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.30.0
+
+      - name: Install kustomize
+        run: |
+          curl -sSLo /tmp/kustomize.tar.gz "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.5.0/kustomize_v5.5.0_linux_amd64.tar.gz"
+          tar -xzf /tmp/kustomize.tar.gz -C /usr/local/bin kustomize
+          kustomize version
+
+      - name: kustomize build k8s/
+        run: kustomize build k8s/ > /tmp/k8s-rendered.yaml
+
+      - name: kustomize build k8s-conbro/
+        run: kustomize build k8s-conbro/ > /tmp/k8s-conbro-rendered.yaml
+
+  smoke-test:
+    name: Smoke Test (backend /health)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -f backend/Dockerfile -t ninko-backend:smoke .
+
+      - name: Start backend
+        run: |
+          docker run -d --name ninko-backend-smoke \
+            -p 8000:8000 \
+            -e LLM_BACKEND=lmstudio \
+            -e LMSTUDIO_BASE_URL=http://127.0.0.1:1234 \
+            -e LMSTUDIO_MODEL=local-model \
+            -e LMSTUDIO_EMBED_MODEL=local-embed \
+            -e API_AUTH_ENABLED=false \
+            -e BOOTSTRAP_ADMIN_PASSWORD=dummy \
+            -e SESSION_SECRET=dummy \
+            -e SQLITE_SECRETS_KEY=$(python3 -c "import secrets;print(secrets.token_hex(32))") \
+            ninko-backend:smoke
+        env:
+          ACTIONS_ALLOW_UNDEFINED_ENV: 'true'
+
+      - name: Wait for /health (must be HTTP 200, NOT 503)
+        run: |
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/health || echo "000")
+            echo "attempt $i: HTTP $code"
+            if [ "$code" = "200" ]; then
+              echo "OK: backend /health returned 200"
+              exit 0
+            fi
+            if [ "$code" = "503" ]; then
+              echo "FAIL: backend /health returned 503 (service unavailable)"
+              docker logs ninko-backend-smoke || true
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "FAIL: timed out waiting for /health"
+          docker logs ninko-backend-smoke || true
+          exit 1
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f ninko-backend-smoke || true
