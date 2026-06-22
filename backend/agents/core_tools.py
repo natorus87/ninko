@@ -1040,9 +1040,33 @@ async def call_module_agent(module_name: str, task: str) -> str:
 
     session_id = status_bus.get_session_id()
     logger.info("call_module_agent: delegiere an '%s': %s…", module_name, task[:80])
+    # Wenn der User bereits auf User-Input-Ebene bestätigt hat (chat_safeguard-tx
+    # mit status=confirmed), reiche confirmed=True an den Sub-Agent durch.
+    # Sonst triggert der Tool-Level-Safeguard im Sub-Agent erneut für die
+    # gleiche Aktion und der User muss 3x bestätigen.
+    _confirmed_propagated = False
+    if session_id:
+        from core.operation_journal import get_operation_journal
+        try:
+            op_journal = get_operation_journal()
+            _pending_tx_id = await op_journal.get_pending_for_session(session_id)
+            if _pending_tx_id:
+                _tx = await op_journal.get(_pending_tx_id)
+                if _tx.get("source") == "chat_safeguard" and _tx.get("status") == "confirmed":
+                    _confirmed_propagated = True
+                    logger.info(
+                        "call_module_agent: Chat-Safeguard bereits bestätigt, "
+                        "reiche confirmed=True an Sub-Agent '%s' durch.",
+                        module_name,
+                    )
+        except _CORE_TOOL_EXCEPTIONS as exc:
+            logger.debug("op_journal Lookup in call_module_agent fehlgeschlagen: %s", exc)
     try:
         result, _ = await agent.invoke(
-            message=task, chat_history=None, session_id=session_id
+            message=task,
+            chat_history=None,
+            session_id=session_id,
+            confirmed=_confirmed_propagated,
         )
         return result
     except _CORE_TOOL_EXCEPTIONS as exc:
