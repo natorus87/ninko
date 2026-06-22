@@ -965,6 +965,7 @@ class BaseAgent:
         thread_config: dict,
         input_data: dict | None,
         session_id: str,
+        confirmed: bool = False,
     ) -> "dict | str":
         """
         Kern-Schleife für den Safeguard-Interrupt-Mechanismus.
@@ -972,6 +973,10 @@ class BaseAgent:
         Führt den Agenten aus und pausiert vor jedem Tool-Call. Gibt das
         LangGraph-Ergebnis-Dict zurück wenn die Ausführung abgeschlossen ist,
         oder einen Sentinel-String wenn ein Tool-Call Bestätigung benötigt.
+
+        Wenn ``confirmed=True`` (vom Caller durchgereicht, typischerweise nach
+        User-Input-Bestätigung), wird der Tool-Level-Safeguard für ALLE
+        Tool-Calls in diesem Loop übersprungen.
         """
         AGENT_TIMEOUT = _get_agent_timeout_seconds()
         iterations = 0
@@ -1040,6 +1045,7 @@ class BaseAgent:
                     tool_args,
                     agent_id=self.name,
                     session_id=session_id,
+                    confirmed=confirmed,
                 )
                 if sg_result.requires_confirmation:
                     dangerous_call = (tool_name, tool_args, sg_result)
@@ -1086,16 +1092,17 @@ class BaseAgent:
                     "rationale": sg_result.rationale,
                 }
             )
-
     async def _run_with_safeguard(
         self,
         messages: list,
         active_tools: list,
         run_config: dict,
         session_id: str,
+        confirmed: bool = False,
     ) -> "dict | str":
         """
         Führt den Agenten mit aktivem Safeguard-Interrupt aus.
+
         Erstellt einen temporären Agenten mit MemorySaver + interrupt_before=["tools"].
         """
         from langgraph.checkpoint.memory import MemorySaver
@@ -1109,7 +1116,8 @@ class BaseAgent:
         )
         thread_config = {**run_config, "configurable": {"thread_id": session_id}}
         return await self._sg_loop(
-            sg_agent, thread_config, {"messages": messages}, session_id
+            sg_agent, thread_config, {"messages": messages}, session_id,
+            confirmed=confirmed,
         )
 
     async def resume_safeguard_tool(self, session_id: str) -> tuple[str, bool]:
@@ -1157,7 +1165,12 @@ class BaseAgent:
                 ), False
             sg_agent, thread_config = paused
             try:
-                result = await self._sg_loop(sg_agent, thread_config, None, session_id)
+                # Resume nach User-Bestätigung: alle Tool-Calls in dieser
+                # Session sind bereits autorisiert. confirmed=True verhindert
+                # weitere Tool-Level-Confirms (z.B. für Workflow-Tools).
+                result = await self._sg_loop(
+                    sg_agent, thread_config, None, session_id, confirmed=True
+                )
             except asyncio.TimeoutError:
                 logger.warning(
                     "Agent '%s' Timeout beim Resume (Session: %s).",

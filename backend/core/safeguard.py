@@ -1822,13 +1822,29 @@ class SafeguardMiddleware:
         tool_args: dict,
         agent_id: str | None = None,
         session_id: str | None = None,
+        confirmed: bool = False,
     ) -> SafeguardResult:
         """
         Klassifiziert einen Tool-Aufruf vor der Ausführung.
 
         Respektiert Profil-Scope (check_tool_calls) und confirm_categories.
         Fast-path für bekannte read-only Tools — kein LLM-Call.
+
+        Wenn ``confirmed=True`` (vom Caller durchgereicht, typischerweise
+        nach User-Input-Bestätigung via User-Input-Safeguard), wird der
+        Check übersprungen und das Tool darf direkt ausgeführt werden.
         """
+        if confirmed:
+            logger.debug(
+                "[Safeguard] check_tool_call übersprungen (confirmed=True): tool=%s",
+                tool_name,
+            )
+            return SafeguardResult(
+                requires_confirmation=False,
+                category=ActionCategory.SAFE,
+                rationale="Tool-Aufruf bereits durch User-Input-Bestätigung autorisiert.",
+                profile_id=None,
+            )
         profile = await self.resolve_profile(agent_id, session_id)
 
         if not profile.check_tool_calls:

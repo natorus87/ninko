@@ -182,7 +182,11 @@ class AgentExecutionMiddleware(BaseMiddleware):
                 )
                 async with self._get_lock(ctx.session_id):
                     raw_result = await self._run_sg(
-                        ctx.messages, ctx.active_tools, run_config, ctx.session_id
+                        ctx.messages,
+                        ctx.active_tools,
+                        run_config,
+                        ctx.session_id,
+                        confirmed=ctx.confirmed,
                     )
                 logger.debug(
                     "AgentExecutionMiddleware: safeguard run end agent=%s session=%s result_type=%s",
