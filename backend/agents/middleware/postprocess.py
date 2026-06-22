@@ -184,7 +184,25 @@ class MemoryStorageMiddleware(BaseMiddleware):
                 self._cooldowns.pop(k, None)
 
         self._cooldowns[key] = now
-        task = asyncio.create_task(self._auto_memorize(ctx.message, ctx.response))
+
+        async def _run_with_log() -> None:
+            """Führt _auto_memorize aus und loggt Exceptions explizit,
+            damit 'Task exception was never retrieved' nicht mehr auftritt."""
+            try:
+                await self._auto_memorize(ctx.message, ctx.response)
+            except asyncio.CancelledError:
+                # Cancel ist kein Crash — normaler Shutdown
+                raise
+            except Exception as exc:
+                # Alle anderen Exceptions (z.B. APIConnectionError) werden
+                # geloggt statt unbehandelt gelassen.
+                logger.warning(
+                    "[Memory] Auto-Memorize Background-Task crashed: %s: %s",
+                    type(exc).__name__,
+                    exc,
+                )
+
+        task = asyncio.create_task(_run_with_log())
         self._bg_tasks.add(task)
         task.add_done_callback(self._bg_tasks.discard)
 

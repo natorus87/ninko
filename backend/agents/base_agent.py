@@ -54,6 +54,33 @@ from agents.middleware import (
 
 logger = logging.getLogger("ninko.agents.base")
 
+# LLM-Provider-Exceptions als recoverable hinzufügen (optionale Imports,
+# damit das Modul auch ohne openai/httpx geladen werden kann).
+_LLM_PROVIDER_EXCEPTIONS: tuple[type[BaseException], ...] = ()
+try:
+    from openai import APIConnectionError as _OpenAIConnectionError
+    from openai import APIError as _OpenAIAPIError
+    from openai import APITimeoutError as _OpenAITimeoutError
+    from openai import AuthenticationError as _OpenAIAuthError
+    from openai import RateLimitError as _OpenAIRateLimit
+    _LLM_PROVIDER_EXCEPTIONS = (
+        _OpenAIConnectionError,
+        _OpenAIAPIError,
+        _OpenAITimeoutError,
+        _OpenAIAuthError,
+        _OpenAIRateLimit,
+    )
+except ImportError:
+    pass
+try:
+    import httpx as _httpx
+    _LLM_PROVIDER_EXCEPTIONS = _LLM_PROVIDER_EXCEPTIONS + (
+        _httpx.HTTPError,
+        _httpx.RequestError,
+    )
+except ImportError:
+    pass
+
 _BASE_AGENT_RECOVERABLE_EXCEPTIONS = (
     ImportError,
     AttributeError,
@@ -64,7 +91,7 @@ _BASE_AGENT_RECOVERABLE_EXCEPTIONS = (
     OSError,
     json.JSONDecodeError,
     asyncio.TimeoutError,
-)
+) + _LLM_PROVIDER_EXCEPTIONS
 
 
 def _tool_display_name(tool: Any) -> str:
