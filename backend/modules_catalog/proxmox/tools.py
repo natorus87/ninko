@@ -5,6 +5,7 @@ Full implementation using proxmoxer.
 
 from __future__ import annotations
 
+import json
 import logging
 from ipaddress import ip_address, ip_network
 
@@ -115,6 +116,94 @@ def _format_bytes(b: int) -> str:
     return f"{b:.1f} PB"
 
 
+def _format_vms_as_markdown(vms: list[dict], title: str = "VMs") -> str:
+    if not vms:
+        return f"Keine {title} gefunden."
+    lines = [
+        f"**{title}** ({len(vms)}):",
+        "",
+        "| VMID | Name | Node | Type | Status | CPU (%) | RAM |",
+        "|---:|---|---|---|---:|---:|---|",
+    ]
+    for vm in vms:
+        mem_total = vm.get("mem_total") or 0
+        ram_gb = mem_total / (1024**3)
+        lines.append(
+            f"| {vm.get('vmid', '-')} | {vm.get('name', '-')} | "
+            f"{vm.get('node', '-')} | {vm.get('type', '-')} | "
+            f"{vm.get('status', '-')} | {float(vm.get('cpu_usage') or 0):.1f} | "
+            f"{ram_gb:.2f} GB |"
+        )
+    return "\n".join(lines)
+
+
+def _format_nodes_as_markdown(nodes: list[dict]) -> str:
+    if not nodes:
+        return "Keine Proxmox-Nodes gefunden."
+    lines = [
+        f"**Proxmox-Nodes** ({len(nodes)}):",
+        "",
+        "| Node | Status | CPU (%) | RAM benutzt | RAM gesamt | RAM (%) |",
+        "|---|---|---:|---:|---:|---:|",
+    ]
+    for n in nodes:
+        lines.append(
+            f"| {n.get('node', '-')} | {n.get('status', '-')} | "
+            f"{float(n.get('cpu_usage') or 0):.1f} | "
+            f"{n.get('mem_used_human', '-')} | {n.get('mem_total_human', '-')} | "
+            f"{float(n.get('mem_usage') or 0):.1f} |"
+        )
+    return "\n".join(lines)
+
+
+def _format_ips_as_markdown(ips: list[dict], title: str = "IP-Adressen") -> str:
+    if not ips:
+        return f"Keine {title} gefunden."
+    lines = [
+        f"**{title}** ({len(ips)}):",
+        "",
+        "| Node/VM | Interface | IP | Familie | Gateway |",
+        "|---|---|---|---|---|",
+    ]
+    for entry in ips:
+        lines.append(
+            f"| {entry.get('node') or entry.get('name') or '-'} | "
+            f"{entry.get('interface', '-') or '-'} | "
+            f"{entry.get('ip') or entry.get('address') or '-'} | "
+            f"{entry.get('family', '-')} | "
+            f"{entry.get('gateway', '-') or '-'} |"
+        )
+    return "\n".join(lines)
+
+
+def _format_vm_ip_dict_as_markdown(data: dict) -> str:
+    vmid = data.get("vmid", "?")
+    name = data.get("name", "?")
+    node = data.get("node", "?")
+    status = data.get("status", "?")
+    guest_type = data.get("type", "?")
+    ips = data.get("ips") or []
+    source = data.get("source", "")
+    note = data.get("note", "")
+    header = (
+        f"**{guest_type.upper()} {vmid} ({name})** auf Node `{node}` — "
+        f"Status: `{status}`, Quelle: `{source or 'n/a'}`"
+    )
+    if not ips:
+        detail = f"Keine IP-Adressen gefunden. {note}".strip()
+        return f"{header}\n\n{detail}"
+    lines = [header, "", "| Interface | IP | Familie |", "|---|---|---|"]
+    for ip in ips:
+        lines.append(
+            f"| {ip.get('interface', '-') or '-'} | "
+            f"{ip.get('ip') or ip.get('address') or '-'} | "
+            f"{ip.get('family', '-')} |"
+        )
+    if note:
+        lines.extend(["", f"_{note}_"])
+    return "\n".join(lines)
+
+
 def _normalize_ip_entry(address: str, family: str, interface: str = "") -> dict | None:
     """Normalizes an IP address entry from Proxmox into a stable shape."""
     value = str(address or "").strip()
@@ -213,15 +302,13 @@ def _netmask_to_prefix(address: str, netmask: str) -> str:
     return f"{address}/{network.prefixlen}"
 
 
-@tool
-async def get_nodes(connection_id: str = "") -> list[dict]:
-    """Returns all Proxmox nodes with status information."""
+async def _get_nodes_raw(connection_id: str = "") -> list[dict]:
+    """Internal: returns all Proxmox nodes with status information as a list of dicts."""
     proxmox = await _get_proxmox_client(connection_id)
     nodes_basic = proxmox.nodes.get()
     result = []
     for n in nodes_basic:
         node_name = n["node"]
-        # Load detailed status (CPU, RAM, etc.)
         try:
             status = proxmox.nodes(node_name).status.get()
             mem_info = status.get("memory", {})
@@ -249,8 +336,14 @@ async def get_nodes(connection_id: str = "") -> list[dict]:
 
 
 @tool
-async def get_node_status(node: str, connection_id: str = "") -> dict:
-    """Returns detailed status of a single node."""
+async def get_nodes(connection_id: str = "") -> str:
+    """Returns all Proxmox nodes with status information as a Markdown table."""
+    nodes = await _get_nodes_raw(connection_id)
+    return _format_nodes_as_markdown(nodes)
+
+
+async def _get_node_status(node: str, connection_id: str = "") -> dict:
+    """Internal: returns detailed status of a single node as a dict."""
     proxmox = await _get_proxmox_client(connection_id)
     status = proxmox.nodes(node).status.get()
     return {
@@ -268,8 +361,34 @@ async def get_node_status(node: str, connection_id: str = "") -> dict:
 
 
 @tool
-async def get_node_ip_addresses(node: str, connection_id: str = "") -> list[dict]:
-    """Returns configured IP addresses for a Proxmox node."""
+async def get_node_status(node: str, connection_id: str = "") -> str:
+    """Returns detailed status of a single Proxmox node as a formatted Markdown block."""
+    data = await _get_node_status(node, connection_id)
+    if not data:
+        return f"Keine Statusdaten für Node {node} gefunden."
+    ram_total = (data.get("mem_total") or 0) / (1024**3)
+    ram_used = (data.get("mem_used") or 0) / (1024**3)
+    ram_free = (data.get("mem_free") or 0) / (1024**3)
+    lines = [
+        f"**Node {data.get('node', node)}** — Status: `{data.get('status', 'unknown')}`",
+        "",
+        "| Property | Value |",
+        "|---|---|",
+        f"| CPU-Modell | {data.get('cpu_model', '-') or '-'} |",
+        f"| CPU-Kerne | {data.get('cpu_count', 0)} |",
+        f"| CPU-Auslastung | {float(data.get('cpu_usage') or 0):.1f} % |",
+        f"| RAM gesamt | {ram_total:.2f} GB |",
+        f"| RAM benutzt | {ram_used:.2f} GB |",
+        f"| RAM frei | {ram_free:.2f} GB |",
+        f"| Uptime (s) | {data.get('uptime', 0)} |",
+        f"| Kernel | {data.get('kernel_version', '-') or '-'} |",
+        f"| PVE-Version | {data.get('pve_version', '-') or '-'} |",
+    ]
+    return "\n".join(lines)
+
+
+async def _get_node_ip_addresses_raw(node: str, connection_id: str = "") -> list[dict]:
+    """Internal: returns configured IP addresses for a Proxmox node as a list of dicts."""
     proxmox = await _get_proxmox_client(connection_id)
     interfaces = proxmox.nodes(node).network.get()
     ips = []
@@ -293,17 +412,21 @@ async def get_node_ip_addresses(node: str, connection_id: str = "") -> list[dict
 
 
 @tool
-async def list_node_ip_addresses(connection_id: str = "") -> list[dict]:
-    """Returns configured IP addresses for all Proxmox nodes."""
+async def get_node_ip_addresses(node: str, connection_id: str = "") -> str:
+    """Returns configured IP addresses for a Proxmox node as a Markdown table."""
+    ips = await _get_node_ip_addresses_raw(node, connection_id)
+    return _format_ips_as_markdown(ips, title=f"IP-Adressen Node {node}")
+
+
+async def _list_node_ip_addresses_raw(connection_id: str = "") -> list[dict]:
+    """Internal: returns configured IP addresses for all Proxmox nodes as a list of dicts."""
     proxmox = await _get_proxmox_client(connection_id)
     results = []
     for node_info in proxmox.nodes.get():
         node = node_info["node"]
         try:
             results.extend(
-                await get_node_ip_addresses.ainvoke(
-                    {"node": node, "connection_id": connection_id}
-                )
+                await _get_node_ip_addresses_raw(node, connection_id)
             )
         except _PROXMOX_EXCEPTIONS as exc:
             logger.warning("Failed to read node IP addresses on %s: %s", node, exc)
@@ -311,15 +434,20 @@ async def list_node_ip_addresses(connection_id: str = "") -> list[dict]:
 
 
 @tool
-async def list_all_vms(connection_id: str = "") -> list[dict]:
-    """Lists all VMs across all nodes."""
+async def list_node_ip_addresses(connection_id: str = "") -> str:
+    """Returns configured IP addresses for all Proxmox nodes as a Markdown table."""
+    ips = await _list_node_ip_addresses_raw(connection_id)
+    return _format_ips_as_markdown(ips, title="Node-IP-Adressen")
+
+
+async def _list_all_vms_raw(connection_id: str = "") -> list[dict]:
+    """Internal: lists all VMs across all nodes as a list of dicts."""
     proxmox = await _get_proxmox_client(connection_id)
     all_vms = []
 
     for node_info in proxmox.nodes.get():
         node = node_info["node"]
 
-        # QEMU VMs
         try:
             vms = proxmox.nodes(node).qemu.get()
             for vm in vms:
@@ -337,7 +465,6 @@ async def list_all_vms(connection_id: str = "") -> list[dict]:
         except _PROXMOX_EXCEPTIONS as e:
             logger.warning("Failed to read VMs on %s: %s", node, e)
 
-        # LXC Container
         try:
             containers = proxmox.nodes(node).lxc.get()
             for ct in containers:
@@ -359,8 +486,14 @@ async def list_all_vms(connection_id: str = "") -> list[dict]:
 
 
 @tool
-async def list_vms(node: str, connection_id: str = "") -> list[dict]:
-    """Lists all VMs on a specific node."""
+async def list_all_vms(connection_id: str = "") -> str:
+    """Lists all VMs and LXC containers across all nodes as a Markdown table."""
+    vms = await _list_all_vms_raw(connection_id)
+    return _format_vms_as_markdown(vms, title="VMs & Container")
+
+
+async def _list_vms_raw(node: str, connection_id: str = "") -> list[dict]:
+    """Internal: lists all VMs on a specific node as a list of dicts."""
     proxmox = await _get_proxmox_client(connection_id)
     vms = proxmox.nodes(node).qemu.get()
     return [
@@ -380,8 +513,14 @@ async def list_vms(node: str, connection_id: str = "") -> list[dict]:
 
 
 @tool
-async def get_vm_status(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Returns the detailed status of a VM."""
+async def list_vms(node: str, connection_id: str = "") -> str:
+    """Lists all QEMU VMs on a specific node as a Markdown table."""
+    vms = await _list_vms_raw(node, connection_id)
+    return _format_vms_as_markdown(vms, title=f"VMs auf Node {node}")
+
+
+async def _get_vm_status_raw(node: str, vmid: int, connection_id: str = "") -> dict:
+    """Internal: returns the detailed status of a VM as a dict."""
     proxmox = await _get_proxmox_client(connection_id)
     try:
         status = proxmox.nodes(node).qemu(vmid).status.current.get()
@@ -400,7 +539,6 @@ async def get_vm_status(node: str, vmid: int, connection_id: str = "") -> dict:
             "uptime": status.get("uptime", 0),
         }
     except _PROXMOX_EXCEPTIONS:
-        # Maybe it's an LXC container
         status = proxmox.nodes(node).lxc(vmid).status.current.get()
         return {
             "vmid": vmid,
@@ -416,8 +554,41 @@ async def get_vm_status(node: str, vmid: int, connection_id: str = "") -> dict:
 
 
 @tool
-async def get_vm_ip_addresses(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Returns IP addresses for a QEMU VM or LXC container."""
+async def get_vm_status(node: str, vmid: int, connection_id: str = "") -> str:
+    """Returns the detailed status of a VM as a formatted Markdown block."""
+    data = await _get_vm_status_raw(node, vmid, connection_id)
+    guest_type = data.get("type", "qemu")
+    ram_total = (data.get("mem_total") or 0) / (1024**3)
+    ram_used = (data.get("mem_used") or 0) / (1024**3)
+    lines = [
+        f"**{guest_type.upper()} {data.get('vmid', vmid)} ({data.get('name', '-')})** "
+        f"auf Node `{data.get('node', node)}` — Status: `{data.get('status', 'unknown')}`",
+        "",
+        "| Property | Value |",
+        "|---|---|",
+        f"| CPU-Auslastung | {float(data.get('cpu_usage') or 0):.1f} % |",
+        f"| RAM gesamt | {ram_total:.2f} GB |",
+        f"| RAM benutzt | {ram_used:.2f} GB |",
+    ]
+    if "disk_read" in data:
+        disk_read_gb = (data.get("disk_read") or 0) / (1024**3)
+        disk_write_gb = (data.get("disk_write") or 0) / (1024**3)
+        net_in_gb = (data.get("net_in") or 0) / (1024**3)
+        net_out_gb = (data.get("net_out") or 0) / (1024**3)
+        lines.extend(
+            [
+                f"| Disk Read | {disk_read_gb:.2f} GB |",
+                f"| Disk Write | {disk_write_gb:.2f} GB |",
+                f"| Net In | {net_in_gb:.2f} GB |",
+                f"| Net Out | {net_out_gb:.2f} GB |",
+            ]
+        )
+    lines.append(f"| Uptime (s) | {data.get('uptime', 0)} |")
+    return "\n".join(lines)
+
+
+async def _get_vm_ip_addresses_raw(node: str, vmid: int, connection_id: str = "") -> dict:
+    """Internal: returns IP addresses for a QEMU VM or LXC container as a dict."""
     proxmox = await _get_proxmox_client(connection_id)
     try:
         status = proxmox.nodes(node).qemu(vmid).status.current.get()
@@ -460,6 +631,13 @@ async def get_vm_ip_addresses(node: str, vmid: int, connection_id: str = "") -> 
         }
 
 
+@tool
+async def get_vm_ip_addresses(node: str, vmid: int, connection_id: str = "") -> str:
+    """Returns IP addresses for a QEMU VM or LXC container as a formatted Markdown block."""
+    data = await _get_vm_ip_addresses_raw(node, vmid, connection_id)
+    return _format_vm_ip_dict_as_markdown(data)
+
+
 async def _get_lxc_ip_addresses(proxmox: object, node: str, vmid: int, qemu_exc: Exception) -> dict:
     try:
         status = proxmox.nodes(node).lxc(vmid).status.current.get()
@@ -499,22 +677,23 @@ async def _get_lxc_ip_addresses(proxmox: object, node: str, vmid: int, qemu_exc:
     }
 
 
-@tool
-async def list_vm_ip_addresses(connection_id: str = "") -> list[dict]:
-    """Returns IP addresses for all QEMU VMs and LXC containers across all nodes."""
-    vms = await list_all_vms.ainvoke({"connection_id": connection_id})
+async def _list_vm_ip_addresses_raw(connection_id: str = "") -> list[dict]:
+    """Internal: returns IP addresses for all QEMU VMs and LXC containers as a list of dicts."""
+    vms = await _list_all_vms_raw(connection_id)
+    if not isinstance(vms, list):
+        return []
     results = []
     for vm in vms:
+        if not isinstance(vm, dict):
+            continue
         try:
-            results.append(
-                await get_vm_ip_addresses.ainvoke(
-                    {
-                        "node": vm["node"],
-                        "vmid": vm["vmid"],
-                        "connection_id": connection_id,
-                    }
-                )
+            result = await _get_vm_ip_addresses_raw(
+                node=vm["node"],
+                vmid=vm["vmid"],
+                connection_id=connection_id,
             )
+            if isinstance(result, dict):
+                results.append(result)
         except _PROXMOX_EXCEPTIONS as exc:
             logger.warning(
                 "Failed to read IP addresses for %s %s on %s: %s",
@@ -523,7 +702,46 @@ async def list_vm_ip_addresses(connection_id: str = "") -> list[dict]:
                 vm.get("node"),
                 exc,
             )
+        except (AttributeError, TypeError, KeyError) as exc:
+            logger.warning(
+                "Unexpected error processing VM entry %r: %s", vm, exc,
+            )
     return results
+
+
+@tool
+async def list_vm_ip_addresses(connection_id: str = "") -> str:
+    """Returns IP addresses for all QEMU VMs and LXC containers as a Markdown table."""
+    ip_entries = await _list_vm_ip_addresses_raw(connection_id)
+    if not ip_entries:
+        return "Keine VM- oder LXC-IP-Adressen gefunden."
+    lines = [
+        f"**VM-/LXC-IP-Adressen** ({len(ip_entries)}):",
+        "",
+        "| VMID | Name | Node | Type | Status | Interface | IP | Familie | Quelle |",
+        "|---:|---|---|---|---|---|---|---|---|",
+    ]
+    for entry in ip_entries:
+        ips = entry.get("ips") or []
+        if not ips:
+            lines.append(
+                f"| {entry.get('vmid', '-')} | {entry.get('name', '-')} | "
+                f"{entry.get('node', '-')} | {entry.get('type', '-')} | "
+                f"{entry.get('status', '-')} | - | - | - | "
+                f"{entry.get('source', '-') or '-'} |"
+            )
+            continue
+        for ip in ips:
+            lines.append(
+                f"| {entry.get('vmid', '-')} | {entry.get('name', '-')} | "
+                f"{entry.get('node', '-')} | {entry.get('type', '-')} | "
+                f"{entry.get('status', '-')} | "
+                f"{ip.get('interface', '-') or '-'} | "
+                f"{ip.get('ip') or ip.get('address') or '-'} | "
+                f"{ip.get('family', '-')} | "
+                f"{entry.get('source', '-') or '-'} |"
+            )
+    return "\n".join(lines)
 
 
 @tool
@@ -674,9 +892,8 @@ async def resume_vm(node: str, vmid: int, connection_id: str = "") -> dict:
         }
 
 
-@tool
-async def list_containers(node: str, connection_id: str = "") -> list[dict]:
-    """Lists all LXC containers on a node."""
+async def _list_containers_raw(node: str, connection_id: str = "") -> list[dict]:
+    """Internal: lists all LXC containers on a node as a list of dicts."""
     proxmox = await _get_proxmox_client(connection_id)
     containers = proxmox.nodes(node).lxc.get()
     return [
@@ -692,6 +909,13 @@ async def list_containers(node: str, connection_id: str = "") -> list[dict]:
         }
         for ct in containers
     ]
+
+
+@tool
+async def list_containers(node: str, connection_id: str = "") -> str:
+    """Lists all LXC containers on a node as a Markdown table."""
+    containers = await _list_containers_raw(node, connection_id)
+    return _format_vms_as_markdown(containers, title=f"LXC-Container auf Node {node}")
 
 
 @tool
@@ -945,9 +1169,8 @@ async def smart_stop(node: str, vmid: int, connection_id: str = "") -> dict:
         }
 
 
-@tool
-async def get_recent_tasks(node: str, connection_id: str = "") -> list[dict]:
-    """Returns the recent tasks of a node."""
+async def _get_recent_tasks_raw(node: str, connection_id: str = "") -> list[dict]:
+    """Internal: returns the recent tasks of a node as a list of dicts."""
     proxmox = await _get_proxmox_client(connection_id)
     tasks = proxmox.nodes(node).tasks.get(limit=20)
     return [
@@ -965,8 +1188,47 @@ async def get_recent_tasks(node: str, connection_id: str = "") -> list[dict]:
 
 
 @tool
-async def get_vm_config(node: str, vmid: int, connection_id: str = "") -> dict:
-    """Returns the configuration of a VM."""
+async def get_recent_tasks(node: str, connection_id: str = "") -> str:
+    """Returns the recent tasks of a node as a Markdown table."""
+    tasks = await _get_recent_tasks_raw(node, connection_id)
+    if not tasks:
+        return f"Keine aktuellen Tasks auf Node {node} gefunden."
+    lines = [
+        f"**Letzte Tasks auf Node {node}** ({len(tasks)}):",
+        "",
+        "| Type | Status | User | Start | End |",
+        "|---|---|---|---|---|",
+    ]
+    from datetime import datetime, timezone
+
+    for t in tasks:
+        start = t.get("starttime", 0)
+        end = t.get("endtime", 0)
+        try:
+            start_str = (
+                datetime.fromtimestamp(start, tz=timezone.utc).isoformat()
+                if start
+                else "-"
+            )
+        except (TypeError, ValueError, OSError):
+            start_str = "-"
+        try:
+            end_str = (
+                datetime.fromtimestamp(end, tz=timezone.utc).isoformat()
+                if end
+                else "-"
+            )
+        except (TypeError, ValueError, OSError):
+            end_str = "-"
+        lines.append(
+            f"| {t.get('type', '-')} | {t.get('status', '-')} | "
+            f"{t.get('user', '-')} | {start_str} | {end_str} |"
+        )
+    return "\n".join(lines)
+
+
+async def _get_vm_config_raw(node: str, vmid: int, connection_id: str = "") -> dict:
+    """Internal: returns the configuration of a VM as a dict."""
     proxmox = await _get_proxmox_client(connection_id)
     try:
         config = proxmox.nodes(node).qemu(vmid).config.get()
@@ -1011,3 +1273,54 @@ async def get_vm_config(node: str, vmid: int, connection_id: str = "") -> dict:
             "networks": networks,
             "ip_hints": _parse_proxmox_net_config(config),
         }
+
+
+@tool
+async def get_vm_config(node: str, vmid: int, connection_id: str = "") -> str:
+    """Returns the configuration of a VM as a formatted Markdown block."""
+    data = await _get_vm_config_raw(node, vmid, connection_id)
+    guest_type = data.get("type", "qemu")
+    lines = [
+        f"**Konfiguration {guest_type.upper()} {data.get('vmid', vmid)}** "
+        f"auf Node `{data.get('node', node)}`",
+        "",
+        "| Property | Value |",
+        "|---|---|",
+    ]
+    for key, value in data.items():
+        if key in ("vmid", "node", "type", "networks", "ip_hints"):
+            continue
+        if isinstance(value, (dict, list)):
+            value = json.dumps(value, default=str, ensure_ascii=False)
+        lines.append(f"| {key} | {value} |")
+    networks = data.get("networks") or {}
+    if networks:
+        lines.extend(
+            [
+                "",
+                "**Netzwerk-Interfaces:**",
+                "",
+                "| Key | Config |",
+                "|---|---|",
+            ]
+        )
+        for k, v in networks.items():
+            lines.append(f"| {k} | {v} |")
+    ip_hints = data.get("ip_hints") or []
+    if ip_hints:
+        lines.extend(
+            [
+                "",
+                "**Statische IP-Hints:**",
+                "",
+                "| Interface | IP | Familie |",
+                "|---|---|---|",
+            ]
+        )
+        for ip in ip_hints:
+            lines.append(
+                f"| {ip.get('interface', '-') or '-'} | "
+                f"{ip.get('ip') or ip.get('address') or '-'} | "
+                f"{ip.get('family', '-')} |"
+            )
+    return "\n".join(lines)

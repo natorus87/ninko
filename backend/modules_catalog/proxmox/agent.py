@@ -32,6 +32,8 @@ from .tools import (
     stop_container,
     stop_vm,
     suspend_vm,
+    _get_nodes_raw,
+    _list_all_vms_raw,
 )
 
 logger = logging.getLogger("ninko.modules.proxmox.agent")
@@ -244,8 +246,8 @@ class ProxmoxAgent(BaseAgent):
             except (RuntimeError, ValueError, TypeError, KeyError, OSError) as exc:
                 logger.warning("Connection-Lookup für Proxmox fehlgeschlagen: %s", exc)
             try:
-                nodes = await get_nodes.ainvoke({"connection_id": ""})
-                vms = await list_all_vms.ainvoke({"connection_id": ""})
+                nodes = await _get_nodes_raw("")
+                vms = await _list_all_vms_raw("")
             except (RuntimeError, ValueError, TypeError, KeyError, OSError) as exc:
                 logger.warning("Proxmox Fast-Path fehlgeschlagen: %s", exc)
                 return (
