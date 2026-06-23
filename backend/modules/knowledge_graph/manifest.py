@@ -18,11 +18,14 @@ async def check_knowledge_graph_health() -> dict:
 
         kg = await get_knowledge_graph()
         stats = await kg.get_stats()
+        nodes = stats["nodes"]
+        edges = stats["edges"]
+        tenants = stats.get("tenants", 0)
         return {
             "status": "ok",
             "detail": _t(
-                f"Knowledge Graph bereit: {stats['nodes']} Nodes, {stats['edges']} Edges",
-                f"Knowledge Graph ready: {stats['nodes']} nodes, {stats['edges']} edges",
+                f"Knowledge Graph bereit: {nodes} Nodes, {edges} Edges, {tenants} Tenants",
+                f"Knowledge Graph ready: {nodes} nodes, {edges} edges, {tenants} tenants",
             ),
             "stats": stats,
         }

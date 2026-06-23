@@ -468,9 +468,10 @@ async def lifespan(app: FastAPI) -> object:
     kg = await get_knowledge_graph()
     kg_stats = await kg.get_stats()
     logger.info(
-        "Knowledge Graph bereit: %d nodes, %d edges",
+        "Knowledge Graph bereit: %d nodes, %d edges, %d tenants",
         kg_stats.get("nodes", 0),
         kg_stats.get("edges", 0),
+        kg_stats.get("tenants", 0),
     )
 
     # ── Dynamischer Agenten-Pool laden ────────────────

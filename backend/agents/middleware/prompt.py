@@ -216,13 +216,15 @@ class KnowledgeGraphMiddleware(BaseMiddleware):
     async def pre_process(self, ctx: MiddlewareContext) -> MiddlewareResult:
         """Append knowledge graph context for the current agent."""
         try:
+            from core.auth import get_current_tenant_id
             from core.knowledge_graph import get_knowledge_graph
 
             kg = await get_knowledge_graph()
+            tenant_id = get_current_tenant_id() or "default"
             module_entity_id = f"module:{ctx.agent_name}"
 
-            if module_entity_id in kg._graph:
-                related = await kg.suggest_related(module_entity_id)
+            if await kg.entity_exists(tenant_id, module_entity_id):
+                related = await kg.suggest_related(tenant_id, module_entity_id)
                 if related:
                     kg_text = ctx.extra.get(
                         "_t_kg_prefix", "Related systems from Knowledge Graph:\n"
@@ -233,7 +235,7 @@ class KnowledgeGraphMiddleware(BaseMiddleware):
                         kg_text += f"- {ent.get('name', ent.get('id'))} ({reason})\n"
                     ctx.final_system_prompt += "\n\n" + kg_text
 
-            incidents = await kg.find_by_type("incident")
+            incidents = await kg.find_by_type(tenant_id, "incident")
             module_incidents = [
                 i
                 for i in incidents

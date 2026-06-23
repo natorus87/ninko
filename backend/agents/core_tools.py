@@ -8,6 +8,7 @@ import json
 import logging
 import re
 import shlex
+import tempfile
 from langchain_core.tools import tool
 from core.task_registry import get_task_registry
 from core.tool_permissions import (
@@ -1657,28 +1658,30 @@ async def kg_find_related(entity_type: str, entity_name: str) -> str:
     - kg_find_related("incident", "2024-01-dns-ausfall") → Ähnliche vergangene Incidents
     """
     try:
+        from core.auth import get_current_tenant_id
         from core.knowledge_graph import get_knowledge_graph
 
         kg = await get_knowledge_graph()
+        tenant_id = get_current_tenant_id() or "default"
 
         # Versuche direkte ID oder suche nach Namen
         entity_id = f"{entity_type}:{entity_name}"
 
         # Falls nicht gefunden, suche nach Name-Property
-        if entity_id not in kg._graph:
-            all_entities = await kg.find_by_type(entity_type)
+        if not await kg.entity_exists(tenant_id, entity_id):
+            all_entities = await kg.find_by_type(tenant_id, entity_type)
             for ent in all_entities:
                 if ent.get("name") == entity_name or entity_name in ent.get("id", ""):
                     entity_id = ent.get("id")
                     break
 
-        if entity_id not in kg._graph:
+        if not await kg.entity_exists(tenant_id, entity_id):
             return _t(
                 f"Entität '{entity_name}' ({entity_type}) nicht im Knowledge Graph gefunden.",
                 f"Entity '{entity_name}' ({entity_type}) not found in Knowledge Graph.",
             )
 
-        related = await kg.suggest_related(entity_id)
+        related = await kg.suggest_related(tenant_id, entity_id)
 
         if not related:
             return _t(
@@ -1731,10 +1734,12 @@ async def kg_find_path(source: str, target: str) -> str:
     - kg_find_path("host:pve1", "service:dns") → Welche DNS-Abhängigkeiten hat dieser Host?
     """
     try:
+        from core.auth import get_current_tenant_id
         from core.knowledge_graph import get_knowledge_graph
 
         kg = await get_knowledge_graph()
-        paths = await kg.get_path(source, target, max_depth=5)
+        tenant_id = get_current_tenant_id() or "default"
+        paths = await kg.get_path(tenant_id, source, target, max_depth=5)
 
         if not paths:
             return _t(
@@ -1752,10 +1757,10 @@ async def kg_find_path(source: str, target: str) -> str:
         for i, path in enumerate(paths[:3], 1):
             lines.append(f"\nPfad {i}:")
             for j, node_id in enumerate(path):
-                node = kg._graph.nodes.get(node_id, {})
+                node = kg.get_node_data(tenant_id, node_id) or {}
                 node_name = node.get("name", node_id)
                 if j < len(path) - 1:
-                    edge = kg._graph.edges.get((node_id, path[j + 1]), {})
+                    edge = kg.get_edge_data(tenant_id, node_id, path[j + 1]) or {}
                     rel = edge.get("relation", "→")
                     lines.append(f"  [{node_name}] --({rel})-->")
                 else:
@@ -1783,23 +1788,25 @@ async def kg_analyze_dependencies(module_name: str) -> str:
         Dependency-Analyse mit Impact-Bewertung
     """
     try:
+        from core.auth import get_current_tenant_id
         from core.knowledge_graph import get_knowledge_graph, RelationType
 
         kg = await get_knowledge_graph()
+        tenant_id = get_current_tenant_id() or "default"
         module_id = f"module:{module_name}"
 
-        if module_id not in kg._graph:
+        if not await kg.entity_exists(tenant_id, module_id):
             return _t(
                 f"Modul '{module_name}' nicht im Knowledge Graph gefunden.",
                 f"Module '{module_name}' not found in Knowledge Graph.",
             )
 
         # Outgoing: Was hängt an diesem Modul?
-        outgoing = await kg.get_neighbors(module_id, RelationType.DEPENDS_ON)
+        outgoing = await kg.get_neighbors(tenant_id, module_id, RelationType.DEPENDS_ON)
         outgoing_targets = [n for n in outgoing if n.get("direction") == "out"]
 
         # Incoming: Was hängt von diesem Modul ab?
-        incoming = await kg.get_neighbors(module_id, RelationType.DEPENDS_ON)
+        incoming = await kg.get_neighbors(tenant_id, module_id, RelationType.DEPENDS_ON)
         incoming_sources = [n for n in incoming if n.get("direction") == "in"]
 
         lines = [
@@ -1876,10 +1883,13 @@ async def kg_record_incident(
         Bestätigung mit extrahierten Entitäten
     """
     try:
+        from core.auth import get_current_tenant_id
         from core.knowledge_graph import get_knowledge_graph
 
         kg = await get_knowledge_graph()
+        tenant_id = get_current_tenant_id() or "default"
         result = await kg.extract_from_incident(
+            tenant_id=tenant_id,
             module=module,
             summary=summary,
             details=details,
@@ -1913,7 +1923,7 @@ async def kg_record_incident(
 async def generate_pdf_report(
     title: str,
     content_markdown: str,
-    output_path: str = "/tmp/ninko-reports/report.pdf",
+    output_path: str | None = None,
 ) -> str:
     """
     Erstellt ein PDF aus Markdown-Inhalt.
@@ -1930,6 +1940,10 @@ async def generate_pdf_report(
         Absoluter Pfad zur erstellten PDF-Datei
     """
     from pathlib import Path
+
+    if output_path is None:
+        tmp_dir = tempfile.mkdtemp(prefix="ninko-reports-")
+        output_path = str(Path(tmp_dir) / "report.pdf")
 
     try:
         import markdown

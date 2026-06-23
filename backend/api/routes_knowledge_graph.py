@@ -70,6 +70,7 @@ async def create_entity(
     try:
         kg = await get_knowledge_graph()
         entity = await kg.add_entity(
+            tenant_id=tenant_id,
             entity_id=body.entity_id,
             entity_type=body.entity_type,
             name=body.name,
@@ -91,7 +92,7 @@ async def get_entity(
     """Gibt eine Entität mit ihren Beziehungen zurück."""
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     kg = await get_knowledge_graph()
-    entity = await kg.get_entity(entity_id)
+    entity = await kg.get_entity(tenant_id=tenant_id, entity_id=entity_id)
     if not entity:
         raise HTTPException(status_code=404, detail=f"Entity {entity_id} not found")
     return ApiResponse(success=True, data=entity)
@@ -106,7 +107,9 @@ async def update_entity(
     """Aktualisiert Properties einer Entität."""
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     kg = await get_knowledge_graph()
-    result = await kg.update_entity(entity_id, body.properties)
+    result = await kg.update_entity(
+        tenant_id=tenant_id, entity_id=entity_id, properties=body.properties
+    )
     if not result:
         raise HTTPException(status_code=404, detail=f"Entity {entity_id} not found")
     return ApiResponse(success=True, data=result)
@@ -120,7 +123,7 @@ async def delete_entity(
     """Löscht eine Entität und alle ihre Beziehungen."""
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     kg = await get_knowledge_graph()
-    success = await kg.delete_entity(entity_id)
+    success = await kg.delete_entity(tenant_id=tenant_id, entity_id=entity_id)
     if not success:
         raise HTTPException(status_code=404, detail=f"Entity {entity_id} not found")
     return ApiResponse(success=True, data={"deleted": True})
@@ -137,10 +140,10 @@ async def list_entities(
     kg = await get_knowledge_graph()
 
     if entity_type:
-        entities = await kg.find_by_type(entity_type)
+        entities = await kg.find_by_type(tenant_id=tenant_id, entity_type=entity_type)
     else:
         # Alle Entitäten
-        entities = [dict(data) for _, data in kg._graph.nodes(data=True)]
+        entities = await kg.list_all_entities(tenant_id=tenant_id)
 
     return ApiResponse(
         success=True, data={"entities": entities[:limit], "total": len(entities)}
@@ -162,6 +165,7 @@ async def create_relationship(
     try:
         kg = await get_knowledge_graph()
         rel = await kg.add_relationship(
+            tenant_id=tenant_id,
             source=body.source,
             target=body.target,
             relation_type=body.relation_type,
@@ -169,7 +173,7 @@ async def create_relationship(
         )
         return ApiResponse(success=True, data=rel)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("Fehler beim Erstellen der Beziehung")
         raise HTTPException(status_code=500, detail="Relationship creation failed.") from exc
@@ -180,7 +184,7 @@ async def get_relation_types(
     request: Request,
 ) -> ApiResponse:
     """Gibt alle verfügbaren Beziehungstypen zurück."""
-    tenant_id = auth_tenant_id(resolve_request_auth(request))
+    auth_tenant_id(resolve_request_auth(request))
     return ApiResponse(
         success=True,
         data={
@@ -205,7 +209,7 @@ async def get_entity_types(
     request: Request,
 ) -> ApiResponse:
     """Gibt alle verfügbaren Entity-Typen zurück."""
-    tenant_id = auth_tenant_id(resolve_request_auth(request))
+    auth_tenant_id(resolve_request_auth(request))
     return ApiResponse(
         success=True,
         data={
@@ -239,7 +243,9 @@ async def get_neighbors(
     """Gibt Nachbarn einer Entität zurück."""
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     kg = await get_knowledge_graph()
-    neighbors = await kg.get_neighbors(entity_id, relation_type)
+    neighbors = await kg.get_neighbors(
+        tenant_id=tenant_id, entity_id=entity_id, relation_type=relation_type
+    )
     return ApiResponse(success=True, data={"neighbors": neighbors})
 
 
@@ -253,7 +259,9 @@ async def find_path(
     """Findet Pfade zwischen zwei Entitäten."""
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     kg = await get_knowledge_graph()
-    paths = await kg.get_path(source, target, max_depth)
+    paths = await kg.get_path(
+        tenant_id=tenant_id, source=source, target=target, max_depth=max_depth
+    )
     if paths is None:
         return ApiResponse(success=True, data={"paths": [], "found": False})
     return ApiResponse(success=True, data={"paths": paths, "found": True})
@@ -267,7 +275,7 @@ async def get_centrality(
     """Berechnet PageRank-Zentralität (Top-K)."""
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     kg = await get_knowledge_graph()
-    ranked = await kg.get_centrality(top_k)
+    ranked = await kg.get_centrality(tenant_id=tenant_id, top_k=top_k)
     return ApiResponse(success=True, data={"rankings": ranked})
 
 
@@ -278,7 +286,7 @@ async def get_communities(
     """Erkennt Communities (Cluster) im Knowledge Graph."""
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     kg = await get_knowledge_graph()
-    communities = await kg.find_communities()
+    communities = await kg.find_communities(tenant_id=tenant_id)
     return ApiResponse(success=True, data={"communities": communities})
 
 
@@ -290,7 +298,7 @@ async def get_suggestions(
     """Schlägt verwandte Entitäten basierend auf Graph und Semantic Memory vor."""
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     kg = await get_knowledge_graph()
-    suggestions = await kg.suggest_related(entity_id)
+    suggestions = await kg.suggest_related(tenant_id=tenant_id, entity_id=entity_id)
     return ApiResponse(success=True, data={"suggestions": suggestions})
 
 
@@ -312,6 +320,7 @@ async def extract_from_incident(
     try:
         kg = await get_knowledge_graph()
         extracted = await kg.extract_from_incident(
+            tenant_id=tenant_id,
             module=body.module,
             summary=body.summary,
             details=body.details,
@@ -335,7 +344,7 @@ async def get_stats(
     """Gibt Statistiken zum Knowledge Graph zurück."""
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     kg = await get_knowledge_graph()
-    stats = await kg.get_stats()
+    stats = await kg.get_stats(tenant_id=tenant_id)
     return ApiResponse(success=True, data=stats)
 
 
@@ -343,10 +352,10 @@ async def get_stats(
 async def export_graph(
     request: Request,
 ) -> ApiResponse:
-    """Exportiert den gesamten Graph als JSON (node-link Format)."""
+    """Exportiert den Tenant-Graph als JSON (node-link Format)."""
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     kg = await get_knowledge_graph()
-    data = await kg.export_graph()
+    data = await kg.export_graph(tenant_id=tenant_id)
     return ApiResponse(success=True, data=data)
 
 
@@ -359,7 +368,9 @@ async def import_graph(
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     try:
         kg = await get_knowledge_graph()
-        stats = await kg.import_graph(body.data, merge=body.merge)
+        stats = await kg.import_graph(
+            tenant_id=tenant_id, data=body.data, merge=body.merge
+        )
         return ApiResponse(success=True, data=stats)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -379,7 +390,7 @@ async def get_visualization_data(
     """
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     kg = await get_knowledge_graph()
-    graph_data = await kg.export_graph()
+    graph_data = await kg.export_graph(tenant_id=tenant_id)
 
     # Konvertiere zu Cytoscape-Format
     nodes = []
