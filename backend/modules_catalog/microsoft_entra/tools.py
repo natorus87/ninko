@@ -150,42 +150,45 @@ async def list_entra_users(connection_id: str = "") -> str:
                 zh="用户",
             )
         ]
-        for u in users[:15]:
+        total = len(users)
+        shown = min(total, 15)
+        for u in users[:shown]:
             enabled = "✅" if u.get("accountEnabled", True) else "❌"
             lines.append(
                 f"  {enabled} {u.get('displayName', '-')} <{u.get('userPrincipalName', '-')}>"
             )
 
-        if total:
+        if total > shown:
+            extra = total - shown
             lines.append(
                 f"\n💡 "
                 + _t(
-                    de=f"{count}+ Benutzer (sehe nach mehr)",
-                    en=f"{count}+ users (see more)",
-                    fr=f"{count}+ utilisateurs (voir plus)",
-                    es=f"{count}+ usuarios (ver más)",
-                    it=f"{count}+ utenti (vedi altro)",
-                    nl=f"{count}+ gebruikers (zie meer)",
-                    pl=f"{count}+ użytkowników (zobacz więcej)",
-                    pt=f"{count}+ usuários (ver mais)",
-                    ja=f"{count}+ ユーザー (もっと見る)",
-                    zh=f"{count}+ 用户 (查看更多)",
+                    de=f"+{extra} weitere Benutzer (insgesamt {total})",
+                    en=f"+{extra} more users (total {total})",
+                    fr=f"+{extra} autres utilisateurs (total {total})",
+                    es=f"+{extra} usuarios más (total {total})",
+                    it=f"+{extra} altri utenti (totale {total})",
+                    nl=f"+{extra} meer gebruikers (totaal {total})",
+                    pl=f"+{extra} więcej użytkowników (łącznie {total})",
+                    pt=f"+{extra} mais usuários (total {total})",
+                    ja=f"他 {extra} ユーザー (合計 {total})",
+                    zh=f"还有 {extra} 个用户 (共 {total})",
                 )
             )
         else:
             lines.append(
                 f"\n✓ "
                 + _t(
-                    de=f"{count} Benutzer gesamt",
-                    en=f"{count} users total",
-                    fr=f"{count} utilisateurs au total",
-                    es=f"{count} usuarios en total",
-                    it=f"{count} utenti in totale",
-                    nl=f"{count} gebruikers totaal",
-                    pl=f"{count} użytkowników łącznie",
-                    pt=f"{count} usuários no total",
-                    ja=f"{count} ユーザー (合計)",
-                    zh=f"{count} 位用户 (共)",
+                    de=f"{total} Benutzer gesamt",
+                    en=f"{total} users total",
+                    fr=f"{total} utilisateurs au total",
+                    es=f"{total} usuarios en total",
+                    it=f"{total} utenti in totale",
+                    nl=f"{total} gebruikers totaal",
+                    pl=f"{total} użytkowników łącznie",
+                    pt=f"{total} usuários no total",
+                    ja=f"合計 {total} ユーザー",
+                    zh=f"共 {total} 个用户",
                 )
             )
 

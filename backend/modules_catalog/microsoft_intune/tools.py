@@ -257,6 +257,14 @@ async def get_intune_device(device_name: str, connection_id: str = "") -> str:
             )
             + f": {d.get('lastSyncDateTime', '-')[:19]}"
         )
+        yes = _t(
+            de="Ja", en="Yes", fr="Oui", es="Sí", it="Sì", nl="Ja", pl="Tak", pt="Sim", ja="はい", zh="是"
+        )
+        no = _t(
+            de="Nein", en="No", fr="Non", es="No", it="No", nl="Nee", pl="Nie", pt="Não", ja="いいえ", zh="否"
+        )
+        jailbreak_marker = yes if d.get("jailBreakDetectedState") else no
+        managed_marker = yes if d.get("isManaged") else no
         lines.append(
             f"  "
             + _t(
@@ -271,7 +279,7 @@ async def get_intune_device(device_name: str, connection_id: str = "") -> str:
                 ja="ジェイルブレイク",
                 zh="越狱",
             )
-            + f": {'" + _t(de="Ja", en="Yes", fr="Oui", es="Sí", it="Sì", nl="Ja", pl="Tak", pt="Sim", ja="はい", zh="是") + "' if d.get('jailBreakDetectedState') else '" + _t(de="Nein", en="No", fr="Non", es="No", it="No", nl="Nee", pl="Nie", pt="Não", ja="いいえ", zh="否") + "'}"
+            + f": {jailbreak_marker}"
         )
         lines.append(
             f"  "
@@ -287,7 +295,7 @@ async def get_intune_device(device_name: str, connection_id: str = "") -> str:
                 ja="管理対象",
                 zh="已管理",
             )
-            + f": {'" + _t(de="Ja", en="Yes", fr="Oui", es="Sí", it="Sì", nl="Ja", pl="Tak", pt="Sim", ja="はい", zh="是") + "' if d.get('isManaged') else '" + _t(de="Nein", en="No", fr="Non", es="No", it="No", nl="Nee", pl="Nie", pt="Não", ja="いいえ", zh="否") + "'}"
+            + f": {managed_marker}"
         )
 
         return "\n".join(lines)

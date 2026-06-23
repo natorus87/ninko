@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import logging
 from typing import Any
+import asyncio
 import httpx
 
 from core.vault import get_vault
@@ -397,11 +398,12 @@ async def handle_teams_turn(app: FastAPI, activity: dict[str, Any]) -> None:
     except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
         logger.exception("Internal error in handle_teams_turn: %s", e)
         err_type = type(e).__name__
+        err_msg = str(e)[:300]
         await send_teams_message(
             service_url, conv_id, activity_id,
             _t(
-                f"❌ Interner Fehler ({err_type}):\n{str(exc)[:300]}\n\nBitte versuche es erneut.",
-                f"❌ Internal error ({err_type}):\n{str(exc)[:300]}\n\nPlease try again.",
+                f"❌ Interner Fehler ({err_type}):\n{err_msg}\n\nBitte versuche es erneut.",
+                f"❌ Internal error ({err_type}):\n{err_msg}\n\nPlease try again.",
             ),
             apply_format=False,
         )

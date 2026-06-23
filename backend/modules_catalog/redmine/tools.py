@@ -281,12 +281,14 @@ async def get_redmine_project(project_id: str, connection_id: str = "") -> dict:
     """
     try:
         client = await _get_api_client(connection_id)
+        params: dict[str, Any] = {}
+        _add_if_set(params, "include", "trackers,issue_categories,attachments,wiki_pages")
         result = await _redmine_request(
             client["base_url"],
             client["api_key"],
             "GET",
-            "issues.json",
-            params,
+            f"projects/{project_id}.json",
+            params=params if params else None,
             verify_ssl=client["verify_ssl"],
         )
         return {
@@ -666,7 +668,7 @@ async def get_redmine_user_hours_report(
                         "comments": entry.get("comments", ""),
                     }
                 )
-            except (AttributeError, TypeError, ValueError) as e:
+            except (AttributeError, TypeError, ValueError):
                 logger.warning(
                     _t(
                         de="Fehlerhafter Time Entry übersprungen: %s",
@@ -1872,7 +1874,7 @@ async def reset_redmine_user_password(
     """
     try:
         client = await _get_api_client(connection_id)
-        result = await _redmine_request(
+        await _redmine_request(
             client["base_url"],
             client["api_key"],
             "PUT",
