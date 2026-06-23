@@ -22,6 +22,7 @@ import numpy as np
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from agents.base_agent import BaseAgent, _t
+from agents.fast_path_tool_resolver import try_get_module_tool
 from agents.core_tools import (
     execute_cli_command,
     create_custom_agent,
@@ -2436,7 +2437,9 @@ JSON-SCHEMA:
             ),
         )
 
-        from modules_catalog.fritzbox.tools import get_fritz_devices
+        get_fritz_devices = try_get_module_tool(self.registry, "fritzbox", "get_fritz_devices")
+        if get_fritz_devices is None:
+            return None
 
         try:
             devices = await get_fritz_devices.ainvoke({"connection_id": ""})
