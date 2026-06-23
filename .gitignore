@@ -19,6 +19,8 @@ my_backend.log
 
 # Laufzeit-Daten (persistent volume, nicht ins Repo)
 data/secrets.db
+data/*.db
+data/**/*.db
 data/plugins/
 data/skills/
 data/uploads/
