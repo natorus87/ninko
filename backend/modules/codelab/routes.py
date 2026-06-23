@@ -31,7 +31,7 @@ async def run_code(req: ExecuteRequest) -> object:
             timeout=req.timeout,
         )
         return result
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError):
         logger.exception("Fehler bei Code-Ausführung")
         return _error("Code-Ausführung fehlgeschlagen.", 500)
 
@@ -41,7 +41,7 @@ async def languages() -> object:
     """Gibt verfügbare Sprachen in der Sandbox zurück."""
     try:
         return get_available_languages.invoke({})
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError):
         logger.exception("Fehler beim Laden der verfügbaren Sprachen")
         return _error("Verfügbare Sprachen konnten nicht geladen werden.", 500)
 
@@ -70,6 +70,6 @@ async def improve_text(req: ImproveTextRequest) -> object:
         llm = get_llm()
         response = await llm.ainvoke([HumanMessage(content=prompt)])
         return {"result": response.content, "error": ""}
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError):
         logger.exception("Fehler bei Textverbesserung")
         return _error("Textverbesserung fehlgeschlagen.", 500)

@@ -98,7 +98,6 @@ async def delete_route_api(route_id: str) -> None:
 @router.post("/workers/restart")
 async def restart_workers() -> dict[str, Any]:
     """Stoppt und startet alle Worker neu (z.B. nach Konfigurationsänderung)."""
-    from fastapi import Request
     from .hub import get_message_hub
 
     hub = get_message_hub()

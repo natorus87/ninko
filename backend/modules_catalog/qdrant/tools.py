@@ -166,11 +166,11 @@ async def _get_qdrant_client(connection_id: str = "") -> tuple[Any, str]:
     """
     try:
         from qdrant_client import AsyncQdrantClient
-    except ImportError:
+    except ImportError as exc:
         raise RuntimeError(
             "qdrant-client is not installed. "
             "Please add 'qdrant-client' to requirements.txt and rebuild."
-        )
+        ) from exc
 
     from core.connections import ConnectionManager
 

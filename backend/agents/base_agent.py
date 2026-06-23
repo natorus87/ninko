@@ -382,8 +382,8 @@ class _StatusEmitter(AsyncCallbackHandler):
                     self.session_id,
                     {"type": "thinking_content", "text": text[:600]},
                 )
-        except Exception:
-            pass  # Thinking-Content ist optional, darf nie blockieren
+        except Exception as exc:
+            logger.debug("Thinking-Content-Event konnte nicht emittiert werden: %s", exc)
 
 
 _DEFAULT_AGENT_TIMEOUT_SECONDS = 1800

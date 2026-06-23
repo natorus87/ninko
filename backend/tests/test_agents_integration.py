@@ -15,10 +15,7 @@ Or run directly:
 
 from __future__ import annotations
 
-import json
 import uuid
-from datetime import datetime, timezone
-from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -29,7 +26,9 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from main import app
-from core.redis_client import get_redis
+
+
+pytestmark = pytest.mark.integration
 
 
 client = TestClient(app)

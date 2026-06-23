@@ -7,7 +7,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import socket
-import subprocess
 from typing import Any
 
 from langchain.tools import tool
@@ -118,7 +117,7 @@ async def ping_host(hostname: str, count: int = 4) -> str:
 
 def _ping_socket_fallback(hostname: str, count: int = 4) -> str:
     """Fallback-Ping via socket.SOCK_DGRAM (kein Root/RAW-Socket nötig)."""
-    import struct, time
+    import time
 
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

@@ -12,7 +12,6 @@ from contextlib import asynccontextmanager
 import httpx
 from langchain_core.tools import tool
 
-from core.vault import get_vault
 from core.tls import get_connection_verify_arg
 from core.ocr_service import extract_text_from_image_bytes
 

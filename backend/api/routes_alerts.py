@@ -46,7 +46,7 @@ async def list_alerts(module: str | None = None) -> ApiResponse:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Fehler beim Laden der Alerts: {exc}",
-        )
+        ) from exc
 
 
 @router.get("/{alert_id}", response_model=ApiResponse)
@@ -81,7 +81,7 @@ async def get_alert(alert_id: str) -> ApiResponse:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Fehler beim Abrufen des Alerts: {exc}",
-        )
+        ) from exc
 
 
 @router.post("/{alert_id}/resolve", response_model=ApiResponse)
@@ -123,4 +123,4 @@ async def resolve_alert_endpoint(alert_id: str) -> ApiResponse:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Fehler beim Resolven des Alerts: {exc}",
-        )
+        ) from exc

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import Optional
 
 class FritzDevice(BaseModel):
     name: str = Field(..., description="Hostname of the device")

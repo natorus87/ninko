@@ -68,7 +68,7 @@ async def create_task(request: Request, body: ScheduledTaskCreate) -> ScheduledT
         task = await scheduler.create_task(body.model_dump())
         return ScheduledTaskInfo(**task)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.put("/tasks/{task_id}", response_model=ScheduledTaskInfo)
@@ -82,7 +82,7 @@ async def update_task(
     try:
         task = await scheduler.update_task(task_id, body.model_dump(exclude_unset=True))
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if not task:
         raise HTTPException(status_code=404, detail="Aufgabe nicht gefunden.")

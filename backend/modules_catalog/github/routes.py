@@ -1,6 +1,6 @@
 """GitHub module API routes."""
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter
 
 from core.schemas import ApiResponse
 

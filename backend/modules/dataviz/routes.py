@@ -15,7 +15,6 @@ from modules.dataviz.schemas import (
     ChartRequest,
     ChartResponse,
     MermaidRequest,
-    MultiSeriesChartRequest,
 )
 
 router = APIRouter(prefix="/dataviz", tags=["dataviz"])
@@ -111,7 +110,7 @@ async def create_chart(request: ChartRequest):
                 )
             except Exception as exc:
                 logger.warning("Plotly HTML chart failed: %s", exc)
-                raise HTTPException(status_code=500, detail="Chart rendering failed.")
+                raise HTTPException(status_code=500, detail="Chart rendering failed.") from exc
         else:
             plt.close(fig)
             return ChartResponse(
@@ -124,7 +123,7 @@ async def create_chart(request: ChartRequest):
         raise
     except Exception as exc:
         logger.exception("Chart rendering failed: %s", exc)
-        raise HTTPException(status_code=500, detail="Chart rendering failed.")
+        raise HTTPException(status_code=500, detail="Chart rendering failed.") from exc
 
 
 @router.post("/mermaid", response_class=HTMLResponse)

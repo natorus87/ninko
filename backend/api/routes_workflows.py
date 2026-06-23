@@ -558,7 +558,7 @@ async def retry_workflow_step(run_id: str, step_index: int, request: Request) ->
         raise
     except Exception as exc:
         logger.warning("Step-Retry konnte nicht gestartet werden: %s", exc)
-        raise HTTPException(status_code=500, detail=f"Retry konnte nicht gestartet werden: {exc}")
+        raise HTTPException(status_code=500, detail=f"Retry konnte nicht gestartet werden: {exc}") from exc
 
     return {"run_id": run_id, "step_index": step_index, "status": "retrying"}
 

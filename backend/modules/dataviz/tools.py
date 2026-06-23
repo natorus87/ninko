@@ -5,15 +5,8 @@ Tools für DataViz Modul - Chart-Generierung.
 import base64
 import io
 import json
-from typing import List, Dict, Any, Optional, Union
 from langchain.tools import tool
 
-from modules.dataviz.schemas import (
-    ChartDataPoint,
-    ChartRequest,
-    MermaidRequest,
-    MultiSeriesChartRequest,
-)
 from agents.base_agent import _t
 
 

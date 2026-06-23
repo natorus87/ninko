@@ -44,4 +44,4 @@ async def get_status(connection_id: str = "") -> object:
             "storage_used": used,
         }
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc

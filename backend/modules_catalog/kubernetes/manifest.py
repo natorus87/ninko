@@ -14,7 +14,7 @@ logger = logging.getLogger("ninko.modules.kubernetes")
 async def check_k8s_health() -> dict:
     """Health check for Kubernetes cluster connection."""
     try:
-        from kubernetes import client, config
+        from kubernetes import client
         from .tools import _get_k8s_client
 
         v1, _, _ = await _get_k8s_client()

@@ -7,7 +7,7 @@ import ipaddress
 import logging
 import os
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import httpx
 from langchain_core.tools import tool
@@ -80,12 +80,12 @@ def _validate_network_value(
         else:
             ipaddress.ip_address(stripped)
         return stripped
-    except ValueError:
+    except ValueError as exc:
         if allow_alias and re.match(r'^[a-zA-Z0-9_.-]{1,128}$', stripped):
             return stripped
         raise ValueError(
             f"Invalid {param}: must be 'any', an IP/CIDR, or a safe alias name (got: {value!r})"
-        )
+        ) from exc
 
 
 def _validate_virtual_ip_mode(value: str) -> str:
@@ -221,10 +221,10 @@ async def _opnsense_request(
         )
         raise ValueError(
             f"OPNsense API error (HTTP {e.response.status_code}): {e.response.text[:200]}"
-        )
+        ) from e
     except httpx.HTTPError as e:
         logger.error("OPNsense API Error: %s", e)
-        raise ValueError(f"OPNsense API error: {e}")
+        raise ValueError(f"OPNsense API error: {e}") from e
 
 
 @tool

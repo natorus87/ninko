@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 import sys
 
 sys.path.append("/app")

@@ -6,9 +6,7 @@ Vordefinierte Workflow-Vorlagen für häufige IT-Operations-Use-Cases.
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
-from typing import Any
 
 
 def _load_template(filename: str) -> dict | None:

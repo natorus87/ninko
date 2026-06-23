@@ -166,7 +166,7 @@ async def create_custom_theme(body: ThemeDefinition) -> ThemeDefinition:
     try:
         return save_custom_theme(body)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.put("/custom/{theme_id}", response_model=ThemeDefinition)
@@ -178,7 +178,7 @@ async def update_custom_theme(theme_id: str, body: ThemeDefinition) -> ThemeDefi
     try:
         return save_custom_theme(body)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.delete("/custom/{theme_id}", response_model=MutationResponse)
@@ -358,8 +358,8 @@ async def install_theme_from_repo(theme_id: str, repo_id: str = Query(default=_O
 
     try:
         theme = ThemeDefinition(**json.loads(data["theme.json"].decode("utf-8")))
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError, UnicodeDecodeError):
-        raise HTTPException(status_code=400, detail="theme.json ungültig.")
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="theme.json ungültig.") from exc
     if theme.id != theme_id:
         raise HTTPException(status_code=400, detail="Theme-ID passt nicht zum angeforderten Pfad.")
 

@@ -109,10 +109,10 @@ async def install_from_marketplace(
         )
         return MarketplaceInstallResponse(name=body.name, path=str(path))
     except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc))
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         logger.error("Marketplace-Install fehlgeschlagen: %s", exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @router.get("/repos", response_model=list[SkillRepo])
@@ -141,7 +141,7 @@ async def add_repo(
         )
         return SkillRepoAddResponse(id=body.id)
     except (ValueError, PermissionError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.delete("/repos/{repo_id}", response_model=SkillRepoRemoveResponse)
@@ -155,9 +155,9 @@ async def remove_repo(
         await mp.remove_repo(repo_id)
         return SkillRepoRemoveResponse(id=repo_id)
     except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc))
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -193,7 +193,7 @@ async def create_skill(
         return SkillCreateResponse(name=body.name, path=str(path))
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         logger.error("Skill-Erstellung fehlgeschlagen: %s", exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @router.put("/{name}", response_model=SkillUpdateResponse)
@@ -208,7 +208,7 @@ async def update_skill(
         return SkillUpdateResponse(name=name, path=str(path))
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         logger.error("Skill-Update fehlgeschlagen: %s", exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @router.delete("/{name}", status_code=200, response_model=SkillDeleteResponse)
@@ -226,8 +226,8 @@ async def delete_skill(
             )
         return SkillDeleteResponse(deleted=name)
     except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc))
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except HTTPException:
         raise
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc

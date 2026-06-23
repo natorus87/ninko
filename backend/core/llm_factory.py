@@ -311,8 +311,8 @@ def get_llm() -> BaseChatModel:
         # Legacy-Fallback: Ollama (nur noch für lokale Entwicklung)
         try:
             from langchain_ollama import ChatOllama
-        except ImportError:
-            raise ImportError("langchain-ollama ist nicht installiert. Nutze LM Studio als Backend.")
+        except ImportError as exc:
+            raise ImportError("langchain-ollama ist nicht installiert. Nutze LM Studio als Backend.") from exc
         logger.info(
             "LLM-Backend: Ollama (Legacy) – Modell=%s, URL=%s",
             settings.OLLAMA_MODEL,
@@ -432,8 +432,8 @@ def get_embeddings() -> Embeddings:
         if embed_backend == "ollama":
             try:
                 from langchain_ollama import OllamaEmbeddings
-            except ImportError:
-                raise ImportError("langchain-ollama ist nicht installiert.")
+            except ImportError as exc:
+                raise ImportError("langchain-ollama ist nicht installiert.") from exc
             logger.info(
                 "Embedding-Backend: Ollama (eigener Provider) – Modell=%s, URL=%s",
                 embed_model, embed_base_url,
@@ -466,8 +466,8 @@ def get_embeddings() -> Embeddings:
     if settings.LLM_BACKEND == "ollama":
         try:
             from langchain_ollama import OllamaEmbeddings
-        except ImportError:
-            raise ImportError("langchain-ollama ist nicht installiert. Nutze LM Studio als Backend.")
+        except ImportError as exc:
+            raise ImportError("langchain-ollama ist nicht installiert. Nutze LM Studio als Backend.") from exc
         logger.info(
             "Embedding-Backend: Ollama (LLM-Fallback) – Modell=%s, URL=%s",
             embed_model, settings.OLLAMA_BASE_URL,

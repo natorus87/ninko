@@ -184,7 +184,7 @@ async def set_active_profile(
     try:
         await sg.set_active_profile(body.profile_id)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     await _audit_admin_change(
         request,
         "Global safeguard profile changed",

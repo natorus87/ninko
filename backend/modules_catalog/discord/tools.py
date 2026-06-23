@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import httpx
 from langchain_core.tools import tool
@@ -227,7 +227,7 @@ async def send_discord_message(
         config = await _get_discord_config(connection_id)
         bot_token = config["bot_token"]
 
-        result = await _discord_request(
+        await _discord_request(
             "POST",
             f"/channels/{channel_id}/messages",
             bot_token,

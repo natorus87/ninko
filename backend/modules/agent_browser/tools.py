@@ -34,6 +34,7 @@ import os
 import re
 import shutil
 import socket
+import tempfile
 import time
 from pathlib import Path
 from urllib.parse import urlparse
@@ -50,7 +51,10 @@ _OPEN_TIMEOUT = 90.0
 _CLOSE_TIMEOUT = 15.0
 _MAX_LINES = 200
 _SCREENSHOT_DIR = Path(
-    os.getenv("NINKO_AGENT_BROWSER_SCREENSHOT_DIR", "/tmp/ninko-agent-browser-screenshots")
+    os.getenv(
+        "NINKO_AGENT_BROWSER_SCREENSHOT_DIR",
+        str(Path(tempfile.gettempdir()) / "ninko-agent-browser-screenshots"),
+    )
 )
 _SCREENSHOT_TTL_SECONDS = int(
     os.getenv("NINKO_AGENT_BROWSER_SCREENSHOT_TTL", str(24 * 3600))
@@ -75,7 +79,7 @@ _BLOCKED_HOSTNAMES = frozenset({
 def _minimal_env() -> dict[str, str]:
     env = {
         "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
-        "HOME": os.environ.get("HOME", "/tmp"),
+        "HOME": os.environ.get("HOME", tempfile.gettempdir()),
         "LANG": os.environ.get("LANG", "C.UTF-8"),
         "LC_ALL": os.environ.get("LC_ALL", "C.UTF-8"),
     }

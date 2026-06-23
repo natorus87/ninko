@@ -21,7 +21,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    pass
+    from core.safeguard import SafeguardProfile
 
 logger = logging.getLogger("ninko.core.safeguard_profiles")
 
@@ -126,7 +126,7 @@ class SafeguardProfileStore:
         profiles.sort(key=lambda p: (not p.get("builtin", False), p.get("name", "")))
         return profiles
 
-    async def get_profile(self, profile_id: str) -> "SafeguardProfile | None":
+    async def get_profile(self, profile_id: str) -> SafeguardProfile | None:
         """Profil nach ID aus Redis laden."""
         from core.redis_client import get_redis
         from core.safeguard import SafeguardProfile
@@ -141,7 +141,7 @@ class SafeguardProfileStore:
         except (json.JSONDecodeError, UnicodeDecodeError, KeyError):
             return None
 
-    async def save_profile(self, profile: "SafeguardProfile") -> None:
+    async def save_profile(self, profile: SafeguardProfile) -> None:
         """
         Custom-Profil speichern. Wirft ValueError bei Built-in-Profilen.
         """

@@ -17,7 +17,6 @@ from .tools import (
     get_deployment_status,
     get_failing_pods,
     restart_pod,
-    get_pod_logs,
 )
 
 logger = logging.getLogger("ninko.modules.kubernetes.remediation")
@@ -39,13 +38,13 @@ async def restart_with_db_dependency(
     5. Status-Report zurückgeben + in Memory schreiben
     """
     memory = get_memory()
-    redis = get_redis()
+    get_redis()
     steps: list[str] = []
 
     try:
         # 1. App herunterskalieren
         logger.info("Remediation: Skaliere '%s' auf 0…", app_deployment)
-        result = await scale_deployment.ainvoke({
+        await scale_deployment.ainvoke({
             "namespace": namespace,
             "name": app_deployment,
             "replicas": 0,
@@ -94,7 +93,7 @@ async def restart_with_db_dependency(
         # 4. App wieder hochskalieren
         # Vorherige Replica-Anzahl abfragen (Default: 1)
         logger.info("Remediation: Skaliere '%s' wieder hoch…", app_deployment)
-        result = await scale_deployment.ainvoke({
+        await scale_deployment.ainvoke({
             "namespace": namespace,
             "name": app_deployment,
             "replicas": 1,
@@ -238,7 +237,7 @@ async def auto_remediate_failing_pods(namespace: str = "") -> dict:
         if "crashloopbackoff" in issues_str:
             # Pod neu starten (letzter Versuch vor Eskalation)
             if pod.get("restarts", 0) < 10:
-                result = await restart_pod.ainvoke({
+                await restart_pod.ainvoke({
                     "namespace": pod_ns,
                     "pod_name": pod_name,
                 })
@@ -268,7 +267,7 @@ async def auto_remediate_failing_pods(namespace: str = "") -> dict:
             )
 
         else:
-            result = await restart_pod.ainvoke({
+            await restart_pod.ainvoke({
                 "namespace": pod_ns,
                 "pod_name": pod_name,
             })

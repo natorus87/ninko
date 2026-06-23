@@ -889,7 +889,7 @@ async def log_openproject_time(
         if comment:
             entry_data["comment"] = {"raw": comment}
 
-        result = await _op_request("POST", "/time_entries", client, json=entry_data)
+        await _op_request("POST", "/time_entries", client, json=entry_data)
 
         return _t(
             de=f"✅ {hours}h gebucht für {project_name}",

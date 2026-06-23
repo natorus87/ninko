@@ -76,7 +76,7 @@ def _build_bwrap_cmd(exec_cmd: list[str], tmp_dir: str, bwrap_bin: str) -> list[
     args += ["--proc", "/proc", "--dev", "/dev"]
 
     # Isoliertes /tmp (tmpfs — kein Zugriff auf Host-/tmp)
-    args += ["--tmpfs", "/tmp"]
+    args += ["--tmpfs", "/tmp"]  # noqa: S108
 
     # Script-Verzeichnis read/write einbinden
     args += ["--bind", tmp_dir, tmp_dir]

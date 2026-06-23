@@ -196,6 +196,6 @@ async def delete_profile(profile_id: str, request: Request) -> None:
     try:
         await profile_store.delete_profile(profile_id)
     except ValueError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+        raise HTTPException(status_code=403, detail=str(e)) from e
     except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e

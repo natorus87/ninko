@@ -7,7 +7,6 @@ from __future__ import annotations
 import logging
 import os
 import base64
-from typing import Any
 
 import httpx
 from langchain_core.tools import tool
@@ -352,7 +351,6 @@ async def update_jira_issue(
         auth = _build_auth_header(client["email"], client["api_key"])
 
         fields = {}
-        update = {}
 
         if summary:
             fields["summary"] = summary
@@ -376,7 +374,7 @@ async def update_jira_issue(
         if status:
             issue_data["transition"] = {"id": status}
 
-        result = await _jira_request(
+        await _jira_request(
             client["base_url"],
             auth,
             "PUT",
@@ -539,7 +537,7 @@ async def transition_jira_issue(
         client = await _get_api_client(connection_id)
         auth = _build_auth_header(client["email"], client["api_key"])
 
-        result = await _jira_request(
+        await _jira_request(
             client["base_url"],
             auth,
             "POST",

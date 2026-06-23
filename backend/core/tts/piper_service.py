@@ -99,11 +99,11 @@ class PiperService:
                     proc.communicate(input=text.encode("utf-8")),
                     timeout=_SYNTHESIZE_TIMEOUT,
                 )
-            except asyncio.TimeoutError:
+            except asyncio.TimeoutError as exc:
                 proc.kill()
                 raise PiperError(
                     f"Piper Timeout nach {_SYNTHESIZE_TIMEOUT}s – Text zu lang?"
-                )
+                ) from exc
 
             if proc.returncode != 0:
                 err = stderr.decode("utf-8", errors="replace").strip()

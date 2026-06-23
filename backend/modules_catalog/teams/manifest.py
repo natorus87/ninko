@@ -5,10 +5,8 @@ Microsoft Teams Module — manifest with metadata and health check.
 from __future__ import annotations
 
 import logging
-import httpx
 
 from core.module_registry import ModuleManifest
-from core.vault import get_vault
 from .bot import get_teams_access_token
 
 logger = logging.getLogger("ninko.modules.teams")

@@ -4,7 +4,6 @@ import threading
 import queue
 import asyncio
 import datetime
-from typing import Optional, List
 
 from redis.exceptions import RedisError
 

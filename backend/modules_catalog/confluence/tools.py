@@ -7,7 +7,6 @@ from __future__ import annotations
 import logging
 import os
 import base64
-from typing import Any
 
 import httpx
 from langchain_core.tools import tool

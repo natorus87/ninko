@@ -300,12 +300,12 @@ async def transcribe_audio(
     except HTTPException:
         raise
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except (ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         logger.error("Transkriptionsfehler: %s", exc)
         raise HTTPException(
             status_code=500, detail=f"Transkription fehlgeschlagen: {exc}"
-        )
+        ) from exc
     finally:
         if tmp_path:
             try:

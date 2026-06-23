@@ -53,7 +53,7 @@ async def summary(connection_id: str = "") -> object:
         return _normalize_tool_output(result)
     except ValueError as e:
         return _error(str(e), 503)
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+    except (RuntimeError, TypeError, KeyError, OSError) as e:
         return _error(str(e))
 
 
@@ -67,7 +67,7 @@ async def queries(count: int = 100, connection_id: str = "") -> object:
         return _normalize_tool_output(result)
     except ValueError as e:
         return _error(str(e), 503)
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+    except (RuntimeError, TypeError, KeyError, OSError) as e:
         return _error(str(e))
 
 
@@ -81,7 +81,7 @@ async def top_domains(count: int = 10, connection_id: str = "") -> object:
         return _normalize_tool_output(result)
     except ValueError as e:
         return _error(str(e), 503)
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+    except (RuntimeError, TypeError, KeyError, OSError) as e:
         return _error(str(e))
 
 
@@ -95,7 +95,7 @@ async def top_clients(count: int = 10, connection_id: str = "") -> object:
         return _normalize_tool_output(result)
     except ValueError as e:
         return _error(str(e), 503)
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+    except (RuntimeError, TypeError, KeyError, OSError) as e:
         return _error(str(e))
 
 
@@ -107,7 +107,7 @@ async def set_blocking(enable: bool = True, duration: int = 0, connection_id: st
         return {"message": msg}
     except ValueError as e:
         return _error(str(e), 503)
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+    except (RuntimeError, TypeError, KeyError, OSError) as e:
         return _error(str(e))
 
 
@@ -119,7 +119,7 @@ async def blocklists(connection_id: str = "") -> object:
         return _normalize_tool_output(result)
     except ValueError as e:
         return _error(str(e), 503)
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+    except (RuntimeError, TypeError, KeyError, OSError) as e:
         return _error(str(e))
 
 
@@ -137,7 +137,7 @@ async def add_domain(list_type: str, kind: str, domain: str, comment: str = "", 
         return {"message": msg}
     except ValueError as e:
         return _error(str(e), 503)
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+    except (RuntimeError, TypeError, KeyError, OSError) as e:
         return _error(str(e))
 
 
@@ -154,7 +154,7 @@ async def remove_domain(list_type: str, kind: str, domain: str, connection_id: s
         return {"message": msg}
     except ValueError as e:
         return _error(str(e), 503)
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+    except (RuntimeError, TypeError, KeyError, OSError) as e:
         return _error(str(e))
 
 
@@ -166,5 +166,5 @@ async def system_info(connection_id: str = "") -> object:
         return _normalize_tool_output(result)
     except ValueError as e:
         return _error(str(e), 503)
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as e:
+    except (RuntimeError, TypeError, KeyError, OSError) as e:
         return _error(str(e))

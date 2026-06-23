@@ -23,8 +23,8 @@ async def messages_webhook(request: Request) -> dict[str, Any]:
     """
     try:
         activity = await request.json()
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError):
-        raise HTTPException(status_code=400, detail="Invalid JSON")
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON") from exc
 
     if activity.get("type") == "message":
         app = request.app

@@ -1,7 +1,7 @@
 import logging
 import asyncio
 import os
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from langchain_core.tools import tool
 from pydantic import ValidationError
 
@@ -64,7 +64,7 @@ async def _get_fc(connection_id: str = "") -> Any:
                     ja=f"FritzBox にアクセスできません（{host}）: {e}",
                     zh=f"FritzBox 无法访问（{host}）: {e}",
                 )
-            )
+            ) from e
 
     return await asyncio.to_thread(_create)
 

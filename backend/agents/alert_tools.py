@@ -12,7 +12,7 @@ import logging
 
 from langchain_core.tools import tool
 
-from core.alert_state import AlertStateManager, get_alert_manager
+from core.alert_state import get_alert_manager
 
 logger = logging.getLogger("ninko.tools.alerts")
 

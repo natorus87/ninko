@@ -63,7 +63,7 @@ async def send_teams_message(message: str) -> str:
         conv = json.loads(raw)
         service_url = conv["service_url"]
         conversation_id = conv["conversation_id"]
-        reply_to_id = conv.get("activity_id")
+        conv.get("activity_id")
     except (KeyError, json.JSONDecodeError):
         return _t(
             de="Fehler: Gespeicherte Teams-Konversation ist ungültig.",

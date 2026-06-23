@@ -273,7 +273,7 @@ async def get_updates_info(connection_id: str = "") -> dict:
     Requires admin privileges.
     """
     try:
-        settings = await _wp_api("GET", "/settings", connection_id)
+        await _wp_api("GET", "/settings", connection_id)
         # WP REST API Settings does not include update info directly.
         # We check the plugin list for available updates.
         plugins = await _wp_api(
@@ -342,7 +342,7 @@ async def search_plugins(query: str, connection_id: str = "") -> list[dict]:
     Returns results with name, slug, rating, and download count.
     """
     try:
-        client_cfg = await _get_wp_client(connection_id)
+        await _get_wp_client(connection_id)
         # WordPress.org Plugin API (external, not WP REST API)
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(
@@ -515,7 +515,7 @@ async def delete_plugin(plugin_slug: str, connection_id: str = "") -> dict:
     DESTRUCTIVE — requires confirmation. Plugin must be deactivated first.
     """
     try:
-        result = await _wp_api("DELETE", f"/plugins/{plugin_slug}", connection_id)
+        await _wp_api("DELETE", f"/plugins/{plugin_slug}", connection_id)
         return {
             "slug": plugin_slug,
             "status": "deleted",
@@ -744,7 +744,7 @@ async def delete_page(
     """
     try:
         params = {"force": 1} if force else {}
-        result = await _wp_api(
+        await _wp_api(
             "DELETE", f"/pages/{page_id}", connection_id, params=params
         )
         return {
@@ -973,7 +973,7 @@ async def delete_post(
     """
     try:
         params = {"force": 1} if force else {}
-        result = await _wp_api(
+        await _wp_api(
             "DELETE", f"/posts/{post_id}", connection_id, params=params
         )
         return {

@@ -3,7 +3,7 @@ Pydantic Schemas für DataViz Modul.
 """
 
 from pydantic import BaseModel, Field
-from typing import Literal, Optional, List, Dict, Any, Union
+from typing import Literal, Optional, List, Dict, Union
 
 
 class ChartDataPoint(BaseModel):

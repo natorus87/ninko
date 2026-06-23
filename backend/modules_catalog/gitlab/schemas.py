@@ -1,7 +1,7 @@
 """GitLab module schemas."""
 
-from typing import Optional, List
-from pydantic import BaseModel, Field
+from typing import Optional
+from pydantic import BaseModel
 
 
 class GitLabConnection(BaseModel):

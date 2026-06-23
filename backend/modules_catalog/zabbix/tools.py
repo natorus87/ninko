@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import httpx
 from langchain_core.tools import tool
@@ -152,13 +152,6 @@ async def get_zabbix_status(connection_id: str = "") -> Dict:
         version_data = version_resp.json()
         version = version_data.get("result", "unknown")
 
-        info_payload = {
-            "jsonrpc": "2.0",
-            "method": "server.runnable",
-            "params": {},
-            "auth": auth_token,
-            "id": 3,
-        }
 
         return {
             "version": version,
@@ -477,7 +470,7 @@ async def get_zabbix_history(
     if not item_result:
         raise ValueError(f"Item {item_id} not found")
 
-    value_type = int(item_result[0].get("value_type", 0))
+    int(item_result[0].get("value_type", 0))
 
     params = {"itemids": [item_id], "limit": limit, "sortorder": "DESC"}
     if from_time:

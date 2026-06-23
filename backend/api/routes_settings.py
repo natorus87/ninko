@@ -257,8 +257,8 @@ async def get_embed_provider() -> dict:
         raw = stored if isinstance(stored, str) else stored.decode()
         try:
             return _sanitize_embed_provider(_json.loads(raw))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Embed-Provider-Config aus Redis nicht lesbar, nutze Defaults: %s", exc)
     # Defaults: kein eigener Provider (Fallback auf LLM-Provider)
     settings = get_settings()
     return _sanitize_embed_provider(
@@ -629,7 +629,7 @@ async def delete_branding_asset(filename: str) -> MutationResponse:
 
     try:
         path.unlink()
-    except OSError:
+    except OSError as exc:
         raise HTTPException(
             status_code=500,
             detail=_t(
@@ -644,7 +644,7 @@ async def delete_branding_asset(filename: str) -> MutationResponse:
                 ja="ファイルを削除できませんでした",
                 zh="无法删除文件",
             ),
-        )
+        ) from exc
 
     # Falls URL im Branding verwendet wurde, zurück auf Defaults/Fallback setzen
     redis = get_redis()
@@ -1379,7 +1379,7 @@ async def add_k8s_cluster(body: K8sClusterCreate) -> dict:
                 ja=f"無効な kubeconfig: {exc}",
                 zh=f"无效的 kubeconfig: {exc}",
             ),
-        )
+        ) from exc
 
     # In Vault speichern
     from core.vault import get_vault

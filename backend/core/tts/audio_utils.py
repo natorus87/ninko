@@ -73,9 +73,9 @@ async def _convert(
             _, stderr = await asyncio.wait_for(
                 proc.communicate(), timeout=_FFMPEG_TIMEOUT
             )
-        except asyncio.TimeoutError:
+        except asyncio.TimeoutError as exc:
             proc.kill()
-            raise RuntimeError(f"ffmpeg Timeout nach {_FFMPEG_TIMEOUT}s")
+            raise RuntimeError(f"ffmpeg Timeout nach {_FFMPEG_TIMEOUT}s") from exc
 
         if proc.returncode != 0:
             err = stderr.decode("utf-8", errors="replace").strip()

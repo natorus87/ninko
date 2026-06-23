@@ -299,8 +299,8 @@ async def get_token_metrics_range(
                         total_cost += metrics.get("cost_usd", 0.0)
                     except (json.JSONDecodeError, AttributeError):
                         continue
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Metrik-Aggregation für Zeitraum fehlgeschlagen, überspringe Tag: %s", exc)
 
             current = dt.fromordinal(current.toordinal() + 1)
 

@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import logging
 import os
+import tempfile
 from pathlib import Path
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,9 @@ class VirtualPathError(Exception):
 class VirtualPathSystem:
     """Manages virtual paths for tool isolation."""
 
-    def __init__(self, base_dir: str = "/tmp/ninko_sandbox"):
+    def __init__(self, base_dir: str | None = None) -> None:
+        if base_dir is None:
+            base_dir = tempfile.mkdtemp(prefix="ninko-sandbox-")
         self._base = Path(base_dir).resolve()
         self._base.mkdir(parents=True, exist_ok=True)
         self._mounts: dict[str, Path] = {}

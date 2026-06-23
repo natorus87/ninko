@@ -16,7 +16,6 @@ import email
 import imaplib
 import logging
 import re
-import time
 from email.header import decode_header as _decode_header
 from typing import TYPE_CHECKING
 
@@ -124,8 +123,8 @@ class EmailWorker(ChannelWorker):
             if mail is not None:
                 try:
                     await asyncio.to_thread(mail.logout)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("IMAP-Logout fehlgeschlagen: %s", exc)
 
     # ── IMAP Helpers ──────────────────────────────────────────────────
 
@@ -221,15 +220,15 @@ class EmailWorker(ChannelWorker):
         mail.socket().settimeout(_IDLE_TIMEOUT)
         try:
             mail.readline()  # blockiert bis Ereignis oder Timeout
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("IMAP-IDLE readline fehlgeschlagen (Timeout/Disconnect): %s", exc)
         # IDLE beenden
         mail.socket().settimeout(None)
         mail.send(b"DONE\r\n")
         try:
             mail.readline()  # OK / NO response
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("IMAP-IDLE DONE readline fehlgeschlagen: %s", exc)
 
     async def _process_unseen(self, mail: imaplib.IMAP4_SSL, ctx: dict) -> None:
         """Holt alle UNSEEN-Nachrichten und dispatched sie."""

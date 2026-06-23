@@ -1,6 +1,6 @@
 import ast
 import json
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 import logging
 from .tools import (
     get_fritz_devices,

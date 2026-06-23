@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
 
 from schemas.module import (
     ModuleInfo,

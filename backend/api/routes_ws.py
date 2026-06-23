@@ -104,7 +104,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket)
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError, WebSocketDisconnect) as exc:
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError) as exc:
         logger.error("WebSocket Fehler: %s", exc)
         ws_manager.disconnect(websocket)
     finally:
@@ -144,5 +144,5 @@ async def _listen_websocket_messages(websocket: WebSocket) -> None:
                 )
         except WebSocketDisconnect:
             raise
-        except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError, WebSocketDisconnect):
+        except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError, json.JSONDecodeError):
             await asyncio.sleep(1)

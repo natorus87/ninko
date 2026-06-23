@@ -5,7 +5,6 @@ Ninko Metrics API – Token-Usage und Cost Tracking.
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel

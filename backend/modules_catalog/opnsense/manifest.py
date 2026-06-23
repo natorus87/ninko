@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 
 from core.module_registry import ModuleManifest
 
@@ -24,7 +23,7 @@ async def check_opnsense_health(connection_id: str = "") -> dict:
             return {"status": "error", "detail": f"HTTP {resp.status_code}"}
     except ValueError as exc:
         return {"status": "error", "detail": str(exc)}
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+    except (RuntimeError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": str(exc)}
 
 

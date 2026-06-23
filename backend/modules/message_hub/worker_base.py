@@ -76,7 +76,7 @@ class ChannelWorker(ABC):
         """Supervisor-Loop mit Exponential Backoff bei Fehlern."""
         try:
             while self.running:
-                start_ts = time.monotonic()
+                time.monotonic()
                 try:
                     await self.run_once()
                     # Erfolgreiche Iteration → Backoff immer zurücksetzen

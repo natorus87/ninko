@@ -38,4 +38,4 @@ async def get_status(connection_id: str = "") -> object:
             "devices_count": len(devices.get("value", [])),
         }
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc

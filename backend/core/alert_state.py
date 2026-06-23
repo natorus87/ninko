@@ -11,7 +11,6 @@ import json
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Any
 
 from core.redis_client import get_redis
 

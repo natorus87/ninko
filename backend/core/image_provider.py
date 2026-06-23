@@ -56,7 +56,8 @@ def _ensure_images_dir() -> Path:
     env_dir = (os.getenv("NINKO_IMAGES_DIR") or "").strip()
     if env_dir:
         candidates.append(Path(env_dir))
-    candidates.extend([IMAGES_DIR, Path("data/images"), Path("/tmp/ninko-images")])
+    fallback_root = Path(tempfile.gettempdir()) / "ninko-images"
+    candidates.extend([IMAGES_DIR, Path("data/images"), fallback_root])
 
     for cand in candidates:
         try:

@@ -8,13 +8,10 @@ Integration-Tests gegen laufenden Redis (optional, nur wenn REDIS_URL erreichbar
 from __future__ import annotations
 
 import asyncio
-import json
 import os
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-import redis.asyncio as aioredis
 
 SKIP_INTEGRATION = os.getenv("SKIP_INTEGRATION_TESTS", "false").lower() == "true"
 

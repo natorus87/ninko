@@ -12,7 +12,6 @@ from datetime import datetime, timezone, timedelta
 import yaml as _yaml
 from kubernetes import client, config, dynamic
 from kubernetes.client import api_client as _api_client
-from kubernetes.utils import create_from_dict
 from langchain_core.tools import tool
 
 logger = logging.getLogger("ninko.modules.kubernetes.tools")
@@ -30,7 +29,6 @@ async def _get_k8s_client(
     from core.connections import ConnectionManager
     from core.vault import get_vault
     import base64
-    import tempfile
 
     if connection_id:
         conn = await ConnectionManager.get_connection("kubernetes", connection_id)
@@ -80,7 +78,7 @@ async def _get_k8s_client(
         logger.error("Failed to parse kubeconfig: %s", e)
         raise ValueError(
             f"Invalid kubeconfig for connection '{conn.name}'. Please check the file."
-        )
+        ) from e
 
     return client.CoreV1Api(), client.AppsV1Api(), client.NetworkingV1Api()
 

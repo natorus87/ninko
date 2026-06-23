@@ -845,7 +845,7 @@ async def upload_plugin(
         raise HTTPException(
             status_code=500,
             detail="Unerwarteter Fehler beim Plugin-Upload. Details im Server-Log.",
-        )
+        ) from e
     finally:
         # Cleanup temp directory
         shutil.rmtree(temp_dir, ignore_errors=True)
@@ -1298,10 +1298,10 @@ async def install_from_repo(
 
     except HTTPException:
         raise
-    except httpx.TimeoutException:
+    except httpx.TimeoutException as exc:
         raise HTTPException(
             status_code=408, detail="Timeout beim Download vom Repository."
-        )
+        ) from exc
     except (
         RuntimeError,
         ValueError,
@@ -1318,7 +1318,7 @@ async def install_from_repo(
             e,
             exc_info=True,
         )
-        raise HTTPException(status_code=500, detail=f"Fehler: {e}")
+        raise HTTPException(status_code=500, detail=f"Fehler: {e}") from e
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -1365,7 +1365,7 @@ async def delete_plugin(request: Request, plugin_name: str) -> PluginUninstallRe
         logger.error("Fehler beim Löschen des Plugins %s: %s", plugin_name, e)
         raise HTTPException(
             status_code=500, detail="Fehler beim Löschen der Plugin-Dateien."
-        )
+        ) from e
 
 
 @router.post("/reinstall/{plugin_name}", response_model=PluginUpdateResponse)
@@ -1526,4 +1526,4 @@ async def reinstall_plugin(request: Request, plugin_name: str) -> PluginUpdateRe
         raise
     except Exception as e:
         logger.error("Fehler beim Re-Installieren des Plugins %s: %s", plugin_name, e)
-        raise HTTPException(status_code=500, detail=f"Update fehlgeschlagen: {e}")
+        raise HTTPException(status_code=500, detail=f"Update fehlgeschlagen: {e}") from e

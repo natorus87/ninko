@@ -200,8 +200,8 @@ Strukturierte Zusammenfassung in natürlicher Sprache mit:
             await redis.connection.lpush(key, _json.dumps(event))
             await redis.connection.ltrim(key, 0, 99)  # Max 100 Steps
             await redis.connection.expire(key, 3600)  # 1h TTL
-        except Exception:
-            pass  # Redis-Fehler nicht kritisch
+        except Exception as exc:
+            logger.debug("Step-Event konnte nicht in Redis persistiert werden: %s", exc)
 
     async def _run_with_step_tracking(
         self,
@@ -277,8 +277,8 @@ Strukturierte Zusammenfassung in natürlicher Sprache mit:
                             else output
                         )
                         result_size = len(result_str)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("Output-Größe konnte nicht ermittelt werden: %s", exc)
 
                     await self.subagent._emit_step(
                         step_type="step_done",
