@@ -9,6 +9,41 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.3.8] – 2026-06-23
+
+### Added
+
+- **Knowledge Graph tenant isolation** (`backend/core/knowledge_graph.py`): the singleton KG was replaced with a per-tenant `dict[str, nx.DiGraph]`. All 19 public methods now require `tenant_id: str` as the first parameter; node metadata stores the tenant as defense-in-depth. Persistence is per-tenant at `data/knowledge_graph/graph_<tenant>.json` (atomic write via `.tmp` + `replace`); legacy `graph_export.json` is still loaded for backward compat. Health check and startup log now report tenant count.
+- **Per-tenant KG test coverage** (`backend/tests/test_knowledge_graph_tenant_isolation.py`): 19 focused tests covering cross-tenant isolation (read/write/delete), scope of `find_by_type`/`get_path`/`get_neighbors`, per-tenant file storage, export/import scoping, and `extract_from_incident` scoping. 1 test skipped (networkx.pagerank needs `scipy`).
+- **Test infrastructure** (`backend/tests/conftest.py`): `mock_redis` fixture rewritten to use `AsyncMock` for every method production code awaits (`get_session_owner`, `set_session_owner`, `store_chat_message`, `ui_history_*`, etc.), eliminating the `'MagicMock' object can't be awaited` errors in chat-streaming tests.
+- **Proxmox bulk-IP tool hardening** (`backend/modules_catalog/proxmox/tools.py:list_vm_ip_addresses`): defensive `isinstance` checks + JSON-parse fallback when the @tool wrapper returns a string (langchain tool-wrapping can serialize lists). Non-list / non-dict entries are skipped with a warning. `AttributeError`/`TypeError`/`KeyError` inside the per-VM loop are caught locally instead of crashing the whole bulk call.
+- **4 i18n keys in 8 locales** (`frontend/i18n/{es,fr,it,ja,nl,pl,pt,zh}.json`): added idiomatic translations for `settings.sttLanguage`, `settings.sttModelSize`, `settings.sttDevice`, `settings.sttComputeType`. All 10 locales now have a consistent 435-key set.
+
+### Changed
+
+- **Proxmox tools return Markdown to the LLM** (`backend/modules_catalog/proxmox/tools.py`): 12 list/dict-returning @tools were refactored into thin `_X_raw()` internal functions (returning the original structured type for routes and the agent's fast-path) and `@tool _X()` wrappers (returning formatted Markdown strings to the LLM). Added `_format_vms_as_markdown`, `_format_nodes_as_markdown`, `_format_ips_as_markdown`, `_format_vm_ip_dict_as_markdown` helpers. Tool names, signatures, and descriptions are unchanged (LLM API compatibility preserved). `routes.py` now imports `_X_raw()` directly; `agent.py` fast-path uses the raw functions to keep receiving lists.
+- **Core decoupled from marketplace** (`backend/agents/fast_path_tool_resolver.py`): added `try_get_module_tool(registry, module_id, tool_name)` so the orchestrator's FRITZ!Box/Tasmota fast-path no longer imports `modules_catalog.fritzbox.tools` directly. Returns `None` (graceful skip) when the module or tool is not registered.
+- **Container images pinned** (`k8s/backend/deployment.yaml`, `docker-compose.yml`): `natorus87/ninko-backend:latest` → `natorus87/ninko-backend:1.3.7` (with `imagePullPolicy: IfNotPresent`); `searxng/searxng:latest` → `searxng/searxng:2024.12.13`. Eliminates supply-chain risk from `:latest` tags and gives reproducible deploys.
+
+### Fixed
+
+- **CRITICAL — Knowledge Graph data leak between tenants**: `tenant_id = auth_tenant_id(...)` was extracted in 18 endpoints in `routes_knowledge_graph.py` but never passed to the underlying KG methods (which didn't even accept it). Any authenticated user could read, modify, or delete any other tenant's entities. Fixed by adding the per-tenant KG refactor.
+- **CRITICAL — XSS in safeguard profile picker** (`frontend/app.js:2699`): `p.id` and `p.name` from `/api/safeguard/profiles` were inserted into `innerHTML` without escaping. An admin could create a profile with `name = "</option><img src=x onerror=...>"` to inject script. Replaced with `createElement` + `textContent` + `replaceChildren` in 5 places: agent-safeguard select, safeguard picker, TTS voice select, TTS download status, and module-noDashboard placeholder.
+- **CRITICAL — Teams bot crashed on every exception** (`backend/modules_catalog/teams/bot.py:403`): `except (...) as e: ... f"❌ {str(exc)[:300]}"` referenced the undefined `exc` (should be `e`), causing a `NameError` on every error path. Also fixed 2 other F821 errors (missing `import asyncio`) in the same file.
+- **SQL-injection vector in `message_hub/db.py`**: `UPDATE routes SET {set_clause}` interpolated dict keys from the request body via f-string. SQL parameter binding only protects values, not column names. Fixed with `ALLOWED_ROUTE_UPDATE_FIELDS` whitelist + static `_UPDATE_ROUTE_SQL` lookup table that maps column-sets to prebuilt SQL statements, eliminating dynamic f-string SQL construction (S608).
+- **Microsoft Entra `list_entra_users` crashed on every non-empty response** (`backend/modules_catalog/microsoft_entra/tools.py:159`): `total` and `count` were referenced in f-strings but never defined. Added `total = len(users)` and `shown = min(total, 15)`; rewrote the i18n branches to reference `{total}`/`{extra}`.
+- **Redmine tool crashed on every call** (`backend/modules_catalog/redmine/tools.py:289`): undefined `params` argument + wrong endpoint (`issues.json` for what was actually project info). Built a proper `params` dict from function args and changed the endpoint to `projects/{project_id}.json`.
+- **Microsoft Intune unparseable on Python 3.11** (`backend/modules_catalog/microsoft_intune/tools.py:274, 290`): f-strings with same-quote-character as the outer delimiter (PEP 701, Python 3.12+ only). The project's `target-version = "py311"`, so this would fail to parse on 3.11. Hoisted `_t(...)` calls for `Ja`/`Nein` into local variables.
+- **PIPER binary trust** (`backend/api/routes_tts.py`): `subprocess.run([binary, "--version"])` with `binary = cfg.PIPER_BINARY` was unbounded. Added `ALLOWED_TTS_BINARIES` frozenset; non-matching binaries log a warning and the local version is reported as empty.
+- **Paramiko `AutoAddPolicy` MITM** (`backend/modules_catalog/linux_server/tools.py`): SSH auto-trusted unknown host keys. Replaced with TOFU (trust-on-first-use) — `RejectPolicy` once `data/linux_server/known_hosts` exists; nested `_TofuHostKeyPolicy` subclass accepts and persists new keys on first connect.
+- **61 unit tests were falsely failing** (now 0): Redis/SQLite-dependent tests (`test_workflows_integration.py`, `test_agents_integration.py`, `test_scripting_integration.py`) were missing `@pytest.mark.integration` markers. `test_telegram_bot_formatting.py` had a module-level `sys.modules` stub that leaked into every subsequent test (broke 8 base_agent_prompts tests). `test_config_security.py` used a 25-char `SESSION_SECRET` that prod correctly rejects. Async-mock mismatches in `test_chat_streaming.py` (3-tuple vs 4-tuple for `orchestrator.route`).
+- **61 `raise-without-from-inside-except`** (B904): All `raise HTTPException(...)` in `except` blocks now use `from exc` to preserve the exception chain for Sentry/Logfire.
+- **8 `try-except-pass`** (S110): Each replaced with `logger.warning(...)` + context message ("Thinking-Content-Event konnte nicht emittiert werden", "IMAP-IDLE readline fehlgeschlagen", "Embed-Provider-Config nicht lesbar, nutze Defaults", etc.).
+- **14 `B025` duplicate-try-except** (mostly `pihole/routes.py`): removed dead `except (RuntimeError, ValueError, ...)` handlers that duplicated earlier `except ValueError` handlers in the same try block.
+- **108 unused imports + 35 unused variables** (F401/F841): resolved via `ruff --fix`; the largest impact was 18 `routes_*.py` files where `tenant_id = auth_tenant_id(...)` was extracted but never used.
+- **False positive F821 in `core/safeguard_profiles.py`**: string annotation `"SafeguardProfile | None"` before the lazy import. Fixed with `from __future__ import annotations` + `if TYPE_CHECKING: from core.safeguard import SafeguardProfile`.
+- **7 hardcoded `/tmp` paths** (S108): replaced with `tempfile.mkdtemp(prefix="ninko-...")` or moved persistent files to `data/`. Kept the bwrap `--tmpfs /tmp` argument (bwrap creates an isolated tmpfs namespace, not a host path) with a `noqa: S108`.
+
 ## [1.3.7] – 2026-05-25
 
 ### Added
