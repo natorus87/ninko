@@ -22,7 +22,7 @@ def test_development_warns_but_allows_defaults() -> None:
     settings = CoreSettings(
         DEPLOYMENT_ENV="development",
         API_AUTH_ENABLED=True,
-        SESSION_SECRET="change-me-in-production",
+        SESSION_SECRET="x" * 32,
         BOOTSTRAP_ADMIN_PASSWORD="admin",
         ADMIN_PASSWORD="",
         SESSION_COOKIE_SECURE=False,

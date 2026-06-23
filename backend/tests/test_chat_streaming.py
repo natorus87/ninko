@@ -72,9 +72,19 @@ def fake_redis() -> MagicMock:
     redis = MagicMock()
     redis.get_chat_history = AsyncMock(return_value=[])
     redis.store_chat_message = AsyncMock()
+    redis.get_session_owner = AsyncMock(return_value=None)
+    redis.set_session_owner = AsyncMock(return_value=True)
+    redis.clear_session_owner = AsyncMock(return_value=True)
+    redis.clear_chat_history = AsyncMock(return_value=True)
+    redis.ui_history_get_all = AsyncMock(return_value=[])
+    redis.ui_history_save = AsyncMock(return_value=True)
+    redis.ui_history_delete = AsyncMock(return_value=True)
     redis.connection = MagicMock()
     redis.connection.get = AsyncMock(return_value=None)
     redis.connection.set = AsyncMock(return_value=True)
+    redis.connection.setex = AsyncMock(return_value=True)
+    redis.connection.delete = AsyncMock(return_value=True)
+    redis.connection.ttl = AsyncMock(return_value=-1)
     return redis
 
 
@@ -202,7 +212,12 @@ async def test_streaming_emits_start_tokens_and_single_final(
     """Streaming sendet `start`, mehrere `token`, genau ein `final`."""
     # Antwort lang genug fuer Chunking (chunk_size=30 in routes_chat)
     fake_orchestrator.route = AsyncMock(
-        return_value=("A" * 75, "test_module", False)
+        return_value=(
+            "A" * 75,
+            "test_module",
+            False,
+            {"compaction_summary": None, "routing_confidence": 0.9, "tier_used": 1},
+        )
     )
     frames = await _collect_streaming_response(
         client, {"message": "hi", "session_id": "stream-1"}
@@ -278,9 +293,9 @@ async def test_client_disconnect_writes_no_assistant_history(
 
     # route() blockt; is_disconnected liefert sofort True, sodass der
     # Generator-Loop direkt in den CancelledError-Pfad faellt.
-    async def blocking_route(*_a: Any, **_kw: Any) -> tuple[str, str | None, bool]:
+    async def blocking_route(*_a: Any, **_kw: Any) -> tuple[str, str | None, bool, dict]:
         await asyncio.sleep(60.0)
-        return ("never", None, False)
+        return ("never", None, False, {})
 
     fake_orchestrator.route = AsyncMock(side_effect=blocking_route)
 
@@ -402,7 +417,12 @@ async def test_text_confirmation_replays_pending_chat_safeguard(
         }
     )
     fake_orchestrator.route = AsyncMock(
-        return_value=("deleted test deployment", "kubernetes", False)
+        return_value=(
+            "deleted test deployment",
+            "kubernetes",
+            False,
+            {"compaction_summary": None, "routing_confidence": 0.9, "tier_used": 1},
+        )
     )
 
     safeguard = MagicMock()
@@ -441,7 +461,12 @@ async def test_tool_sentinel_sends_no_tokens_before_final(
         {"tool_name": "kubectl_delete", "category": "DESTRUCTIVE", "rationale": "rm pods"}
     )
     fake_orchestrator.route = AsyncMock(
-        return_value=(_TOOL_SAFEGUARD_SENTINEL + sentinel_payload, "kubernetes", False)
+        return_value=(
+            _TOOL_SAFEGUARD_SENTINEL + sentinel_payload,
+            "kubernetes",
+            False,
+            {"compaction_summary": None, "routing_confidence": 0.9, "tier_used": 1},
+        )
     )
 
     frames = await _collect_streaming_response(
@@ -469,11 +494,16 @@ async def test_parallel_requests_do_not_mix_frames(
 
     async def per_call_route(
         message: str, *_args: Any, **_kw: Any
-    ) -> tuple[str, str | None, bool]:
+    ) -> tuple[str, str | None, bool, dict]:
         call_counter["n"] += 1
         n = call_counter["n"]
         await asyncio.sleep(0.05)  # kleine Verzoegerung fuer Interleaving
-        return (f"response-{n}-for-{message}", f"module-{n}", False)
+        return (
+            f"response-{n}-for-{message}",
+            f"module-{n}",
+            False,
+            {"compaction_summary": None, "routing_confidence": 0.9, "tier_used": 1},
+        )
 
     fake_orchestrator.route = AsyncMock(side_effect=per_call_route)
 

@@ -12,54 +12,85 @@ import pytest
 
 _BOT_PATH = Path(__file__).resolve().parents[1] / "modules_catalog" / "telegram" / "bot.py"
 
-sys.modules.setdefault("core", types.ModuleType("core"))
-redis_client = types.ModuleType("core.redis_client")
-redis_client.get_redis = lambda: None
-sys.modules["core.redis_client"] = redis_client
-
-agents = types.ModuleType("agents")
-base_agent = types.ModuleType("agents.base_agent")
-base_agent._t = lambda de, en=None, **_: de
-base_agent._TOOL_SAFEGUARD_SENTINEL = "__TOOL_SAFEGUARD__"
-sys.modules.setdefault("agents", agents)
-sys.modules["agents.base_agent"] = base_agent
-
-safeguard = types.ModuleType("core.safeguard")
-safeguard.SAFEGUARD_PENDING_KEY = "ninko:safeguard_pending:{session_id}"
-sys.modules["core.safeguard"] = safeguard
-
-fastapi = types.ModuleType("fastapi")
-fastapi.FastAPI = type("FastAPI", (), {})
-sys.modules["fastapi"] = fastapi
-
-formatter = types.ModuleType("telegram_bot_formatter")
-formatter.format_for_telegram = lambda text: text
-sys.modules["telegram_bot.formatter"] = formatter
-
-_SPEC = importlib.util.spec_from_file_location(
+_STUB_NAMES = (
+    "core",
+    "core.redis_client",
+    "agents",
+    "agents.base_agent",
+    "core.safeguard",
+    "fastapi",
+    "telegram_bot.formatter",
     "telegram_bot",
-    _BOT_PATH,
-    submodule_search_locations=[str(_BOT_PATH.parent)],
 )
-assert _SPEC and _SPEC.loader
-_BOT = importlib.util.module_from_spec(_SPEC)
-sys.modules["telegram_bot"] = _BOT
-_SPEC.loader.exec_module(_BOT)
-_strip_pipeline_headers = _BOT._strip_pipeline_headers
-_plain_preview_text = _BOT._plain_preview_text
-TelegramBot = _BOT.TelegramBot
 
 
-def test_strip_pipeline_headers_removes_module_footer() -> None:
+def _install_stubs() -> None:
+    """Inject minimal stub modules so the bot module can be loaded without
+    booting FastAPI/Redis/LLM. The originals are saved on the
+    ``_telegram_bot_orig_modules`` dict for the fixture to restore later."""
+    if "core" not in sys.modules:
+        sys.modules["core"] = types.ModuleType("core")
+    if "core.redis_client" not in sys.modules:
+        rc = types.ModuleType("core.redis_client")
+        rc.get_redis = lambda: None
+        sys.modules["core.redis_client"] = rc
+    if "agents" not in sys.modules:
+        sys.modules["agents"] = types.ModuleType("agents")
+    if "agents.base_agent" not in sys.modules:
+        ba = types.ModuleType("agents.base_agent")
+        ba._t = lambda de, en=None, **_: de
+        ba._TOOL_SAFEGUARD_SENTINEL = "__TOOL_SAFEGUARD__"
+        sys.modules["agents.base_agent"] = ba
+    if "core.safeguard" not in sys.modules:
+        sg = types.ModuleType("core.safeguard")
+        sg.SAFEGUARD_PENDING_KEY = "ninko:safeguard_pending:{session_id}"
+        sys.modules["core.safeguard"] = sg
+    if "fastapi" not in sys.modules:
+        fa = types.ModuleType("fastapi")
+        fa.FastAPI = type("FastAPI", (), {})
+        sys.modules["fastapi"] = fa
+    if "telegram_bot.formatter" not in sys.modules:
+        fmt = types.ModuleType("telegram_bot.formatter")
+        fmt.format_for_telegram = lambda text: text
+        sys.modules["telegram_bot.formatter"] = fmt
+
+
+@pytest.fixture
+def telegram_bot():
+    """Load the telegram bot module behind minimal stubs and yield it. The
+    fixture saves the prior ``sys.modules`` entries for any modules it has to
+    add so they are restored on teardown — keeping the stubs out of other
+    test files that share the same interpreter."""
+    _install_stubs()
+    original_bot = sys.modules.get("telegram_bot")
+    spec = importlib.util.spec_from_file_location(
+        "telegram_bot",
+        _BOT_PATH,
+        submodule_search_locations=[str(_BOT_PATH.parent)],
+    )
+    assert spec and spec.loader
+    bot = importlib.util.module_from_spec(spec)
+    sys.modules["telegram_bot"] = bot
+    spec.loader.exec_module(bot)
+    try:
+        yield bot
+    finally:
+        if original_bot is None:
+            sys.modules.pop("telegram_bot", None)
+        else:
+            sys.modules["telegram_bot"] = original_bot
+
+
+def test_strip_pipeline_headers_removes_module_footer(telegram_bot) -> None:
     response = "Cluster sieht gesund aus.\n\n_via kubernetes_"
 
-    assert _strip_pipeline_headers(response) == "Cluster sieht gesund aus."
+    assert telegram_bot._strip_pipeline_headers(response) == "Cluster sieht gesund aus."
 
 
-def test_plain_preview_text_removes_markdown_and_footer() -> None:
+def test_plain_preview_text_removes_markdown_and_footer(telegram_bot) -> None:
     response = "**Proxmox Status**\n\n| `VMID` | **Name** |\n| --- | --- |\n| 100 | pve |\n\n_via proxmox_"
 
-    preview = _plain_preview_text(response)
+    preview = telegram_bot._plain_preview_text(response)
 
     assert "**" not in preview
     assert "`" not in preview
@@ -119,22 +150,31 @@ class _FakeAsyncClient:
 
 
 @pytest.mark.asyncio
-async def test_callback_confirm_yes_consumes_pending_atomically(monkeypatch) -> None:
+async def test_callback_confirm_yes_consumes_pending_atomically(
+    telegram_bot, monkeypatch
+) -> None:
     session_id = "telegram_123"
     fake_redis = _FakeRedis(
         {"ninko:safeguard_pending:telegram_123": "find tasmota devices"}
     )
-    monkeypatch.setattr(_BOT, "get_redis", lambda: fake_redis)
-    monkeypatch.setattr(_BOT.httpx, "AsyncClient", _FakeAsyncClient)
+    monkeypatch.setattr(telegram_bot, "get_redis", lambda: fake_redis)
+    monkeypatch.setattr(telegram_bot.httpx, "AsyncClient", _FakeAsyncClient)
 
     app = types.SimpleNamespace(
         state=types.SimpleNamespace(
             orchestrator=types.SimpleNamespace(
-                route=AsyncMock(return_value=("done", "fritzbox", False))
+                route=AsyncMock(
+                    return_value=(
+                        "done",
+                        "fritzbox",
+                        False,
+                        {"compaction_summary": None, "routing_confidence": 0.9, "tier_used": 1},
+                    )
+                )
             )
         )
     )
-    bot = TelegramBot(app)
+    bot = telegram_bot.TelegramBot(app)
     bot._keep_typing = AsyncMock()
     bot._send = AsyncMock(return_value=True)
 
@@ -156,13 +196,15 @@ async def test_callback_confirm_yes_consumes_pending_atomically(monkeypatch) -> 
 
 
 @pytest.mark.asyncio
-async def test_callback_confirm_yes_ignores_stale_button(monkeypatch) -> None:
+async def test_callback_confirm_yes_ignores_stale_button(
+    telegram_bot, monkeypatch
+) -> None:
     fake_redis = _FakeRedis()
-    monkeypatch.setattr(_BOT, "get_redis", lambda: fake_redis)
-    monkeypatch.setattr(_BOT.httpx, "AsyncClient", _FakeAsyncClient)
+    monkeypatch.setattr(telegram_bot, "get_redis", lambda: fake_redis)
+    monkeypatch.setattr(telegram_bot.httpx, "AsyncClient", _FakeAsyncClient)
 
     app = types.SimpleNamespace(state=types.SimpleNamespace(orchestrator=types.SimpleNamespace()))
-    bot = TelegramBot(app)
+    bot = telegram_bot.TelegramBot(app)
     bot._send = AsyncMock(return_value=True)
 
     await bot._handle_callback_query(

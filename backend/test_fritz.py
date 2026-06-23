@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 import sys
 
 # Add /app to sys.path so we can import from core

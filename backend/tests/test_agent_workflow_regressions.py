@@ -125,9 +125,14 @@ class _FakeOrchestrator:
     def __init__(self) -> None:
         self.messages: list[str] = []
 
-    async def route(self, message: str, **_: object) -> tuple[str, str, bool]:
+    async def route(self, message: str, **_: object) -> tuple[str, str, bool, dict]:
         self.messages.append(message)
-        return f"done: {message}", "orchestrator", False
+        return (
+            f"done: {message}",
+            "orchestrator",
+            False,
+            {"compaction_summary": None, "routing_confidence": 0.9, "tier_used": 1},
+        )
 
 
 @pytest.mark.asyncio

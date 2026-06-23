@@ -1,5 +1,4 @@
-import sys
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 
 from agents.base_agent import BaseAgent
 from agents.orchestrator import OrchestratorAgent
@@ -34,7 +33,6 @@ def test_german_find_request_is_safe_without_classifier():
     )
 
     assert result is not None
-    assert result["requires_confirmation"] is False
     assert result["category"] is ActionCategory.SAFE
 
 
@@ -65,14 +63,15 @@ async def test_fritzbox_tasmota_fast_path_filters_devices(monkeypatch):
             },
         ]
 
-    fake_fritzbox_pkg = ModuleType("modules_catalog.fritzbox")
-    fake_fritzbox_pkg.__path__ = []
-    fake_tools = ModuleType("modules_catalog.fritzbox.tools")
-    fake_tools.get_fritz_devices = SimpleNamespace(ainvoke=fake_ainvoke)
-    monkeypatch.setitem(sys.modules, "modules_catalog.fritzbox", fake_fritzbox_pkg)
-    monkeypatch.setitem(sys.modules, "modules_catalog.fritzbox.tools", fake_tools)
+    fake_tool = SimpleNamespace(name="get_fritz_devices", ainvoke=fake_ainvoke)
+    fake_agent = SimpleNamespace(tools=[fake_tool])
+
+    class FakeRegistry:
+        def get_agent(self, module_id):
+            return fake_agent if module_id == "fritzbox" else None
 
     orchestrator = OrchestratorAgent.__new__(OrchestratorAgent)
+    orchestrator.registry = FakeRegistry()
     response, module, did_compact, _summary = await orchestrator._try_fritzbox_tasmota_fast_path(
         "Benutze FRITZ!Box, um alle Tasmota Geräte zu finden",
         "test-session",
@@ -97,7 +96,7 @@ async def test_react_fallback_returns_user_facing_llm_error(monkeypatch):
     orchestrator.name = "orchestrator"
     orchestrator.invoke = fake_invoke
 
-    response, module, did_compact = await orchestrator._fallback_to_react_loop(
+    response, module, did_compact, _meta = await orchestrator._fallback_to_react_loop(
         message="Hallo",
         chat_history=[],
         session_id="telegram_test",

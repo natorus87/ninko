@@ -12,7 +12,6 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-import pytest_asyncio
 
 
 # ── Test-Isolation: sichere Settings BEVOR irgendein core-Modul geladen wird ─
@@ -47,6 +46,19 @@ def mock_redis():
     redis_mock.connection = MagicMock()
     redis_mock.connection.get = AsyncMock(return_value=None)
     redis_mock.connection.set = AsyncMock(return_value=True)
+    redis_mock.connection.setex = AsyncMock(return_value=True)
+    redis_mock.connection.delete = AsyncMock(return_value=True)
+    redis_mock.connection.ttl = AsyncMock(return_value=-1)
+    redis_mock.connection.lrange = AsyncMock(return_value=[])
+    redis_mock.get_session_owner = AsyncMock(return_value=None)
+    redis_mock.set_session_owner = AsyncMock(return_value=True)
+    redis_mock.clear_session_owner = AsyncMock(return_value=True)
+    redis_mock.get_chat_history = AsyncMock(return_value=[])
+    redis_mock.store_chat_message = AsyncMock(return_value=True)
+    redis_mock.clear_chat_history = AsyncMock(return_value=True)
+    redis_mock.ui_history_get_all = AsyncMock(return_value=[])
+    redis_mock.ui_history_save = AsyncMock(return_value=True)
+    redis_mock.ui_history_delete = AsyncMock(return_value=True)
     return redis_mock
 
 

@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from core.connections import ConnectionManager
 from modules.pihole.manifest import check_pihole_health
 
 logger = logging.getLogger(__name__)
