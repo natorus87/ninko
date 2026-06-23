@@ -41,6 +41,15 @@ if TYPE_CHECKING:
     from core.tts.voice_manager import VoiceManager
 
 
+ALLOWED_TTS_BINARIES: frozenset[str] = frozenset({
+    "piper",
+    "piper.exe",
+    "/usr/local/bin/piper",
+    "/usr/bin/piper",
+    "/opt/piper/piper",
+})
+
+
 # ─── Hilfsfunktionen ──────────────────────────────────────────────────────────
 
 def _get_voice_manager() -> "VoiceManager":
@@ -107,18 +116,24 @@ async def get_piper_version() -> PiperVersionResponse:
     binary = cfg.PIPER_BINARY
 
     local_version = ""
-    try:
-        proc = subprocess.run(
-            [binary, "--version"],
-            capture_output=True,
-            text=True,
-            timeout=8,
-            check=False,
+    if binary in ALLOWED_TTS_BINARIES:
+        try:
+            proc = subprocess.run(  # noqa: S603
+                [binary, "--version"],
+                capture_output=True,
+                text=True,
+                timeout=8,
+                check=False,
+            )
+            output = (proc.stdout or proc.stderr or "").strip()
+            local_version = output.splitlines()[0].strip() if output else ""
+        except (OSError, subprocess.SubprocessError, ValueError, RuntimeError, TypeError) as exc:
+            logger.warning("Konnte lokale Piper-Version nicht lesen: %s", exc)
+    else:
+        logger.warning(
+            "PIPER_BINARY '%s' ist nicht in der Allowlist. Erlaubt: %s",
+            binary, sorted(ALLOWED_TTS_BINARIES),
         )
-        output = (proc.stdout or proc.stderr or "").strip()
-        local_version = output.splitlines()[0].strip() if output else ""
-    except (OSError, subprocess.SubprocessError, ValueError, RuntimeError, TypeError) as exc:
-        logger.warning("Konnte lokale Piper-Version nicht lesen: %s", exc)
 
     latest_tag = ""
     latest_version = ""
@@ -180,11 +195,11 @@ async def synthesize(body: SynthesizeRequest) -> Response:
             voice=body.voice or None,
         )
     except PiperError as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     return Response(
         content=wav_bytes,
@@ -257,6 +272,6 @@ async def delete_voice(lang: str, voice: str) -> VoiceDeleteResponse:
         shutil.rmtree(voice_dir)
         logger.info("Stimme gelöscht: %s/%s", lang, voice)
     except (RuntimeError, ValueError, TypeError, KeyError, OSError) as exc:
-        raise HTTPException(status_code=500, detail=f"Löschen fehlgeschlagen: {exc}")
+        raise HTTPException(status_code=500, detail=f"Löschen fehlgeschlagen: {exc}") from exc
 
     return VoiceDeleteResponse(status="deleted", lang=lang, voice=voice)

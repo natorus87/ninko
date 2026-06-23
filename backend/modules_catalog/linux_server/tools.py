@@ -9,15 +9,53 @@ import asyncio
 import logging
 import os
 import io
+from pathlib import Path
 from typing import Any
 
+import paramiko
 from langchain_core.tools import tool
 
 from agents.base_agent import _t
+from core.config import get_settings
 from core.connections import ConnectionManager
 from core.vault import get_vault
 
 logger = logging.getLogger("ninko.modules.linux_server.tools")
+
+_KNOWN_HOSTS_PATH: Path | None = None
+
+
+def _get_known_hosts_path() -> Path:
+    global _KNOWN_HOSTS_PATH
+    if _KNOWN_HOSTS_PATH is None:
+        settings = get_settings()
+        _KNOWN_HOSTS_PATH = Path(settings.DATA_DIR) / "linux_server" / "known_hosts"
+    return _KNOWN_HOSTS_PATH
+
+
+def _configure_host_key_policy(client: Any) -> None:
+    kh_path = _get_known_hosts_path()
+    if kh_path.exists():
+        client.load_host_keys(str(kh_path))
+        client.set_missing_host_key_policy(paramiko.RejectPolicy())
+    else:
+        kh_path.parent.mkdir(parents=True, exist_ok=True)
+
+        class _TofuHostKeyPolicy(paramiko.MissingHostKeyPolicy):
+            def missing_host_key(self, c: Any, hostname: str, key: Any) -> None:
+                c.get_host_keys().add(hostname, key.get_name(), key)
+                try:
+                    c.get_host_keys().save(str(kh_path))
+                    logger.info(
+                        "Neuer SSH-Host-Key für %s akzeptiert und gespeichert: %s %s",
+                        hostname, key.get_name(), key.get_base64()[:32],
+                    )
+                except OSError as exc:
+                    logger.warning(
+                        "Konnte Host-Key nicht in %s speichern: %s", kh_path, exc,
+                    )
+
+        client.set_missing_host_key_policy(_TofuHostKeyPolicy())
 
 
 async def _get_ssh_client(connection_id: str = "") -> dict:
@@ -145,12 +183,10 @@ async def _run_ssh_command(
     Execute a command over SSH.
     Supports password and RSA-key authentication.
     """
-    import paramiko
-
     cfg = await _get_ssh_client(connection_id)
 
     client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    _configure_host_key_policy(client)
 
     connect_kwargs: dict[str, Any] = {
         "hostname": cfg["host"],
