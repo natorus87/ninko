@@ -103,7 +103,7 @@ services:
 
   # ─── SearXNG (Web Search Backend) ──────────────
   searxng:
-    image: searxng/searxng:latest
+    image: searxng/searxng:2024.12.13
     container_name: ninko-searxng
     ports:
       - "8080:8080"
