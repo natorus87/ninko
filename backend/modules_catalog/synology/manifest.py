@@ -16,7 +16,7 @@ async def check_synology_health() -> dict:
     try:
         from .tools import _get_api_client
 
-        client = await _get_api_client("")
+        await _get_api_client("")
         return {"status": "ok", "detail": "Synology DSM reachable"}
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": str(exc)}

@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any
 
 import httpx
 from langchain_core.tools import tool
@@ -979,7 +978,7 @@ async def shutdown_synologyNAS(confirm: bool = False, connection_id: str = "") -
             session = login_data["data"]["sid"]
 
             try:
-                result = await _synology_request(
+                await _synology_request(
                     client["base_url"],
                     "entry.cgi",
                     session,
@@ -1039,7 +1038,7 @@ async def reboot_synologyNAS(confirm: bool = False, connection_id: str = "") -> 
             session = login_data["data"]["sid"]
 
             try:
-                result = await _synology_request(
+                await _synology_request(
                     client["base_url"],
                     "entry.cgi",
                     session,
@@ -1170,7 +1169,7 @@ async def delete_synology_user(
             session = login_data["data"]["sid"]
 
             try:
-                result = await _synology_request(
+                await _synology_request(
                     client["base_url"],
                     "entry.cgi",
                     session,
@@ -1234,7 +1233,7 @@ async def change_synology_user_password(
             session = login_data["data"]["sid"]
 
             try:
-                result = await _synology_request(
+                await _synology_request(
                     client["base_url"],
                     "entry.cgi",
                     session,
@@ -1488,7 +1487,7 @@ async def remove_user_from_group(
             session = login_data["data"]["sid"]
 
             try:
-                result = await _synology_request(
+                await _synology_request(
                     client["base_url"],
                     "entry.cgi",
                     session,

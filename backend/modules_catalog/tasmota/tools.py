@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Dict, List
 
 import httpx
 from langchain_core.tools import tool
@@ -405,7 +405,7 @@ async def set_tasmota_group_power(
         await _tasmota_request(host, command)
 
         command = f"Power{power}"
-        result = await _tasmota_request(host, command)
+        await _tasmota_request(host, command)
 
         return _t(
             de=f"Gruppen-Befehl '{command}' an {group_topic} gesendet.",

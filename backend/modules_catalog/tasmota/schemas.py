@@ -4,7 +4,7 @@ Tasmota Modul – Pydantic Schemas für API-Antworten.
 
 from __future__ import annotations
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, Dict, Any
 from pydantic import BaseModel
 
 

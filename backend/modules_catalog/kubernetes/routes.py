@@ -14,7 +14,6 @@ from .tools import (
     get_cluster_status,
     get_all_pods,
     get_failing_pods,
-    get_deployment_status,
     get_recent_events,
     list_namespaces,
     list_services,

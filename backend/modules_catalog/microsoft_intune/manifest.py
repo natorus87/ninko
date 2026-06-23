@@ -40,7 +40,7 @@ async def check_microsoft_intune_health() -> dict:
             ) as session:
                 async with session.get(
                     "https://graph.microsoft.com/beta/deviceManagement/managedDevices"
-                ) as resp:
+                ):
                     return {"status": "ok", "detail": "Intune API reachable (Env)"}
 
         tenant_id = conn.config.get("tenant_id", "")
@@ -61,7 +61,7 @@ async def check_microsoft_intune_health() -> dict:
         ) as session:
             async with session.get(
                 "https://graph.microsoft.com/beta/deviceManagement/managedDevices"
-            ) as resp:
+            ):
                 return {"status": "ok", "detail": "Intune API reachable"}
 
     except aiohttp.ClientResponseError as e:

@@ -619,7 +619,6 @@ async def upload_slack_file(
                 zh=f"未找到频道: {channel}",
             )
 
-        import io
 
         async with aiohttp.ClientSession(
             headers={"Authorization": f"Bearer {token}"},

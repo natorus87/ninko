@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 # Wir benötigen hier aktuell eventuell gar keine Pydantic Modelle,
 # da wir die Parameter direkt in den Tools als primitive Typen definieren.

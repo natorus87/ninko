@@ -42,7 +42,7 @@ async def check_microsoft_entra_health() -> dict:
             ) as session:
                 async with session.get(
                     "https://graph.microsoft.com/v1.0/$delta?$deltaToken=latest"
-                ) as resp:
+                ):
                     return {
                         "status": "ok",
                         "detail": "Microsoft Graph API reachable (Env)",
@@ -66,7 +66,7 @@ async def check_microsoft_entra_health() -> dict:
         ) as session:
             async with session.get(
                 "https://graph.microsoft.com/v1.0/$delta?$deltaToken=latest"
-            ) as resp:
+            ):
                 return {"status": "ok", "detail": "Microsoft Graph API reachable"}
 
     except aiohttp.ClientResponseError as e:
