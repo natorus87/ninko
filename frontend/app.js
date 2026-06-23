@@ -567,8 +567,17 @@ const Ninko = {
 
                 const skipFrontendFetch = modulesWithoutDashboardFiles.has(mod.name);
                 let hasFrontend = false;
+                const setNoDashboard = () => {
+                    const wrap = document.createElement('div');
+                    wrap.className = 'module-tab-content';
+                    const p = document.createElement('p');
+                    p.className = 'empty-state';
+                    p.textContent = t('module.noDashboard', mod.display_name);
+                    wrap.appendChild(p);
+                    panel.replaceChildren(wrap);
+                };
                 if (skipFrontendFetch) {
-                    panel.innerHTML = `<div class="module-tab-content"><p class="empty-state">${t('module.noDashboard', mod.display_name)}</p></div>`;
+                    setNoDashboard();
                 } else {
                     try {
                         const htmlRes = await fetch(`/api/modules/${mod.name}/frontend/tab.html`);
@@ -594,10 +603,16 @@ const Ninko = {
                                 : '';
                             hasFrontend = true;
                         } else {
-                            panel.innerHTML = `<div class="module-tab-content"><p class="empty-state">${t('module.noDashboard', mod.display_name)}</p></div>`;
+                            setNoDashboard();
                         }
                     } catch {
-                        panel.innerHTML = `<div class="module-tab-content"><p class="empty-state">${t('module.dashboardError')}</p></div>`;
+                        const wrap = document.createElement('div');
+                        wrap.className = 'module-tab-content';
+                        const p = document.createElement('p');
+                        p.className = 'empty-state';
+                        p.textContent = t('module.dashboardError');
+                        wrap.appendChild(p);
+                        panel.replaceChildren(wrap);
                     }
                 }
 
@@ -2362,23 +2377,33 @@ ${messagesHtml}
     _renderSafeguardPicker(picker) {
         const profiles = this._safeguardProfiles || [];
         const activeId = this._safeguardActiveId || 'moderate';
-        const items = profiles.map(p => {
+        const header = document.createElement('div');
+        header.className = 'sg-picker-header';
+        header.textContent = t('safeguard.pickProfile');
+        const buttons = profiles.map(p => {
             const isActive = p.id === activeId;
             const scopeBadge = this._sgScopeBadge(p);
-            return `<button class="sg-picker-item${isActive ? ' active' : ''}"
-                data-action="_selectSafeguardProfile" data-args="${JSON.stringify([p.id]).replace(/\"/g, '&quot;')}">
-                <span class="sg-picker-name">${p.name}</span>
-                <span class="sg-picker-scope">${scopeBadge}</span>
-            </button>`;
-        }).join('');
-        picker.innerHTML = `
-            <div class="sg-picker-header">${t('safeguard.pickProfile')}</div>
-            ${items}
-            <div class="sg-picker-footer">
-                <button class="sg-picker-settings" data-actions='[["_closeSafeguardPicker"],["switchTab","settings"],["switchSettingsTab","safeguard"]]'>
-                    ${t('safeguard.manageProfiles')}
-                </button>
-            </div>`;
+            const btn = document.createElement('button');
+            btn.className = 'sg-picker-item' + (isActive ? ' active' : '');
+            btn.dataset.action = '_selectSafeguardProfile';
+            btn.dataset.args = JSON.stringify([p.id]);
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'sg-picker-name';
+            nameSpan.textContent = p.name;
+            const scopeSpan = document.createElement('span');
+            scopeSpan.className = 'sg-picker-scope';
+            scopeSpan.textContent = scopeBadge;
+            btn.append(nameSpan, scopeSpan);
+            return btn;
+        });
+        const footer = document.createElement('div');
+        footer.className = 'sg-picker-footer';
+        const settingsBtn = document.createElement('button');
+        settingsBtn.className = 'sg-picker-settings';
+        settingsBtn.dataset.actions = '[["_closeSafeguardPicker"],["switchTab","settings"],["switchSettingsTab","safeguard"]]';
+        settingsBtn.textContent = t('safeguard.manageProfiles');
+        footer.appendChild(settingsBtn);
+        picker.replaceChildren(header, ...buttons, footer);
     },
 
     _sgScopeBadge(p) {
@@ -2695,9 +2720,17 @@ ${messagesHtml}
         const sel = document.getElementById('agent-safeguard-profile');
         if (!sel) return;
         const profiles = this._safeguardProfiles || [];
-        // Option "globales Profil" bleibt als erster Eintrag
-        const opts = profiles.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
-        sel.innerHTML = `<option value="">${t('safeguard.useGlobal')}</option>${opts}`;
+        // Option "globales Profil" als erster Eintrag
+        const globalOpt = document.createElement('option');
+        globalOpt.value = '';
+        globalOpt.textContent = t('safeguard.useGlobal');
+        const profileOpts = profiles.map(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.name;
+            return opt;
+        });
+        sel.replaceChildren(globalOpt, ...profileOpts);
         if (agentId) {
             try {
                 const res = await fetch(`/api/safeguard/agents/${agentId}/profile`);
@@ -4619,8 +4652,16 @@ ${messagesHtml}
         } catch { /* ignore */ }
         const sel = document.getElementById('tts-default-voice');
         if (sel) {
-            sel.innerHTML = '<option value="">-- Stimme wählen --</option>' +
-                voices.map(v => `<option value="${v.lang}/${v.name}">${v.lang}/${v.name} (${v.quality})</option>`).join('');
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = '-- Stimme wählen --';
+            const voiceOpts = voices.map(v => {
+                const opt = document.createElement('option');
+                opt.value = `${v.lang}/${v.name}`;
+                opt.textContent = `${v.lang}/${v.name} (${v.quality})`;
+                return opt;
+            });
+            sel.replaceChildren(placeholder, ...voiceOpts);
         }
 
         try {
@@ -4710,23 +4751,55 @@ ${messagesHtml}
             const sel = document.getElementById('tts-default-voice');
             if (sel) {
                 const current = sel.value;
-                sel.innerHTML = '<option value="">-- Stimme wählen --</option>' +
-                    voices.map(v => `<option value="${v.lang}/${v.name}">${v.lang}/${v.name} (${v.quality})</option>`).join('');
+                const placeholder = document.createElement('option');
+                placeholder.value = '';
+                placeholder.textContent = '-- Stimme wählen --';
+                const voiceOpts = voices.map(v => {
+                    const opt = document.createElement('option');
+                    opt.value = `${v.lang}/${v.name}`;
+                    opt.textContent = `${v.lang}/${v.name} (${v.quality})`;
+                    return opt;
+                });
+                sel.replaceChildren(placeholder, ...voiceOpts);
                 if (current) sel.value = current;
             }
             if (voices.length === 0) {
                 container.innerHTML = '<p class="text-muted">Keine Stimmen installiert. Stimme unten herunterladen.</p>';
                 return;
             }
-            container.innerHTML = `<table class="data-table"><thead><tr><th>Sprache</th><th>Name</th><th>Qualität</th><th></th></tr></thead><tbody>
-                ${voices.map(v => `<tr>
-                    <td>${v.lang}</td>
-                    <td>${v.name}</td>
-                    <td>${v.quality}</td>
-                    <td><button class="btn btn-outline btn-sm" style="color:var(--error-color);border-color:var(--error-color);"
-                        data-action="deleteTtsVoice" data-args="${JSON.stringify([v.lang, v.name]).replace(/\"/g, '&quot;')}"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></td>
-                </tr>`).join('')}
-            </tbody></table>`;
+            const table = document.createElement('table');
+            table.className = 'data-table';
+            const thead = document.createElement('thead');
+            const headRow = document.createElement('tr');
+            ['Sprache', 'Name', 'Qualität', ''].forEach(label => {
+                const th = document.createElement('th');
+                th.textContent = label;
+                headRow.appendChild(th);
+            });
+            thead.appendChild(headRow);
+            table.appendChild(thead);
+            const tbody = document.createElement('tbody');
+            voices.forEach(v => {
+                const tr = document.createElement('tr');
+                [v.lang, v.name, v.quality].forEach(val => {
+                    const td = document.createElement('td');
+                    td.textContent = val || '';
+                    tr.appendChild(td);
+                });
+                const actionTd = document.createElement('td');
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-outline btn-sm';
+                btn.style.color = 'var(--error-color)';
+                btn.style.borderColor = 'var(--error-color)';
+                btn.dataset.action = 'deleteTtsVoice';
+                btn.dataset.args = JSON.stringify([v.lang, v.name]);
+                btn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
+                actionTd.appendChild(btn);
+                tr.appendChild(actionTd);
+                tbody.appendChild(tr);
+            });
+            table.appendChild(tbody);
+            container.replaceChildren(table);
         } catch (err) {
             container.innerHTML = `<p class="text-muted">Fehler: ${this._escapeHtml(err.message)}</p>`;
         }
@@ -4781,7 +4854,10 @@ ${messagesHtml}
                 st.innerHTML = '<span class="sf sf-ok">Bereits installiert</span>';
                 st.className = 'save-status';
             } else {
-                st.innerHTML = `<span class="sf sf-ok">${lang}/${voice} installiert</span>`;
+                const okSpan = document.createElement('span');
+                okSpan.className = 'sf sf-ok';
+                okSpan.textContent = `${lang}/${voice} installiert`;
+                st.replaceChildren(okSpan);
                 st.className = 'save-status';
                 this.loadTtsVoices();
             }

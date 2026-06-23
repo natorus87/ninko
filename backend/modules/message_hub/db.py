@@ -21,7 +21,7 @@ logger = logging.getLogger("ninko.modules.message_hub.db")
 
 # SQLite-Datei im persistenten /data-Verzeichnis (wie Knowledge Graph)
 _DB_PATH = Path("/data/message_hub_routes.db")
-_FALLBACK_DB_PATH = Path("/tmp/message_hub_routes.db")
+_FALLBACK_DB_PATH = Path("data/message_hub_routes.db")
 
 _db_path: Path = _DB_PATH
 _db_lock = asyncio.Lock()
@@ -49,9 +49,9 @@ async def _ensure_db() -> None:
     if _init_event.is_set():
         return
 
-    # /data bevorzugen, aber Fallback zu /tmp
+    # /data bevorzugen, aber Fallback auf data/ im Projekt-Root
     if not _DB_PATH.parent.exists():
-        logger.warning("Message Hub: /data nicht verfügbar, nutze /tmp als Fallback")
+        logger.warning("Message Hub: /data nicht verfügbar, nutze data/ als Fallback")
         _db_path = _FALLBACK_DB_PATH
 
     async with aiosqlite.connect(str(_db_path)) as db:
@@ -165,6 +165,33 @@ async def create_route(data: RouteCreate) -> RouteEntry:
     return entry
 
 
+ALLOWED_ROUTE_UPDATE_FIELDS = frozenset({
+    "session_id",
+    "permission_cap",
+    "label",
+    "enabled",
+})
+
+
+_UPDATE_ROUTE_SQL: dict[frozenset[str], str] = {
+    frozenset({"session_id"}): "UPDATE routes SET session_id = ? WHERE id = ?",
+    frozenset({"permission_cap"}): "UPDATE routes SET permission_cap = ? WHERE id = ?",
+    frozenset({"label"}): "UPDATE routes SET label = ? WHERE id = ?",
+    frozenset({"enabled"}): "UPDATE routes SET enabled = ? WHERE id = ?",
+    frozenset({"session_id", "permission_cap"}): "UPDATE routes SET session_id = ?, permission_cap = ? WHERE id = ?",
+    frozenset({"session_id", "label"}): "UPDATE routes SET session_id = ?, label = ? WHERE id = ?",
+    frozenset({"session_id", "enabled"}): "UPDATE routes SET session_id = ?, enabled = ? WHERE id = ?",
+    frozenset({"permission_cap", "label"}): "UPDATE routes SET permission_cap = ?, label = ? WHERE id = ?",
+    frozenset({"permission_cap", "enabled"}): "UPDATE routes SET permission_cap = ?, enabled = ? WHERE id = ?",
+    frozenset({"label", "enabled"}): "UPDATE routes SET label = ?, enabled = ? WHERE id = ?",
+    frozenset({"session_id", "permission_cap", "label"}): "UPDATE routes SET session_id = ?, permission_cap = ?, label = ? WHERE id = ?",
+    frozenset({"session_id", "permission_cap", "enabled"}): "UPDATE routes SET session_id = ?, permission_cap = ?, enabled = ? WHERE id = ?",
+    frozenset({"session_id", "label", "enabled"}): "UPDATE routes SET session_id = ?, label = ?, enabled = ? WHERE id = ?",
+    frozenset({"permission_cap", "label", "enabled"}): "UPDATE routes SET permission_cap = ?, label = ?, enabled = ? WHERE id = ?",
+    frozenset({"session_id", "permission_cap", "label", "enabled"}): "UPDATE routes SET session_id = ?, permission_cap = ?, label = ?, enabled = ? WHERE id = ?",
+}
+
+
 async def update_route(route_id: str, data: RouteUpdate) -> RouteEntry | None:
     """Aktualisiert einen Routing-Eintrag."""
     await _ensure_db()
@@ -179,6 +206,10 @@ async def update_route(route_id: str, data: RouteUpdate) -> RouteEntry | None:
     if data.enabled is not None:
         fields["enabled"] = int(data.enabled)
 
+    invalid = set(fields) - ALLOWED_ROUTE_UPDATE_FIELDS
+    if invalid:
+        raise ValueError(f"Unbekannte Felder: {sorted(invalid)}")
+
     async with _db_lock:
         async with aiosqlite.connect(str(_db_path)) as db:
             db.row_factory = aiosqlite.Row
@@ -189,9 +220,9 @@ async def update_route(route_id: str, data: RouteUpdate) -> RouteEntry | None:
                 return None
             if not fields:
                 return _row_to_entry(row)
-            set_clause = ", ".join(f"{k} = ?" for k in fields)
+            sql = _UPDATE_ROUTE_SQL[frozenset(fields)]
             values = list(fields.values()) + [route_id]
-            await db.execute(f"UPDATE routes SET {set_clause} WHERE id = ?", values)
+            await db.execute(sql, values)
             await db.commit()
             cur2 = await db.execute("SELECT * FROM routes WHERE id = ?", (route_id,))
             updated = await cur2.fetchone()
