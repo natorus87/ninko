@@ -410,7 +410,7 @@ _BUILTIN_PROFILES: dict[str, SafeguardProfile] = {
         check_user_messages=True,
         check_tool_calls=True,
         confirm_categories=["DESTRUCTIVE", "STATE_CHANGING", "PROMPT_INJECTION"],
-        detect_prompt_injection=False,
+        detect_prompt_injection=True,
         fail_open=False,  # fail-safe: Classifier-Ausfall blockiert Aktionen statt sie zu erlauben
         auto_mode=True,
         auto_mode_policy="",
@@ -2084,7 +2084,7 @@ class SafeguardMiddleware:
             text, result.category, result.rationale, profile
         )
         return SafeguardResult(
-            requires_confirmation=not allowed,
+            requires_confirmation=False,
             category=result.category,
             rationale=reason,
             raw_response=result.raw_response,

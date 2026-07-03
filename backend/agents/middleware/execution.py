@@ -110,7 +110,6 @@ class AgentExecutionMiddleware(BaseMiddleware):
         use_sg = (
             self._safeguard is not None
             and self._safeguard.enabled
-            and not ctx.confirmed
             and bool(ctx.session_id)
             and bool(ctx.active_tools)
         )

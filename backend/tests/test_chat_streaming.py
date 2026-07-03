@@ -444,6 +444,53 @@ async def test_text_confirmation_replays_pending_chat_safeguard(
     assert route_kwargs["confirmed"] is True
 
 
+async def test_confirmed_true_without_pending_is_rejected(
+    client: AsyncClient,
+    fake_orchestrator: MagicMock,
+) -> None:
+    response = await client.post(
+        "/api/chat/",
+        json={
+            "message": "delete the test deployment",
+            "session_id": "sg-no-pending",
+            "confirmed": True,
+        },
+    )
+
+    assert response.status_code == 400
+    fake_orchestrator.route.assert_not_awaited()
+
+
+async def test_factual_followup_does_not_confirm_pending_chat_safeguard(
+    app: FastAPI,
+    fake_op_journal: MagicMock,
+    fake_orchestrator: MagicMock,
+) -> None:
+    fake_op_journal.get_pending_for_session = AsyncMock(return_value="tx-chat-1")
+    fake_op_journal.get = AsyncMock(
+        return_value={
+            "source": "chat_safeguard",
+            "text": "delete the test deployment",
+        }
+    )
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.post(
+            "/api/chat/",
+            json={
+                "message": "what is the restart policy?",
+                "session_id": "sg-text-confirm",
+            },
+        )
+
+    assert response.status_code == 200
+    fake_op_journal.mark_confirmed.assert_not_awaited()
+    route_kwargs = fake_orchestrator.route.await_args.kwargs
+    assert route_kwargs["message"] == "what is the restart policy?"
+    assert route_kwargs["confirmed"] is False
+
+
 @pytest.mark.parametrize("text", ["ok", "confirm:true", "confirmed: true"])
 async def test_chat_confirmation_words_include_api_like_forms(text: str) -> None:
     from core.safeguard import is_bot_confirmation
@@ -452,13 +499,19 @@ async def test_chat_confirmation_words_include_api_like_forms(text: str) -> None
 
 
 async def test_tool_sentinel_sends_no_tokens_before_final(
-    client: AsyncClient, fake_orchestrator: MagicMock
+    client: AsyncClient, fake_orchestrator: MagicMock, fake_op_journal: MagicMock
 ) -> None:
     """Tool-Safeguard-Sentinel sendet keine Antwort-Tokens vor `final`."""
     from agents.base_agent import _TOOL_SAFEGUARD_SENTINEL
 
     sentinel_payload = json.dumps(
-        {"tool_name": "kubectl_delete", "category": "DESTRUCTIVE", "rationale": "rm pods"}
+        {
+            "tool_name": "kubectl_delete",
+            "tool_args_preview": "{\"namespace\": \"prod\"}",
+            "tool_signature": "sig-123",
+            "category": "DESTRUCTIVE",
+            "rationale": "rm pods",
+        }
     )
     fake_orchestrator.route = AsyncMock(
         return_value=(
@@ -483,7 +536,12 @@ async def test_tool_sentinel_sends_no_tokens_before_final(
     final = frames[final_idx]
     assert final["meta"]["confirmation_required"] is True
     assert final["meta"]["safeguard"]["tool_name"] == "kubectl_delete"
+    assert final["meta"]["safeguard"]["tool_signature"] == "sig-123"
+    assert "prod" in final["response"]
     assert "Tool-Bestätigung erforderlich" in final["response"]
+    create_kwargs = fake_op_journal.create_pending.await_args.kwargs
+    assert create_kwargs["metadata"]["tool_signature"] == "sig-123"
+    assert "prod" in create_kwargs["metadata"]["tool_args_preview"]
 
 
 async def test_parallel_requests_do_not_mix_frames(

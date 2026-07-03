@@ -207,6 +207,13 @@ def _parse_sentinel(response_text: str) -> dict:
         return {}
 
 
+def _safe_action_category(value: object) -> ActionCategory:
+    try:
+        return ActionCategory(str(value or "STATE_CHANGING"))
+    except ValueError:
+        return ActionCategory.STATE_CHANGING
+
+
 def _tool_confirmation_response(info: dict, session_id: str) -> ChatResponse:
     """Baut eine ChatResponse für eine Tool-Level Safeguard Confirmation."""
     response = _tool_confirmation_text(info)
@@ -225,16 +232,21 @@ def _tool_confirmation_text(info: dict) -> str:
     tool_name = info.get("tool_name", "unbekannt")
     category = info.get("category", "UNKNOWN")
     rationale = info.get("rationale", "")
+    args_preview = str(info.get("tool_args_preview") or "").strip()
+    args_block_de = f"**Parameter:** `{args_preview}`\n" if args_preview else ""
+    args_block_en = f"**Arguments:** `{args_preview}`\n" if args_preview else ""
     return _t(
         f"⚠️ **Tool-Bestätigung erforderlich**\n\n"
         f"Der Agent möchte folgendes Tool ausführen:\n\n"
         f"**Tool:** `{tool_name}`\n"
+        f"{args_block_de}"
         f"**Kategorie:** {category}\n"
         f"**Begründung:** {rationale}\n\n"
         f"Sende die Nachricht erneut mit `confirmed: true` um fortzufahren.",
         f"⚠️ **Tool Confirmation Required**\n\n"
         f"The agent wants to execute a tool:\n\n"
         f"**Tool:** `{tool_name}`\n"
+        f"{args_block_en}"
         f"**Category:** {category}\n"
         f"**Rationale:** {rationale}\n\n"
         f"Resend the message with `confirmed: true` to proceed.",
@@ -644,9 +656,7 @@ async def _stream_safe_generate(
                     if safeguard:
                         await safeguard._audit_log(
                             action="tool_confirmed",
-                            category=ActionCategory(
-                                _pending_info.get("category", "STATE_CHANGING")
-                            ),
+                            category=_safe_action_category(_pending_info.get("category")),
                             text=effective_message,
                             session_id=scoped_session_id,
                             agent_id=_pending_info.get("agent", ""),
@@ -718,17 +728,13 @@ async def _stream_safe_generate(
                     detail=sg_result.rationale,
                     data={"category": sg_result.category.value},
                 )
-                if sg_result.category in (
-                    ActionCategory.DESTRUCTIVE,
-                    ActionCategory.STATE_CHANGING,
-                ):
-                    current_tx_id = await op_journal.create_pending(
-                        session_id=scoped_session_id,
-                        text=effective_message,
-                        category=sg_result.category.value,
-                        rationale=sg_result.rationale,
-                        source="chat_safeguard",
-                    )
+                current_tx_id = await op_journal.create_pending(
+                    session_id=scoped_session_id,
+                    text=effective_message,
+                    category=sg_result.category.value,
+                    rationale=sg_result.rationale,
+                    source="chat_safeguard",
+                )
                 sg_payload = sg_result.to_dict()
                 if current_tx_id:
                     sg_payload["transaction_id"] = current_tx_id
@@ -906,6 +912,10 @@ async def _stream_safe_generate(
                     source="tool_safeguard",
                     module=module_used,
                     tool_name=str(info.get("tool_name", "")),
+                    metadata={
+                        "tool_signature": str(info.get("tool_signature", "")),
+                        "tool_args_preview": str(info.get("tool_args_preview", "")),
+                    },
                 )
                 info["transaction_id"] = current_tx_id
             # Buffer response - no streaming tokens before final for confirmations
@@ -1143,9 +1153,7 @@ async def chat(request: Request, body: ChatRequest):
                 if safeguard:
                     await safeguard._audit_log(
                         action="tool_confirmed",
-                        category=ActionCategory(
-                            _pending_info.get("category", "STATE_CHANGING")
-                        ),
+                        category=_safe_action_category(_pending_info.get("category")),
                         text=effective_message,
                         session_id=scoped_session_id,
                         agent_id=_pending_info.get("agent", ""),
@@ -1210,14 +1218,13 @@ async def chat(request: Request, body: ChatRequest):
                 detail=sg_result.rationale,
                 data={"category": sg_result.category.value},
             )
-            if sg_result.category in (ActionCategory.DESTRUCTIVE, ActionCategory.STATE_CHANGING):
-                current_tx_id = await op_journal.create_pending(
-                    session_id=scoped_session_id,
-                    text=effective_message,
-                    category=sg_result.category.value,
-                    rationale=sg_result.rationale,
-                    source="chat_safeguard",
-                )
+            current_tx_id = await op_journal.create_pending(
+                session_id=scoped_session_id,
+                text=effective_message,
+                category=sg_result.category.value,
+                rationale=sg_result.rationale,
+                source="chat_safeguard",
+            )
             sg_payload = sg_result.to_dict()
             if current_tx_id:
                 sg_payload["transaction_id"] = current_tx_id
@@ -1323,6 +1330,10 @@ async def chat(request: Request, body: ChatRequest):
                 source="tool_safeguard",
                 module=module_used,
                 tool_name=str(info.get("tool_name", "")),
+                metadata={
+                    "tool_signature": str(info.get("tool_signature", "")),
+                    "tool_args_preview": str(info.get("tool_args_preview", "")),
+                },
             )
             info["transaction_id"] = current_tx_id
         return _tool_confirmation_response(info, body.session_id)

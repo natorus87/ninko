@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import atexit as _atexit
+import hashlib
 import json
 import logging
 import re
@@ -451,6 +452,7 @@ _paused_sg_agents: dict[str, tuple[Any, dict]] = {}
 _paused_sg_agents_ts: dict[
     str, float
 ] = {}  # session_id → Erstellungszeitpunkt (monotonic)
+_authorized_sg_tool_calls: dict[str, set[str]] = {}
 # Schutz gegen race zwischen resume_safeguard_tool und cleanup_paused_agents:
 # Cleanup läuft als periodischer Background-Task und könnte pausierte Agents
 # entfernen, während der User gerade den Confirm-Button klickt.
@@ -470,6 +472,23 @@ _SAFEGUARD_OVERFLOW_LOCKS = 64
 _safeguard_overflow_locks: dict[int, asyncio.Lock] = {}
 
 _global_safeguard: "SafeguardMiddleware | None" = None
+
+
+def _tool_call_signature(tool_name: str, tool_args: dict) -> str:
+    raw = json.dumps(
+        {"tool_name": tool_name, "tool_args": tool_args},
+        sort_keys=True,
+        ensure_ascii=False,
+        default=str,
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _tool_args_preview(tool_args: dict, *, limit: int = 500) -> str:
+    if not tool_args:
+        return ""
+    raw = json.dumps(tool_args, sort_keys=True, ensure_ascii=False, default=str)
+    return redact_text(raw, limit=limit)
 
 
 def set_global_safeguard(sg: "SafeguardMiddleware") -> None:
@@ -974,13 +993,14 @@ class BaseAgent:
         LangGraph-Ergebnis-Dict zurück wenn die Ausführung abgeschlossen ist,
         oder einen Sentinel-String wenn ein Tool-Call Bestätigung benötigt.
 
-        Wenn ``confirmed=True`` (vom Caller durchgereicht, typischerweise nach
-        User-Input-Bestätigung), wird der Tool-Level-Safeguard für ALLE
-        Tool-Calls in diesem Loop übersprungen.
+        Bestätigte Tool-Calls werden über eine signierte Pending-Autorisierung
+        scoped freigegeben; weitere Tool-Calls im gleichen Loop werden erneut
+        geprüft.
         """
         AGENT_TIMEOUT = _get_agent_timeout_seconds()
         iterations = 0
         max_iterations = 50
+        message_confirmation_consumed = False
 
         while True:
             iterations += 1
@@ -1030,6 +1050,7 @@ class BaseAgent:
             for tool_call in last_ai.tool_calls:
                 tool_name = tool_call["name"]
                 tool_args = tool_call.get("args", {})
+                tool_signature = _tool_call_signature(tool_name, tool_args)
 
                 if _global_safeguard is None or not _global_safeguard.enabled:
                     logger.warning(
@@ -1041,8 +1062,9 @@ class BaseAgent:
                     dangerous_call = None
                     break
 
-                iter_confirmed = confirmed
-                if iter_confirmed:
+                authorized = _authorized_sg_tool_calls.setdefault(session_id, set())
+                iter_confirmed = tool_signature in authorized
+                if confirmed and not iter_confirmed:
                     try:
                         from core.redis_client import get_redis as _get_redis_scoped
 
@@ -1052,10 +1074,9 @@ class BaseAgent:
                         )
                         if _pending_raw:
                             _pending = json.loads(_pending_raw)
-                            if _pending.get("tool_name") != tool_name:
-                                iter_confirmed = False
-                        else:
-                            iter_confirmed = False
+                            if _pending.get("tool_signature") == tool_signature:
+                                authorized.add(tool_signature)
+                                iter_confirmed = True
                     except Exception:
                         iter_confirmed = False
 
@@ -1066,15 +1087,55 @@ class BaseAgent:
                     session_id=session_id,
                     confirmed=iter_confirmed,
                 )
+                if sg_result.auto_decided and sg_result.auto_decision == "deny":
+                    logger.warning(
+                        "[Safeguard] Auto-Mode verweigert Tool-Call '%s' "
+                        "(Agent: '%s', Session: '%s'): %s",
+                        tool_name,
+                        self.name,
+                        session_id,
+                        sg_result.rationale,
+                    )
+                    return {
+                        "messages": [
+                            AIMessage(
+                                content=_t(
+                                    "SafeGuard Auto-Mode hat die Tool-Ausführung abgelehnt.\n\n"
+                                    f"Kategorie: {sg_result.category.value}\n"
+                                    f"Begründung: {sg_result.rationale}",
+                                    "SafeGuard Auto-Mode denied the tool execution.\n\n"
+                                    f"Category: {sg_result.category.value}\n"
+                                    f"Reason: {sg_result.rationale}",
+                                )
+                            )
+                        ]
+                    }
                 if sg_result.requires_confirmation:
-                    dangerous_call = (tool_name, tool_args, sg_result)
+                    if confirmed and not iter_confirmed and not message_confirmation_consumed:
+                        message_confirmation_consumed = True
+                        authorized.add(tool_signature)
+                        logger.info(
+                            "[Safeguard] Tool-Call '%s' durch zuvor bestätigte "
+                            "User-Message einmalig autorisiert (Agent: '%s', Session: '%s').",
+                            tool_name,
+                            self.name,
+                            session_id,
+                        )
+                        continue
+                    dangerous_call = (
+                        tool_name,
+                        tool_args,
+                        tool_signature,
+                        sg_result,
+                    )
                     break  # Ersten gefährlichen Call als Confirmation-Request nehmen
 
             if dangerous_call is None:
                 # Alle Tools sind SAFE → sofort resumieren (transparent)
+                _authorized_sg_tool_calls.pop(session_id, None)
                 continue
 
-            tool_name, tool_args, sg_result = dangerous_call
+            tool_name, tool_args, tool_signature, sg_result = dangerous_call
 
             # Pausiert: Zustand im Modul-Dict speichern + in Redis vermerken
             import time as _time_mod
@@ -1089,6 +1150,8 @@ class BaseAgent:
                     {
                         "tool_name": tool_name,
                         "tool_args": tool_args,
+                        "tool_args_preview": _tool_args_preview(tool_args),
+                        "tool_signature": tool_signature,
                         "agent": self.name,
                         "category": sg_result.category.value,
                         "rationale": sg_result.rationale,
@@ -1107,6 +1170,8 @@ class BaseAgent:
             return f"{_TOOL_SAFEGUARD_SENTINEL}" + json.dumps(
                 {
                     "tool_name": tool_name,
+                    "tool_args_preview": _tool_args_preview(tool_args),
+                    "tool_signature": tool_signature,
                     "category": sg_result.category.value,
                     "rationale": sg_result.rationale,
                 }
@@ -1147,6 +1212,7 @@ class BaseAgent:
         async def _cleanup_pending_state() -> None:
             _paused_sg_agents.pop(session_id, None)
             _paused_sg_agents_ts.pop(session_id, None)
+            _authorized_sg_tool_calls.pop(session_id, None)
             try:
                 from core.redis_client import get_redis
 
