@@ -103,7 +103,7 @@ module_manifest = ModuleManifest(
         "(start, stop, reboot/restart/neustart, reset). Diagnose hung or stuck "
         "VMs and dev environments."
     ),
-    version="1.1.8",
+    version="1.1.9",
     author="Ninko Team",
     enabled_by_default=True,
     env_prefix="PROXMOX_",

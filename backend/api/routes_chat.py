@@ -418,7 +418,8 @@ async def _stream_pipeline_resume(
 
     engine = get_pipeline_engine()
     try:
-        result = await engine.resume(pipeline_id, scoped_session_id, auto_confirm=True)
+        # Step-weise: bestätigt nur den wartenden Step. Weitere confirm-Steps → erneuter Pause.
+        result = await engine.resume(pipeline_id, scoped_session_id)
     except ValueError as exc:
         await status_bus.emit_trace(
             scoped_session_id,
@@ -439,6 +440,31 @@ async def _stream_pipeline_resume(
             ),
             meta={
                 "confirmation_required": False,
+                "session_id": body.session_id,
+            },
+        )
+        return
+
+    # Pipeline pausiert erneut für den nächsten bestätigungspflichtigen Step.
+    if result.status == PipelineStatus.AWAITING_CONFIRMATION:
+        await status_bus.done(scoped_session_id)
+        awaiting = next(
+            (s for s in result.steps if s.status.value == "awaiting_confirmation"),
+            None,
+        )
+        yield _stream_frame(
+            "final",
+            request_id,
+            message_id,
+            response=_t(
+                f"Weiterer Schritt benötigt Bestätigung: **{awaiting.module if awaiting else '?'}**. "
+                "Bitte bestätige, um fortzufahren.",
+                f"Another step requires confirmation: **{awaiting.module if awaiting else '?'}**. "
+                "Please confirm to continue.",
+            ),
+            meta={
+                "confirmation_required": True,
+                "pipeline_id": pipeline_id,
                 "session_id": body.session_id,
             },
         )
@@ -502,7 +528,8 @@ async def _run_pipeline_resume(
 
     engine = get_pipeline_engine()
     try:
-        result = await engine.resume(pipeline_id, scoped_session_id, auto_confirm=True)
+        # Step-weise: bestätigt nur den wartenden Step. Weitere confirm-Steps → erneuter Pause.
+        result = await engine.resume(pipeline_id, scoped_session_id)
     except ValueError as exc:
         await op_journal.clear_pending_for_session(scoped_session_id)
         await status_bus.done(scoped_session_id)
@@ -513,6 +540,32 @@ async def _run_pipeline_resume(
             ),
             module_used=None,
             session_id=body.session_id,
+            timestamp=datetime.now(timezone.utc),
+        )
+
+    # Pipeline pausiert erneut für den nächsten bestätigungspflichtigen Step.
+    if result.status == PipelineStatus.AWAITING_CONFIRMATION:
+        await status_bus.done(scoped_session_id)
+        awaiting = next(
+            (s for s in result.steps if s.status.value == "awaiting_confirmation"),
+            None,
+        )
+        return ChatResponse(
+            response=_t(
+                f"Weiterer Schritt benötigt Bestätigung: **{awaiting.module if awaiting else '?'}**. "
+                "Bitte bestätige, um fortzufahren.",
+                f"Another step requires confirmation: **{awaiting.module if awaiting else '?'}**. "
+                "Please confirm to continue.",
+            ),
+            module_used=None,
+            session_id=body.session_id,
+            confirmation_required=True,
+            safeguard={
+                "source": "pipeline_safeguard",
+                "pipeline_id": pipeline_id,
+                "module": awaiting.module if awaiting else "",
+                "step_index": awaiting.step_index if awaiting else None,
+            },
             timestamp=datetime.now(timezone.utc),
         )
 

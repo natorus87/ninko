@@ -107,8 +107,8 @@ def patch_engine_checkpoint(engine: PipelineEngine, store: dict[str, dict] | Non
         pipeline_id: str,
         session_id: str,
         result: PipelineResult,
-        *,
         steps: list[PipelineStep] | None = None,
+        confirmed_indices: set[int] | None = None,
     ) -> None:
         payload = {
             **checkpoint_store.get(pipeline_id, {}),
@@ -117,6 +117,8 @@ def patch_engine_checkpoint(engine: PipelineEngine, store: dict[str, dict] | Non
         }
         if steps is not None:
             payload["steps"] = [step.model_dump() for step in steps]
+        if confirmed_indices is not None:
+            payload["confirmed_indices"] = sorted(confirmed_indices)
         checkpoint_store[pipeline_id] = payload
 
     async def load_checkpoint(pipeline_id: str) -> dict:
@@ -544,6 +546,46 @@ async def test_resume_bypasses_pre_flight_gate():
 
     assert result.status == PipelineStatus.COMPLETED
     assert result.steps[0].status == StepStatus.COMPLETED
+
+
+# ── Test 7j: step-weiser Resume — eine Bestätigung ≠ ganze Pipeline ──────────
+
+
+@pytest.mark.asyncio
+async def test_stepwise_resume_confirms_one_step_at_a_time():
+    """Zwei confirm-Steps: jeder wird einzeln bestätigt, ein resume() gibt nicht alle frei."""
+    step1 = make_step("kubernetes", "Lösche Pods A", requires_confirmation=True)
+    step2 = make_step("proxmox", "Lösche VM B", requires_confirmation=True)
+    engine = PipelineEngine()
+    mock_agent = make_mock_agent("OK")
+    fake_journal = FakeOperationJournal()
+
+    with (
+        patch_engine_checkpoint(engine),
+        patch("core.operation_journal.get_operation_journal", return_value=fake_journal),
+        patch.object(engine, "_get_module_agent", return_value=mock_agent),
+        patch("core.pipeline_events.emit_pipeline_event", new=AsyncMock()),
+        patch("core.status_bus.emit", new=AsyncMock()),
+    ):
+        paused = await engine.execute(
+            [step1, step2], session_id="test-session-7j", auto_confirm=False,
+        )
+        assert paused.status == PipelineStatus.AWAITING_CONFIRMATION
+        # Erster Resume bestätigt nur Step 0 → muss erneut für Step 1 pausieren.
+        second = await engine.resume(paused.pipeline_id, "test-session-7j")
+        assert second.status == PipelineStatus.AWAITING_CONFIRMATION
+        assert mock_agent.invoke.await_count == 1
+        assert second.steps[0].status == StepStatus.COMPLETED
+        assert second.steps[0].step_index == 0
+        awaiting = next(s for s in second.steps if s.status == StepStatus.AWAITING_CONFIRMATION)
+        assert awaiting.step_index == 1
+        # Zweiter Resume bestätigt Step 1 → Pipeline läuft vollständig durch.
+        done = await engine.resume(paused.pipeline_id, "test-session-7j")
+        assert mock_agent.invoke.await_count == 2
+
+    assert done.status == PipelineStatus.COMPLETED
+    assert len(done.steps) == 2
+    assert all(s.status == StepStatus.COMPLETED for s in done.steps)
 
 
 # ── Test 8: Pipeline läuft nach auto_confirm weiter ──────────────────────────

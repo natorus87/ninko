@@ -9,6 +9,27 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.3.9] – 2026-07-04
+
+### Changed
+
+- **Routing documentation aligned with runtime** (`DOCS.md`, `backend/README.md`, `PLAN.md`): removed the old 4-tier-router description from the current docs and documented the Function-Calling-first routing path, deterministic fast-paths, dynamic-agent dispatch, and pipeline fallback behavior.
+- **Workflow run writes serialized** (`backend/core/workflow_engine.py`, `backend/agents/core_tools.py`): workflow run creation and updates now share the same per-workflow lock so concurrent read-modify-write paths do not overwrite each other.
+- **TTS output handling** (`backend/core/tts/__init__.py`, `backend/api/routes_tts.py`): generated WAV output is stored as short-lived served files instead of being pushed through oversized tool responses.
+
+### Fixed
+
+- **Pipeline confirmation resume** (`backend/core/pipeline_engine.py`, `backend/api/routes_chat.py`): confirmed multi-step pipelines now execute only the confirmed step, preserve completed checkpoint results, pause again for the next unconfirmed destructive step, and return `confirmation_required=true` metadata on JSON resume responses.
+- **Agent API validation** (`backend/api/routes_agents.py`): agent create/update requests now enforce reserved-name checks and the maximum system-prompt length at the API boundary instead of relying only on `DynamicAgentPool.register()`.
+- **Tool permission hardening** (`backend/core/tool_permissions.py`, `backend/core/tool_registry.py`, `backend/core/safeguard.py`): read-only inference and mutation keyword handling were tightened so destructive tool names are classified conservatively.
+- **Agent lifecycle/state consistency** (`backend/core/agent_pool.py`, `backend/core/agent_config_store.py`, `backend/agents/scheduler_agent.py`, `backend/agents/monitor_agent.py`): custom-agent synchronization, scheduler state, and live-agent updates now handle Redis/live-object drift more defensively.
+- **Proxmox LXC power operations** (`backend/modules_catalog/proxmox/tools.py`): smart start/stop/reboot now read the guest `type` from `/cluster/resources?type=vm`, avoiding LXC containers being misclassified as QEMU VMs.
+
+### Tests
+
+- Added regression coverage for step-wise pipeline confirmation resume, oversized agent prompts, and Proxmox LXC/QEMU endpoint selection.
+- Verified in Docker with `docker compose run --rm --no-deps --user root ... pytest tests/test_pipeline_engine.py tests/test_proxmox_power_tools.py tests/test_agent_workflow_regressions.py -q`: **64 passed**.
+
 ## [1.3.8] – 2026-06-23
 
 ### Added

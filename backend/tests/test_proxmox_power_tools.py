@@ -231,6 +231,106 @@ async def test_stop_vm_surfaces_proxmox_errors() -> None:
     assert "not found" in result["detail"]
 
 
+# ── smart_* type-detection tests (LXC must not be misdetected as QEMU) ────────
+
+
+@pytest.mark.asyncio
+async def test_detect_target_type_uses_resource_type_field() -> None:
+    """cluster/resources?type=vm liefert qemu UND lxc — der Typ kommt aus dem Feld."""
+    mock = _mock_proxmox_chain()
+    mock.cluster.resources.get = MagicMock(
+        return_value=[
+            {"vmid": 130, "node": "pve-1", "type": "qemu"},
+            {"vmid": 200, "node": "pve-1", "type": "lxc"},
+        ]
+    )
+    assert await proxmox_tools._detect_target_type(mock, "pve-1", 200) == "lxc"
+    assert await proxmox_tools._detect_target_type(mock, "pve-1", 130) == "qemu"
+
+
+@pytest.mark.asyncio
+async def test_smart_reboot_uses_lxc_endpoint_for_container() -> None:
+    """smart_reboot auf einen LXC-Container muss den lxc-Endpoint aufrufen, nicht qemu."""
+    mock = _mock_proxmox_chain()
+    mock.cluster.resources.get = MagicMock(
+        return_value=[{"vmid": 200, "node": "pve-1", "type": "lxc"}]
+    )
+    with patch.object(
+        proxmox_tools, "_get_proxmox_client", new=AsyncMock(return_value=mock)
+    ):
+        result = await proxmox_tools.smart_reboot.ainvoke({"node": "pve-1", "vmid": 200})
+
+    assert result["status"] == "success"
+    assert result["target_type"] == "lxc"
+    mock.nodes.return_value.lxc.return_value.status.reboot.post.assert_called_once_with()
+    mock.nodes.return_value.qemu.return_value.status.reboot.post.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_smart_start_uses_qemu_endpoint_for_vm() -> None:
+    """smart_start auf eine QEMU-VM muss den qemu-Endpoint aufrufen."""
+    mock = _mock_proxmox_chain()
+    mock.cluster.resources.get = MagicMock(
+        return_value=[{"vmid": 130, "node": "pve-1", "type": "qemu"}]
+    )
+    with patch.object(
+        proxmox_tools, "_get_proxmox_client", new=AsyncMock(return_value=mock)
+    ):
+        result = await proxmox_tools.smart_start.ainvoke({"node": "pve-1", "vmid": 130})
+
+    assert result["status"] == "success"
+    assert result["target_type"] == "qemu"
+    mock.nodes.return_value.qemu.return_value.status.start.post.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_smart_stop_uses_lxc_endpoint_for_container() -> None:
+    """smart_stop nutzt denselben Typ-Erkennungspfad — auch für LXC verifizieren."""
+    mock = _mock_proxmox_chain()
+    mock.cluster.resources.get = MagicMock(
+        return_value=[{"vmid": 200, "node": "pve-1", "type": "lxc"}]
+    )
+    with patch.object(
+        proxmox_tools, "_get_proxmox_client", new=AsyncMock(return_value=mock)
+    ):
+        result = await proxmox_tools.smart_stop.ainvoke({"node": "pve-1", "vmid": 200})
+
+    assert result["status"] == "success"
+    assert result["target_type"] == "lxc"
+    mock.nodes.return_value.lxc.return_value.status.stop.post.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_detect_target_type_skips_malformed_resource_entries() -> None:
+    """Ein Eintrag ohne gültige vmid darf die Suche nicht abbrechen."""
+    mock = _mock_proxmox_chain()
+    mock.cluster.resources.get = MagicMock(
+        return_value=[
+            {"node": "pve-1", "type": "storage"},   # kein vmid
+            {"vmid": None, "node": "pve-1"},          # vmid None
+            {"vmid": 200, "node": "pve-1", "type": "lxc"},  # Treffer danach
+        ]
+    )
+    assert await proxmox_tools._detect_target_type(mock, "pve-1", 200) == "lxc"
+
+
+@pytest.mark.asyncio
+async def test_detect_target_type_falls_back_when_cluster_unavailable() -> None:
+    """Wirft cluster.resources, greift die direkte Endpoint-Probe."""
+    from proxmoxer.core import ResourceException
+
+    mock = _mock_proxmox_chain()
+    mock.cluster.resources.get = MagicMock(side_effect=ResourceException(500, "x", "y"))
+    # qemu-Probe schlägt fehl, lxc-Probe gelingt → "lxc"
+    mock.nodes.return_value.qemu.return_value.status.current.get = MagicMock(
+        side_effect=ResourceException(404, "not found", "z")
+    )
+    mock.nodes.return_value.lxc.return_value.status.current.get = MagicMock(
+        return_value={"status": "running"}
+    )
+    assert await proxmox_tools._detect_target_type(mock, "pve-1", 200) == "lxc"
+
+
 # ── Tool-registry tier tests ─────────────────────────────────────────────────
 
 

@@ -1290,6 +1290,7 @@ class SafeguardMiddleware:
         has expired. Returns the number of cleaned entries.
         """
         from agents.base_agent import (
+            _authorized_sg_tool_calls,
             _paused_sg_agents,
             _paused_sg_agents_lock,
             _paused_sg_agents_ts,
@@ -1319,6 +1320,9 @@ class SafeguardMiddleware:
                 ):
                     _paused_sg_agents.pop(sid, None)
                     _paused_sg_agents_ts.pop(sid, None)
+                    # Verwaiste Autorisierungs-Signaturen derselben Session mit aufräumen
+                    # (wurden bisher nur im Erfolgs-/Resume-Pfad entfernt → langsames Wachstum).
+                    _authorized_sg_tool_calls.pop(sid, None)
         logger.info(
             "[Safeguard] Cleaned %d stale paused-agent entries.", len(stale_keys)
         )
@@ -1446,8 +1450,11 @@ class SafeguardMiddleware:
             "finden",
             "mostra ",
         )
+        # Nur Präfix-Match: ein Substring-Treffer (z.B. "get " in "get rid of the
+        # customer database") würde eine destruktive Nachricht fälschlich als SAFE
+        # klassifizieren und den LLM-Klassifizierer überspringen.
         if (
-            any(lower.startswith(kw) or kw in lower for kw in safe_keywords)
+            any(lower.startswith(kw) for kw in safe_keywords)
             or lower.endswith("?")
         ) and not _contains_write_or_destructive_intent(lower):
             return {

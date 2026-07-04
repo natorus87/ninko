@@ -7,7 +7,7 @@ Ninko is a modular, AI-powered IT-Operations platform built on FastAPI (Python 3
 ## Table of Contents
 
 1. [Architecture Overview](#1-architecture-overview)
-2. [The Orchestrator — 4-Tier Routing](#2-the-orchestrator--4-tier-routing)
+2. [The Orchestrator — Function-Calling Routing](#2-the-orchestrator--function-calling-routing)
 3. [How an Agent Processes a Request](#3-how-an-agent-processes-a-request)
 4. [SafeGuard Middleware](#4-safeguard-middleware)
 5. [Semantic Memory](#5-semantic-memory)
@@ -37,7 +37,7 @@ Ninko is a modular, AI-powered IT-Operations platform built on FastAPI (Python 3
 |---|---|
 | **Immutable Core** | No module name is hardcoded in the orchestrator or routing logic |
 | **Auto-Discovering Modules** | Modules register themselves at startup via `ModuleManifest` |
-| **4-Tier Routing** | Every request is automatically assigned to the correct handler |
+| **Function-Calling Routing** | The model picks the right module tool(s) per request; deterministic fast-paths handle common cases |
 | **Local AI by Default** | All LLM calls remain within the local network (Ollama / LM Studio) |
 
 ### Current Runtime Baseline (Apr 2026)
@@ -63,8 +63,7 @@ Ninko is a modular, AI-powered IT-Operations platform built on FastAPI (Python 3
 │  └──────────────────────────┬──────────────────────────────┘    │
 │  ┌───────────────────────────▼──────────────────────────────┐   │
 │  │                   OrchestratorAgent                       │   │
-│  │  Tier 1: Direct  │  Tier 2: Module  │  Tier 3: Dynamic  │   │
-│  │                    Tier 4: Pipeline                       │   │
+│  │  Fast-paths → Function Calling → Pipeline / ReAct        │   │
 │  └──────────────────────────┬──────────────────────────────-┘   │
 │  ┌───────────────────────────▼──────────────────────────────┐   │
 │  │                   Module Registry                         │   │
@@ -119,98 +118,74 @@ ninko/
 
 ---
 
-## 2. The Orchestrator — 4-Tier Routing
+## 2. The Orchestrator — Function-Calling Routing
 
-The `OrchestratorAgent` is the central brain. Every user message passes through it (unless SafeGuard blocks it beforehand). The tier decision runs in this fixed order:
+The `OrchestratorAgent` is the central brain. Every user message passes through it (unless SafeGuard blocks it beforehand). Routing is **LLM-native Function Calling**, not a fixed tier ladder: a few deterministic fast-paths run first, and everything else is decided by the model choosing which module tool(s) to call.
 
 ```
-Compound-Check ──→ Tier 4 (Pipeline)
+force_module?  ─────────────→ Direct module / custom-agent call
        ↓ no
-Module-Detection ──→ Tier 2 (Module Agent)
-       ↓ no match
-Simple-Query-Check ──→ Tier 1 (Direct Answer)
-       ↓ complex
-Tier 3 (Dynamic Agent)
+agent/workflow creation? ────→ Deterministic auto-create
+       ↓ no
+FRITZ!Box-Tasmota discovery? → Read-only fast-path
+       ↓ no
+infra-status (proxmox/k8s)? ─→ Module status fast-path
+       ↓ no
+Function Calling (primary) ──→ LLM picks module tool(s)
+       ↓ FC disabled / fails
+ReAct fallback ──────────────→ orchestrator.invoke() with core tools
 ```
 
-### Tier 1 — Direct Answer
+### Deterministic fast-paths (no LLM routing)
 
-**Condition:** Message < 120 characters AND no action verbs.
+Checked in `route()` before any routing LLM call:
 
-Action verbs (in all 10 languages) that trigger escalation: `create`, `delete`, `update`, `install`, `configure`, `restart`, `scale`, `deploy`, `run`, `start`, `stop`, `remove`, `erstelle`, `lösche`, `aktualisiere`, `installiere`, `starte`, `stoppe`, `crée`, `supprime`, `crea`, `elimina`, …
+- **`force_module`** — the request pins a module or custom-agent UUID (e.g. via the chat module picker); bypasses routing entirely and calls that agent directly.
+- **Agent creation** — explicit "create an agent for …" intent → `_auto_create_custom_agent` generates and registers a custom agent.
+- **Workflow creation** — explicit "create a workflow …" intent → `_auto_create_workflow`.
+- **FRITZ!Box-Tasmota discovery** — "find Tasmota devices in the FritzBox" style requests are served read-only without LLM routing.
+- **Infra-status** — status/health questions for `proxmox` or `kubernetes` route straight to that module.
 
-When the condition is met, the orchestrator answers directly from LLM knowledge — no module, no tools. Fast and lightweight.
+### Function Calling (primary path)
 
-**Examples:**
-```
-"What is a Kubernetes pod?"  → Tier 1 → Direct LLM answer
-"Explain BGP"                → Tier 1 → Direct LLM answer
-```
+For everything else, the orchestrator exposes one tool per registered module (schema auto-generated from each manifest — no hardcoding) plus its core tools, and lets the LLM decide:
 
-### Tier 2 — Module Agent
+- **No tool call** → the model answers directly from its own knowledge.
+- **One module tool** → `call_module_agent` delegates to that module's agent.
+- **Two or more module tools** → the calls are assembled into an ad-hoc pipeline and run by the `PipelineEngine` (typed steps, per-step retry, Redis checkpoints).
 
-**Condition:** The message refers to a specific module.
-
-Module detection in **two stages:**
-
-**Stage 1 — Keyword Fast-Path** (no LLM call):
-- Each module registers `routing_keywords` in its manifest.
-- The orchestrator scores each module against the tokenized message.
-- Keywords < 7 characters: only `\b` word-boundary matching (`"pod"` does not match `"tripod"`).
-- Keywords ≥ 7 characters: additionally compact substring matching (`"ipadresse"` matches `"ip-adresse"`).
-- Exactly one module with score > 0 → forward immediately.
-
-**Stage 2 — LLM Classification** (only on ambiguity):
-- Fires when: score = 0 (no match) OR two or more modules with score > 0.
-- Dynamic prompt built from all module descriptions and keywords — no hardcoding.
-- 8-second timeout; fallback to keyword behavior on error.
-- Result is cached by MD5(message) with 60s TTL.
+Routing decisions are cached to skip the LLM call on repeats:
+- **Exact cache** — sha256 of the (context + message), 24h TTL.
+- **Semantic cache** — embedding cosine ≥ 0.92 against prior routings, 7d TTL.
 
 ```
-"Show all failing pods"           → kubernetes (keyword: "pod")
-"Pi-hole statistics today"        → pihole (keyword: "pi-hole")
-"FritzBox external IP"            → fritzbox (keyword: "fritzbox")
+"What is a Kubernetes pod?"                       → direct LLM answer (no tool)
+"Show all failing pods"                           → call_module_agent("kubernetes", …)
+"Check the Kubernetes cluster and send a Telegram report"
+                                                  → pipeline [kubernetes → telegram]
+"Create an agent for security audits"             → auto-create custom agent
 ```
 
-### Tier 3 — Dynamic Agent
+### Custom (dynamic) agents
 
-**Condition:** No module match AND complex request.
+Registered custom agents from the `DynamicAgentPool` are listed in the routing prompt appendix, so the model can delegate to them like any module. New agents are created on demand via `create_custom_agent` (or the explicit agent-creation fast-path) and are usable immediately.
 
-1. Search `DynamicAgentPool` for a matching custom agent (Jaccard keyword overlap ≥ 18%).
-2. If found → route directly.
-3. If not found → LLM generates agent spec (name, description, system prompt as JSON), `create_custom_agent` registers it in Redis, immediate execution.
+### ReAct fallback
 
-```
-"Create an agent for security audits"
-→ Tier 3 → LLM generates spec → New agent created and used immediately
-```
-
-### Tier 4 — Pipeline (Multi-Step / Compound)
-
-**Condition:** Message concerns multiple modules simultaneously, or contains explicit multi-step patterns.
-
-Detection patterns: `"first … then"`, `"and afterwards"`, `"step 1 … step 2"`, `"also"`, `"and send"`, `"and report"`, …
-
-**Flow:**
-1. Single LLM call → structured JSON execution plan.
-2. `run_pipeline` executes each step sequentially.
-3. Output of each step is passed to the next as `{previous_output}`.
-
-```
-"Check the Kubernetes cluster and send me a Telegram report"
-→ Tier 4 → Pipeline: [kubernetes → telegram]
-```
+If Function Calling is disabled (`LLM_ENABLE_FUNCTION_CALLING=false` / `tool_choice=none`), the model produces no tool schema, or the routing LLM call fails, the orchestrator falls back to a ReAct loop (`orchestrator.invoke()`) that reasons over its core tools directly.
 
 ### Utility Module Exclusion
 
-`_UTILITY_MODULES = {"web_search", "image_gen", "telegram", "email", "teams"}` — These modules are excluded from compound scoring unless they are explicitly named in the text. Prevents false-positive Tier-4 routing caused by history contamination.
+`_UTILITY_MODULES = {"web_search", "image_gen", "telegram", "email", "teams"}` — notification/utility modules are only added to a multi-step pipeline when explicitly named in the message. Prevents false-positive extra steps caused by history contamination.
+
+> **Note:** Earlier releases used an explicit 4-tier router (keyword fast-path + compound pipeline planner). Those code paths (`_route_tier2_module`, `_plan_and_execute_pipeline`) were removed in 2026-07; routing is Function-Calling-only. A `KeywordRouter` shim remains in `orchestrator.py` for its unit tests but is not part of the live routing path.
 
 ### Orchestrator Tools
 
 | Tool | Function |
 |---|---|
 | `execute_cli_command` | Run a shell command on the backend host |
-| `create_custom_agent` | Create and register a new Tier-3 dynamic agent |
+| `create_custom_agent` | Create and register a new dynamic agent |
 | `update_custom_agent` | Update an existing agent (takes effect immediately) |
 | `install_skill` | Write a SKILL.md to the persistent volume and hot-reload |
 | `create_linear_workflow` | Programmatically create and save a workflow |
@@ -643,7 +618,7 @@ Enter requests in natural language. The orchestrator handles routing automatical
 ### Module Pre-Selection (Chat Toolbar)
 
 The module-picker pill next to the chat title (`Ninko._forcedModule`) enables direct routing:
-- **Auto** — 4-tier routing as normal
+- **Auto** — normal Function-Calling routing
 - **Module name** — Directly to the module agent (bypasses all tiers)
 - **Custom agent UUID** — Directly to the custom agent (from `DynamicAgentPool`)
 
@@ -663,14 +638,14 @@ Click the microphone button → record a voice message → Whisper transcribes i
 
 ## 11. Custom Agents
 
-Custom agents are specialized AI personas that can be created manually or automatically by the orchestrator (Tier 3).
+Custom agents are specialized AI personas that can be created manually or automatically by the orchestrator.
 
 ### Creating an Agent (UI)
 
 1. **Agents tab → New Agent**
 2. Fill in the fields:
    - **Name** — Used for routing and Soul generation
-   - **Description** — Helps Tier-3 routing to match future requests (Jaccard ≥ 18%)
+   - **Description** — Listed in the orchestrator's routing prompt so the model can delegate matching requests to this agent
    - **System Prompt** — Bullet points for capabilities recommended (used by the Soul generator)
    - **LLM Provider** — Empty = global default
    - **SafeGuard Profile** — Which security profile for this agent
@@ -720,7 +695,7 @@ The workflow editor provides a visual canvas for multi-step automation pipelines
 | Node | Configuration fields | Purpose |
 |---|---|---|
 | **Trigger** | — | Entry point of every workflow |
-| **Agent** | `agent_id`, `prompt` | Delegate a task to the orchestrator (full 4-tier routing) |
+| **Agent** | `agent_id`, `prompt` | Delegate a task to the orchestrator (full Function-Calling routing) |
 | **Condition** | `expression`, `true_label`, `false_label` | Branch: `output.contains("error")` → true path |
 | **Variable** | `name`, `value` | Set a variable, supports `{other_variable}` interpolation |
 | **Loop** | `variable`, `items` | Iterate over a list |
@@ -1242,7 +1217,7 @@ Sends a user message through the orchestrator.
 | `session_id` | string | — | `"default"` | Session ID for chat history |
 | `language` | string | — | `"de"` | Response language |
 | `confirmed` | bool | — | `false` | `true` → skip SafeGuard for this request |
-| `force_module` | string \| null | — | `null` | Module name or custom agent UUID (bypasses 4-tier routing) |
+| `force_module` | string \| null | — | `null` | Module name or custom agent UUID (bypasses routing) |
 
 **Response `200 ChatResponse`:**
 
@@ -1370,7 +1345,7 @@ Create a new custom agent.
 | Field | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `name` | string | ✓ | — | Display name (1–128 characters) |
-| `description` | string | — | `""` | Short description (for Tier-3 keyword matching) |
+| `description` | string | — | `""` | Short description (shown in the orchestrator's routing prompt) |
 | `system_prompt` | string | — | `""` | System prompt; bullet points for capabilities recommended |
 | `llm_provider_id` | string \| null | — | `null` | Provider ID; null = global default |
 | `enabled` | bool | — | `true` | Is the agent active? |

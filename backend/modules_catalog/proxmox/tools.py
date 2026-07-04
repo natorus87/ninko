@@ -348,6 +348,10 @@ async def _get_node_status(node: str, connection_id: str = "") -> dict:
     status = proxmox.nodes(node).status.get()
     return {
         "node": node,
+        # Ein erfolgreicher status.get() bedeutet, dass der Node erreichbar ist.
+        # (Der Detail-Endpoint liefert kein online/offline-Feld — ohne dies zeigte
+        # der Tool-Output immer "unknown".)
+        "status": "online",
         "cpu_count": status.get("cpuinfo", {}).get("cpus", 0),
         "cpu_model": status.get("cpuinfo", {}).get("model", ""),
         "cpu_usage": round(status.get("cpu", 0) * 100, 1),
@@ -528,6 +532,7 @@ async def _get_vm_status_raw(node: str, vmid: int, connection_id: str = "") -> d
             "vmid": vmid,
             "name": status.get("name", f"VM-{vmid}"),
             "node": node,
+            "type": "qemu",
             "status": status.get("status", "unknown"),
             "cpu_usage": round(status.get("cpu", 0) * 100, 1),
             "mem_total": status.get("maxmem", 0),
@@ -1005,20 +1010,24 @@ async def _detect_target_type(proxmox: object, node: str, vmid: int) -> str | No
 
     Returns None wenn weder VM noch LXC gefunden.
     """
+    # /cluster/resources?type=vm liefert BEIDE Gasttypen (qemu UND lxc); der
+    # tatsächliche Typ steht im 'type'-Feld jedes Eintrags. Es gibt keinen
+    # gültigen type=lxc-Filter — daher genau EINE Abfrage und das Feld lesen.
     try:
         resources = proxmox.cluster.resources.get(type="vm")
-        for r in resources:
-            if int(r.get("vmid", -1)) == vmid and r.get("node") == node:
-                return "qemu"
     except (*_PROXMOX_EXCEPTIONS, AttributeError):
-        pass
-    try:
-        resources = proxmox.cluster.resources.get(type="lxc")
-        for r in resources:
-            if int(r.get("vmid", -1)) == vmid and r.get("node") == node:
-                return "lxc"
-    except (*_PROXMOX_EXCEPTIONS, AttributeError):
-        pass
+        resources = []
+    for r in resources or []:
+        # Per-Eintrag parsen: ein Eintrag ohne/ungültige vmid darf die restliche
+        # Suche nicht abbrechen (sonst unnötiger Fallback trotz vorhandenem Treffer).
+        try:
+            r_vmid = int(r.get("vmid", -1))
+        except (TypeError, ValueError):
+            continue
+        if r_vmid == vmid and r.get("node") == node:
+            rtype = str(r.get("type", ""))
+            if rtype in ("qemu", "lxc"):
+                return rtype
 
     # Fallback: direkter Endpoint-Probe. Wir versuchen zuerst qemu; wenn
     # das mit 404 endet, probieren wir lxc. Reihenfolge ist egal da

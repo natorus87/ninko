@@ -57,8 +57,9 @@ _CORE_TOOL_EXCEPTIONS = (
     RuntimeError,
     OSError,
     asyncio.TimeoutError,
-    asyncio.CancelledError,
 )
+# asyncio.CancelledError bewusst NICHT hier: sie ist eine BaseException und muss
+# durchpropagieren (Client-Disconnect/Shutdown), sonst laufen Tools als Zombies weiter.
 _CORE_IMPORT_EXCEPTIONS = (ImportError, AttributeError, RuntimeError)
 
 
@@ -173,6 +174,12 @@ logger = logging.getLogger("ninko.agents.core_tools")
 REDIS_KEY_WORKFLOWS = "ninko:workflows"
 REDIS_KEY_RUNS_PREFIX = "ninko:workflow:runs:"
 
+# Serialisiert Read-Modify-Write auf der Workflow-Liste, damit parallele
+# create_dag_/create_linear_workflow-Aufrufe sich nicht gegenseitig überschreiben.
+# Prozessweit — wirkt in der Single-Process-Deployment. (Die Run-Listen nutzen den
+# geteilten Lock der WorkflowEngine via get_run_update_lock.)
+_workflows_write_lock = asyncio.Lock()
+
 
 def _normalize_tenant_id(tenant_id: str) -> str:
     t = (tenant_id or "default").strip().lower().replace(" ", "_")
@@ -228,12 +235,9 @@ def _extract_step_agent_hint(step_prompt: str) -> tuple[str, str]:
     if m:
         return m.group(1).strip(), m.group(2).strip()
 
-    low = raw.lower()
-    if "proxmox" in low:
-        return "proxmox", raw
-    if "telegram" in low:
-        return "telegram", raw
-
+    # Kein Substring-Rateraten (z.B. "telegram" im Text): das würde erklärenden Text
+    # wie "wie man Telegram deinstalliert" fälschlich ans telegram-Modul routen.
+    # Nur das explizite [module:...]-Prefix ist maßgeblich, sonst der Orchestrator.
     return "orchestrator", raw
 
 
@@ -640,21 +644,30 @@ async def create_dag_workflow(
             "错误: 未指定节点。",
         )
 
-    # UUIDs vergeben und Positionen auto-berechnen (einfaches Layer-Layout)
+    # UUIDs vergeben und Positionen auto-berechnen (einfaches Layer-Layout).
+    # Pro Node eine eigene full_id (via Liste, nicht via short_id-Key), damit
+    # doppelte oder leere short_ids keine Node-ID-Kollision erzeugen. Doppelte
+    # EXPLIZITE short_ids werden abgelehnt (Edges würden sonst auf den falschen
+    # Node zeigen).
     id_map: dict[str, str] = {}
+    node_full_ids: list[str] = []
     for n in nodes:
         short_id = str(n.get("id", "")).strip()
-        if not short_id:
-            short_id = str(uuid.uuid4())[:8]
         full_id = str(uuid.uuid4())[:8]
-        id_map[short_id] = full_id
+        node_full_ids.append(full_id)
+        if short_id:
+            if short_id in id_map:
+                return _t(
+                    f"Fehler: Doppelte Node-ID '{short_id}' im Workflow. Node-IDs müssen eindeutig sein.",
+                    f"Error: Duplicate node id '{short_id}' in the workflow. Node ids must be unique.",
+                )
+            id_map[short_id] = full_id
 
     # Nodes mit neuen IDs und Positionen aufbauen
     x_base, y_base, y_step = 120, 100, 160
     built_nodes = []
     for i, n in enumerate(nodes):
-        short_id = str(n.get("id", "")).strip()
-        full_id = id_map.get(short_id, str(uuid.uuid4())[:8])
+        full_id = node_full_ids[i]
         built_nodes.append(
             {
                 "id": full_id,
@@ -682,9 +695,6 @@ async def create_dag_workflow(
 
     redis = get_redis()
     tenant_id = _current_tenant_id()
-    raw = await redis.connection.get(_tenant_key(REDIS_KEY_WORKFLOWS, tenant_id))
-    workflows = json.loads(raw) if raw else []
-
     public_wf_id = str(uuid.uuid4())
     wf_id = _scoped_workflow_id(tenant_id, public_wf_id)
     now = datetime.now(timezone.utc).isoformat()
@@ -702,10 +712,13 @@ async def create_dag_workflow(
         "updated_at": now,
     }
 
-    workflows.append(new_wf)
-    await redis.connection.set(
-        _tenant_key(REDIS_KEY_WORKFLOWS, tenant_id), json.dumps(workflows)
-    )
+    async with _workflows_write_lock:
+        raw = await redis.connection.get(_tenant_key(REDIS_KEY_WORKFLOWS, tenant_id))
+        workflows = json.loads(raw) if raw else []
+        workflows.append(new_wf)
+        await redis.connection.set(
+            _tenant_key(REDIS_KEY_WORKFLOWS, tenant_id), json.dumps(workflows)
+        )
     logger.info(
         "DAG-Workflow via Tool erstellt: %s (%s, tenant=%s, %d nodes, %d edges)",
         name,
@@ -776,9 +789,6 @@ async def create_linear_workflow(name: str, description: str, steps: list[str]) 
 
     redis = get_redis()
     tenant_id = _current_tenant_id()
-    raw = await redis.connection.get(_tenant_key(REDIS_KEY_WORKFLOWS, tenant_id))
-    workflows = json.loads(raw) if raw else []
-
     public_wf_id = str(uuid.uuid4())
     wf_id = _scoped_workflow_id(tenant_id, public_wf_id)
     now = datetime.now(timezone.utc).isoformat()
@@ -796,10 +806,13 @@ async def create_linear_workflow(name: str, description: str, steps: list[str]) 
         "updated_at": now,
     }
 
-    workflows.append(new_wf)
-    await redis.connection.set(
-        _tenant_key(REDIS_KEY_WORKFLOWS, tenant_id), json.dumps(workflows)
-    )
+    async with _workflows_write_lock:
+        raw = await redis.connection.get(_tenant_key(REDIS_KEY_WORKFLOWS, tenant_id))
+        workflows = json.loads(raw) if raw else []
+        workflows.append(new_wf)
+        await redis.connection.set(
+            _tenant_key(REDIS_KEY_WORKFLOWS, tenant_id), json.dumps(workflows)
+        )
     logger.info(
         "Linearer Workflow via Tool erstellt: %s (%s, tenant=%s)",
         name,
@@ -873,12 +886,18 @@ async def execute_workflow(workflow_name_or_id: str) -> str:
     )
 
     runs_key = f"{_tenant_key(REDIS_KEY_RUNS_PREFIX, tenant_id)}{wf_id}"
-    runs_raw = await redis.connection.get(runs_key)
-    runs = json.loads(runs_raw) if runs_raw else []
-    runs.append(run_obj.model_dump())
-    if len(runs) > 50:
-        runs = runs[-50:]
-    await redis.connection.set(runs_key, json.dumps(runs))
+    # Geteilter per-(tenant, workflow) Lock mit der WorkflowEngine, damit der
+    # initiale Run-Eintrag hier und die Status-Updates der Engine denselben
+    # Runs-Key nicht gegenseitig überschreiben.
+    from core.workflow_engine import get_run_update_lock
+
+    async with get_run_update_lock(tenant_id, wf_id):
+        runs_raw = await redis.connection.get(runs_key)
+        runs = json.loads(runs_raw) if runs_raw else []
+        runs.append(run_obj.model_dump())
+        if len(runs) > 50:
+            runs = runs[-50:]
+        await redis.connection.set(runs_key, json.dumps(runs))
 
     # Engine asynchron im Hintergrund starten
     try:
@@ -981,6 +1000,26 @@ async def execute_workflow(workflow_name_or_id: str) -> str:
     )
 
 
+def _normalize_confirm_text(text: str) -> str:
+    """Normalisiert Text für den Bestätigungs-Abgleich (lower, nur Wort-Tokens)."""
+    return " ".join(re.findall(r"\w+", (text or "").lower()))
+
+
+def _confirmation_covers_task(confirmed_text: str, task: str) -> bool:
+    """True, wenn die delegierte Aufgabe von der bestätigten Nachricht gedeckt ist.
+
+    Konservativ: nur wenn die normalisierte Aufgabe Teilstring der bestätigten
+    Nachricht ist (oder umgekehrt). Ein Fehl-Nichttreffer führt lediglich zu einer
+    zusätzlichen Bestätigung im Sub-Agent (sicher), ein Fehltreffer wäre ein Bypass —
+    daher lieber strikt.
+    """
+    norm_confirmed = _normalize_confirm_text(confirmed_text)
+    norm_task = _normalize_confirm_text(task)
+    if not norm_confirmed or not norm_task:
+        return False
+    return norm_task in norm_confirmed or norm_confirmed in norm_task
+
+
 @tool
 async def call_module_agent(module_name: str, task: str) -> str:
     """
@@ -1053,11 +1092,26 @@ async def call_module_agent(module_name: str, task: str) -> str:
             _pending_tx_id = await op_journal.get_pending_for_session(session_id)
             if _pending_tx_id:
                 _tx = await op_journal.get(_pending_tx_id)
-                if _tx.get("source") == "chat_safeguard" and _tx.get("status") == "confirmed":
+                if (
+                    _tx.get("source") == "chat_safeguard"
+                    and _tx.get("status") == "confirmed"
+                    and _confirmation_covers_task(_tx.get("text", ""), task)
+                ):
+                    # Nur durchreichen, wenn die delegierte Aufgabe inhaltlich der
+                    # bestätigten Nachricht entspricht. Sonst würde eine zweite,
+                    # UNBESTÄTIGTE destruktive Delegation im selben Turn die
+                    # Bestätigung erben (Safeguard-Bypass). Der Sub-Agent-_sg_loop
+                    # autorisiert mit confirmed=True zusätzlich nur EINEN Tool-Call.
                     _confirmed_propagated = True
                     logger.info(
-                        "call_module_agent: Chat-Safeguard bereits bestätigt, "
+                        "call_module_agent: Chat-Safeguard bestätigt und Task-passend, "
                         "reiche confirmed=True an Sub-Agent '%s' durch.",
+                        module_name,
+                    )
+                elif _tx.get("source") == "chat_safeguard" and _tx.get("status") == "confirmed":
+                    logger.info(
+                        "call_module_agent: Bestätigte Chat-Safeguard-tx passt NICHT zur "
+                        "delegierten Aufgabe — Sub-Agent '%s' prüft eigenständig (confirmed=False).",
                         module_name,
                     )
         except _CORE_TOOL_EXCEPTIONS as exc:
@@ -1084,67 +1138,6 @@ async def call_module_agent(module_name: str, task: str) -> str:
             f"モジュール '{module_name}' でエラーが発生しました: {exc}",
             f"模块 '{module_name}' 发生错误: {exc}",
         )
-
-
-def _build_execution_groups(steps: list[dict]) -> list[list[int]]:
-    """
-    Topologische Sortierung der Pipeline-Steps anhand von ``depends_on``.
-
-    Gibt eine Liste von Gruppen zurück. Steps innerhalb einer Gruppe haben
-    keine gegenseitigen Abhängigkeiten und können parallel ausgeführt werden.
-    Gruppen selbst werden sequenziell abgearbeitet.
-
-    Ohne ``depends_on``-Felder → rein sequenziell (eine Gruppe pro Step).
-    """
-    n = len(steps)
-    if n == 0:
-        return []
-
-    # Prüfen ob irgendein Step depends_on hat
-    has_deps = any("depends_on" in s for s in steps)
-    if not has_deps:
-        # Rein sequenziell – rückwärtskompatibel
-        return [[i] for i in range(n)]
-
-    # Abhängigkeitsgraph aufbauen
-    in_degree = [0] * n
-    dependents: list[list[int]] = [[] for _ in range(n)]
-
-    for i, step in enumerate(steps):
-        deps = step.get("depends_on")
-        if deps is None:
-            # Ohne depends_on → hängt vom vorherigen Step ab (sequenziell)
-            if i > 0:
-                deps = [i - 1]
-            else:
-                deps = []
-        for d in deps:
-            if 0 <= d < n and d != i:
-                in_degree[i] += 1
-                dependents[d].append(i)
-
-    # Kahn's Algorithmus – Gruppen-basiert (BFS level-order)
-    groups: list[list[int]] = []
-    ready = [i for i in range(n) if in_degree[i] == 0]
-
-    visited = 0
-    while ready:
-        groups.append(ready)
-        visited += len(ready)
-        next_ready: list[int] = []
-        for idx in ready:
-            for dep in dependents[idx]:
-                in_degree[dep] -= 1
-                if in_degree[dep] == 0:
-                    next_ready.append(dep)
-        ready = next_ready
-
-    if visited < n:
-        # Zyklus erkannt – Fallback auf sequenziell
-        logger.warning("Pipeline depends_on enthält Zyklen – Fallback auf sequenziell.")
-        return [[i] for i in range(n)]
-
-    return groups
 
 
 @tool
@@ -1207,13 +1200,22 @@ async def run_pipeline(steps: list[dict]) -> str:
         )
     )
 
-    # Rohe Dicts → typisierte PipelineStep-Objekte
+    # Rohe Dicts → typisierte PipelineStep-Objekte.
+    # Fail-fast: Ein einziger ungültiger Step darf NICHT still verworfen werden —
+    # das würde die 0-basierten depends_on-Indizes der Folge-Steps verschieben und
+    # zu plausibel aussehenden, aber inhaltlich falschen Ergebnissen führen.
     typed_steps: list[PipelineStep] = []
-    for raw in steps:
+    for idx, raw in enumerate(steps):
         try:
             typed_steps.append(PipelineStep.from_dict(raw))
         except Exception as exc:
-            logger.warning("run_pipeline: Ungültiger Step verworfen: %s – %s", raw, exc)
+            logger.warning("run_pipeline: Ungültiger Step %d verworfen: %s – %s", idx, raw, exc)
+            return _t(
+                f"Fehler: Schritt {idx + 1} der Pipeline ist ungültig ({exc}). "
+                "Die Pipeline wurde nicht ausgeführt, um falsche Abhängigkeiten zu vermeiden.",
+                f"Error: Step {idx + 1} of the pipeline is invalid ({exc}). "
+                "The pipeline was not executed to avoid broken dependencies.",
+            )
 
     if not typed_steps:
         return _t(
@@ -1257,21 +1259,6 @@ async def run_pipeline(steps: list[dict]) -> str:
     )
 
 
-# Legacy-Hilfsfunktion: wird von run_parallel_pipeline intern noch benötigt
-def _build_execution_groups_legacy(steps: list[dict]) -> list[list[int]]:
-    """Topologische Sortierung für den Legacy run_parallel_pipeline()-Pfad."""
-    from core.pipeline_engine import _build_execution_groups as _beg, PipelineStep
-    typed = []
-    for s in steps:
-        try:
-            typed.append(PipelineStep.from_dict(s))
-        except Exception:
-            typed.append(PipelineStep(module=s.get("module", "unknown"), task=s.get("task", ""), depends_on=[]))
-    return _beg(typed)
-
-
-
-
 @tool
 async def run_parallel_pipeline(groups: list[list[dict]]) -> str:
     """
@@ -1291,23 +1278,27 @@ async def run_parallel_pipeline(groups: list[list[dict]]) -> str:
         [{"module": "glpi", "task": "Erstelle Incident-Ticket mit den K8s- und DNS-Ergebnissen"}]
       ]
     """
-    # Intern: Konvertiere groups-Format zu depends_on-Format und delegiere an run_pipeline
+    # Intern: Konvertiere groups-Format zu depends_on-Format und delegiere an run_pipeline.
+    # Indizes explizit mitzählen statt rückwärts zu rechnen — robust auch bei leeren
+    # (Zwischen-)Gruppen, die einfach übersprungen werden.
     flat_steps: list[dict] = []
-    group_start = 0
-    for gi, group in enumerate(groups):
-        prev_indices = (
-            list(range(group_start - len(groups[gi - 1]) if gi > 0 else 0, group_start))
-            if gi > 0
-            else []
-        )
+    prev_indices: list[int] = []
+    idx = 0
+    for group in groups:
+        if not group:
+            continue
+        current_indices: list[int] = []
         for step in group:
-            new_step = {"module": step.get("module", ""), "task": step.get("task", "")}
-            if gi == 0:
-                new_step["depends_on"] = []
-            else:
-                new_step["depends_on"] = prev_indices
-            flat_steps.append(new_step)
-        group_start += len(group)
+            flat_steps.append(
+                {
+                    "module": step.get("module", ""),
+                    "task": step.get("task", ""),
+                    "depends_on": list(prev_indices),
+                }
+            )
+            current_indices.append(idx)
+            idx += 1
+        prev_indices = current_indices
 
     return await run_pipeline.ainvoke({"steps": flat_steps})
 
@@ -1531,10 +1522,8 @@ async def speak(text: str, lang: str = "", voice: str = "") -> str:
         lang: Sprach-Code (z.B. 'de', 'en'). Leer = Systemstandard (TTS_DEFAULT_LANG).
         voice: Stimmenname (z.B. 'thorsten-medium', 'kerstin-low'). Leer = Systemstandard.
     """
-    import base64
-
     try:
-        from core.tts import synthesize_reply, is_tts_available
+        from core.tts import synthesize_reply, is_tts_available, store_audio
 
         if not is_tts_available():
             return _t(
@@ -1552,9 +1541,11 @@ async def speak(text: str, lang: str = "", voice: str = "") -> str:
             "speak-Tool: %d Bytes WAV synthetisiert (%d KB)", len(wav_bytes), kb
         )
 
-        # Audio als Data-URL zurückgeben, damit der Chat-Client es abspielen kann
-        b64 = base64.b64encode(wav_bytes).decode("ascii")
-        audio_url = f"data:audio/wav;base64,{b64}"
+        # Audio in den kurzlebigen Store schreiben und nur einen kompakten Link
+        # zurückgeben. KEINE Base64-Data-URL im Tool-Return — die landet sonst im
+        # LLM-Kontextfenster (Token-Explosion, State-Bloat).
+        filename = store_audio(wav_bytes)
+        audio_url = f"/api/tts/audio/{filename}"
 
         return _t(
             f"Audio erfolgreich synthetisiert ({kb} KB, {len(text)} Zeichen).\n"
@@ -1622,11 +1613,10 @@ async def wait(seconds: int, reason: str = "") -> str:
             f"⏳ Waited for {seconds} seconds. Continuing...",
         )
     except asyncio.CancelledError:
+        # Nicht als Fehlerstring zurückgeben — Cancellation muss propagieren,
+        # damit der Agenten-Task bei Disconnect/Shutdown sauber terminiert.
         logger.warning("Warte-Operation wurde abgebrochen")
-        return _t(
-            "⚠️ Warte-Operation wurde abgebrochen.",
-            "⚠️ Wait operation was cancelled.",
-        )
+        raise
     except _CORE_TOOL_EXCEPTIONS as exc:
         logger.error("Fehler während der Wartezeit: %s", exc)
         return _t(
@@ -1939,11 +1929,27 @@ async def generate_pdf_report(
     Returns:
         Absoluter Pfad zur erstellten PDF-Datei
     """
+    import html as _html
     from pathlib import Path
 
+    # Feste Report-Basis. LLM-kontrollierte output_path müssen darunter liegen,
+    # sonst wäre beliebiges Überschreiben schreibbarer Dateien möglich (Path Traversal).
+    base_dir = Path(tempfile.gettempdir()) / "ninko-reports"
+    base_dir.mkdir(parents=True, exist_ok=True)
+
     if output_path is None:
-        tmp_dir = tempfile.mkdtemp(prefix="ninko-reports-")
-        output_path = str(Path(tmp_dir) / "report.pdf")
+        output_path = str(base_dir / f"report-{uuid.uuid4().hex[:8]}.pdf")
+    else:
+        candidate = Path(output_path)
+        if not candidate.is_absolute():
+            candidate = base_dir / candidate
+        resolved = candidate.resolve()
+        if resolved.suffix.lower() != ".pdf" or base_dir.resolve() not in resolved.parents:
+            return _t(
+                f"Fehler: Ungültiger Ausgabepfad. PDFs dürfen nur unter '{base_dir}' erstellt werden.",
+                f"Error: Invalid output path. PDFs may only be created under '{base_dir}'.",
+            )
+        output_path = str(resolved)
 
     try:
         import markdown
@@ -1954,6 +1960,15 @@ async def generate_pdf_report(
             "Fehler: PDF-Generierung nicht verfügbar (weasyprint nicht installiert)",
             "Error: PDF generation not available (weasyprint not installed)",
         )
+
+    def _deny_all_fetcher(url: str, *args, **kwargs):
+        # Kein Nachladen externer/lokaler Ressourcen (verhindert LFI/SSRF via
+        # <img src="file:///etc/passwd"> oder url(http://intern/...) im Markdown).
+        raise ValueError(f"Externe Ressourcen sind in Reports nicht erlaubt: {url}")
+
+    # Titel für HTML- bzw. CSS-Kontext neutralisieren.
+    safe_title_html = _html.escape(title or "")
+    safe_title_css = (title or "").replace("\\", "").replace('"', "").replace("\n", " ")
 
     try:
         # Verzeichnis erstellen falls nicht vorhanden
@@ -1972,13 +1987,13 @@ async def generate_pdf_report(
         <html>
         <head>
             <meta charset="utf-8">
-            <title>{title}</title>
+            <title>{safe_title_html}</title>
             <style>
                 @page {{
                     size: A4;
                     margin: 2cm;
                     @top-center {{
-                        content: "{title}";
+                        content: "{safe_title_css}";
                         font-size: 9pt;
                         color: #666;
                     }}
@@ -2059,14 +2074,18 @@ async def generate_pdf_report(
             </style>
         </head>
         <body>
-            <h1>{title}</h1>
+            <h1>{safe_title_html}</h1>
             {html_content}
         </body>
         </html>
         """
 
-        # PDF generieren
-        HTML(string=full_html).write_pdf(output_path)
+        # PDF generieren: Deny-All-Fetcher (kein Ressourcen-Nachladen) und in einem
+        # Thread, damit das synchrone, CPU-intensive write_pdf den Event-Loop nicht blockiert.
+        await asyncio.to_thread(
+            HTML(string=full_html, url_fetcher=_deny_all_fetcher).write_pdf,
+            output_path,
+        )
 
         # Absoluten Pfad zurückgeben
         abs_path = str(Path(output_path).resolve())

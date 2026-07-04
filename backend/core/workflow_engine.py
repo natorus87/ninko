@@ -17,6 +17,16 @@ from typing import Any
 # Per-workflow asyncio locks prevent concurrent R-M-W races on run state
 _run_update_locks: dict[str, asyncio.Lock] = {}
 
+
+def get_run_update_lock(tenant_id: str, workflow_id: str) -> asyncio.Lock:
+    """Gemeinsamer per-(tenant, workflow) Lock für alle Writer der Run-Liste.
+
+    Wird von der Engine (`_ensure_run_entry`, `_update_run`) UND von
+    `execute_workflow` (core_tools) genutzt, damit deren Read-Modify-Write auf
+    `ninko:workflow:runs:<wf>` sich nicht gegenseitig überschreiben.
+    """
+    return _run_update_locks.setdefault(f"{tenant_id}:{workflow_id}", asyncio.Lock())
+
 logger = logging.getLogger("ninko.workflow_engine")
 
 _WORKFLOW_EXCEPTIONS = (
@@ -787,33 +797,34 @@ class WorkflowEngine:
         parent_run_id: str | None,
     ) -> None:
         key = f"{_tenant_key(REDIS_KEY_RUNS_PREFIX, tenant_id)}{workflow_id}"
-        runs_raw = await self.redis.connection.get(key)
-        runs = json.loads(runs_raw) if runs_raw else []
-        if any(r.get("id") == run_id for r in runs):
-            return
-        now = datetime.now(timezone.utc).isoformat()
-        runs.append(
-            {
-                "id": run_id,
-                "workflow_id": workflow_id.split("::", 1)[1]
-                if "::" in workflow_id
-                else workflow_id,
-                "workflow_name": workflow_name,
-                "workflow_version": workflow_version,
-                "status": "running",
-                "started_at": now,
-                "finished_at": None,
-                "duration_ms": None,
-                "steps": [],
-                "variables": {},
-                "error": None,
-                "triggered_by": triggered_by,
-                "parent_run_id": parent_run_id,
-            }
-        )
-        if len(runs) > MAX_RUNS_PER_WORKFLOW:
-            runs = runs[-MAX_RUNS_PER_WORKFLOW:]
-        await self.redis.connection.set(key, json.dumps(runs))
+        async with get_run_update_lock(tenant_id, workflow_id):
+            runs_raw = await self.redis.connection.get(key)
+            runs = json.loads(runs_raw) if runs_raw else []
+            if any(r.get("id") == run_id for r in runs):
+                return
+            now = datetime.now(timezone.utc).isoformat()
+            runs.append(
+                {
+                    "id": run_id,
+                    "workflow_id": workflow_id.split("::", 1)[1]
+                    if "::" in workflow_id
+                    else workflow_id,
+                    "workflow_name": workflow_name,
+                    "workflow_version": workflow_version,
+                    "status": "running",
+                    "started_at": now,
+                    "finished_at": None,
+                    "duration_ms": None,
+                    "steps": [],
+                    "variables": {},
+                    "error": None,
+                    "triggered_by": triggered_by,
+                    "parent_run_id": parent_run_id,
+                }
+            )
+            if len(runs) > MAX_RUNS_PER_WORKFLOW:
+                runs = runs[-MAX_RUNS_PER_WORKFLOW:]
+            await self.redis.connection.set(key, json.dumps(runs))
 
     async def _update_run(
         self,
@@ -827,8 +838,7 @@ class WorkflowEngine:
         duration_ms: int | None = None,
     ) -> None:
         """Schreibt den aktuellen Run-Status nach Redis (mit Lock gegen Race Conditions)."""
-        lock_key = f"{tenant_id}:{workflow_id}"
-        lock = _run_update_locks.setdefault(lock_key, asyncio.Lock())
+        lock = get_run_update_lock(tenant_id, workflow_id)
         key = f"{_tenant_key(REDIS_KEY_RUNS_PREFIX, tenant_id)}{workflow_id}"
         now = datetime.now(timezone.utc).isoformat()
 

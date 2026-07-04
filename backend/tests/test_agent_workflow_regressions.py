@@ -5,11 +5,13 @@ import sys
 import types
 
 import pytest
+from fastapi import HTTPException
 
-from api.routes_agents import _extract_json_from_llm_response
+from api.routes_agents import _extract_json_from_llm_response, _validate_agent_create
 from agents.orchestrator import OrchestratorAgent
-from core.agent_pool import DynamicAgentPool
+from core.agent_pool import DynamicAgentPool, _MAX_SYSTEM_PROMPT_CHARS
 from core.workflow_engine import WorkflowEngine
+from schemas.agents import AgentCreate
 
 
 def test_extract_json_from_llm_response_preserves_valid_json() -> None:
@@ -18,6 +20,19 @@ def test_extract_json_from_llm_response_preserves_valid_json() -> None:
     )
 
     assert spec == {"name": "K8s Agent", "description": "x"}
+
+
+def test_agents_api_rejects_oversized_system_prompt() -> None:
+    body = AgentCreate(
+        name="Too Large",
+        system_prompt="x" * (_MAX_SYSTEM_PROMPT_CHARS + 1),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        _validate_agent_create(body)
+
+    assert exc_info.value.status_code == 422
+    assert "System-Prompt zu lang" in str(exc_info.value.detail)
 
 
 @pytest.mark.asyncio
@@ -66,7 +81,7 @@ async def test_dynamic_agent_pool_sync_updates_and_removes_live_agent(monkeypatc
     monkeypatch.setitem(sys.modules, "agents.base_agent", fake_base_agent_module)
 
     pool = DynamicAgentPool()
-    monkeypatch.setattr(pool, "_get_dynamic_tools", lambda: [])
+    monkeypatch.setattr(pool, "_get_dynamic_tools", lambda *_a, **_k: [])
 
     await pool.sync_agent(
         {

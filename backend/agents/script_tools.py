@@ -21,6 +21,10 @@ logger = logging.getLogger("ninko.agents.script_tools")
 REDIS_SCRIPTS_KEY = "ninko:scripting:scripts"
 REDIS_TOOL_INVOCATIONS_KEY = "ninko:scripting:tool_invocations"
 
+# Serialisiert Read-Modify-Write auf dem Invocation-Log, damit parallele
+# Script-Läufe sich keine Log-Einträge gegenseitig überschreiben (prozessweit).
+_invocations_write_lock = asyncio.Lock()
+
 
 def _normalize_tenant_id(tenant_id: str) -> str:
     return (tenant_id or "default").strip().lower().replace(" ", "_") or "default"
@@ -211,10 +215,11 @@ async def execute_script_tool(
         }
 
     finally:
-        invocations = await _load_invocations(tenant_id)
-        invocations.insert(0, invocation)
-        invocations = invocations[:100]
-        await _save_invocations(tenant_id, invocations)
+        async with _invocations_write_lock:
+            invocations = await _load_invocations(tenant_id)
+            invocations.insert(0, invocation)
+            invocations = invocations[:100]
+            await _save_invocations(tenant_id, invocations)
 
 
 async def _load_invocations(tenant_id: str) -> list[dict]:

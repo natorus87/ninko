@@ -129,6 +129,11 @@ async def record_alert(
 
         if should_notify and ticket_id:
             await mgr.record_notification(alert_id, ticket_id)
+        elif should_notify and check_cooldown and not ticket_id:
+            # should_notify hat den Cooldown-Slot atomar reserviert, aber es erfolgt
+            # keine ticketbasierte Notification → Slot freigeben, damit ein echter
+            # Folge-Alert im Fenster nicht fälschlich unterdrückt wird.
+            await mgr.release_notify_cooldown(alert_id)
 
         is_new = state.get("is_new", False)
 

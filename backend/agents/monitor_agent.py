@@ -50,6 +50,8 @@ class MonitorAgent:
     async def start_loop(self) -> None:
         """Startet die Monitoring-Schleife als Background-Task."""
         self._running = True
+        # Eigene Task-Referenz merken, damit stop() den Loop tatsächlich canceln kann.
+        self._task = asyncio.current_task()
         logger.info(
             "Monitor-Agent gestartet (Intervall: %ds, Auto-Remediation: %s)",
             self._settings.MONITOR_INTERVAL_SECONDS,
@@ -97,7 +99,7 @@ class MonitorAgent:
                 alert_id = self._alert_mgr.make_id(
                     module=module_name,
                     resource=module_name,
-                    reason=status.get("detail", "error")[:50],
+                    reason=(status.get("detail") or "error")[:50],
                 )
 
                 is_new = not await self._alert_mgr.is_active(alert_id)
@@ -110,7 +112,7 @@ class MonitorAgent:
                         severity="critical",
                         summary=f"Health-Check fehlgeschlagen: {module_name}",
                         resource=module_name,
-                        reason=status.get("detail", "error")[:50],
+                        reason=(status.get("detail") or "error")[:50],
                     )
 
                     alert = {

@@ -12,6 +12,7 @@ import asyncio
 import json as _json
 import logging
 import time
+from collections import OrderedDict
 from typing import Any, TYPE_CHECKING
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -32,8 +33,11 @@ _DEFAULT_SUBAGENT_TIMEOUT = 300
 # Max. Output-Tokens für Summary (verhindert Context-Overflow)
 _MAX_SUMMARY_TOKENS = 500
 
-# Module-level dict für aktive Subagents (für Retry/Error Recovery)
-_active_subagents: dict[str, "DataAnalysisSubagent"] = {}
+# Module-level Cache für aktive Subagents (für Retry/Error Recovery).
+# LRU-begrenzt, da kein automatischer Cleanup bei Session-Ende existiert und der
+# Cache sonst einen Eintrag pro (session, module) für die Prozess-Lebensdauer hält.
+_active_subagents: "OrderedDict[str, DataAnalysisSubagent]" = OrderedDict()
+_MAX_ACTIVE_SUBAGENTS = 200
 
 
 # Error-Typen für Retry-Logik
@@ -398,6 +402,11 @@ Strukturierte Zusammenfassung in natürlicher Sprache mit:
         Returns:
             tuple: (summary, did_compact) – kompakte Zusammenfassung
         """
+        # Step-Tracking pro Lauf zurücksetzen, sonst wachsen die Listen bei einem
+        # wiederverwendeten (gecachten) Subagent über alle invoke()-Aufrufe unbegrenzt.
+        self._completed_steps.clear()
+        self._failed_steps.clear()
+
         # LLM neu initialisieren wenn Provider gewechselt wurde
         current_gen = get_llm_generation()
         if current_gen != self._llm_generation:
@@ -424,8 +433,10 @@ Strukturierte Zusammenfassung in natürlicher Sprache mit:
         # Aktuelle Aufgabe
         messages.append(HumanMessage(content=task))
 
-        # Config für Execution
-        run_config = {"recursion_limit": 10000}
+        # Config für Execution. Realistisches Limit statt faktisch unbegrenzt (10000):
+        # ein loopender ReAct-Agent verbrennt sonst in 5 min (Timeout) hunderte
+        # LLM-/Tool-Calls (Kosten, Rate-Limits, Ziel-System-Last).
+        run_config = {"recursion_limit": 60}
 
         # Ausführen mit Step-Tracking
         await self._emit_step(
@@ -561,12 +572,19 @@ def _get_or_create_subagent(
 ) -> DataAnalysisSubagent:
     """Gibt einen bestehenden Subagent zurück oder erstellt einen neuen."""
     key = f"{session_id}:{module}"
-    if key not in _active_subagents:
-        _active_subagents[key] = DataAnalysisSubagent(
-            module=module,
-            tools=tools,
-            session_id=session_id,
-        )
+    existing = _active_subagents.get(key)
+    if existing is not None:
+        _active_subagents.move_to_end(key)
+        return existing
+    # LRU-Eviction bei Überschreitung des Limits
+    while len(_active_subagents) >= _MAX_ACTIVE_SUBAGENTS:
+        evicted_key, _ = _active_subagents.popitem(last=False)
+        logger.debug("DataAnalysisSubagent LRU-Eviction: '%s' entfernt.", evicted_key)
+    _active_subagents[key] = DataAnalysisSubagent(
+        module=module,
+        tools=tools,
+        session_id=session_id,
+    )
     return _active_subagents[key]
 
 

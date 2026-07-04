@@ -34,6 +34,24 @@ REDIS_KEY = "ninko:agents"
 _MATCH_THRESHOLD = 0.18
 # Maximale Anzahl live-instanziierter Agenten im Pool vor LRU-Eviction
 _AGENT_POOL_MAX = 200
+# Namen von Built-in-Agenten. Ein Custom-Agent mit einem dieser Namen würde beim
+# name-gekeyten `save_soul(name, ...)` die Built-in-Soul zur Laufzeit überschreiben
+# (Prompt-Injection in Core-Agenten) — daher bei der Registrierung blockieren.
+_RESERVED_AGENT_NAMES = frozenset({"orchestrator", "monitor", "scheduler"})
+# Infra-Module, für die ein dynamischer Agent rohen CLI-Zugriff bekommen darf.
+_CLI_CAPABLE_MODULES = frozenset({"linux_server", "docker", "kubernetes", "proxmox"})
+# Obergrenze für user-definierte System-Prompts (verhindert Kontext-/Speicher-Missbrauch).
+_MAX_SYSTEM_PROMPT_CHARS = 20000
+
+# Prozessweiter Lock für Read-Modify-Write auf den Agenten-Redis-Keys
+# (ninko:agents:<tenant>). Wird von Pool UND Agents-API genutzt, damit parallele
+# Writes (register vs. API create/update/delete) sich nicht gegenseitig überschreiben.
+_AGENTS_REDIS_LOCK = asyncio.Lock()
+
+
+def get_agents_redis_lock() -> asyncio.Lock:
+    """Gemeinsamer Lock für alle Writer der Agenten-Liste (Pool + API)."""
+    return _AGENTS_REDIS_LOCK
 
 
 class DynamicAgentPool:
@@ -43,10 +61,12 @@ class DynamicAgentPool:
     Workflow:
     1. Beim App-Start: alle gespeicherten Custom-Agenten aus Redis laden
        und als BaseAgent-Instanzen im Speicher halten.
-    2. Bei Stufe-3-Routing: `find_best_match(task)` prüft, ob ein
-       bereits vorhandener Agent zur Aufgabe passt.
-    3. Bei Neuanforderung: `register(...)` persistiert den Agenten in Redis
-       UND erstellt sofort eine Live-Instanz.
+    2. `register(...)` persistiert einen neuen Agenten in Redis UND erstellt
+       sofort eine Live-Instanz. Zugriff zur Laufzeit über `get_agent_by_id`.
+
+    Hinweis: `find_best_match` + der Token-Index sind derzeit NICHT im route()-Pfad
+    verdrahtet (Routing ist Function-Calling-only). Sie bleiben als Keyword-Matching-
+    Baustein erhalten, falls Keyword-Routing wieder aktiviert wird.
     """
 
     def __init__(self) -> None:
@@ -98,12 +118,15 @@ class DynamicAgentPool:
                         )
                 return tenant_loaded
 
-            # Legacy-Key (ohne Tenant) weiterhin unterstützen
-            loaded += await _load_for_tenant("default", REDIS_KEY)
+            # Legacy-Key (ohne Tenant) einmalig in den Tenant-Key "default"
+            # migrieren und danach löschen. Sonst bleiben Legacy-Agenten live und
+            # routbar, sind aber über die API (die nur ninko:agents:default nutzt)
+            # weder aktualisier- noch löschbar (Ghost-Agenten).
+            await self._migrate_legacy_key(redis)
 
-            # Tenant-scoped Keys laden
-            keys = await redis.connection.keys(f"{REDIS_KEY}:*")
-            for key in keys:
+            # Tenant-scoped Keys laden. scan_iter statt KEYS, damit Redis bei
+            # großen Keyspaces nicht blockiert wird.
+            async for key in redis.connection.scan_iter(match=f"{REDIS_KEY}:*", count=100):
                 tenant = _tenant_from_key(key)
                 if not tenant:
                     continue
@@ -113,8 +136,56 @@ class DynamicAgentPool:
             logger.warning("DynamicAgentPool.load_from_redis fehlgeschlagen: %s", exc)
 
     @staticmethod
-    def _get_dynamic_tools() -> list:
-        """Gibt die Basis-Tools zurück, die allen dynamischen Agenten zur Verfügung stehen."""
+    async def _migrate_legacy_key(redis) -> None:
+        """Migriert den Legacy-Key `ninko:agents` einmalig nach `ninko:agents:default`.
+
+        Legacy-Agenten (ohne Tenant-Suffix) werden nur beim id-Match NICHT überschrieben
+        — der bereits vorhandene default-Eintrag hat Vorrang. Danach wird der Legacy-Key
+        gelöscht, damit er nicht bei jedem Neustart erneut auftaucht.
+        """
+        raw_legacy = await redis.connection.get(REDIS_KEY)
+        if not raw_legacy:
+            return
+        try:
+            legacy_agents = json.loads(raw_legacy) or []
+        except json.JSONDecodeError:
+            legacy_agents = []
+        if not legacy_agents:
+            await redis.connection.delete(REDIS_KEY)
+            return
+
+        default_key = _tenant_key("default")
+        raw_default = await redis.connection.get(default_key)
+        try:
+            default_agents = json.loads(raw_default) if raw_default else []
+        except json.JSONDecodeError:
+            default_agents = []
+
+        existing_ids = {a.get("id") for a in default_agents}
+        migrated = 0
+        for agent_def in legacy_agents:
+            if agent_def.get("id") not in existing_ids:
+                default_agents.append(agent_def)
+                migrated += 1
+
+        await redis.connection.set(default_key, json.dumps(default_agents))
+        await redis.connection.delete(REDIS_KEY)
+        logger.info(
+            "DynamicAgentPool: Legacy-Key '%s' migriert (%d neue Agenten → '%s') und gelöscht.",
+            REDIS_KEY,
+            migrated,
+            default_key,
+        )
+
+    @staticmethod
+    def _get_dynamic_tools(agent_def: dict | None = None) -> list:
+        """Basis-Tools für dynamische Agenten.
+
+        `execute_cli_command` wird NICHT mehr pauschal vergeben (user-definierter,
+        unvalidierter System-Prompt + rohe Shell = zu mächtig). Es gibt es nur für
+        Agenten, die explizit auf ein Infra-Modul gescoped sind; alle anderen
+        delegieren über `call_module_agent` an Module (die eigene Tools + Safeguard haben).
+        """
         from agents.core_tools import (
             execute_cli_command,
             call_module_agent,
@@ -122,7 +193,11 @@ class DynamicAgentPool:
             remember_fact,
         )
 
-        return [execute_cli_command, call_module_agent, recall_memory, remember_fact]
+        tools = [call_module_agent, recall_memory, remember_fact]
+        module_names = set((agent_def or {}).get("module_names", []) or [])
+        if module_names & _CLI_CAPABLE_MODULES:
+            tools.insert(0, execute_cli_command)
+        return tools
 
     def _instantiate(self, agent_def: dict) -> "BaseAgent":
         """
@@ -137,16 +212,19 @@ class DynamicAgentPool:
         scoped_id = _scoped_id(tenant_id, agent_id)
         normalized_def = {**agent_def, "tenant_id": tenant_id}
 
-        # LRU-Eviction: Wenn Pool-Größe >= Limit, am längsten ungenutzten Eintrag entfernen
+        # LRU-Eviction: Wenn die Zahl der LIVE-Instanzen das Limit erreicht, die am
+        # längsten ungenutzte Live-Instanz entladen. Metadaten (_meta) und Such-Index
+        # bleiben erhalten — sonst wäre der Agent danach weder routbar noch per
+        # get_agent_by_id auffindbar (Scheduler-Tasks würden dauerhaft scheitern).
+        # Bei erneutem Zugriff wird die Instanz aus _meta rehydriert.
         if (
             scoped_id not in self._live_agents
             and len(self._live_agents) >= _AGENT_POOL_MAX
         ):
             evicted_id, _ = self._live_agents.popitem(last=False)
-            self._remove_index(evicted_id)
-            self._meta.pop(evicted_id, None)
             logger.info(
-                "DynamicAgentPool: LRU-Eviction: Agent '%s' entfernt (Pool-Limit %d)",
+                "DynamicAgentPool: LRU-Eviction: Live-Instanz '%s' entladen "
+                "(Meta bleibt, Live-Limit %d)",
                 evicted_id,
                 _AGENT_POOL_MAX,
             )
@@ -154,7 +232,7 @@ class DynamicAgentPool:
         agent = BaseAgent(
             name=normalized_def["name"],
             system_prompt=normalized_def["system_prompt"],
-            tools=self._get_dynamic_tools(),
+            tools=self._get_dynamic_tools(normalized_def),
         )
         self._remove_index(scoped_id)
         self._live_agents[scoped_id] = agent
@@ -186,6 +264,27 @@ class DynamicAgentPool:
                     scoped_id,
                     exc,
                 )
+
+    def _rehydrate(self, scoped_id: str) -> "BaseAgent | None":
+        """Gibt die Live-Instanz zurück; re-instanziiert sie aus _meta falls evicted.
+
+        Ermöglicht, dass ein per LRU entladener Agent bei Zugriff transparent
+        wiederhergestellt wird (statt dauerhaft zu verschwinden).
+        """
+        agent = self._live_agents.get(scoped_id)
+        if agent is not None:
+            self._mark_used(scoped_id)
+            return agent
+        meta = self._meta.get(scoped_id)
+        if meta is None:
+            return None
+        try:
+            return self._instantiate(meta)
+        except _AGENT_POOL_EXCEPTIONS as exc:
+            logger.warning(
+                "Rehydrierung von Agent '%s' fehlgeschlagen: %s", scoped_id, exc
+            )
+            return None
 
     def _mark_used(self, scoped_id: str) -> None:
         """Markiert einen Agenten als zuletzt verwendet, damit die Eviction echtes LRU bleibt."""
@@ -233,7 +332,7 @@ class DynamicAgentPool:
         Gibt (agent_instance, agent_name) zurück, oder (None, "") wenn
         kein Agent den Mindest-Schwellwert überschreitet.
         """
-        if not self._live_agents:
+        if not self._meta:
             return None, ""
 
         task_words = set(_tokenize(task))
@@ -273,53 +372,53 @@ class DynamicAgentPool:
 
         if best_id and best_score >= _MATCH_THRESHOLD:
             agent_name = self._meta[best_id].get("name", best_id)
-            self._mark_used(best_id)
             logger.debug(
                 "DynamicAgentPool: Bester Match '%s' mit Score %.2f",
                 agent_name,
                 best_score,
             )
-            return self._live_agents[best_id], agent_name
+            agent = self._rehydrate(best_id)
+            if agent is not None:
+                return agent, agent_name
 
         return None, ""
 
-    def get_agent_by_id(self, agent_id: str) -> tuple["BaseAgent | None", str]:
-        """Gibt einen Agenten anhand seiner ID zurück, oder (None, '') wenn nicht gefunden."""
+    def get_agent_by_id(
+        self, agent_id: str, *, allow_cross_tenant: bool = False
+    ) -> tuple["BaseAgent | None", str]:
+        """Gibt einen Agenten anhand seiner ID zurück, oder (None, '') wenn nicht gefunden.
+
+        allow_cross_tenant: Nur für vertrauenswürdige System-Kontexte ohne Session
+            (z.B. Scheduler). Erlaubt den tenant-übergreifenden endswith-Fallback.
+            Für user-facing Pfade (Chat/force_module) IMMER False → Tenant-Isolation.
+        """
         tenant = _effective_tenant_id()
         scoped = _scoped_id(tenant, agent_id)
 
-        logger.debug(
-            "get_agent_by_id: Suche agent_id='%s', tenant='%s', scoped='%s', "
-            "verfügbare_live=%d, keys=%s",
-            agent_id,
-            tenant,
-            scoped,
-            len(self._live_agents),
-            list(self._live_agents.keys()),
-        )
-
-        agent = self._live_agents.get(scoped)
-        if agent:
+        if scoped in self._meta:
             name = self._meta.get(scoped, {}).get("name", agent_id)
-            self._mark_used(scoped)
-            logger.debug("get_agent_by_id: Gefunden mit scoped_id, name='%s'", name)
-            return agent, name
+            agent = self._rehydrate(scoped)
+            if agent is not None:
+                logger.debug("get_agent_by_id: Gefunden mit scoped_id, name='%s'", name)
+                return agent, name
 
-        # Fallback: für Legacy-/System-Kontexte nicht tenant-scoped suchen
-        for sid, a in self._live_agents.items():
-            if sid.endswith(f":{agent_id}"):
-                name = self._meta.get(sid, {}).get("name", agent_id)
-                self._mark_used(sid)
-                logger.debug(
-                    "get_agent_by_id: Gefunden mit Fallback endsWith, name='%s'", name
-                )
-                return a, name
+        # Tenant-übergreifender Fallback nur für System-Kontexte. Sonst könnte ein
+        # User per bekannter fremder UUID einen Agenten eines anderen Tenants aufrufen.
+        if allow_cross_tenant:
+            for sid in list(self._meta.keys()):
+                if sid.endswith(f":{agent_id}"):
+                    name = self._meta.get(sid, {}).get("name", agent_id)
+                    agent = self._rehydrate(sid)
+                    if agent is not None:
+                        logger.debug(
+                            "get_agent_by_id: Gefunden mit System-Fallback, name='%s'", name
+                        )
+                        return agent, name
 
         logger.warning(
-            "get_agent_by_id: NICHT GEFUNDEN agent_id='%s', tenant='%s', verfügbare=%s",
+            "get_agent_by_id: NICHT GEFUNDEN agent_id='%s', tenant='%s'",
             agent_id,
             tenant,
-            list(self._live_agents.keys()),
         )
         return None, ""
 
@@ -343,6 +442,22 @@ class DynamicAgentPool:
         import uuid
         from core.redis_client import get_redis
 
+        clean_name = (name or "").strip()
+        if not clean_name:
+            raise ValueError("Agent-Name darf nicht leer sein.")
+        if clean_name.casefold() in _RESERVED_AGENT_NAMES:
+            raise ValueError(
+                f"Agent-Name '{clean_name}' ist reserviert (Built-in-Agent) "
+                "und kann nicht für einen Custom-Agenten verwendet werden."
+            )
+        name = clean_name
+
+        if len(system_prompt or "") > _MAX_SYSTEM_PROMPT_CHARS:
+            raise ValueError(
+                f"System-Prompt zu lang ({len(system_prompt)} Zeichen, "
+                f"max. {_MAX_SYSTEM_PROMPT_CHARS})."
+            )
+
         tenant = _effective_tenant_id(tenant_id)
         agent_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
@@ -362,7 +477,7 @@ class DynamicAgentPool:
             "tenant_id": tenant,
         }
 
-        async with self._register_lock:
+        async with self._register_lock, _AGENTS_REDIS_LOCK:
             redis = get_redis()
             redis_key = _tenant_key(tenant)
             raw = await redis.connection.get(redis_key)
@@ -412,7 +527,11 @@ class DynamicAgentPool:
 
         scoped_id = _scoped_id(tenant, agent_id)
         if not agent_def.get("enabled", True) or not agent_def.get("system_prompt"):
-            await self._close_live_agent(scoped_id)
+            # Auch der Disable-Pfad muss unter dem Lock laufen, sonst kann ein
+            # paralleles sync_agent/update_agent den Agenten neu instanziieren
+            # → Endzustand "live trotz disabled".
+            async with self._register_lock:
+                await self._close_live_agent(scoped_id)
             return
 
         normalized_def = {**agent_def, "id": agent_id, "tenant_id": tenant}
@@ -434,14 +553,15 @@ class DynamicAgentPool:
         """Gibt einen Live-Agenten anhand seiner ID zurück."""
         tenant = _effective_tenant_id()
         scoped = _scoped_id(tenant, agent_id)
-        agent = self._live_agents.get(scoped)
-        if agent:
-            self._mark_used(scoped)
-            return agent
-        for sid, a in self._live_agents.items():
+        if scoped in self._meta:
+            agent = self._rehydrate(scoped)
+            if agent is not None:
+                return agent
+        for sid in list(self._meta.keys()):
             if sid.endswith(f":{agent_id}"):
-                self._mark_used(sid)
-                return a
+                agent = self._rehydrate(sid)
+                if agent is not None:
+                    return agent
         return None
 
     # ──────────────────────────────────────────────────────────────────────

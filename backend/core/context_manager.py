@@ -255,8 +255,12 @@ class ContextManager:
             return self.trim_messages(messages), False
 
         try:
+            # Pro Nachricht großzügig cappen (2000 statt 400): sonst gehen genau die
+            # konkreten Werte (IPs, Hostnamen, IDs, Configs, Tool-Ergebnisse), die die
+            # Summary laut Prompt bewahren soll, vor der Zusammenfassung verloren.
+            # Überlange Nachrichten wurden oben bereits von trim_large_messages gestutzt.
             summary_input = "\n".join(
-                f"{'User' if m.get('role') == 'user' else 'Assistent'}: {m.get('content', '')[:400]}"
+                f"{'User' if m.get('role') == 'user' else 'Assistent'}: {m.get('content', '')[:2000]}"
                 for m in old
             )
             prompt = _t(

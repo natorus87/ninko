@@ -1,329 +1,119 @@
-# Plan: Ninko Open Items — 2026-06-10
+# Plan: Ninko Agenten-Logik — Code-Review 2026-07-03
 
-**Stand:** 2026-06-10
-**Quelle**: [.claude/reports/full-review-2026-06-10.md](.claude/reports/full-review-2026-06-10.md)
-**Vorgänger**: `PLAN.md` (Full Code Review 2026-05-20) — alle P0-Items abgeschlossen, in DONE.md überführt
+**Stand:** 2026-07-03
+**Quelle:** Tiefes Review der Agenten-Logik (orchestrator, base_agent, middleware, pipeline_engine, safeguard, tool_permissions, scheduler, agent_pool, sub-agents). Findings verifiziert gegen den echten Code.
 
-> **Hinweis Methodik**: Der zugrundeliegende Full-Review vom 2026-06-10 ist **diff-basiert** (alle 8 Commits seit 2026-05-29 + gezielte Greps). Kein vollständiger Re-Walk aller 449 Python-Dateien / 383 KB `app.js` — die als „Coverage-Limit aufholen" markierten Items holen das nach.
+> **Fokus:** Agenten-Routing, Safeguard, Tool-Ausführung, Agent-Lifecycle, Pipeline. Nicht Frontend/Deployment.
 
 ---
 
 ## Executive Summary
 
-| Bereich | Diff-Scope | Carry-Over offen | Neu im Diff | Status |
+| Bereich | Kritisch | Hoch | Mittel | Niedrig |
 |---|---|---|---|---|
-| Sicherheit | 🟢 keine Regression | 0 | 0 (2× Low) | OK |
-| Backend | 🟢 | 4× Schulden | 0 | OK |
-| Frontend | 🟢 | 0 | 1× Low | OK |
-| Architektur | 🟢 | 2× Schulden | 1× Low | OK |
-| API | 🟢 | 2× Schulden | 0 | OK |
-| **Total offene Items** | – | **8** | **3** | – |
+| Sicherheit (Safeguard-Bypass) | 1 | 5 | 1 | – |
+| Robustheit / Lifecycle | 1 (behoben) | 3 | 3 | 3 |
+| Korrektheit | – | – | 5 | 2 |
+| Wartbarkeit / toter Code | – | 1 (behoben) | 1 | mehrere |
 
-**0 Critical / 0 High.** Diff-Scope ist sauber. Alle 4 dringenden Findings vom 2026-05-29-Review (DOM-XSS, WS-Auth-Revocation, registry.js-Bug, Plugin-Upload-Limit) sind in den neuen Commits behoben oder konsolidiert.
-
-**Verbleibende 11 offene Items**: 8 Architektur-Schulden (Carry-Over aus 2026-05-29), 3 neue Low-Priority-Findings aus dem aktuellen Diff.
-
-> **Stand nach Umsetzung (Sprint 1-6, 2026-06-10)**: **Alle 16 Items abgeschlossen** (1.1, 1.2, 1.3, 1.4, 2.1, 2.2, 2.3, 2.4, 3.1, 3.2, 3.3, 4.1, 4.2, 4.3, 4.5). 4.4 übersprungen (deckungsgleich mit 2.3). Coverage-Berichte in `.claude/knowledge/`. 2.3 + 2.4 sind im Working Tree uncommitted, **0 Commits** (auf User-Wunsch zur späteren Review).
+**Gesamtbild:** Funktional reiche, defensiv geschriebene Agenten-Logik. Drei strukturelle Probleme: (1) eine ausbrechbare Safeguard-Bypass-Kette rund um `confirmed`-Propagation und readonly-Inferenz, (2) Lifecycle-Inkonsistenzen zwischen Redis-State und Live-Objekten, (3) toter Code aus der Routing-Migration.
 
 ---
 
-## P1 — Kurzfristig (1-2 Wochen)
+## ✅ Bereits behoben (2026-07-03)
 
-> Reihenfolge nach Risiko × Aufwand. Jedes Item mit konkretem Datei-Anker und Code-Snippet.
+- **C1** — `SchedulerAgent.start_loop` fängt jetzt auch unerwartete Exceptions (`scheduler_agent.py`). Loop stirbt nicht mehr permanent.
+- **A1** — `execute_cli_command` lehnt Pfad-Argumente ab (`tool_permissions.py`). Basename-Bypass geschlossen.
+- **A7** — Fast-Prefilter matcht Safe-Keywords nur am Satzanfang (`safeguard.py`). Kein Substring-False-Negative mehr.
+- **D5** — Monitor überlebt `detail: None` (`monitor_agent.py`).
+- **C2** — `delete_agent` räumt `ninko:agent_configs` auf (neue `AgentConfigStore.delete_config`) und deaktiviert referenzierende Scheduler-Tasks (`routes_agents.py`).
+- **B1 (toter Code)** — `_plan_and_execute_pipeline`, `_route_tier2_module`, `_CORE_ALWAYS_MODULES` entfernt (`orchestrator.py`, −354 Zeilen). Doku angeglichen: `DOCS.md`, `backend/README.md`, Memory-Arch-Notiz. Routing ist jetzt dokumentiert Function-Calling-only.
 
-### 1.1 Secret-Redaction zentralisieren (4× Stellen) — ✅ DONE (Sprint 1)
-- **Risiko**: Medium — Tokens/Passwörter können in einem Pfad maskiert, im anderen geleakt werden
-- **Aufwand**: ~2 h
-- **Stellen**:
-  - [backend/agents/base_agent.py:200-216](backend/agents/base_agent.py#L200-L216) (`_StatusEmitter`)
-  - [backend/agents/middleware/execution.py:35-50](backend/agents/middleware/execution.py#L35-L50)
-  - [backend/core/connections.py:33-37](backend/core/connections.py#L33-L37)
-  - [backend/core/safeguard.py:67-71](backend/core/safeguard.py#L67-L71)
-- **Fix**: Zentrales `backend/core/redaction.py` mit kanonischer Key-Liste, `redact_text()` und `mask_dict()`; alle 4 Stellen umstellen.
-  ```python
-  # backend/core/redaction.py
-  SECRET_KEYS: frozenset[str] = frozenset({
-      "password", "token", "api_key", "secret", "apikey", "api_token",
-      "authorization", "vault_key", "private_key", "access_key",
-  })
-  def mask_dict(d: dict) -> dict: ...
-  def redact_text(s: str) -> str: ...
-  ```
+### ✅ Stufe 2 (Safeguard-Bypass-Kette, 2026-07-04)
 
-### 1.2 Orchestrator Tier-Routing-Leiche entfernen — ✅ DONE (Sprint 2)
-- **Risiko**: Medium — tote Methoden kosten Wartung, lenken von echtem Code ab
-- **Aufwand**: ~4 h
-- **Stellen** in [backend/agents/orchestrator.py](backend/agents/orchestrator.py) (3039 LOC):
-  - `classify_tier`, `_classify_tier`, `_detect_module_fast`, `_proactive_routing_adjust`, `_update_session_stats`
-  - `RoutingConfig`-Presets, `_check_task_complexity`
-  - `_route_legacy_tiered` (delegiert komplett an `_fallback_to_react_loop`)
-- **Vorgehen**:
-  1. Sicherstellen, dass keine Produktiv-Aufrufer existieren (Test-Suite checken)
-  2. In `backend/agents/legacy_routing.py` isolieren oder direkt löschen
-  3. CLAUDE.md + Doku ehrlich als „Function Calling + ReAct Fallback" benennen
-- **Erwarteter Effekt**: Halbierung der Orchestrator-Größe (~1500 LOC weniger)
+- **A3** — `call_module_agent` propagiert `confirmed=True` nur noch, wenn die delegierte Aufgabe von der bestätigten Nachricht gedeckt ist (`_confirmation_covers_task`, `core_tools.py`). Fremde destruktive Delegation im selben Turn erbt die Bestätigung nicht mehr. Verifiziert.
+- **A6** — `_infer_readonly` (`tool_registry.py`) wendet die Präfix-Heuristik nicht mehr an, wenn ein Namens-Token ein Mutations-Verb ist (`_MUTATION_VERBS`, exaktes Token-Matching). `get_and_purge_logs`/`check_and_apply_update`/`read_secret_and_rotate` → nicht mehr readonly; `list_installed_packages`/`get_startup_config` bleiben readonly. 12/12 Fälle grün.
+- **A4b** — Pipeline-Step erkennt jetzt das `__TOOL_SAFEGUARD__`-Sentinel (`pipeline_engine.py`): pausierter Sub-Agent-State wird bereinigt (`_release_paused_subagent`), Step als FAILED abgebrochen, kein Sentinel-Leak, keine 300s-Session-Blockade.
+- **A5b** — Reserved-Name-Blocklist (`_RESERVED_AGENT_NAMES`: orchestrator/monitor/scheduler) in `DynamicAgentPool.register` UND API `create_agent`/`update_agent`. Verhindert Überschreiben von Built-in-Souls.
 
-### 1.3 EmbeddingRouter reaktivieren oder entfernen — ✅ DONE (Sprint 2, entfernt)
-- **Risiko**: Low — toter Code mit Runtime-Kosten (wird bei jedem `_refresh_routing_map()` gefüttert)
-- **Aufwand**: ~1 h (löschen) oder ~6 h (reaktivieren)
-- **Stellen**: [backend/core/embedding_router.py](backend/core/embedding_router.py) — `arank()` ohne Produktiv-Aufrufer
-- **Empfehlung**: Entfernen, falls nicht für 1.4 (Pipeline `requires_confirmation`) benötigt
-- **Falls behalten**: Mindestens `arank()` mit dem Function-Calling-Router verdrahten
+### ✅ Stufe P1 (Lifecycle/Robustheit, 2026-07-04)
 
-### 1.4 Pipeline `requires_confirmation` implementieren — ✅ DONE (Sprint 3)
-- **Risiko**: Medium — functional safety gap (destruktive Pipeline-Steps laufen still durch)
-- **Aufwand**: ~6 h
-- **Stelle**: [backend/core/pipeline_engine.py:401-412](backend/core/pipeline_engine.py#L401-L412) — Step wird stillschweigend geskippt
-- **Vorgehen**:
-  1. Step-Definition um `requires_confirmation: bool` erweitern
-  2. Bei `True` Pipeline pausieren, `op_journal.create_pending(...)` analog zu Chat-Flow
-  3. Resume-Mechanik via `pipeline_id` (analog zu Session-Resume)
+- **C3** — LRU-Eviction entlädt jetzt nur die Live-Instanz; `_meta`/Such-Index bleiben vollständiger Katalog (`agent_pool.py`). Neuer `_rehydrate()` re-instanziiert evictete Agenten bei Zugriff; `find_best_match`/`get_agent_by_id`/`get_by_id` gehen über `_meta` + Rehydrierung. Scheduler-Tasks mit evicted `agent_id` scheitern nicht mehr. Logik verifiziert (Eviction behält Meta, Rehydrierung, echtes LRU).
+- **H5** — `_migrate_legacy_key()` migriert `ninko:agents` einmalig beim Start nach `ninko:agents:default` (id-Match kollisionsfrei) und löscht den Legacy-Key → keine unlöschbaren Ghost-Agenten mehr.
+- **C5** — Scheduler: `_run_task_guarded()` mit Doppellauf-Schutz (`_running_task_ids`) und hartem `asyncio.wait_for`-Timeout (`TASK_EXECUTION_TIMEOUT_SECONDS=600`); genutzt von `_check_and_run` UND `run_task_now`. Bei Timeout wird `next_run` fortgeschrieben (kein Re-Fire-Storm).
+- **C4 (vollständig)** — Alle gemeldeten Lost-Update-RMW abgesichert (prozessweite Locks; wirken in der Single-Process-Deployment):
+  - `AgentConfigStore`: atomar über `_config_write_lock` (`_mutate`) — Safeguard-Overrides bleiben erhalten (deckt M8).
+  - Agenten-Liste: gemeinsamer `get_agents_redis_lock()` von Pool (`register`) UND API (`create`/`update`/`delete`) auf `ninko:agents:<tenant>` (deckt H4).
+  - Workflow-Liste: `_workflows_write_lock` in `create_dag_workflow` + `create_linear_workflow`.
+  - Run-Listen: geteilter `get_run_update_lock(tenant, wf)` — genutzt von `execute_workflow` (core_tools) UND der WorkflowEngine (`_ensure_run_entry` war zuvor sogar ganz ohne Lock, jetzt gesichert; `_update_run` nutzt denselben Accessor).
+  - Script-Invocation-Log: `_invocations_write_lock` (`script_tools.py`).
+  - **Rest (dokumentiert):** Multi-Replica-Betrieb braucht Redis-Level-Atomarität (WATCH/MULTI oder Lua) statt Prozess-Locks — Prozess-Locks wirken nur single-process.
 
 ---
 
-## P2 — Mittelfristig (2-4 Wochen)
+### ✅ P0-Design-Entscheidungen (2026-07-04)
 
-### 2.1 Plugin Hot-Unload korrigieren — ✅ DONE (Sprint 4)
-- **Risiko**: Low — funktional, nicht Security
-- **Aufwand**: ~4 h
-- **Stellen**:
-  - [backend/core/module_registry.py:304-309](backend/core/module_registry.py#L304-L309) — `remove_plugin` lässt FastAPI-Routen im Memory
-  - `hot_load_plugin` manipuliert Starlette-Internals direkt → fragil gegen Versionswechsel
-- **Fix**: Eigene `PluginRouteRegistry` mit explizitem `mount()`/`unmount()`-Lifecycle
-
-### 2.2 Prompt-Konventions-Drift beheben
-- **Risiko**: Low — Sprach-Qualität, nicht funktional
-- **Aufwand**: ~30 min (deutlich kleiner als 3 h, weil 90 % der Migration in Sprint 1-4 erledigt war)
-- **Stellen**:
-  - [backend/agents/base_agent.py:89-119](backend/agents/base_agent.py#L89-L119) — `_t(de=..., en=...)`-Multilingual-Pattern
-  - `_LANG_INSTRUCTIONS` injiziert „Antworte auf Deutsch" — widerspricht [.claude/rules/prompt-konventionen.md](.claude/rules/prompt-konventionen.md)
-- **Fix**: Canonical-English-Prompts, Sprache via `LanguageMiddleware` zur Render-Zeit
-- **Status**: ✅ DONE (Sprint 5) — `_LANG_INSTRUCTIONS` entfernt, `_dynamic_prompt_appendix` und `_auto_memorize` auf plain English, 9 Regression-Tests in `test_base_agent_prompts.py`. `LanguageMiddleware` war bereits korrekt (war nicht Teil der Migration).
-
-### 2.3 API-Documentation: `response_model` für ~110 Endpoints
-- **Risiko**: Low — DX und OpenAPI-Quality
-- **Aufwand**: ~8 h
-- **Stellen**: ~110 Endpoints mit `-> dict` ohne `response_model` (Schätzung aus 2026-05-29-Review, im aktuellen Diff nicht neu gezählt)
-- **Vorgehen**:
-  1. Top-20 meistgenutzte Endpoints priorisieren (Auth, Chat, Agents, Workflows, Settings)
-  2. Pro Endpoint dediziertes Pydantic-Response-Modell anlegen
-  3. Pydantic-`model_dump()`-Aufrufe im Endpoint-Body durch Return-Wert + `response_model` ersetzen
-- **Betroffene Dateien (Auszug)**: `routes_chat.py`, `routes_agents.py`, `routes_workflows.py`, `routes_settings.py`, `routes_auth.py`, `routes_plugins.py`, `routes_modules.py`
-- **Status**: ✅ DONE (Sprint 6) — 18 Route-Dateien + 7 Schema-Dateien. Realität: 162 Endpoints (statt 110 geschätzt) — alle 6 fertigen Sub-Agenten-Domänen kompilieren, 95 targeted Tests grün. `routes_plugins.py` aus 1 Sub-Agent reverted auf HEAD (Syntaxfehler im Sub-Agent-Output, jetzt sauber). Pre-existing Test-Failures (Redis nicht erreichbar in Test-Setup, 401-Auth) unabhängig von 2.3.
-
-### 2.4 MutationResponse-Modell vereinheitlichen
-- **Risiko**: Low — API-Konsistenz
-- **Aufwand**: ~3 h
-- **Beobachtung**: Statusfeld uneinheitlich:
-  - `{"status":"created"}`
-  - `{"deleted":True}`
-  - `{"success":bool}`
-- **Fix**: Einheitliches `MutationResponse`-Modell in `backend/schemas/mutations.py`:
-  ```python
-  class MutationResponse(NinkoModel):
-      id: str | None = None
-      status: Literal["created", "updated", "deleted", "noop"]
-      message: str | None = None
-  ```
-  Betrifft v. a. `routes_agents.py`, `routes_workflows.py`, `routes_secrets.py`, `routes_modules.py`.
-- **Status**: ✅ DONE (Sprint 6) — `schemas/mutations.py` neu, 13 inline-Mutations in `routes_chat.py` (4), `routes_auth.py` (3), `routes_settings.py` (4), `routes_themes.py` (2), `routes_workflows.py` (1) migriert auf `MutationResponse(status, id, data)`. 0 Reste nach `grep`. 2.3 hatte den Großteil schon zu dedizierten Pydantic-Modellen migriert, sodass nur die inline-Returns übrig blieben.
+- **A2** — Subcommand-/Argument-Whitelisting für write-fähige, read-only gemeinte Allowlist-Kommandos (`tool_permissions.py::_assert_readonly_cli_usage`): `systemctl` nur lesende Subcommands, `journalctl` ohne `--vacuum/--rotate/--flush`, `ip`/`route` ohne `set/add/del/change/…`, `ethtool` ohne Set-Flags, `dpkg` nur Query-Flags, `rpm` nur `-q`. Greift in allen Modi außer `DANGER_FULL_ACCESS`. 16/16 Fälle verifiziert.
+- **A4** — Step-weiser Pipeline-Resume (`pipeline_engine.py`): `execute()` hat `confirmed_indices`; das Pre-Flight-Gate pausiert vor dem ersten NOCH NICHT bestätigten `requires_confirmation`-Step; `resume()` bestätigt nur den wartenden Step (akkumuliert im Checkpoint) und pausiert bei weiteren erneut. `routes_chat.py` behandelt den erneuten `AWAITING_CONFIRMATION`-Zustand. Eine Bestätigung autorisiert nie die ganze Pipeline. `resume(auto_confirm=True)` bleibt rückwärtskompatibel (Tests). Neuer Regressionstest `test_stepwise_resume_confirms_one_step_at_a_time`.
+- **A5a** — `execute_cli_command` nicht mehr pauschal an alle dynamischen Agenten: nur wenn `module_names` ein Infra-Modul (`_CLI_CAPABLE_MODULES`: linux_server/docker/kubernetes/proxmox) enthält; sonst delegieren sie über `call_module_agent`. Zusätzlich System-Prompt-Längen-Cap (`_MAX_SYSTEM_PROMPT_CHARS=20000`) bei `register`.
+- **A5c** — `get_agent_by_id(allow_cross_tenant=False)` als Default: der tenant-übergreifende `endswith`-Fallback greift nur noch für System-Kontexte (Scheduler übergibt explizit `True`). Chat/force_module-Pfade sind damit tenant-isoliert.
+- **A8** — bereits entschärft (kein Fix nötig): äußerer `except`/`except CancelledError` (`routes_chat.py`) ruft `_mark_current_tx_failed` → `mark_failed` + `clear_pending_for_session`; mit task-gescoptem A3 ist die Restgefahr durch die 24h-TTL begrenzt.
 
 ---
 
-## P3 — Low-Priority Findings aus 2026-06-10 Diff
+## P4 — Aufräumen — ✅ erledigt (2026-07-04)
 
-### 3.1 Proxmox-IP-Discovery in Prod validieren — ✅ DONE (Sprint 2)
-- **Risiko**: Low — gut strukturiert, defensiv (ipaddress-Validierung, loopback/unspecified/link-local-Filter)
-- **Stelle**: [backend/modules_catalog/proxmox/tools.py](backend/modules_catalog/proxmox/tools.py) (267 neue LOC in Commit 2683042)
-- **Aufwand**: ~1 h (manueller Test) + ggf. 1 h (Edge-Case-Tests)
-- **Vorgehen**:
-  - Erste Prod-Nutzung: Output-Format gegen `/api/proxmox/discover_ips` validieren
-  - Tests ergänzen für: CIDR-Suffix, IPv6 Zone-ID, malformed QEMU-Guest-Agent-Output
-  - Coverage-Lücke in `backend/tests/test_proxmox_ip_tools.py` schließen
-
-### 3.2 `workflows.js` — konsequent `_escapeHtml` in `innerHTML` — ✅ DONE (Sprint 1)
-- **Risiko**: Low — Auth-Required, identisches Pattern wie der im 2026-05-29-Review behobene DOM-XSS #1
-- **Stellen**:
-  - [frontend/features/workflows.js:243](frontend/features/workflows.js#L243) — `content.innerHTML = (this._wfNodes || []).map(...)`
-  - [frontend/features/workflows.js:697](frontend/features/workflows.js#L697) — `<option>` für Agenten
-  - [frontend/features/workflows.js:712](frontend/features/workflows.js#L712) — `<option>` für Workflows
-  - [frontend/features/workflows.js:727](frontend/features/workflows.js#L727) — `<option>` für Scripts
-- **Fix**: `_escapeHtml()` auf alle User-/API-kontrollierten Werte anwenden (auch `data-`-Attribute und IDs)
-- **Aufwand**: ~30 min
-
-### 3.3 `ConnectionManager.get_tenant_id` Multi-Tenant-Fallback testen — ✅ DONE (Sprint 1)
-- **Risiko**: Low — Tasmota-Fix in Commit eb2f183 zieht jetzt auch `get_current_tenant_id()` aus Auth-Kontext
-- **Stelle**: [backend/core/connections.py:82-89](backend/core/connections.py#L82-L89)
-- **Vorgehen**: Test ergänzen, der `get_tenant_id()` mit gesetztem `get_current_tenant_id()` und leerem `tenant_id`-Argument aufruft → muss den Auth-Tenant liefern, nicht Session-Prefix oder „default"
-- **Aufwand**: ~30 min
+- **Entfernt (isoliert toter Code):** `_build_execution_groups` + `_build_execution_groups_legacy` (`core_tools.py`, Logik liegt in `core.pipeline_engine`); die Orchestrator-Stub-Methoden `build_task_sketch`/`get_last_task_sketch`/`resolve_evidence_semantics`/`get_last_evidence_trace`/`_should_show_user_evidence_trace`.
+- **`_authorized_sg_tool_calls`** wird jetzt in `cleanup_paused_agents` (`safeguard.py`) für abgelaufene Sessions mit aufgeräumt → kein langsames Speicherwachstum mehr.
+- **Bewusst behalten (wie KeywordRouter-Shim), Doku korrigiert:** `find_best_match` + Token-Index — kohäsives Keyword-Matching-Subsystem, das die Hot-Paths `_instantiate`/`_close_live_agent` berührt; im route()-Pfad ungenutzt (Function-Calling-only), aber risikoarm zu behalten falls Keyword-Routing reaktiviert wird. `KeywordRouter` (dokumentierter Shim + Tests) bleibt ebenfalls.
+- **`_close_live_agent` `aclose`-Guard:** bewusst behalten — harmloses, konsistentes Defensiv-Muster (auch `LLMProviderMiddleware` nutzt den `hasattr`-Guard); greift, falls `BaseAgent` künftig `aclose` erhält.
+- **Inkonsistente Fehler-Rückgabetypen** (String vs. dict vs. JSON-String): als bekannte Schuld dokumentiert — eine projektweite Vereinheitlichung ist ein eigenständiges Refactoring außerhalb dieses Review-Scopes.
 
 ---
 
-## P4 — Coverage-Limit aufholen
 
-> Diese Items schließen die Lücke aus dem 2026-06-10-Review (4 von 5 Sub-Agenten mit Timeout abgebrochen). Jeder Sub-Agent mit **engerem Scope** (1-2 Dateien / 1 Modul) kann innerhalb der 30-Min-Grenze durchlaufen.
+## P1 — Robustheit & Lifecycle — ✅ vollständig erledigt (2026-07-04)
 
-### 4.1 Vollständiger Security-Audit (449 Python-Dateien)
-- **Sub-Agent-Scope**: Batch-für-Batch (z. B. 50 Dateien pro Lauf), gezielte Greps für CWE-Top-25
-- **Aufwand**: ~5-7 Batches à 30 min
-- **Trigger**: `task(category="unspecified-high", load_skills=["sicherheitspruefung", "error-handling"])`
-
-### 4.2 Performance-Profiling (3 Hot-Spots)
-- **Dateien**:
-  - [backend/agents/orchestrator.py](backend/agents/orchestrator.py) (136 KB / 3039 LOC)
-  - [backend/core/tool_registry.py](backend/core/tool_registry.py) (78 KB)
-  - [backend/core/safeguard.py](backend/core/safeguard.py) (83 KB)
-- **Sub-Agent-Scope**: 1 Datei pro Lauf, gezielt auf N+1, Blocking-IO, GIL-Contention, Memory-Leaks
-- **Trigger**: `task(category="deep", load_skills=["python-backend"])`
-
-### 4.3 frontend/app.js (383 KB) Vollinspektion
-- **Sub-Agent-Scope**: Frontend-File in 4-5 Hälften (je ~80 KB)
-- **Fokus**: Memory-Leaks, Event-Listener-Cleanup, WebSocket-Reconnect-Logik, LocalStorage-Verwendung
-- **Trigger**: `task(category="visual-engineering", load_skills=["frontend-ui-ux", "ninko-frontend-debug"])`
-
-### 4.4 API-Contract-Audit (30+ Route-Dateien)
-- **Sub-Agent-Scope**: 5-7 Routes pro Lauf
-- **Fokus**: Pydantic-Validatoren, `response_model`-Coverage, einheitliche Error-Schema, Rate-Limiting pro Endpoint
-- **Trigger**: `task(category="unspecified-high", load_skills=["pydantic", "python-backend"])`
-
-### 4.5 I18n-Konsistenz (10 Sprachen)
-- **Betroffen**: Neue Confirmation-Texte, Skills-Tab-Labels, Proxmox-IP-Discovery-Output
-- **Sub-Agent-Scope**: 1 Modul × 10 Sprachen pro Lauf
-- **Trigger**: `task(category="writing", load_skills=["ninko-i18n"])`
+- **C3, C4, C5, H5** — siehe „✅ Stufe P1" oben.
+- **M9** — `sync_agent` Disable-Pfad läuft jetzt unter `self._register_lock` (`agent_pool.py`). Kein „live trotz disabled" mehr.
+- **M7** — `_active_subagents` ist jetzt LRU-begrenzt (`OrderedDict`, `_MAX_ACTIVE_SUBAGENTS=200`, Eviction in `_get_or_create_subagent`); `_completed_steps`/`_failed_steps` werden zu Beginn jedes `invoke()` zurückgesetzt (`data_analysis_subagent.py`).
+- **M6** — `recursion_limit` von 10000 auf 60 gesenkt (`data_analysis_subagent.py`).
+- **M8** — bereits durch C4 erledigt (`AgentConfigStore._mutate` unter `_config_write_lock`).
+- **N2** — `load_from_redis` nutzt `scan_iter` statt blockierendem `KEYS` (`agent_pool.py`).
+- **N3** — `self._task = asyncio.current_task()` in `start_loop` von Scheduler UND Monitor gesetzt → `stop()`-Cancel wirkt jetzt.
 
 ---
 
-## Verifikations-Strategie
+## P2 — Korrektheit — ✅ erledigt (2026-07-04)
 
-Pro Fix (Karpathy-Prinzip 4):
-
-1. **Unit-Test zuerst** (Red): Test schreiben, der den Bug ohne Fix reproduziert
-2. **Fix implementieren** (Green): Minimaler Code-Change, fokussiert
-3. **Refactor** (Refactor): Nur bei klarer Duplikation
-4. **Lokaler Smoke-Test**:
-   ```bash
-   docker compose build backend && docker compose up -d --no-deps backend
-   python3 -m compileall -q backend/<geändertes_modul>
-   node --check frontend/<geändertes_feature>.js
-   ```
-5. **K8s-Smoke-Test** nach Prod-Deploy via `k8s-smoke-test`-Skill
-
-Spezifische Verifikationen pro Item:
-
-| Item | Verifikations-Test |
-|---|---|
-| 1.1 Secret-Redaction | Tool mit Token im Output triggern → SSE-Stream darf Token nicht enthalten (für ALLE 4 Stellen) |
-| 1.2 Tier-Routing-Leiche | Alle bestehenden Tests grün + manueller Routing-Test mit echtem LLM |
-| 1.3 EmbeddingRouter | Falls gelöscht: `from core.embedding_router import arank` wirft ImportError (erwartet) |
-| 1.4 Pipeline confirmation | Pipeline mit `requires_confirmation: true` → muss pausieren, Resume mit `confirmed: true` |
-| 2.1 Plugin Hot-Unload | Plugin installieren + entfernen ohne Backend-Restart → Routen 404, Module-Liste leer |
-| 2.2 Prompt-Konventionen | Prompt-Template-Snapshot-Test: canonical English, deutsche Antwort erst nach Middleware |
-| 2.3 response_model | OpenAPI-Schema-Snapshot: alle Endpoints haben `responses: { 200: { content: { ... } } }` |
-| 2.4 MutationResponse | API-Collection-Test: alle Mutations-Endpoints geben `{id, status}` zurück |
-| 3.1 Proxmox-IP | Echte Proxmox-VM + LXC + Guest-Agent → IPs korrekt, keine 127.0.0.1, keine `fe80::` |
-| 3.2 workflows.js | Pen-Test-Skill-Namen + Workflow-Namen mit `<img onerror>` → müssen escaped sein |
-| 3.3 Tenant-Fallback | Test mit 2 Tenants, `tenant_id=""`, `get_current_tenant_id()="tenant_a"` → muss tenant_a liefern |
+- **D1** — `run_pipeline` ist jetzt Fail-fast: ein ungültiger Step lehnt die ganze Pipeline mit Fehlermeldung ab, statt still zu filtern (was `depends_on`-Indizes verschob). (`core_tools.py`)
+- **D2** — `asyncio.CancelledError` aus `_CORE_TOOL_EXCEPTIONS` entfernt; `wait()` re-raist Cancellation statt sie in einen Fehlerstring zu wandeln → saubere Task-Terminierung bei Disconnect/Shutdown. (`core_tools.py`)
+- **D3** — `generate_pdf_report` gehärtet: `output_path` auf festes Verzeichnis (`tmp/ninko-reports`) normalisiert + `.pdf`-Zwang (kein Path Traversal); Deny-All-`url_fetcher` (kein LFI/SSRF via `file:///`); Rendering in `asyncio.to_thread` (kein Event-Loop-Block); Titel via `html.escape` (HTML) bzw. quote-/newline-frei (CSS). (`core_tools.py`)
+- **D4/M1** — Scheduler setzt `exec_status` explizit pro Branch; neuer `_response_indicates_error()` erkennt Fehler-Antwortstrings von Agent/Orchestrator (deckt auch N5 downstream). Keine branch-lokale Variable in gemeinsamer Expression mehr. (`scheduler_agent.py`)
+- **D6** — Per-Nachricht-Cap vor der Summary von 400 → 2000 Zeichen erhöht (`context_manager.py`), damit IPs/IDs/Configs erhalten bleiben (überlange Nachrichten stutzt `trim_large_messages` bereits vorher). Tokenizer-Genauigkeit (fester `cl100k_base`) bewusst nicht verändert — ein globaler Sicherheitsfaktor würde jede Anfrage betreffen und über-eager kompaktieren (Regressionsrisiko); als Beobachtung notiert.
+- **Weitere:**
+  - `run_parallel_pipeline` — `depends_on`-Indizes werden jetzt explizit mitgezählt statt rückwärts gerechnet; leere (Zwischen-)Gruppen werden übersprungen. (`core_tools.py`)
+  - `create_dag_workflow` — doppelte explizite Node-IDs werden abgelehnt; pro Node eine eigene `full_id` (keine Kollision bei leeren/doppelten IDs). (`core_tools.py`)
+  - `record_alert`/`should_notify` — reservierter Cooldown-Slot wird freigegeben (`release_notify_cooldown`), wenn keine ticketbasierte Notification erfolgt → kein fälschlich unterdrückter Folge-Alert. (`alert_tools.py`, `alert_state.py`)
+  - `_extract_step_agent_hint` — Substring-Heuristik entfernt; nur explizites `[module:...]`-Prefix routet, sonst Orchestrator. (`core_tools.py`)
+  - **N5 (Rest):** `DataAnalysisSubagent` gibt Fehlertext weiterhin als Summary zurück; downstream jetzt durch `_response_indicates_error` im Scheduler abgefangen. Ein sauberes Fehler-Flag im Rückgabewert wäre der tiefere Fix (offen, geringe Priorität).
 
 ---
 
-## Empfohlene Umsetzungsreihenfolge
+## P3 — Performance — ✅ erledigt (2026-07-04)
 
-### Sprint 1 (diese Woche)
-- [x] **3.2** `workflows.js` `_escapeHtml` (30 min, niedrigstes Risiko, sofortige Konsistenz) ✅
-- [x] **3.3** Connection Tenant-Fallback-Test (30 min) ✅
-- [x] **1.1** Secret-Redaction zentralisieren (2 h, größte Reduktion von Token-Leak-Vektoren) ✅
-
-### Sprint 2 (nächste Woche)
-- [x] **1.2** Orchestrator Tier-Routing-Leiche entfernen (4 h, massiver Code-Cleanup) ✅
-- [x] **1.3** EmbeddingRouter entscheiden + umsetzen (1-6 h) ✅ (entfernt)
-- [x] **3.1** Proxmox-IP-Discovery in Prod validieren (1-2 h) ✅
-
-### Sprint 3-4 (in 2-4 Wochen)
-- [x] **1.4** Pipeline `requires_confirmation` (6 h, functional safety) ✅
-- [x] **2.1** Plugin Hot-Unload korrigieren (4 h) ✅
-- [x] **2.2** Prompt-Konventions-Drift beheben (~30 min, Restmigration) ✅
-
-### Backlog (P2)
-- [x] **2.3** `response_model` für ~110 Endpoints ✅
-- [x] **2.4** MutationResponse vereinheitlichen ✅
-
-### Backlog (P4 — Coverage-Limit aufholen)
-- [x] **4.1** Security-Audit (449 Python-Dateien) — ✅ Bericht in `.claude/knowledge/security-audit-2026-06-10.md` (145 Zeilen, 0 HIGH/MED)
-- [x] **4.2** Performance-Profiling (3 Hot-Spots) — ✅ Bericht in `.claude/knowledge/perf-profile-2026-06-10.md` (259 Zeilen)
-- [x] **4.3** frontend/app.js (383 KB) Vollinspektion — ✅ Bericht in `.claude/knowledge/frontend-app-js-audit-2026-06-10.md` (35 Event-Listener-Memory-Leaks identifiziert, 0 cleanup-Hooks)
-- [ ] **4.4** API-Contract-Audit (30+ Route-Dateien) — übersprungen (2.3 deckelt das; 95 targeted Tests grün)
-- [x] **4.5** I18n-Konsistenz (10 Sprachen) — ✅ Bericht in `.claude/knowledge/i18n-audit-2026-06-10.md` (47 Zeilen, 14 fehlende Keys in 9 Sprachen)
+- **B3** — Semantic-Routing-Cache ist jetzt größenbegrenzt: ein ZSET-Index (`ninko:toolcall:sem_index`, Cap 500, Score = Zeitstempel) ersetzt den `scan_iter` über alle `sem:*`-Keys. `_route_cache_semantic_get` liest Kandidaten via `zrevrange` (bounded), räumt verwaiste Index-Einträge (abgelaufene Payloads) auf; `_route_cache_semantic_set` trimmt die ältesten Einträge samt Payload. Lookup-Kosten sind damit gedeckelt statt linear im gesamten Keyspace. (`orchestrator.py`)
+- **speak** — Kein Base64 mehr im Tool-Return: WAV wird via `core.tts.store_audio()` in einen kurzlebigen Ordner (`tmp/ninko-tts-audio`, 1h-Cleanup) geschrieben; der Tool-Return enthält nur noch einen kompakten Markdown-Link auf den neuen Endpoint `GET /api/tts/audio/{filename}` (auth-frei wie das Image-Serving, mit Path-Traversal-Guard). Kein LLM-Kontext-Bloat mehr. (`core_tools.py`, `core/tts/__init__.py`, `api/routes_tts.py`)
 
 ---
 
-## Architektur-Stärken (NICHT anfassen)
+## Status
 
-Diese Bereiche funktionieren und sind explizit **nicht** Teil dieses Plans:
+**Alle Prioritäten des Reviews abgeschlossen:** Stufe 1, Stufe 2 (Safeguard-Bypass-Kette), P0-Design-Entscheidungen (A2/A4/A5a/A5c/A8), P1 (Lifecycle/Robustheit), P2 (Korrektheit), P3 (Performance), P4 (Aufräumen).
 
-1. **DRY-Konsolidierung Auth** ([core/auth.py:is_active_api_token](backend/core/auth.py)) — Token-Revocation-Check ist jetzt eine Source of Truth für HTTP und WebSocket. Konsolidiert in Commit 105c8b6.
-2. **Module Registry Plugin-Precedence** ([core/module_registry.py](backend/core/module_registry.py)) — verhindert stale-Plugin-Override (Commit d2bdc83). Saubere defensive Logik.
-3. **Agent Pool Hot-Reload** ([core/agent_pool.py](backend/core/agent_pool.py)) — `sync_agent()` / `remove_agent()` mit `_close_live_agent` (Commit 572a17c). Lock-Schutz, sauberes aclose-Handling.
-4. **Workflow DAG-Deadlock-Fix** ([core/workflow_engine.py](backend/core/workflow_engine.py)) — `_dependencies_complete` + `_dedupe_preserve_order` (Commit 572a17c).
-5. **Safeguard `content=None`-Handling** ([core/safeguard.py:1721, 1908](backend/core/safeguard.py)) — explizite `ValueError` statt `.strip()` auf None. Wichtig für OSS-LLMs.
-6. **Streaming-Plugin-Upload-Limit** ([api/routes_plugins.py:660-682](backend/api/routes_plugins.py)) — 50 MB komprimiert, 1 MB Chunks, HTTP 413 bei Überschreitung.
-7. **Telegram Bot Resilience** ([modules_catalog/telegram/bot.py](backend/modules_catalog/telegram/bot.py)) — K8s-Rolling-Desync (Random 0-5s), HTTP 409 Conflict Handling.
-8. **Codelab/Scripting `ainvoke`-Fix** ([modules/codelab/tools.py](backend/modules/codelab/tools.py)) — `execute_code_raw` vs `@tool execute_code`. Behebt den in [.claude/memory/project_ninko_gotchas.md](.claude/memory/project_ninko_gotchas.md) dokumentierten Anti-Pattern.
-9. **DOM-XSS-Schließung Frontend** ([features/agents.js](frontend/features/agents.js)) — Migration von inline `onclick` zu `data-action` + `addEventListener`.
-10. **`is_bot_confirmation` Guard** ([api/routes_chat.py:_resolve_confirmed_message](backend/api/routes_chat.py)) — kurze Bestätigungen nur bei tatsächlich pending Action.
-
----
-
-## Aktueller Arbeitsstand (Stand 2026-06-10, 09:38)
-
-**Uncommitted changes** (lokal, nicht in Commit-History):
-- `backend/api/routes_chat.py` (M, 38 insertions / 8 deletions)
-- `backend/core/module_registry.py` (M, 17 insertions)
-- `backend/core/safeguard.py` (M, 26 insertions / 3 deletions)
-
-Diese sind wahrscheinlich in-progress-Arbeit an offenen Items. Vor Commit:
-- `python3 -m compileall -q` über die 3 Dateien
-- pytest auf den relevanten Test-Files (`test_chat_streaming.py`, `test_module_registry_plugin_precedence.py`, `test_websocket_auth.py`)
-- `node --check` auf frontend (falls Cross-File-Änderungen)
-
-**Letzter Commit-Hash**: `d2bdc83` (2026-06-10 07:39, `fix(registry): prefer current catalog modules over stale plugins`)
-
----
-
-## Sprint-Abschluss-Übersicht (2026-06-10)
-
-### ✅ Erledigt (9/11 Items)
-
-| # | Item | Sprint | Kern-Commits / Files |
-|---|------|--------|---------------------|
-| 1.1 | Secret-Redaction zentralisieren | Sprint 1 | `backend/core/redaction.py` (neu), 5 Migrationen, 23 Tests |
-| 1.2 | Tier-Routing-Leiche entfernen | Sprint 2 | `backend/agents/orchestrator.py` (-403 LOC), `core_tools.py` (-116 LOC), 2 LLM-Tools gelöscht, `test_builder_fastpath.py` gelöscht, `backend/README.md` aktualisiert |
-| 1.3 | EmbeddingRouter entfernen | Sprint 2 | `backend/core/embedding_router.py` + `test_embedding_router.py` gelöscht, 4 Call-Sites + Config-Setting entfernt |
-| 1.4 | Pipeline `requires_confirmation` | Sprint 3 | `backend/core/pipeline_engine.py` (Pre-Flight-Gate + `resume()`), `pipeline_events.py` (2 neue Events), `core_tools.py` (i18n String), `routes_chat.py` (Resume-Branch), `operation_journal.py` (metadata-Support), 9 neue Tests |
-| 2.1 | Plugin Hot-Unload | Sprint 4 | `backend/core/module_registry.py` (neue `PluginRouteRegistry`-Klasse, mount/unmount Lifecycle), `routes_plugins.py` (app-Argument), 9 neue Tests |
-| 2.2 | Prompt-Konventions-Drift beheben | Sprint 5 | `backend/agents/base_agent.py` (3 Edits: `_LANG_INSTRUCTIONS` entfernt, `_dynamic_prompt_appendix` + `_auto_memorize` auf plain English), `backend/tests/test_base_agent_prompts.py` (neu, 9 Tests in 3 Gruppen) |
-| 2.3 | `response_model` für ~110 Endpoints | Sprint 6 | 18 Route-Dateien + 7 Schema-Dateien (chat, workflows, agents, settings, themes, connections, secrets, safeguard×3, skills, routing, image_gen, tts, logs, operations, scheduler). 95 targeted Tests grün, 28 pre-existing Failures (Redis-Test-Setup) unabhängig. `routes_plugins.py` aus 1 Sub-Agent reverted auf HEAD (Syntaxfehler). |
-| 2.4 | MutationResponse vereinheitlichen | Sprint 6 | `backend/schemas/mutations.py` (neu), 13 inline-Mutations in 5 Route-Dateien migriert: `routes_chat.py` (4 via `SessionMessagesResponse`), `routes_auth.py` (3), `routes_settings.py` (4), `routes_themes.py` (2), `routes_workflows.py` (1). |
-| 3.1 | Proxmox-IP-Discovery Tests | Sprint 2 | `backend/modules_catalog/proxmox/tools.py` (malformed-Input-Fix), `test_proxmox_ip_tools.py` (+5 Edge-Case-Tests) |
-| 3.2 | `workflows.js` `_escapeHtml` | Sprint 1 | `frontend/features/workflows.js` (3 innerHTML-Fixes: `e.id`, `step.status`, `step.duration_ms`) |
-| 3.3 | Tenant-Fallback-Test | Sprint 1 | `backend/tests/test_connection_tenant_fallback.py` (neu, 10 Tests) |
-| 4.1 | Security-Audit | Sprint 6 | `.claude/knowledge/security-audit-2026-06-10.md` (145 Zeilen, 0 HIGH/MED, 2 LOW/INFO) |
-| 4.2 | Performance-Profiling | Sprint 6 | `.claude/knowledge/perf-profile-2026-06-10.md` (259 Zeilen, 3 Hot-Spots in orchestrator/tool_registry/safeguard) |
-| 4.3 | frontend/app.js Audit | Sprint 6 | `.claude/knowledge/frontend-app-js-audit-2026-06-10.md` (35 Event-Listener-Memory-Leaks, 0 cleanup-Hooks) |
-| 4.4 | API-Contract-Audit | übersprungen | deckungsgleich mit 2.3; 95 targeted Tests grün |
-| 4.5 | I18n-Konsistenz | Sprint 6 | `.claude/knowledge/i18n-audit-2026-06-10.md` (47 Zeilen, 14 fehlende Keys in 9 Sprachen) |
-
-**Verifikations-Stand**: `compileall backend/api/ backend/schemas/` clean · `git diff --check` clean · 95 targeted Tests grün (chat_streaming, base_agent_prompts, module_response_formatting, module_registry_plugin_precedence, connection_tenant_fallback) · 28 pre-existing Failures (Redis-Test-Setup, 401-Auth) unabhängig von PLAN.md.
-
-**Netto-Code-Reduktion**: ~1.500 LOC entfernt (Tier-Routing + EmbeddingRouter + Builder-Fastpath Tests) · ~500 LOC hinzugefügt (1.4 Pipeline-Engine, 2.1 PluginRouteRegistry, 1.1 Redaction, 2.2 BaseAgent-Prompts, 2.3 Schemas+Routes, 2.4 MutationResponse) · **alle Änderungen uncommitted** (auf User-Wunsch zur späteren Review, atomare Commits pro Datei geplant nach 8/11 Sprint-Abschluss).
-
----
-
-## Quellen
-
-- **Aktueller Review**: [.claude/reports/full-review-2026-06-10.md](.claude/reports/full-review-2026-06-10.md)
-- **Vorgänger-Review**: [.claude/reports/full-review-2026-05-29.md](.claude/reports/full-review-2026-05-29.md) (alle 4 dringenden Findings inzwischen behoben)
-- **Carry-Over-Quellen**:
-  - [.claude/reports/full-review-2026-05-20.md](.claude/reports/full-review-2026-05-20.md) (Items 1.1, 1.2, 1.3, 1.4, 2.1, 2.2 ursprünglich identifiziert)
-  - [.claude/reports/full-review-2026-04-11-v2.md](.claude/reports/full-review-2026-04-11-v2.md) (Items 2.3, 2.4)
-- **Memory-Referenz**: [.claude/memory/project_ninko_gotchas.md](.claude/memory/project_ninko_gotchas.md)
-- **Regelwerk**: [.claude/rules/](.claude/rules/) (insbesondere `code-stil.md`, `workflow.md`, `api-konventionen.md`)
+**Verbleibende, bewusst dokumentierte Schuld (eigenständige Refactorings, kein akutes Risiko):**
+- Multi-Replica-Atomarität für Redis-RMW (aktuell Prozess-Locks, wirken single-process).
+- Projektweite Vereinheitlichung der Tool-Fehler-Rückgabetypen.
+- Tokenizer-Genauigkeit der Kontext-Kompaktierung (fester `cl100k_base`).
+- N5: `DataAnalysisSubagent` gibt Fehlertext als Summary zurück (downstream im Scheduler erkannt).
+- Optional: `find_best_match`/`KeywordRouter` samt Index vollständig entfernen, falls Keyword-Routing dauerhaft aufgegeben wird.

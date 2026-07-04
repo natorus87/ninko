@@ -1491,6 +1491,43 @@ def _infer_tier(
     return ToolTier.WRITE_SYSTEM  # konservativer Fallback
 
 
+# Mutations-Verben, die einen read-only wirkenden Präfix-Namen entkräften
+# (z.B. `get_and_purge_logs`). Exaktes Token-Matching (Trennung an "_"), damit
+# legitime Namen wie `list_installed_packages` oder `get_startup_config` NICHT
+# fälschlich als mutierend gelten.
+_MUTATION_VERBS: frozenset[str] = frozenset(
+    {
+        "purge",
+        "delete",
+        "remove",
+        "apply",
+        "rotate",
+        "reset",
+        "create",
+        "update",
+        "write",
+        "set",
+        "restart",
+        "reboot",
+        "stop",
+        "start",
+        "disable",
+        "enable",
+        "wipe",
+        "flush",
+        "drop",
+        "kill",
+        "install",
+        "uninstall",
+        "deploy",
+        "scale",
+        "revoke",
+        "rollback",
+        "prune",
+    }
+)
+
+
 def _infer_readonly(tool_name: str) -> bool:
     readonly_prefixes = (
         "get_",
@@ -1517,7 +1554,15 @@ def _infer_readonly(tool_name: str) -> bool:
         "ping_host",
         "get_network_info",
     }
-    return tool_name.startswith(readonly_prefixes) or tool_name in readonly_names
+    if tool_name in readonly_names:
+        return True
+    # Präfix-Heuristik NICHT anwenden, wenn ein Namens-Token ein Mutations-Verb ist.
+    # Sonst würden Tools wie `get_and_purge_logs`, `check_and_apply_update` oder
+    # `read_secret_and_rotate` fälschlich als read-only (→ SAFE, keine Bestätigung)
+    # eingestuft. Nur explizite Overrides/readonly_names dürfen solche Namen freigeben.
+    if _MUTATION_VERBS.intersection(tool_name.split("_")):
+        return False
+    return tool_name.startswith(readonly_prefixes)
 
 
 def _infer_destructive(tool_name: str) -> bool:

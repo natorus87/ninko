@@ -97,7 +97,9 @@ Primary mechanism: **LLM-native Function Calling** on tool definitions auto-gene
 3. **Dynamic agent** — spec generated and registered at runtime when no static module fits
 4. **`run_pipeline` / `run_parallel_pipeline`** — typed multi-step workflow with per-step retry and Redis checkpoints
 
-The legacy keyword `core/router.py` was removed in 2026-05. A small `KeywordRouter` shim in `orchestrator.py` provides keyword-based fast-path detection (`routing_keywords`) used as a tie-breaker in ambiguous cases; routing is otherwise LLM-native Function Calling. The historical tier-routing system (`RoutingConfig`, `ROUTING_PRESETS`, `configure_routing`/`get_routing_info` tools, `classify_tier`) was removed in 2026-06 as part of PLAN.md item 1.2.
+Besides Function Calling, `route()` runs a few deterministic fast-paths first (forced module/agent, agent/workflow creation, FRITZ!Box-Tasmota discovery, infra-status for proxmox/kubernetes); everything else goes through Function Calling, with a ReAct loop as the final fallback.
+
+The legacy keyword `core/router.py` was removed in 2026-05. A small `KeywordRouter` shim remains in `orchestrator.py` but is **no longer wired into `route()`** — it is retained only for its unit tests. The former tier-routing entry points `_plan_and_execute_pipeline` (Tier-4 LLM planner) and `_route_tier2_module` (Tier-2 keyword fast-path) were removed in 2026-07 as dead code; routing is now Function-Calling-only. The earlier tier-routing system (`RoutingConfig`, `ROUTING_PRESETS`, `configure_routing`/`get_routing_info` tools, `classify_tier`) had already been removed in 2026-06 as part of PLAN.md item 1.2.
 
 ### Skills System
 - SKILL.md format with YAML frontmatter (name, description, modules)

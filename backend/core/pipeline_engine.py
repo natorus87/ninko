@@ -41,6 +41,36 @@ from pydantic import BaseModel, Field, field_validator
 logger = logging.getLogger("ninko.pipeline_engine")
 
 
+def _is_safeguard_sentinel(response: Any) -> bool:
+    """True, wenn ein Sub-Agent-Return das Tool-Safeguard-Pause-Sentinel ist."""
+    try:
+        from agents.base_agent import _TOOL_SAFEGUARD_SENTINEL
+    except ImportError:
+        return False
+    return isinstance(response, str) and response.startswith(_TOOL_SAFEGUARD_SENTINEL)
+
+
+async def _release_paused_subagent(session_id: str) -> None:
+    """Räumt einen innerhalb eines Pipeline-Steps pausierten Sub-Agenten auf.
+
+    Ohne diesen Cleanup blockiert der `_paused_sg_agents`-Eintrag alle weiteren
+    Invokes der Session bis zum TTL (~300s), obwohl es keinen Resume-Pfad gibt.
+    """
+    try:
+        from agents.base_agent import _paused_sg_agents, _paused_sg_agents_ts
+        _paused_sg_agents.pop(session_id, None)
+        _paused_sg_agents_ts.pop(session_id, None)
+    except ImportError:
+        pass
+    try:
+        from core.redis_client import get_redis
+        await get_redis().connection.delete(
+            f"ninko:safeguard_tool_pending:{session_id}"
+        )
+    except _PIPELINE_RECOVERABLE_EXCEPTIONS as exc:
+        logger.debug("Pending-Key Cleanup nach Pipeline-Sentinel fehlgeschlagen: %s", exc)
+
+
 # ── Enumerations ───────────────────────────────────────────────────────────────
 
 
@@ -273,6 +303,8 @@ class PipelineEngine:
         *,
         auto_confirm: bool = False,
         skip_on_error: bool = False,
+        confirmed_indices: set[int] | None = None,
+        completed_results: dict[int, StepResult] | None = None,
     ) -> PipelineResult:
         """
         Führt eine validierte Step-Liste aus.
@@ -295,17 +327,25 @@ class PipelineEngine:
 
         pipeline_id = pipeline_id or f"pipe_{uuid.uuid4().hex[:12]}"
         start_time = time.monotonic()
-        is_resume = bool(pipeline_id) and await self._has_checkpoint(pipeline_id)
+        confirmed = set(confirmed_indices or set())
+        step_results: dict[int, StepResult] = dict(completed_results or {})
 
-        # Pre-Flight Confirmation Gate: pausiere VOR dem ersten Step
-        if not is_resume and not auto_confirm:
+        # Pre-Flight Confirmation Gate: pausiere vor dem ersten NOCH NICHT bestätigten
+        # requires_confirmation-Step. Jeder solche Step wird einzeln bestätigt
+        # (step-weiser Resume akkumuliert confirmed_indices) — eine Bestätigung
+        # autorisiert NICHT die ganze Pipeline. Bei auto_confirm=True komplett übersprungen.
+        if not auto_confirm and not confirmed:
             awaiting_idx = next(
-                (i for i, s in enumerate(steps) if s.requires_confirmation),
+                (
+                    i for i, s in enumerate(steps)
+                    if s.requires_confirmation
+                ),
                 None,
             )
             if awaiting_idx is not None:
                 return await self._pause_for_confirmation(
                     steps, session_id, pipeline_id, awaiting_idx,
+                    confirmed_indices=confirmed,
                 )
 
         result = PipelineResult(
@@ -313,6 +353,10 @@ class PipelineEngine:
             session_id=session_id,
             status=PipelineStatus.RUNNING,
         )
+        if step_results:
+            result.steps.extend(
+                step_results[i] for i in sorted(step_results)
+            )
 
         # Initialer Checkpoint mit Steps (für späteres Resume)
         await self._checkpoint(pipeline_id, session_id, result, steps=steps)
@@ -325,15 +369,37 @@ class PipelineEngine:
 
         # Topologische Gruppen für parallele Ausführung
         groups = _build_execution_groups(steps)
-        step_results: dict[int, StepResult] = {}
+        pause_before_idx = None
+        if not auto_confirm and confirmed:
+            pause_before_idx = next(
+                (
+                    i for i, s in enumerate(steps)
+                    if s.requires_confirmation and i not in confirmed
+                ),
+                None,
+            )
 
         try:
             for group in groups:
-                if len(group) == 1:
-                    idx = group[0]
+                if pause_before_idx is not None and pause_before_idx in group:
+                    return await self._pause_for_confirmation(
+                        steps,
+                        session_id,
+                        pipeline_id,
+                        pause_before_idx,
+                        confirmed_indices=confirmed,
+                        prior_result=result,
+                    )
+
+                pending_group = [i for i in group if i not in step_results]
+                if not pending_group:
+                    continue
+
+                if len(pending_group) == 1:
+                    idx = pending_group[0]
                     sr = await self._execute_step(
                         steps[idx], idx, step_results, session_id,
-                        auto_confirm=auto_confirm,
+                        auto_confirm=auto_confirm or idx in confirmed,
                     )
                     step_results[idx] = sr
                     result.steps.append(sr)
@@ -345,13 +411,13 @@ class PipelineEngine:
                         *[
                             self._execute_step(
                                 steps[i], i, step_results, session_id,
-                                auto_confirm=auto_confirm,
+                                auto_confirm=auto_confirm or i in confirmed,
                             )
-                            for i in group
+                            for i in pending_group
                         ],
                         return_exceptions=True,
                     )
-                    for i, raw_sr in zip(group, raw_group_results):
+                    for i, raw_sr in zip(pending_group, raw_group_results):
                         if isinstance(raw_sr, BaseException):
                             sr = StepResult(
                                 step_id=steps[i].step_id,
@@ -373,7 +439,7 @@ class PipelineEngine:
                 await self._checkpoint(pipeline_id, session_id, result)
 
                 # Fehler-Propagation: Wenn Step fehlschlug und kein skip_on_error
-                last_group_results = [step_results[i] for i in group]
+                last_group_results = [step_results[i] for i in pending_group]
                 failed = [sr for sr in last_group_results if sr.status == StepStatus.FAILED]
                 if failed and not skip_on_error:
                     logger.warning(
@@ -502,6 +568,28 @@ class PipelineEngine:
                     ),
                     timeout=step.timeout_s,
                 )
+                # Der Sub-Agent hat vor einem gefährlichen Tool pausiert und den
+                # Safeguard-Sentinel zurückgegeben. In einer Pipeline gibt es keinen
+                # interaktiven Resume-Pfad — der Sentinel würde sonst roh in den
+                # Output leaken und der pausierte Agent die Session ~300s blockieren.
+                # Daher: pausierten Zustand bereinigen und Step sauber abbrechen.
+                if _is_safeguard_sentinel(response):
+                    await _release_paused_subagent(session_id)
+                    sr.status = StepStatus.FAILED
+                    sr.error = (
+                        "Schritt benötigt eine Tool-Bestätigung, die in einer "
+                        "automatischen Pipeline nicht eingeholt werden kann. "
+                        "Führe die Aktion einzeln (nicht als Pipeline) aus."
+                    )
+                    sr.retries_used = attempt
+                    sr.duration_ms = (time.monotonic() - step_start) * 1000
+                    await emit_pipeline_event(PipelineEvent.step_failed(
+                        step_id=step.step_id,
+                        session_id=session_id,
+                        module=step.module,
+                        error=sr.error,
+                    ))
+                    return sr
                 sr.result = str(response)
                 sr.status = StepStatus.COMPLETED
                 sr.retries_used = attempt
@@ -600,6 +688,7 @@ class PipelineEngine:
         session_id: str,
         result: PipelineResult,
         steps: list[PipelineStep] | None = None,
+        confirmed_indices: set[int] | None = None,
     ) -> None:
         """Schreibt einen Checkpoint in Redis für Resume-Support.
 
@@ -623,6 +712,8 @@ class PipelineEngine:
             payload["session_id"] = session_id
             if steps is not None:
                 payload["steps"] = [s.model_dump() for s in steps]
+            if confirmed_indices is not None:
+                payload["confirmed_indices"] = sorted(confirmed_indices)
             await get_redis().connection.set(key, json.dumps(payload), ex=3600)
         except Exception as exc:
             logger.debug("Checkpoint für Pipeline '%s' fehlgeschlagen: %s", pipeline_id, exc)
@@ -653,17 +744,20 @@ class PipelineEngine:
         session_id: str,
         pipeline_id: str,
         step_idx: int,
+        confirmed_indices: set[int] | None = None,
+        prior_result: PipelineResult | None = None,
     ) -> PipelineResult:
         """Pausiert die Pipeline VOR der Ausführung und erstellt einen Pending-Confirmation-Eintrag."""
         from core.pipeline_events import emit_pipeline_event, PipelineEvent
         from core.operation_journal import get_operation_journal
 
         first_step = steps[step_idx]
-        result = PipelineResult(
+        result = prior_result or PipelineResult(
             pipeline_id=pipeline_id,
             session_id=session_id,
             status=PipelineStatus.AWAITING_CONFIRMATION,
         )
+        result.status = PipelineStatus.AWAITING_CONFIRMATION
         result.steps.append(StepResult(
             step_id=first_step.step_id,
             step_index=step_idx,
@@ -691,7 +785,10 @@ class PipelineEngine:
             },
         )
 
-        await self._checkpoint(pipeline_id, session_id, result, steps=steps)
+        await self._checkpoint(
+            pipeline_id, session_id, result, steps=steps,
+            confirmed_indices=confirmed_indices or set(),
+        )
 
         await emit_pipeline_event(PipelineEvent.pipeline_awaiting_confirmation(
             pipeline_id=pipeline_id,
@@ -712,13 +809,18 @@ class PipelineEngine:
         pipeline_id: str,
         session_id: str,
         *,
-        auto_confirm: bool = True,
+        auto_confirm: bool = False,
     ) -> PipelineResult:
         """Setzt eine pausierte Pipeline nach User-Bestätigung fort.
 
-        Lädt den Checkpoint, rekonstruiert die Steps und ruft execute() mit
-        auto_confirm=True auf. Das Pre-Flight-Gate wird übersprungen, weil
-        ein Checkpoint vorhanden ist (is_resume=True).
+        Step-weise: bestätigt NUR den zuletzt wartenden Step (akkumuliert in
+        confirmed_indices im Checkpoint) und ruft execute() erneut auf. Enthält die
+        Pipeline weitere requires_confirmation-Steps, pausiert sie erneut
+        (Status AWAITING_CONFIRMATION) — eine Bestätigung autorisiert nie die
+        gesamte Pipeline.
+
+        auto_confirm=True erzwingt (rückwärtskompatibel) die Ausführung aller Steps
+        ohne weiteres Gate — nur für vertrauenswürdige/Test-Kontexte.
         """
         from core.pipeline_events import emit_pipeline_event, PipelineEvent
 
@@ -736,9 +838,27 @@ class PipelineEngine:
         except Exception as exc:
             raise ValueError(f"Checkpoint-Steps für Pipeline '{pipeline_id}' ungültig: {exc}") from exc
 
+        # Bisher bestätigte Indizes + den nun bestätigten wartenden Step übernehmen.
+        confirmed = set(checkpoint.get("confirmed_indices", []) or [])
+        awaiting = checkpoint.get("result", {}).get("steps", [])
+        for sr in awaiting:
+            if sr.get("status") == StepStatus.AWAITING_CONFIRMATION.value:
+                confirmed.add(int(sr.get("step_index", -1)))
+        confirmed.discard(-1)
+        completed_results: dict[int, StepResult] = {}
+        for sr in awaiting:
+            try:
+                step_result = StepResult.model_validate(sr)
+            except Exception:
+                continue
+            if step_result.status in (StepStatus.COMPLETED, StepStatus.SKIPPED):
+                completed_results[step_result.step_index] = step_result
+
         await emit_pipeline_event(PipelineEvent.pipeline_resumed(pipeline_id, session_id))
         return await self.execute(
-            steps, session_id, pipeline_id=pipeline_id, auto_confirm=auto_confirm,
+            steps, session_id, pipeline_id=pipeline_id,
+            auto_confirm=auto_confirm, confirmed_indices=confirmed,
+            completed_results=completed_results,
         )
 
     # ── Validation-Hilfsmethoden ─────────────────────────────────────────────

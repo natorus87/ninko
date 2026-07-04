@@ -215,11 +215,37 @@ async def list_agents(request: Request) -> AgentListResponse:
     return AgentListResponse(agents=[AgentDefinition(**a) for a in pub], total=len(pub))
 
 
+def _reject_reserved_agent_name(name: str) -> None:
+    """Blockt reservierte Built-in-Agent-Namen (verhindert Soul-/Routing-Kollision)."""
+    from core.agent_pool import _RESERVED_AGENT_NAMES
+
+    if (name or "").strip().casefold() in _RESERVED_AGENT_NAMES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Agent-Name '{name}' ist reserviert und nicht erlaubt.",
+        )
+
+
+def _validate_agent_create(body: AgentCreate) -> None:
+    _reject_reserved_agent_name(body.name)
+
+    from core.agent_pool import _MAX_SYSTEM_PROMPT_CHARS
+
+    if len(body.system_prompt or "") > _MAX_SYSTEM_PROMPT_CHARS:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"System-Prompt zu lang ({len(body.system_prompt)} Zeichen, "
+                f"max. {_MAX_SYSTEM_PROMPT_CHARS})."
+            ),
+        )
+
+
 @router.post("/", status_code=201)
 async def create_agent(body: AgentCreate, request: Request) -> dict:
+    _validate_agent_create(body)
     redis = get_redis()
     tenant_id = auth_tenant_id(resolve_request_auth(request))
-    agents = await _load_agents(redis, tenant_id)
 
     now = datetime.now(timezone.utc).isoformat()
     new_agent = AgentDefinition(
@@ -227,8 +253,14 @@ async def create_agent(body: AgentCreate, request: Request) -> dict:
         created_at=now,
         updated_at=now,
     )
-    agents.append({**new_agent.model_dump(), "tenant_id": tenant_id})
-    await _save_agents(redis, tenant_id, agents)
+    # Geteilter Lock mit dem DynamicAgentPool: verhindert Lost Updates zwischen
+    # API-Write und pool.register auf ninko:agents:<tenant>.
+    from core.agent_pool import get_agents_redis_lock
+
+    async with get_agents_redis_lock():
+        agents = await _load_agents(redis, tenant_id)
+        agents.append({**new_agent.model_dump(), "tenant_id": tenant_id})
+        await _save_agents(redis, tenant_id, agents)
     await _sync_agent_pool({**new_agent.model_dump(), "tenant_id": tenant_id})
     logger.info("Agent erstellt: %s (%s)", new_agent.name, new_agent.id)
     return {"id": new_agent.id, "status": "created"}
@@ -299,24 +331,27 @@ async def get_agent(agent_id: str, request: Request) -> dict:
 
 @router.put("/{agent_id}")
 async def update_agent(agent_id: str, body: AgentCreate, request: Request) -> dict:
+    _validate_agent_create(body)
     redis = get_redis()
     tenant_id = auth_tenant_id(resolve_request_auth(request))
-    agents = await _load_agents(redis, tenant_id)
-
-    idx = next((i for i, a in enumerate(agents) if a["id"] == agent_id), None)
-    if idx is None:
-        raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' nicht gefunden")
+    from core.agent_pool import get_agents_redis_lock
 
     now = datetime.now(timezone.utc).isoformat()
-    updated = {
-        **agents[idx],
-        **body.model_dump(),
-        "id": agent_id,
-        "updated_at": now,
-        "tenant_id": tenant_id,
-    }
-    agents[idx] = updated
-    await _save_agents(redis, tenant_id, agents)
+    async with get_agents_redis_lock():
+        agents = await _load_agents(redis, tenant_id)
+        idx = next((i for i, a in enumerate(agents) if a["id"] == agent_id), None)
+        if idx is None:
+            raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' nicht gefunden")
+
+        updated = {
+            **agents[idx],
+            **body.model_dump(),
+            "id": agent_id,
+            "updated_at": now,
+            "tenant_id": tenant_id,
+        }
+        agents[idx] = updated
+        await _save_agents(redis, tenant_id, agents)
     await _sync_agent_pool(updated)
     logger.info("Agent aktualisiert: %s", agent_id)
     return {"id": agent_id, "status": "updated"}
@@ -326,13 +361,16 @@ async def update_agent(agent_id: str, body: AgentCreate, request: Request) -> di
 async def delete_agent(agent_id: str, request: Request) -> dict:
     redis = get_redis()
     tenant_id = auth_tenant_id(resolve_request_auth(request))
-    agents = await _load_agents(redis, tenant_id)
-    deleted_agent = next((a for a in agents if a["id"] == agent_id), None)
-    if not deleted_agent:
-        raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' nicht gefunden")
+    from core.agent_pool import get_agents_redis_lock
 
-    agents = [a for a in agents if a["id"] != agent_id]
-    await _save_agents(redis, tenant_id, agents)
+    async with get_agents_redis_lock():
+        agents = await _load_agents(redis, tenant_id)
+        deleted_agent = next((a for a in agents if a["id"] == agent_id), None)
+        if not deleted_agent:
+            raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' nicht gefunden")
+
+        agents = [a for a in agents if a["id"] != agent_id]
+        await _save_agents(redis, tenant_id, agents)
     await _remove_agent_from_pool(agent_id, tenant_id)
 
     try:
@@ -351,6 +389,51 @@ async def delete_agent(agent_id: str, request: Request) -> dict:
         json.JSONDecodeError,
     ) as exc:
         logger.warning("Soul-Cleanup für Agent '%s' fehlgeschlagen: %s", agent_id, exc)
+
+    # Per-Agent-Overrides entfernen (sonst bleiben verwaiste, sicherheitsrelevante
+    # Einträge wie safeguard_enabled=false unbegrenzt in ninko:agent_configs).
+    try:
+        from core.agent_config_store import AgentConfigStore
+
+        await AgentConfigStore().delete_config(agent_id)
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        json.JSONDecodeError,
+    ) as exc:
+        logger.warning("Config-Cleanup für Agent '%s' fehlgeschlagen: %s", agent_id, exc)
+
+    # Referenzierende Scheduler-Tasks deaktivieren, sonst werfen sie bei jedem
+    # Cron-Lauf ValueError ("Agent nicht im Pool gefunden").
+    try:
+        from agents.scheduler_agent import get_scheduler_agent
+
+        scheduler = get_scheduler_agent()
+        if scheduler is not None:
+            for task in await scheduler.get_all_tasks():
+                if task.get("agent_id") == agent_id and task.get("enabled", True):
+                    await scheduler.update_task(task["id"], {"enabled": False})
+                    logger.info(
+                        "Scheduler-Task '%s' deaktiviert (Agent '%s' gelöscht).",
+                        task["id"],
+                        agent_id,
+                    )
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        json.JSONDecodeError,
+    ) as exc:
+        logger.warning(
+            "Scheduler-Task-Cleanup für Agent '%s' fehlgeschlagen: %s", agent_id, exc
+        )
 
     logger.info("Agent gelöscht: %s", agent_id)
     return {"id": agent_id, "deleted": True}

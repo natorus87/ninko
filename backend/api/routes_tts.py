@@ -65,6 +65,21 @@ def _parse_version_tuple(value: str) -> tuple[int, ...]:
 
 # ─── Routen ───────────────────────────────────────────────────────────────────
 
+@router.get("/audio/{filename}")
+async def serve_tts_audio(filename: str) -> Response:
+    """Liefert eine vom `speak`-Tool erzeugte WAV-Datei aus (kurzlebiger Store)."""
+    if ".." in filename or "/" in filename or not filename.endswith(".wav"):
+        raise HTTPException(status_code=400, detail="Ungültiger Dateiname")
+
+    from core.tts import TTS_AUDIO_DIR
+
+    filepath = TTS_AUDIO_DIR / filename
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail="Audio nicht gefunden oder abgelaufen")
+
+    return Response(content=filepath.read_bytes(), media_type="audio/wav")
+
+
 @router.get("/voices", response_model=list[VoiceEntry])
 async def list_voices() -> list[VoiceEntry]:
     """

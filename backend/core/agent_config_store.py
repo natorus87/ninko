@@ -7,12 +7,18 @@ Nutzt einen Hash-Key: ninko:agent_configs
 Kein Schema-Migration nötig — Redis-Hash wächst dynamisch.
 """
 
+import asyncio
 import json
 import logging
 
 logger = logging.getLogger("ninko.core.agent_config_store")
 
 REDIS_KEY = "ninko:agent_configs"
+
+# Serialisiert Read-Modify-Write auf dem gemeinsamen Hash, damit parallele Writes
+# (z.B. set_safeguard + set_profile aus zwei Requests) sich nicht gegenseitig
+# überschreiben. Prozessweit — wirkt in der Single-Process-Deployment.
+_config_write_lock = asyncio.Lock()
 
 
 class AgentConfigStore:
@@ -38,12 +44,26 @@ class AgentConfigStore:
         except json.JSONDecodeError:
             return {}
 
-    async def set_config(self, agent_id: str, key: str, value) -> None:
+    async def _mutate(self, agent_id: str, mutator) -> None:
+        """Atomares Read-Modify-Write auf dem Config-Hash (unter Lock)."""
         from core.redis_client import get_redis
-        config = await self.get_config(agent_id)
-        config[key] = value
         redis = get_redis()
-        await redis.connection.hset(REDIS_KEY, agent_id, json.dumps(config))
+        async with _config_write_lock:
+            config = await self.get_config(agent_id)
+            mutator(config)
+            await redis.connection.hset(REDIS_KEY, agent_id, json.dumps(config))
+
+    async def set_config(self, agent_id: str, key: str, value) -> None:
+        await self._mutate(agent_id, lambda config: config.__setitem__(key, value))
+
+    async def delete_config(self, agent_id: str) -> None:
+        """Entfernt alle gespeicherten Overrides eines Agenten (bei Agent-Delete).
+
+        Verhindert verwaiste, sicherheitsrelevante Einträge (z.B. safeguard_enabled=false).
+        """
+        from core.redis_client import get_redis
+        redis = get_redis()
+        await redis.connection.hdel(REDIS_KEY, agent_id)
 
     # ── Safeguard-spezifisch (convenience wrapper) ────────────────────────────
 
@@ -82,11 +102,7 @@ class AgentConfigStore:
 
     async def clear_profile(self, agent_id: str) -> None:
         """Entfernt die per-Agent Profil-Überschreibung (Fallback auf globales Profil)."""
-        from core.redis_client import get_redis
-        config = await self.get_config(agent_id)
-        config.pop("safeguard_profile", None)
-        redis = get_redis()
-        await redis.connection.hset(REDIS_KEY, agent_id, json.dumps(config))
+        await self._mutate(agent_id, lambda config: config.pop("safeguard_profile", None))
         logger.info("[AgentConfigStore] Agent '%s' safeguard_profile zurückgesetzt.", agent_id)
 
     # ── Safeguard Custom Classifier Policy (pro Agent) ────────────────────────
@@ -110,9 +126,7 @@ class AgentConfigStore:
 
     async def clear_classifier_policy(self, agent_id: str) -> None:
         """Remove the custom classifier policy (falls back to global default)."""
-        from core.redis_client import get_redis
-        config = await self.get_config(agent_id)
-        config.pop("safeguard_classifier_policy", None)
-        redis = get_redis()
-        await redis.connection.hset(REDIS_KEY, agent_id, json.dumps(config))
+        await self._mutate(
+            agent_id, lambda config: config.pop("safeguard_classifier_policy", None)
+        )
         logger.info("[AgentConfigStore] Agent '%s' safeguard_classifier_policy cleared.", agent_id)

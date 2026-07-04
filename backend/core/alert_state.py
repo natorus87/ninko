@@ -299,6 +299,15 @@ class AlertStateManager:
             )
             return False
 
+    async def release_notify_cooldown(self, alert_id: str) -> None:
+        """Gibt einen zuvor via should_notify reservierten Cooldown-Slot wieder frei.
+
+        Nötig, wenn should_notify True lieferte (Slot atomar reserviert), danach aber
+        doch keine Notification erfolgte — sonst würde der nächste echte Alert im
+        Cooldown-Fenster fälschlich unterdrückt.
+        """
+        await self._redis.connection.delete(f"{self.NOTIFY_PREFIX}{alert_id}")
+
     async def list_active(self, module: str | None = None) -> list[dict]:
         """
         Listet alle aktiven Alerts (optional gefiltert nach Modul).

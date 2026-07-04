@@ -95,4 +95,42 @@ async def synthesize_reply(
     return await service.synthesize(text=text, model_path=voice_path)
 
 
-__all__ = ["synthesize_reply", "is_tts_available"]
+# ── Kurzlebiger Audio-Store (statt Base64-Data-URLs im LLM-Kontext) ──────────
+import tempfile as _tempfile
+import time as _time
+import uuid as _uuid
+
+TTS_AUDIO_DIR = Path(_tempfile.gettempdir()) / "ninko-tts-audio"
+# Max. Alter ausgelieferter Audiodateien; ältere werden bei jedem Store aufgeräumt.
+_TTS_AUDIO_MAX_AGE_SECONDS = 3600
+
+
+def _cleanup_old_audio() -> None:
+    """Entfernt abgelaufene WAV-Dateien (best effort)."""
+    try:
+        now = _time.time()
+        for f in TTS_AUDIO_DIR.glob("*.wav"):
+            try:
+                if now - f.stat().st_mtime > _TTS_AUDIO_MAX_AGE_SECONDS:
+                    f.unlink()
+            except OSError:
+                continue
+    except OSError:
+        pass
+
+
+def store_audio(wav_bytes: bytes) -> str:
+    """Schreibt WAV-Bytes in den Serving-Ordner und gibt den Dateinamen zurück.
+
+    Genutzt vom `speak`-Tool: statt das komplette Audio als Base64-Data-URL in den
+    Tool-Return (und damit ins LLM-Kontextfenster) zu packen, wird es hier abgelegt
+    und über `GET /api/tts/audio/{filename}` ausgeliefert.
+    """
+    TTS_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+    _cleanup_old_audio()
+    filename = f"{_uuid.uuid4().hex}.wav"
+    (TTS_AUDIO_DIR / filename).write_bytes(wav_bytes)
+    return filename
+
+
+__all__ = ["synthesize_reply", "is_tts_available", "store_audio", "TTS_AUDIO_DIR"]

@@ -50,10 +50,25 @@ _SCHEDULER_EXCEPTIONS = (
     asyncio.TimeoutError,
 )
 
+_ERROR_RESPONSE_PREFIXES = ("fehler:", "error:", "erreur", "❌")
+
+
+def _response_indicates_error(response_text: str) -> bool:
+    """Heuristik: erkennt Fehler-Antwortstrings von Agent/Orchestrator.
+
+    Verhindert, dass inhaltliche Fehlermeldungen als Task-Status 'ok' geloggt werden.
+    """
+    stripped = (response_text or "").strip().lower()
+    return stripped.startswith(_ERROR_RESPONSE_PREFIXES)
+
+
 REDIS_KEY_TASKS = "ninko:scheduler:tasks"
 REDIS_KEY_LOG_PREFIX = "ninko:scheduler:log:"
 MAX_LOG_ENTRIES = 50
 CHECK_INTERVAL_SECONDS = 30
+# Obergrenze pro Task-Ausführung. Verhindert, dass ein hängender LLM-/Workflow-Call
+# den seriellen _check_and_run-Zyklus (und damit alle anderen fälligen Tasks) blockiert.
+TASK_EXECUTION_TIMEOUT_SECONDS = 600
 
 
 class SchedulerAgent:
@@ -73,12 +88,16 @@ class SchedulerAgent:
         self._redis = get_redis()
         self._running = False
         self._task: asyncio.Task | None = None
+        # Verhindert Doppelläufe desselben Tasks (Scheduler-Zyklus vs. run_task_now)
+        self._running_task_ids: set[str] = set()
 
     # ── Lifecycle ──────────────────────────────────────
 
     async def start_loop(self) -> None:
         """Startet die Scheduler-Schleife als Background-Task."""
         self._running = True
+        # Eigene Task-Referenz merken, damit stop() den Loop tatsächlich canceln kann.
+        self._task = asyncio.current_task()
         logger.info(
             "Scheduler-Agent gestartet (Intervall: %ds)",
             CHECK_INTERVAL_SECONDS,
@@ -89,6 +108,11 @@ class SchedulerAgent:
                 await self._check_and_run()
             except _SCHEDULER_EXCEPTIONS as exc:
                 logger.error("Scheduler-Cycle Fehler: %s", exc, exc_info=True)
+            except Exception as exc:
+                # Fängt alles Unerwartete (AttributeError, Provider-/LangGraph-Fehler),
+                # damit die Schleife nicht stirbt und alle Cron-Tasks bis zum
+                # Backend-Neustart stillstehen. Analog zum MonitorAgent.
+                logger.exception("Scheduler-Cycle unerwarteter Fehler: %s", exc)
 
             await asyncio.sleep(CHECK_INTERVAL_SECONDS)
 
@@ -123,7 +147,46 @@ class SchedulerAgent:
                     task["name"],
                     task["id"],
                 )
-                await self._execute_task(task)
+                await self._run_task_guarded(task)
+
+    async def _run_task_guarded(self, task: dict) -> dict | None:
+        """Führt einen Task mit Doppellauf-Schutz und hartem Timeout aus.
+
+        Verhindert, dass derselbe Task parallel läuft (Zyklus vs. run_task_now) und
+        dass ein hängender Lauf den seriellen Scheduler-Zyklus blockiert.
+        """
+        task_id = task["id"]
+        if task_id in self._running_task_ids:
+            logger.warning(
+                "Task '%s' (%s) läuft bereits – Doppellauf übersprungen.",
+                task.get("name"),
+                task_id,
+            )
+            return None
+        self._running_task_ids.add(task_id)
+        try:
+            return await asyncio.wait_for(
+                self._execute_task(task),
+                timeout=TASK_EXECUTION_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            logger.error(
+                "Task '%s' (%s) Timeout nach %ds – abgebrochen.",
+                task.get("name"),
+                task_id,
+                TASK_EXECUTION_TIMEOUT_SECONDS,
+            )
+            # next_run trotzdem fortschreiben, sonst feuert der überfällige Task
+            # in jedem Zyklus erneut.
+            try:
+                await self._update_after_execution(task, "error")
+            except _SCHEDULER_EXCEPTIONS as exc:
+                logger.warning(
+                    "next_run-Update nach Timeout fehlgeschlagen (%s): %s", task_id, exc
+                )
+            return None
+        finally:
+            self._running_task_ids.discard(task_id)
 
     async def _execute_task(self, task: dict) -> dict:
         """Führt einen einzelnen Task über den Orchestrator oder die WorkflowEngine aus."""
@@ -136,6 +199,7 @@ class SchedulerAgent:
         try:
             response_text = ""
             module_used = None
+            exec_status = "ok"
 
             if workflow_id:
                 # Workflow ausführen
@@ -163,12 +227,15 @@ class SchedulerAgent:
                 else:
                     response_text += f": {run_result.get('error', 'Unbekannter Fehler')}"
                 module_used = "workflow"
+                exec_status = "ok" if status == "succeeded" else "error"
 
             elif agent_id:
                 # Dynamischen Agenten aus dem Pool aufrufen
                 from core.agent_pool import get_agent_pool
                 pool = get_agent_pool()
-                agent, agent_name = pool.get_agent_by_id(agent_id)
+                # Scheduler ist ein System-Kontext ohne Session/Tenant → cross-tenant
+                # erlaubt, damit die (vom Owner erstellte) Task ihren Agenten findet.
+                agent, agent_name = pool.get_agent_by_id(agent_id, allow_cross_tenant=True)
                 if agent is None:
                     raise ValueError(f"Agent '{agent_id}' nicht im Pool gefunden.")
 
@@ -178,6 +245,7 @@ class SchedulerAgent:
                     chat_history=None,
                 )
                 module_used = f"agent:{agent_name}"
+                exec_status = "error" if _response_indicates_error(response_text) else "ok"
 
             else:
                 # Orchestrator ausführen (Prompt)
@@ -185,6 +253,7 @@ class SchedulerAgent:
                     message=task["prompt"],
                     chat_history=None,
                 )
+                exec_status = "error" if _response_indicates_error(response_text) else "ok"
 
             duration_ms = int((time.monotonic() - start_time) * 1000)
 
@@ -192,7 +261,7 @@ class SchedulerAgent:
                 "task_id": task_id,
                 "task_name": task["name"],
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "status": "ok" if (workflow_id and status == "succeeded") or (not workflow_id) else "error",
+                "status": exec_status,
                 "module_used": module_used,
                 "prompt": task.get("prompt", ""),
                 "workflow_id": workflow_id,
@@ -364,7 +433,7 @@ class SchedulerAgent:
         task = await self.get_task(task_id)
         if not task:
             return None
-        return await self._execute_task(task)
+        return await self._run_task_guarded(task)
 
     # ── Logs ───────────────────────────────────────────
 
