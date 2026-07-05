@@ -133,6 +133,57 @@ def test_clean_final_response_removes_agent_retry_meta(telegram_bot) -> None:
     assert "| Nodes | 1 |" in cleaned
 
 
+def test_telegram_command_menu_includes_operational_commands(telegram_bot) -> None:
+    commands = {item["command"] for item in telegram_bot._telegram_commands()}
+
+    assert {"start", "help", "status", "chatid", "pair", "clear", "reset"} <= commands
+
+
+@pytest.mark.asyncio
+async def test_streaming_preview_filters_meta_and_returns_route_meta(
+    telegram_bot, monkeypatch
+) -> None:
+    class _FakeOrchestrator:
+        async def route(self, **kwargs):
+            callback = kwargs.get("token_callback")
+            if callback:
+                await callback("1. I will call get_cluster_status.\n")
+                await callback("⚠️ 7 consecutive tool errors.\n")
+                await callback("Der Kubernetes-Cluster ist gesund.")
+            return (
+                "Der Kubernetes-Cluster ist gesund.",
+                "kubernetes",
+                False,
+                {"routing_confidence": 1.0},
+            )
+
+    app = types.SimpleNamespace(state=types.SimpleNamespace())
+    bot = telegram_bot.TelegramBot(app)
+    bot._send_preview_message = AsyncMock(return_value=42)
+    bot._edit_message = AsyncMock(return_value=True)
+
+    response, module, did_compact, route_meta, preview_id = await bot._route_with_live_preview(
+        orchestrator=_FakeOrchestrator(),
+        token="token",
+        chat_id=123,
+        message_id=7,
+        contextualized_text="Wie ist der Status von Kubernetes?",
+        history=[],
+        session_id="telegram_123",
+    )
+
+    assert response == "Der Kubernetes-Cluster ist gesund."
+    assert module == "kubernetes"
+    assert did_compact is False
+    assert route_meta == {"routing_confidence": 1.0}
+    assert preview_id == 42
+    edited_texts = [call.args[3] for call in bot._edit_message.await_args_list]
+    assert edited_texts
+    assert all("I will call" not in text for text in edited_texts)
+    assert all("consecutive tool errors" not in text for text in edited_texts)
+    assert any("Der Kubernetes-Cluster ist gesund" in text for text in edited_texts)
+
+
 class _FakeRedisConnection:
     def __init__(self, values: dict[str, str] | None = None) -> None:
         self.values = values or {}
