@@ -95,6 +95,63 @@ def _strip_pipeline_headers(text: str) -> str:
     return text.strip()
 
 
+def _strip_agent_meta_chatter(text: str) -> str:
+    """Remove planning/retry meta text that should not be sent over Telegram."""
+    if not text:
+        return ""
+
+    lines = text.splitlines()
+    cleaned: list[str] = []
+    skip_numbered_plan = False
+
+    for line in lines:
+        stripped = line.strip()
+        folded = stripped.casefold()
+
+        if not stripped:
+            if cleaned and cleaned[-1] != "":
+                cleaned.append("")
+            skip_numbered_plan = False
+            continue
+
+        if re.search(r"\bconsecutive\s+tool\s+errors\b", folded):
+            skip_numbered_plan = True
+            continue
+
+        if folded.startswith(
+            (
+                "let's try once more",
+                "lets try once more",
+                "i will call ",
+                "i will not repeat",
+                "i will now call",
+                "i will report ",
+                "my previous approach is wrong",
+            )
+        ):
+            skip_numbered_plan = True
+            continue
+
+        if re.match(r"^\d+\.\s+i\s+will\b", folded):
+            skip_numbered_plan = True
+            continue
+
+        if skip_numbered_plan and re.match(r"^\d+\.\s+", stripped):
+            continue
+
+        cleaned.append(line)
+        skip_numbered_plan = False
+
+    text = "\n".join(cleaned)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _clean_final_response(text: str) -> str:
+    """Apply all Telegram-specific response cleanup before final delivery."""
+    return _strip_agent_meta_chatter(_strip_pipeline_headers(text))
+
+
 def _plain_preview_text(text: str) -> str:
     """Keep live Telegram edits readable before the final HTML rendering pass."""
     text = re.sub(r"```[\s\S]*?```", lambda m: m.group(0).strip("`"), text)
@@ -105,7 +162,7 @@ def _plain_preview_text(text: str) -> str:
     text = re.sub(r"(?<!\w)_([^_\n]+)_(?!\w)", r"\1", text)
     text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
     text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
-    return _strip_pipeline_headers(text)
+    return _clean_final_response(text)
 
 
 def _telegram_error_message(exc: BaseException) -> str:
@@ -1411,9 +1468,17 @@ class TelegramBot:
                     return
 
             history = await redis.get_chat_history(session_id)
-            streaming_enabled = str(
-                conn.config.get("streaming", "false") if conn else "false"
-            ).lower() in ("true", "1", "yes")
+            streaming_enabled = False
+            if conn and str(conn.config.get("streaming", "false")).lower() in (
+                "true",
+                "1",
+                "yes",
+            ):
+                logger.info(
+                    "Telegram streaming preview is configured but disabled for "
+                    "chat %s; Telegram replies are final-only.",
+                    chat_id,
+                )
 
             # Chat-ID + detected language as context hint
             lang_hint = ""
@@ -1525,7 +1590,7 @@ class TelegramBot:
                     return
 
             # ── Text response (for text inputs only) ──────────────────────────
-            final_text = _strip_pipeline_headers(response_text)
+            final_text = _clean_final_response(response_text)
 
             # ── Image generation: detect marker, URL, or phrase ────────────
             image_path = None
