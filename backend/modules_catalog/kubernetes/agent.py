@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ast
+import json
 import re
 from typing import Any
 
@@ -163,8 +165,36 @@ def _is_simple_cluster_status_request(message: str) -> bool:
     return has_k8s_target and has_status_intent and not has_specific_scope and not has_action
 
 
-def _format_cluster_status(data: dict[str, Any]) -> str:
-    failing = int(data.get("failing_pods") or 0)
+def _coerce_cluster_status(data: Any) -> dict[str, Any]:
+    if isinstance(data, dict):
+        return data
+    if isinstance(data, str):
+        text = data.strip()
+        if not text:
+            raise ValueError("Kubernetes status tool returned an empty response.")
+        for parser in (json.loads, ast.literal_eval):
+            try:
+                parsed = parser(text)
+            except (ValueError, SyntaxError, TypeError):
+                continue
+            if isinstance(parsed, dict):
+                return parsed
+        raise ValueError(
+            "Kubernetes status tool returned a non-structured response: "
+            f"{text[:200]}"
+        )
+    raise TypeError(
+        "Kubernetes status tool returned "
+        f"{type(data).__name__}, expected dict or stringified dict."
+    )
+
+
+def _format_cluster_status(data: Any) -> str:
+    data = _coerce_cluster_status(data)
+    try:
+        failing = int(data.get("failing_pods") or 0)
+    except (TypeError, ValueError):
+        failing = 0
     status = "✅ Gesund" if failing == 0 else "⚠️ Prüfen"
     rows = [
         ("Status", status),
