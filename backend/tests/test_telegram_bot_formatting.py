@@ -28,19 +28,21 @@ def _install_stubs() -> None:
     """Inject minimal stub modules so the bot module can be loaded without
     booting FastAPI/Redis/LLM. The originals are saved on the
     ``_telegram_bot_orig_modules`` dict for the fixture to restore later."""
+    try:
+        __import__("agents.base_agent")
+    except ImportError:
+        if "agents" not in sys.modules:
+            sys.modules["agents"] = types.ModuleType("agents")
+        ba = types.ModuleType("agents.base_agent")
+        ba._t = lambda de, en=None, **_: de
+        ba._TOOL_SAFEGUARD_SENTINEL = "__TOOL_SAFEGUARD__"
+        sys.modules["agents.base_agent"] = ba
     if "core" not in sys.modules:
         sys.modules["core"] = types.ModuleType("core")
     if "core.redis_client" not in sys.modules:
         rc = types.ModuleType("core.redis_client")
         rc.get_redis = lambda: None
         sys.modules["core.redis_client"] = rc
-    if "agents" not in sys.modules:
-        sys.modules["agents"] = types.ModuleType("agents")
-    if "agents.base_agent" not in sys.modules:
-        ba = types.ModuleType("agents.base_agent")
-        ba._t = lambda de, en=None, **_: de
-        ba._TOOL_SAFEGUARD_SENTINEL = "__TOOL_SAFEGUARD__"
-        sys.modules["agents.base_agent"] = ba
     if "core.safeguard" not in sys.modules:
         sg = types.ModuleType("core.safeguard")
         sg.SAFEGUARD_PENDING_KEY = "ninko:safeguard_pending:{session_id}"
@@ -61,8 +63,8 @@ def telegram_bot():
     fixture saves the prior ``sys.modules`` entries for any modules it has to
     add so they are restored on teardown — keeping the stubs out of other
     test files that share the same interpreter."""
+    original_modules = {name: sys.modules.get(name) for name in _STUB_NAMES}
     _install_stubs()
-    original_bot = sys.modules.get("telegram_bot")
     spec = importlib.util.spec_from_file_location(
         "telegram_bot",
         _BOT_PATH,
@@ -75,10 +77,21 @@ def telegram_bot():
     try:
         yield bot
     finally:
-        if original_bot is None:
-            sys.modules.pop("telegram_bot", None)
-        else:
-            sys.modules["telegram_bot"] = original_bot
+        for name, module in original_modules.items():
+            if module is None:
+                sys.modules.pop(name, None)
+                if "." in name:
+                    parent_name, attr = name.rsplit(".", 1)
+                    parent = sys.modules.get(parent_name)
+                    if parent is not None and hasattr(parent, attr):
+                        delattr(parent, attr)
+            else:
+                sys.modules[name] = module
+                if "." in name:
+                    parent_name, attr = name.rsplit(".", 1)
+                    parent = sys.modules.get(parent_name)
+                    if parent is not None:
+                        setattr(parent, attr, module)
 
 
 def test_strip_pipeline_headers_removes_module_footer(telegram_bot) -> None:
@@ -96,6 +109,28 @@ def test_plain_preview_text_removes_markdown_and_footer(telegram_bot) -> None:
     assert "`" not in preview
     assert "_via proxmox_" not in preview
     assert "Proxmox Status" in preview
+
+
+def test_clean_final_response_removes_agent_retry_meta(telegram_bot) -> None:
+    response = (
+        "1. I will call get_cluster_status with the correct connection_id.\n"
+        "2. I will NOT repeat the call if it fails.\n"
+        "3. I will report the error clearly.\n\n"
+        "Let's try once more with the correct connection_id.\n"
+        "⚠️ 7 consecutive tool errors. My previous approach is wrong.\n\n"
+        "Der Kubernetes-Cluster ist gesund.\n\n"
+        "| Metrik | Wert |\n"
+        "| --- | --- |\n"
+        "| Nodes | 1 |\n"
+    )
+
+    cleaned = telegram_bot._clean_final_response(response)
+
+    assert "I will call" not in cleaned
+    assert "consecutive tool errors" not in cleaned
+    assert "Let's try" not in cleaned
+    assert "Der Kubernetes-Cluster ist gesund." in cleaned
+    assert "| Nodes | 1 |" in cleaned
 
 
 class _FakeRedisConnection:
