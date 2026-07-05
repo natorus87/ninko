@@ -27,6 +27,12 @@ Tippe dazu einfach einen dieser Befehle in den Telegram-Chat mit dem Bot ein:
 - `/clear`
 - `/reset`
 
+Weitere native Befehle im Telegram-Menü:
+- `/help` — Befehle und Beispiel-Prompts anzeigen
+- `/status` — Bot-/Session-Status, IDs, Streaming und Voice-Reply anzeigen
+- `/chatid` — aktuelle Chat-ID anzeigen
+- `/pair` — Pairing-Code erzeugen oder mit `/pair CODE` bestätigen
+
 Dies löscht das serverseitige Redis-Gedächtnis und Ninko beginnt den Chat kontextuell wieder von Null.
 
 ## Pairing & Zugriff (DM Policy)
@@ -50,6 +56,13 @@ Standardmäßig ist der Zugriff geschützt. Es gibt drei Wege, Nutzer zu autoris
 ### Chat‑ID anzeigen
 Der Bot zeigt die Chat‑ID immer an (auch vor Pairing):
 - `/chatid`
+
+## Streaming
+
+Wenn in der Telegram-Connection `streaming=true` gesetzt ist, sendet der Bot
+eine einzelne Preview-Nachricht und editiert diese während der Antwort. Interne
+Agenten-Zwischenschritte, Retry-Pläne und Tool-Fehler-Meta werden vor dem Edit
+gefiltert; im Chat soll nur Nutztext bzw. ein knapper Status sichtbar sein.
 
 ### Wichtige Hinweise
 - **`allow_from` nutzt User‑IDs**, nicht Chat‑IDs.
