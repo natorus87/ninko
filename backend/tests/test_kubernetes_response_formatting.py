@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from langchain_core.messages import AIMessage, ToolMessage
 
 from agents.middleware.base import MiddlewareContext
@@ -9,6 +10,21 @@ from agents.middleware.postprocess import (
     ResponseExtractionMiddleware,
     _format_kubernetes_tool_fallback,
 )
+
+
+def _import_real_base_agent():
+    import importlib
+    import sys
+
+    import agents
+    import agents.base_agent as base_agent
+
+    if not hasattr(base_agent, "get_memory"):
+        sys.modules.pop("agents.base_agent", None)
+        if hasattr(agents, "base_agent"):
+            delattr(agents, "base_agent")
+        base_agent = importlib.import_module("agents.base_agent")
+    return base_agent
 
 
 def test_kubernetes_node_tool_output_formats_as_markdown_table() -> None:
@@ -31,6 +47,7 @@ def test_kubernetes_node_tool_output_formats_as_markdown_table() -> None:
     assert "```json" not in formatted
 
 
+@pytest.mark.asyncio
 async def test_kubernetes_short_ai_response_gets_tool_table_appended() -> None:
     middleware = ResponseExtractionMiddleware()
     ctx = MiddlewareContext(
@@ -61,7 +78,7 @@ async def test_kubernetes_short_ai_response_gets_tool_table_appended() -> None:
 def test_simple_cluster_status_request_uses_fast_path_detector(monkeypatch) -> None:
     import importlib
 
-    import agents.base_agent as base_agent
+    base_agent = _import_real_base_agent()
 
     monkeypatch.setattr(base_agent, "get_memory", lambda: object())
     monkeypatch.setattr(base_agent, "get_context_manager", lambda: object())
@@ -73,15 +90,19 @@ def test_simple_cluster_status_request_uses_fast_path_detector(monkeypatch) -> N
     assert kubernetes_agent_module._is_simple_cluster_status_request(
         "Wie ist der Status von Kubernetes?"
     )
+    assert kubernetes_agent_module._is_simple_cluster_status_request(
+        "[Telegram Chat-ID: 1260743556]\nWie ist der Status von Kubernetes?"
+    )
     assert not kubernetes_agent_module._is_simple_cluster_status_request(
         "Wie ist der Status der Kubernetes Pods?"
     )
 
 
+@pytest.mark.asyncio
 async def test_simple_cluster_status_request_invokes_tool_once(monkeypatch) -> None:
     import importlib
 
-    import agents.base_agent as base_agent
+    base_agent = _import_real_base_agent()
 
     monkeypatch.setattr(base_agent, "get_memory", lambda: object())
     monkeypatch.setattr(base_agent, "get_context_manager", lambda: object())
