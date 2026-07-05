@@ -76,6 +76,19 @@ logger = logging.getLogger("ninko.modules.telegram.bot")
 _MAX_MSG_LEN = 4000
 
 
+def _telegram_commands() -> list[dict[str, str]]:
+    """Native Telegram command menu."""
+    return [
+        {"command": "start", "description": "Start bot and clear chat history"},
+        {"command": "help", "description": "Show commands and examples"},
+        {"command": "status", "description": "Show bot/session status"},
+        {"command": "chatid", "description": "Show this chat ID"},
+        {"command": "pair", "description": "Create or approve a pairing code"},
+        {"command": "clear", "description": "Clear chat history"},
+        {"command": "reset", "description": "Reset conversation memory"},
+    ]
+
+
 def _strip_pipeline_headers(text: str) -> str:
     """Remove transport-only markers from pipeline responses."""
     # **Step 1 – module:** (Markdown bold)
@@ -150,6 +163,14 @@ def _strip_agent_meta_chatter(text: str) -> str:
 def _clean_final_response(text: str) -> str:
     """Apply all Telegram-specific response cleanup before final delivery."""
     return _strip_agent_meta_chatter(_strip_pipeline_headers(text))
+
+
+def _safe_stream_preview(text: str) -> str:
+    """Return only user-facing partial text for Telegram live edits."""
+    preview = _plain_preview_text(text).strip()
+    if not preview:
+        return ""
+    return preview[-3900:]
 
 
 def _plain_preview_text(text: str) -> str:
@@ -360,12 +381,7 @@ class TelegramBot:
         Register native Telegram bot commands in the menu (OpenClaw-style).
         Commands appear in the Telegram command menu for easy access.
         """
-        commands = [
-            {"command": "start", "description": "Start the bot / clear chat history"},
-            {"command": "clear", "description": "Clear chat history and reset"},
-            {"command": "reset", "description": "Reset conversation memory"},
-            {"command": "chatid", "description": "Show your Telegram Chat ID"},
-        ]
+        commands = _telegram_commands()
 
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -907,7 +923,7 @@ class TelegramBot:
         history: list[dict[str, Any]],
         session_id: str,
         confirmed: bool = False,
-    ) -> tuple[str, str | None, bool, int | None]:
+    ) -> tuple[str, str | None, bool, dict, int | None]:
         """Run the orchestrator and edit a Telegram preview with streamed tokens."""
         preview_msg_id = await self._send_preview_message(
             token,
@@ -915,14 +931,14 @@ class TelegramBot:
             reply_to_message_id=message_id,
         )
         if not preview_msg_id:
-            response_text, module_used, did_compact, _ = await orchestrator.route(
+            response_text, module_used, did_compact, route_meta = await orchestrator.route(
                 message=contextualized_text,
                 chat_history=history,
                 session_id=session_id,
                 confirmed=confirmed,
                 wants_stream=True,
             )
-            return response_text, module_used, did_compact, None
+            return response_text, module_used, did_compact, route_meta, None
 
         token_queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=500)
         from core import status_bus
@@ -981,19 +997,19 @@ class TelegramBot:
                 enough_text = len(buffer) - last_sent_len >= 24
                 enough_time = now - last_edit_at >= 1.2
                 route_finished = route_task.done() and token_queue.empty()
+                preview = ""
                 if buffer:
-                    preview = _plain_preview_text(buffer)[-3900:]
+                    preview = _safe_stream_preview(buffer)
                     if not route_finished:
-                        preview = f"{preview} ..."
-                elif latest_status:
+                        preview = f"{preview} ..." if preview else ""
+                if not preview and latest_status:
                     preview = f"⏳ {latest_status}"
-                else:
-                    preview = ""
 
                 status_changed = bool(preview and preview != last_sent_preview)
                 if preview and (
                     route_finished
-                    or (buffer and enough_text and enough_time)
+                    or (preview.startswith("⏳") and status_changed and enough_time)
+                    or (buffer and enough_text and enough_time and status_changed)
                     or (not buffer and status_changed and enough_time)
                 ):
                     await self._edit_message(
@@ -1006,9 +1022,9 @@ class TelegramBot:
                     last_sent_len = len(buffer)
                     last_sent_preview = preview
 
-            response_text, module_used, did_compact, _ = await route_task
+            response_text, module_used, did_compact, route_meta = await route_task
             status_bus.cleanup(session_id)
-            return response_text, module_used, did_compact, preview_msg_id
+            return response_text, module_used, did_compact, route_meta, preview_msg_id
         except Exception:
             route_task.cancel()
             status_bus.cleanup(session_id)
@@ -1224,7 +1240,9 @@ class TelegramBot:
         if not chat_id or not text:
             return
 
-        cmd = text.strip().lower().split("@")[0]  # /clear@botname → /clear
+        command_parts = text.strip().split(maxsplit=1)
+        cmd = command_parts[0].lower().split("@")[0] if command_parts else ""
+        cmd_args = command_parts[1].strip() if len(command_parts) > 1 else ""
 
         user = msg.get("from", {})
         user_id = user.get("id")
@@ -1241,34 +1259,70 @@ class TelegramBot:
             )
             return
 
-        if cmd == "/pair":
-            if authorized:
-                await self._send(
-                    token,
-                    chat_id,
-                    _t(
-                        "✅ Du bist bereits autorisiert.",
-                        "✅ You are already authorized.",
-                    ),
-                )
-            else:
-                code = await self._generate_pairing_code(user_id)
-                await self._send(
-                    token,
-                    chat_id,
-                    _t(
-                        f"🔐 Pairing-Code: <code>{code}</code>\n\nGib diesen Code im Ninko Dashboard ein oder sende ihn einem Admin.",
-                        f"🔐 Pairing Code: <code>{code}</code>\n\nEnter this code in the Ninko Dashboard or send it to an admin.",
-                    ),
-                    parse_mode="HTML",
-                )
+        if cmd == "/help":
+            commands = "\n".join(
+                f"/{item['command']} - {item['description']}"
+                for item in _telegram_commands()
+            )
+            await self._send(
+                token,
+                chat_id,
+                _t(
+                    "🤖 <b>Ninko Telegram</b>\n\n"
+                    f"{commands}\n\n"
+                    "<b>Beispiele:</b>\n"
+                    "• Wie ist der Status von Kubernetes?\n"
+                    "• Zeige failing Pods\n"
+                    "• Restarte VM 104 in Proxmox",
+                    "🤖 <b>Ninko Telegram</b>\n\n"
+                    f"{commands}\n\n"
+                    "<b>Examples:</b>\n"
+                    "• What is the Kubernetes status?\n"
+                    "• Show failing pods\n"
+                    "• Restart VM 104 in Proxmox",
+                ),
+                parse_mode="HTML",
+            )
             return
 
-        if cmd.startswith("/pair ") and user_id:
-            # Admin approval: /pair CODE
-            parts = text.strip().split()
-            if len(parts) == 2:
-                code = parts[1].upper()
+        if cmd == "/status":
+            cfg = await self._get_connection_config()
+            streaming = str(cfg.get("streaming", "false")).lower() in (
+                "true",
+                "1",
+                "yes",
+            )
+            voice_reply = str(cfg.get("voice_reply", "false")).lower() in (
+                "true",
+                "1",
+                "yes",
+            )
+            await self._send(
+                token,
+                chat_id,
+                _t(
+                    "📊 <b>Telegram Status</b>\n\n"
+                    f"Bot: {'läuft' if self.running else 'gestoppt'}\n"
+                    f"Chat-ID: <code>{chat_id}</code>\n"
+                    f"User-ID: <code>{user_id}</code>\n"
+                    f"Autorisierung: {reason}\n"
+                    f"Streaming: {'an' if streaming else 'aus'}\n"
+                    f"Voice Reply: {'an' if voice_reply else 'aus'}",
+                    "📊 <b>Telegram Status</b>\n\n"
+                    f"Bot: {'running' if self.running else 'stopped'}\n"
+                    f"Chat ID: <code>{chat_id}</code>\n"
+                    f"User ID: <code>{user_id}</code>\n"
+                    f"Authorization: {reason}\n"
+                    f"Streaming: {'on' if streaming else 'off'}\n"
+                    f"Voice reply: {'on' if voice_reply else 'off'}",
+                ),
+                parse_mode="HTML",
+            )
+            return
+
+        if cmd == "/pair":
+            if cmd_args and user_id:
+                code = cmd_args.split()[0].upper()
                 success = await self._approve_pairing(code, user_id)
                 if success:
                     await self._send(
@@ -1288,6 +1342,26 @@ class TelegramBot:
                             "❌ Invalid or expired pairing code.",
                         ),
                     )
+            elif authorized:
+                await self._send(
+                    token,
+                    chat_id,
+                    _t(
+                        "✅ Du bist bereits autorisiert.",
+                        "✅ You are already authorized.",
+                    ),
+                )
+            else:
+                code = await self._generate_pairing_code(user_id)
+                await self._send(
+                    token,
+                    chat_id,
+                    _t(
+                        f"🔐 Pairing-Code: <code>{code}</code>\n\nGib diesen Code im Ninko Dashboard ein oder sende ihn einem Admin.",
+                        f"🔐 Pairing Code: <code>{code}</code>\n\nEnter this code in the Ninko Dashboard or send it to an admin.",
+                    ),
+                    parse_mode="HTML",
+                )
             return
 
         if not authorized and not is_group:
@@ -1468,17 +1542,16 @@ class TelegramBot:
                     return
 
             history = await redis.get_chat_history(session_id)
-            streaming_enabled = False
-            if conn and str(conn.config.get("streaming", "false")).lower() in (
-                "true",
-                "1",
-                "yes",
-            ):
-                logger.info(
-                    "Telegram streaming preview is configured but disabled for "
-                    "chat %s; Telegram replies are final-only.",
-                    chat_id,
+            streaming_enabled = bool(
+                conn
+                and str(conn.config.get("streaming", "false")).lower() in (
+                    "true",
+                    "1",
+                    "yes",
                 )
+            )
+            if streaming_enabled:
+                logger.debug("Telegram streaming preview enabled for chat %s.", chat_id)
 
             # Chat-ID + detected language as context hint
             lang_hint = ""
@@ -1496,6 +1569,7 @@ class TelegramBot:
                     response_text,
                     module_used,
                     did_compact,
+                    route_meta,
                     preview_msg_id,
                 ) = await self._route_with_live_preview(
                     orchestrator=orchestrator,
