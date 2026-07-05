@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from agents.base_agent import BaseAgent
@@ -111,7 +112,8 @@ Error handling:
 
 def _is_simple_cluster_status_request(message: str) -> bool:
     """Detect simple cluster health questions that do not need LLM planning."""
-    text = message.casefold()
+    text = re.sub(r"\[[^\]]+\]\s*", " ", message).casefold()
+    text = re.sub(r"(?:telegram\s+)?chat-?id[:\s]+\d+", " ", text)
     has_k8s_target = any(token in text for token in ("kubernetes", "k8s", "cluster"))
     has_status_intent = any(
         token in text
