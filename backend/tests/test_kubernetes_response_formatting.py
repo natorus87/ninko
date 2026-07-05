@@ -114,17 +114,17 @@ async def test_simple_cluster_status_request_invokes_tool_once(monkeypatch) -> N
 
     calls = 0
 
-    async def fake_ainvoke(_self, args: dict) -> dict:
+    async def fake_ainvoke(_self, args: dict) -> str:
         nonlocal calls
         calls += 1
-        return {
+        return str({
             "nodes": 1,
             "namespaces": 7,
             "total_pods": 19,
             "running_pods": 19,
             "failing_pods": 0,
             "deployments": 15,
-        }
+        })
 
     monkeypatch.setattr(
         type(kubernetes_agent_module.get_cluster_status),
@@ -141,3 +141,19 @@ async def test_simple_cluster_status_request_invokes_tool_once(monkeypatch) -> N
     assert did_compact is False
     assert "Der Kubernetes-Cluster wirkt gesund." in response
     assert "| Pods gesamt | 19 |" in response
+
+
+def test_cluster_status_formatter_rejects_plain_text(monkeypatch) -> None:
+    import importlib
+
+    base_agent = _import_real_base_agent()
+
+    monkeypatch.setattr(base_agent, "get_memory", lambda: object())
+    monkeypatch.setattr(base_agent, "get_context_manager", lambda: object())
+    monkeypatch.setattr(base_agent, "get_llm", lambda: object())
+    monkeypatch.setattr(base_agent, "create_react_agent", lambda **_: object())
+
+    kubernetes_agent_module = importlib.import_module("modules_catalog.kubernetes.agent")
+
+    with pytest.raises(ValueError, match="non-structured response"):
+        kubernetes_agent_module._format_cluster_status("cluster unavailable")
