@@ -1,6 +1,11 @@
 """
 Ninko Scheduler Agent – Autonome Aufgabenplanung mit Cron-Ausdrücken.
 Führt geplante Aufgaben über den Orchestrator aus und pusht Ergebnisse via PubSub.
+
+Hinweis Multi-Replica: Der Scheduler-Loop läuft pro Prozess; Doppellauf-Schutz
+(_running_task_ids) und _tasks_lock sind In-Memory. Bei mehr als einer
+Backend-Replica würde jeder Task pro Replica feuern — dann wären Leader-
+Election bzw. verteilte Locks (core/distributed_lock.py) nötig.
 """
 
 from __future__ import annotations
