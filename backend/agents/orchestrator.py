@@ -42,6 +42,8 @@ from agents.core_tools import (
     create_scheduled_task,
     list_scheduled_tasks,
     delete_scheduled_task,
+    run_agent_job,
+    get_agent_job_result,
 )
 from agents.alert_tools import (
     check_alert_state,
@@ -264,6 +266,9 @@ ENTSCHEIDUNGS-LOGIK:
      Output, Kritikalität). System-Prompt strukturiert aufbauen: ## Aufgaben / ## Arbeitsweise /
      ## Kritische Aktionen / ## Eskalation. Destruktive Aktionen immer gatten.
    → Mit `update_custom_agent` einen bestehenden Agenten verbessern wenn der User das möchte.
+   → Soll ein Agent EINMALIG eine Aufgabe ausführen: `run_agent_job(agent_id_or_name, prompt)` —
+     läuft im Hintergrund; Ergebnis später mit `get_agent_job_result(job_id)` abrufen.
+     Für WIEDERKEHRENDE Ausführung stattdessen `create_scheduled_task` mit agent_id.
 4. Braucht der User einen Workflow?
    → Einfache lineare Abfolge: `create_linear_workflow` SOFORT aufrufen.
    → Conditions, Loops oder Branching: `create_dag_workflow` aufrufen — NIEMALS nur erklären wie es geht.
@@ -321,6 +326,7 @@ class OrchestratorAgent(BaseAgent):
             tools.extend([run_script_tool, list_script_tools])
 
         tools.extend([create_scheduled_task, list_scheduled_tasks, delete_scheduled_task])
+        tools.extend([run_agent_job, get_agent_job_result])
 
         super().__init__(
             name="orchestrator",
