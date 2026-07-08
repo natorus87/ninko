@@ -549,14 +549,20 @@ class DynamicAgentPool:
             await self._close_live_agent(scoped_id)
         return True
 
-    def get_by_id(self, agent_id: str) -> "BaseAgent | None":
-        """Gibt einen Live-Agenten anhand seiner ID zurück."""
+    def get_by_id(self, agent_id: str, *, allow_cross_tenant: bool = False) -> "BaseAgent | None":
+        """Gibt einen Live-Agenten anhand seiner ID zurück.
+
+        Der Cross-Tenant-Scan läuft nur mit explizitem allow_cross_tenant=True
+        (System-Kontexte wie der Scheduler) — analog zu get_agent_by_id.
+        """
         tenant = _effective_tenant_id()
         scoped = _scoped_id(tenant, agent_id)
         if scoped in self._meta:
             agent = self._rehydrate(scoped)
             if agent is not None:
                 return agent
+        if not allow_cross_tenant:
+            return None
         for sid in list(self._meta.keys()):
             if sid.endswith(f":{agent_id}"):
                 agent = self._rehydrate(sid)
