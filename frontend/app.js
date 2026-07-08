@@ -7368,13 +7368,15 @@ ${messagesHtml}
     },
 
     async runScheduledTask(id) {
-        showNotification('Aufgabe wird ausgeführt…', 'info');
         try {
             const res = await fetch(`/api/scheduler/tasks/${id}/run`, { method: 'POST' });
             const result = await res.json();
+            // Läuft asynchron im Backend — Ergebnis kommt via WS-Event 'task_executed'
             showNotification(
-                `Aufgabe ausgeführt (${result.duration_ms}ms)`,
-                result.status === 'ok' ? 'success' : 'error'
+                result.status === 'already_running'
+                    ? 'Aufgabe läuft bereits.'
+                    : 'Aufgabe gestartet — Ergebnis erscheint in den Logs.',
+                'info'
             );
             await this.loadScheduledTasks();
         } catch (err) {
