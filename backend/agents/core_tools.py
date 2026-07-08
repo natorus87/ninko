@@ -2170,7 +2170,12 @@ async def create_scheduled_task(
                 "Error: Scheduler agent not available.",
             )
 
-        data: dict = {"name": name, "cron": cron, "enabled": True}
+        data: dict = {
+            "name": name,
+            "cron": cron,
+            "enabled": True,
+            "tenant_id": _current_tenant_id(),
+        }
         if workflow_id:
             data["workflow_id"] = workflow_id
         elif agent_id:
