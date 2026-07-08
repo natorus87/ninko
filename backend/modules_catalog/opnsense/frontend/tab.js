@@ -170,18 +170,9 @@ if (statusData.status === 'error') {
             const interfaces = interfacesData.data || [];
             const services = servicesData.data || [];
 
-            if (status.error) {
-                container.innerHTML = `<p class="empty-state text-error">OPNsense Fehler: ${this.esc(status.error)}</p>`;
-                return;
-            }
-
-            const status = statusData.data || {};
-            const interfaces = interfacesData.data || [];
-            const services = servicesData.data || [];
-
             // Prüfe auf Tool-Fehler in den Daten
             if (status.error) {
-                container.innerHTML = `<p class="empty-state text-error">OPNsense Fehler: ${esc(status.error)}</p>`;
+                container.innerHTML = `<p class="empty-state text-error">OPNsense Fehler: ${this.esc(status.error)}</p>`;
                 return;
             }
 
