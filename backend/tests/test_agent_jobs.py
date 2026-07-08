@@ -5,7 +5,6 @@ Tests für core/agent_jobs.py — einmalige Hintergrund-Ausführung von Agenten.
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -82,7 +81,9 @@ def _manager_with(redis_mock, agent) -> AgentJobManager:
     return manager
 
 
-async def _wait_terminal(manager: AgentJobManager, tenant: str, job_id: str, timeout: float = 2.0) -> dict:
+async def _wait_terminal(
+    manager: AgentJobManager, tenant: str, job_id: str, timeout: float = 2.0
+) -> dict:
     async def _poll():
         while True:
             job = await manager.get_job(tenant, job_id)
