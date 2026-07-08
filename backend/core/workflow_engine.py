@@ -157,12 +157,23 @@ async def sweep_orphan_workflow_runs(
     return interrupted
 
 
-class WorkflowEngine:
-    """Asynchrone Workflow-Ausführungsmaschine."""
+MAX_SUBFLOW_DEPTH = 5
 
-    def __init__(self, redis, orchestrator) -> None:
+
+class WorkflowEngine:
+    """Asynchrone Workflow-Ausführungsmaschine.
+
+    Hinweis Multi-Replica: Run-Updates werden nur über In-Process-Locks
+    (`get_run_update_lock`) serialisiert — bei mehr als einer Backend-Replica
+    wären verteilte Locks (core/distributed_lock.py) nötig.
+    """
+
+    def __init__(self, redis, orchestrator, *, subflow_stack: tuple[str, ...] = ()) -> None:
         self.redis = redis
         self.orchestrator = orchestrator
+        # Kette der Vorfahren-Workflow-IDs (scoped) für Subflow-Zyklus/Tiefen-Guard
+        self.subflow_stack = subflow_stack
+        self._current_workflow_id: str = ""
 
     async def execute(
         self,
@@ -174,6 +185,7 @@ class WorkflowEngine:
     ) -> None:
         """Führt einen Workflow aus und schreibt Statusupdates in Redis."""
         workflow_id = workflow["id"]
+        self._current_workflow_id = workflow_id
         workflow_name = workflow.get("name", "")
         workflow_version = int(workflow.get("version", 1) or 1)
         tenant_id = (
@@ -524,8 +536,21 @@ class WorkflowEngine:
             if not sub_wf:
                 raise ValueError(f"Sub-Workflow '{sub_workflow_public_id}' nicht gefunden")
 
+            # Zyklus-/Tiefen-Guard: verhindert Endlos-Rekursion bei Selbst-
+            # oder Kreuz-Referenzen zwischen Workflows.
+            ancestry = self.subflow_stack + (self._current_workflow_id,)
+            if scoped_sub_id in ancestry:
+                raise ValueError(
+                    f"Subflow-Zyklus erkannt: '{sub_workflow_public_id}' ist bereits "
+                    "in der Aufrufkette enthalten."
+                )
+            if len(ancestry) >= MAX_SUBFLOW_DEPTH:
+                raise ValueError(
+                    f"Maximale Subflow-Tiefe ({MAX_SUBFLOW_DEPTH}) erreicht."
+                )
+
             sub_run_id = str(uuid.uuid4())
-            sub_engine = WorkflowEngine(self.redis, self.orchestrator)
+            sub_engine = WorkflowEngine(self.redis, self.orchestrator, subflow_stack=ancestry)
             await sub_engine.execute(
                 sub_wf,
                 sub_run_id,
@@ -677,7 +702,7 @@ class WorkflowEngine:
         if node_type == "debate":
             return await self._execute_debate_node(config, variables, tenant_id)
 
-        return f"Unbekannter Node-Typ: {node_type}", None
+        raise ValueError(f"Unbekannter Node-Typ: '{node_type}'")
 
     async def _execute_debate_node(
         self,
@@ -735,34 +760,43 @@ class WorkflowEngine:
         return result_summary, None
 
     def _evaluate_condition(self, expr: str, previous: str, variables: dict) -> bool:
-        """Wertet eine Condition-Expression aus. Gibt True/False zurück."""
+        """Wertet eine Condition-Expression aus. Gibt True/False zurück.
+
+        Unbekannte Expressions werfen ValueError (→ Step failed) statt
+        still True zu liefern — Tippfehler sollen sichtbar scheitern.
+        """
+        from core.workflow_validation import CONDITION_PATTERNS
+
         expr = expr.strip()
 
-        m = re.match(r"output\.contains\(['\"](.+?)['\"]\)", expr)
+        if expr.lower() in ("true", "false"):
+            return expr.lower() == "true"
+
+        m = CONDITION_PATTERNS["contains"].match(expr)
         if m:
             return m.group(1).lower() in previous.lower()
 
-        m = re.match(r"output\.startswith\(['\"](.+?)['\"]\)", expr)
+        m = CONDITION_PATTERNS["startswith"].match(expr)
         if m:
             return previous.lower().startswith(m.group(1).lower())
 
-        m = re.match(r"output\.endswith\(['\"](.+?)['\"]\)", expr)
+        m = CONDITION_PATTERNS["endswith"].match(expr)
         if m:
             return previous.lower().endswith(m.group(1).lower())
 
-        m = re.match(r"output\.matches\(['\"](.+?)['\"]\)", expr)
+        m = CONDITION_PATTERNS["matches"].match(expr)
         if m:
             try:
                 return bool(re.search(m.group(1), previous))
             except re.error:
                 return False
 
-        m = re.match(r"len\(output\)\s*([><=!]+)\s*(\d+)", expr)
+        m = CONDITION_PATTERNS["output_len"].match(expr)
         if m:
             op, val = m.group(1), int(m.group(2))
             return _compare(len(previous), op, val)
 
-        m = re.match(r"variable\.(\w+)\s*([><=!]+)\s*['\"]?([^'\"]+?)['\"]?$", expr)
+        m = CONDITION_PATTERNS["variable"].match(expr)
         if m:
             var_val = variables.get(m.group(1), "")
             op = m.group(2)
@@ -776,8 +810,7 @@ class WorkflowEngine:
                     return str(var_val) != rhs
                 return False
 
-        logger.debug("Unbekannte Condition-Expression '%s' → fallback true", expr)
-        return True
+        raise ValueError(f"Unbekannte Condition-Expression: '{expr}'")
 
     def _interpolate(self, template: str, variables: dict) -> str:
         """Ersetzt {variable_name} Platzhalter."""
@@ -899,6 +932,7 @@ class WorkflowEngine:
     ) -> None:
         """Führt einen fehlgeschlagenen Step erneut aus und setzt den Workflow fort."""
         workflow_id = workflow_def.get("id", "unknown")
+        self._current_workflow_id = workflow_id
         tenant_id = workflow_def.get("tenant_id") or _tenant_from_scoped_workflow_id(workflow_id)
         workflow_name = workflow_def.get("name", "Unnamed")
         nodes = workflow_def.get("nodes", [])
