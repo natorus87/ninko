@@ -616,6 +616,25 @@ print('Hello, World!')"></textarea>
                         <p class="empty-state">Lade Vorlagen…</p>
                     </div>
                 </div>
+                <!-- Agent-Jobs Panel (Einmal-Ausführung + Historie) -->
+                <div id="agenten-jobs" class="module-dashboard hidden">
+                    <div class="page-header">
+                        <h2>▶ Agent ausführen: <span id="agent-jobs-agent-name"></span></h2>
+                        <button class="btn btn-outline" data-action="closeAgentJobsPanel">← Zurück</button>
+                    </div>
+                    <div class="form-row" style="max-width:700px;">
+                        <label class="form-label" for="agent-job-prompt">Aufgabe (einmalige Ausführung)</label>
+                        <textarea id="agent-job-prompt" class="form-input" rows="3" style="resize:vertical"
+                            placeholder="Was soll der Agent jetzt einmalig tun?"></textarea>
+                        <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+                            <button class="btn btn-primary" data-action="startAgentJob">▶ Job starten</button>
+                        </div>
+                    </div>
+                    <h3 style="margin-top:1.5rem;">Job-Historie</h3>
+                    <div id="agent-jobs-list">
+                        <p class="empty-state">Lade Jobs…</p>
+                    </div>
+                </div>
                 <!-- Skills Panel -->
                 <div id="agenten-skills" class="module-dashboard hidden">
                     <div class="page-header">
