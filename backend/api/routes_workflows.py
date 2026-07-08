@@ -75,6 +75,19 @@ def _versions_key(tenant_id: str, scoped_workflow_id: str) -> str:
     return f"{_tenant_key(REDIS_KEY_WORKFLOW_VERSIONS, tenant_id)}:{scoped_workflow_id}"
 
 
+def _validate_or_422(nodes: list, edges: list, *, public_workflow_id: str = "") -> None:
+    """Validiert die Workflow-Struktur und wirft 422 mit Fehlerliste."""
+    from core.workflow_validation import validate_workflow_definition
+
+    errors = validate_workflow_definition(
+        [n.model_dump() if hasattr(n, "model_dump") else n for n in nodes],
+        [e.model_dump() if hasattr(e, "model_dump") else e for e in edges],
+        public_workflow_id=public_workflow_id,
+    )
+    if errors:
+        raise HTTPException(status_code=422, detail={"errors": errors})
+
+
 async def _load_workflows(redis, tenant_id: str) -> list[dict]:
     raw = await redis.connection.get(_tenant_key(REDIS_KEY_WORKFLOWS, tenant_id))
     return json.loads(raw) if raw else []
@@ -138,6 +151,7 @@ async def list_workflows(request: Request) -> WorkflowListResponse:
 @router.post("/", status_code=201)
 async def create_workflow(body: WorkflowCreate, request: Request) -> dict:
     """Neuen Workflow erstellen."""
+    _validate_or_422(body.nodes, body.edges, public_workflow_id=body.id)
     redis = get_redis()
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     workflows = await _load_workflows(redis, tenant_id)
@@ -186,6 +200,12 @@ async def instantiate_workflow_template(
     instance = instantiate_template(template_id, name)
     if not instance:
         raise HTTPException(status_code=404, detail=f"Template '{template_id}' nicht gefunden")
+
+    _validate_or_422(
+        instance.get("nodes", []),
+        instance.get("edges", []),
+        public_workflow_id=str(instance.get("id", "")),
+    )
 
     redis = get_redis()
     tenant_id = auth_tenant_id(resolve_request_auth(request))
@@ -250,6 +270,7 @@ async def get_workflow(workflow_id: str, request: Request) -> dict:
 @router.put("/{workflow_id}")
 async def update_workflow(workflow_id: str, body: WorkflowCreate, request: Request) -> dict:
     """Workflow bearbeiten."""
+    _validate_or_422(body.nodes, body.edges, public_workflow_id=workflow_id)
     redis = get_redis()
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     workflows = await _load_workflows(redis, tenant_id)
@@ -502,43 +523,47 @@ async def retry_workflow_step(run_id: str, step_index: int, request: Request) ->
     if not workflow_id:
         raise HTTPException(status_code=404, detail=f"Run '{run_id}' nicht gefunden")
 
-    # Run laden
+    # Read-Modify-Write der Run-Liste unter dem gemeinsamen Engine-Lock,
+    # damit ein parallel schreibender Workflow-Run nichts überschreibt.
+    from core.workflow_engine import get_run_update_lock
+
     runs_key = f"{_tenant_key(REDIS_KEY_RUNS_PREFIX, tenant_id)}{workflow_id}"
-    runs_raw = await redis.connection.get(runs_key)
-    runs = json.loads(runs_raw) if runs_raw else []
-    run = next((r for r in runs if r["id"] == run_id), None)
+    async with get_run_update_lock(tenant_id, workflow_id):
+        runs_raw = await redis.connection.get(runs_key)
+        runs = json.loads(runs_raw) if runs_raw else []
+        run = next((r for r in runs if r["id"] == run_id), None)
 
-    if not run:
-        raise HTTPException(status_code=404, detail=f"Run '{run_id}' nicht gefunden")
+        if not run:
+            raise HTTPException(status_code=404, detail=f"Run '{run_id}' nicht gefunden")
 
-    # Step validieren
-    steps = run.get("steps", [])
-    if step_index < 0 or step_index >= len(steps):
-        raise HTTPException(status_code=400, detail=f"Ungültiger Step-Index: {step_index}")
+        # Step validieren
+        steps = run.get("steps", [])
+        if step_index < 0 or step_index >= len(steps):
+            raise HTTPException(status_code=400, detail=f"Ungültiger Step-Index: {step_index}")
 
-    step = steps[step_index]
-    if step.get("status") not in ["failed", "error"]:
-        raise HTTPException(
-            status_code=400, detail="Nur fehlgeschlagene Steps können retry't werden"
-        )
+        step = steps[step_index]
+        if step.get("status") not in ["failed", "error"]:
+            raise HTTPException(
+                status_code=400, detail="Nur fehlgeschlagene Steps können retry't werden"
+            )
 
-    # Workflow laden
-    workflows = await _load_workflows(redis, tenant_id)
-    wf = next((w for w in workflows if w["id"] == workflow_id), None)
-    if not wf:
-        raise HTTPException(status_code=404, detail="Workflow nicht gefunden")
+        # Workflow laden
+        workflows = await _load_workflows(redis, tenant_id)
+        wf = next((w for w in workflows if w["id"] == workflow_id), None)
+        if not wf:
+            raise HTTPException(status_code=404, detail="Workflow nicht gefunden")
 
-    # Step zurücksetzen
-    step["status"] = "pending"
-    step["error"] = None
-    step["output"] = None
-    step["started_at"] = None
-    step["finished_at"] = None
-    step["duration_ms"] = None
-    step["attempts"] = (step.get("attempts") or 0) + 1
+        # Step zurücksetzen
+        step["status"] = "pending"
+        step["error"] = None
+        step["output"] = None
+        step["started_at"] = None
+        step["finished_at"] = None
+        step["duration_ms"] = None
+        step["attempts"] = (step.get("attempts") or 0) + 1
 
-    # Aktualisierten Run speichern
-    await redis.connection.set(runs_key, json.dumps(runs))
+        # Aktualisierten Run speichern
+        await redis.connection.set(runs_key, json.dumps(runs))
 
     # Step asynchron neu ausführen
     try:
