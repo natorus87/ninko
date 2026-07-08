@@ -167,6 +167,10 @@ async def create_workflow(body: WorkflowCreate, request: Request) -> dict:
     )
     workflows.append({**new_wf.model_dump(), "tenant_id": tenant_id})
     await _save_workflows(redis, tenant_id, workflows)
+
+    from core.workflow_cron_sync import sync_workflow_cron_trigger
+
+    await sync_workflow_cron_trigger(workflows[-1], tenant_id)
     logger.info("Workflow erstellt: %s (%s)", new_wf.name, scoped_id)
     return {"id": body.id, "status": "created"}
 
@@ -225,6 +229,9 @@ async def instantiate_workflow_template(
     workflows.append({**workflow_def.model_dump(), "tenant_id": tenant_id})
     await _save_workflows(redis, tenant_id, workflows)
 
+    from core.workflow_cron_sync import sync_workflow_cron_trigger
+
+    await sync_workflow_cron_trigger(workflows[-1], tenant_id)
     logger.info("Workflow aus Template erstellt: %s (%s)", workflow_def.name, scoped_id)
     return {"id": public_id, "status": "created", "template_id": template_id}
 
@@ -305,6 +312,10 @@ async def update_workflow(workflow_id: str, body: WorkflowCreate, request: Reque
         "updated_at": now,
     }
     await _save_workflows(redis, tenant_id, workflows)
+
+    from core.workflow_cron_sync import sync_workflow_cron_trigger
+
+    await sync_workflow_cron_trigger(workflows[idx], tenant_id)
     logger.info("Workflow aktualisiert: %s", workflow_id)
     return {"id": workflow_id, "status": "updated", "version": next_version}
 
@@ -330,6 +341,10 @@ async def delete_workflow(workflow_id: str, request: Request) -> dict:
         run_index = json.loads(index_raw)
         run_index = {k: v for k, v in run_index.items() if v != scoped_id}
         await redis.connection.set(run_index_key, json.dumps(run_index))
+
+    from core.workflow_cron_sync import remove_workflow_cron_trigger
+
+    await remove_workflow_cron_trigger(tenant_id, workflow_id)
     logger.info("Workflow gelöscht: %s", workflow_id)
     return {"id": workflow_id, "deleted": True}
 
@@ -467,6 +482,10 @@ async def restore_workflow_version(workflow_id: str, version: int, request: Requ
 
     await _save_workflows(redis, tenant_id, workflows)
     await redis.connection.set(versions_key, json.dumps(versions))
+
+    from core.workflow_cron_sync import sync_workflow_cron_trigger
+
+    await sync_workflow_cron_trigger(restored, tenant_id)
     return {"id": workflow_id, "status": "restored", "version": restored["version"]}
 
 
