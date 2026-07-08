@@ -1969,6 +1969,7 @@ async def generate_pdf_report(
         Absoluter Pfad zur erstellten PDF-Datei
     """
     import html as _html
+    import uuid
     from pathlib import Path
 
     # Feste Report-Basis. LLM-kontrollierte output_path müssen darunter liegen,
