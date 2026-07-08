@@ -131,15 +131,13 @@ def validate_workflow_definition(
                     "Beispiel: '0 8 * * *'."
                 )
 
+        # Leere subflow.workflow_id / script.script_id sind als Entwurf erlaubt
+        # (Templates liefern Platzhalter) — die Engine schlägt zur Laufzeit
+        # sichtbar fehl. Nur Selbstreferenzen werden hier abgefangen.
         if node_type == "subflow":
             sub_id = str(config.get("workflow_id", "")).strip()
-            if not sub_id:
-                errors.append(f"Node '{node_id}': subflow.workflow_id fehlt.")
-            elif public_workflow_id and sub_id == public_workflow_id:
+            if sub_id and public_workflow_id and sub_id == public_workflow_id:
                 errors.append(f"Node '{node_id}': Subflow referenziert den eigenen Workflow.")
-
-        if node_type == "script" and not str(config.get("script_id", "")).strip():
-            errors.append(f"Node '{node_id}': script.script_id fehlt.")
 
     valid_ids = set(node_ids)
     for edge in edges:

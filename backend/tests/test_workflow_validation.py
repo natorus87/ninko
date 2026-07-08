@@ -126,11 +126,12 @@ class TestTypeSpecificConfig:
         nodes[0] = _node("start", "trigger", {"mode": "cron", "cron": "0 8 * * *"})
         assert validate_workflow_definition(nodes, edges) == []
 
-    def test_subflow_without_workflow_id_rejected(self):
+    def test_subflow_with_empty_workflow_id_allowed_as_draft(self):
+        # Templates liefern leere Platzhalter — als Entwurf speicherbar,
+        # Laufzeitfehler bleibt sichtbar (Engine wirft ValueError).
         nodes, edges = _valid_workflow()
-        nodes.append(_node("sub", "subflow", {}))
-        errors = validate_workflow_definition(nodes, edges)
-        assert any("subflow.workflow_id fehlt" in e for e in errors)
+        nodes.append(_node("sub", "subflow", {"workflow_id": ""}))
+        assert validate_workflow_definition(nodes, edges) == []
 
     def test_subflow_self_reference_rejected(self):
         nodes, edges = _valid_workflow()
@@ -138,8 +139,7 @@ class TestTypeSpecificConfig:
         errors = validate_workflow_definition(nodes, edges, public_workflow_id="wf-self")
         assert any("eigenen Workflow" in e for e in errors)
 
-    def test_script_without_script_id_rejected(self):
+    def test_script_with_empty_script_id_allowed_as_draft(self):
         nodes, edges = _valid_workflow()
         nodes.append(_node("scr", "script", {}))
-        errors = validate_workflow_definition(nodes, edges)
-        assert any("script.script_id fehlt" in e for e in errors)
+        assert validate_workflow_definition(nodes, edges) == []
