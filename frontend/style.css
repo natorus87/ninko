@@ -1695,11 +1695,11 @@ select {
     margin-bottom: 0.55rem;
     font-size: clamp(1.72rem, 2.44vw, 2.85rem);
     font-weight: 650;
-    line-height: 1.08;
+    line-height: 1.14;
     letter-spacing: -0.025em;
     max-width: none;
-    white-space: nowrap;
-    text-wrap: nowrap;
+    white-space: normal;
+    text-wrap: balance;
     text-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
 }
 
@@ -1751,8 +1751,8 @@ select {
 
     .dh-intro h2 {
         white-space: normal;
-        max-width: 10ch;
-        font-size: clamp(1.9rem, 7.2vw, 2.8rem);
+        max-width: 100%;
+        font-size: clamp(1.35rem, 5.6vw, 1.9rem);
     }
 
     .dh-intro p {
@@ -4855,10 +4855,13 @@ select {
         position: fixed;
         left: 12px;
         top: env(safe-area-inset-top, 12px);
-        height: calc(100vh - 24px - env(safe-area-inset-bottom, 0px));
+        /* 64px Mobile-Nav (z-index 1001) liegt über dem Drawer — Höhe entsprechend kürzen */
+        height: calc(100vh - 24px - 64px - env(safe-area-inset-bottom, 0px));
         z-index: 1000;
-        transform: translateX(-100%);
-        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        /* -100% allein lässt wegen left:12px einen sichtbaren Streifen stehen */
+        transform: translateX(calc(-100% - 12px));
+        visibility: hidden;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s 0.3s;
         width: 240px !important;
         background: var(--bg-sidenav);
         border-radius: 24px;
@@ -4866,11 +4869,43 @@ select {
 
     .sidebar.mobile-open {
         transform: translateX(0);
+        visibility: visible;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s;
         width: 240px !important;
     }
 
     .sidebar-panels {
-        width: 100%;
+        /* Wie Desktop: 3 Panels à 33.333%, Slide via translateX — 100% quetscht alle Panels übereinander */
+        width: 300%;
+    }
+
+    /* Drawer ist 240px breit: Labels + Verlauf wieder einblenden
+       (werden weiter oben von der älteren Icon-Sidebar-Regel versteckt) */
+    .sidebar .tab-label {
+        display: block;
+    }
+
+    .sidebar .nav-tab {
+        justify-content: flex-start;
+        padding: 0.74rem 0.9rem;
+    }
+
+    .sidebar .sidebar-history-section {
+        display: flex;
+    }
+
+    .sidebar .sidebar-account-meta,
+    .sidebar .sidebar-account-arrow {
+        display: block;
+    }
+
+    .sidebar .sidebar-account-trigger {
+        justify-content: flex-start;
+    }
+
+    /* Platz für den fixen Hamburger-Button (links oben) schaffen */
+    .page-header {
+        padding-left: 44px;
     }
 
     .main-content {
