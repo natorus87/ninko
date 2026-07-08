@@ -6604,6 +6604,7 @@ ${messagesHtml}
                             <div class="task-card-title">
                                 <strong>${this._escapeHtml(task.name)}</strong>
                                 ${statusBadge}
+                                ${task.source === 'workflow_trigger' ? '<span class="task-badge task-badge-module" title="Automatisch aus einem Workflow-Cron-Trigger erzeugt">aus Workflow</span>' : ''}
                                 ${task.target_module ? `<span class="task-badge task-badge-module">${this._escapeHtml(task.target_module)}</span>` : ''}
                             </div>
                             <div class="task-card-actions">
