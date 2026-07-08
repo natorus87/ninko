@@ -678,20 +678,39 @@ async def create_dag_workflow(
             }
         )
 
-    # Edges mit gemappten IDs aufbauen
+    # Edges mit gemappten IDs aufbauen. Unbekannte Referenzen sind ein harter
+    # Fehler — still verworfene Edges würden einen kaputten Graphen erzeugen.
     built_edges = []
     for e in edges:
-        src = id_map.get(str(e.get("source_id", "")), "")
-        tgt = id_map.get(str(e.get("target_id", "")), "")
-        if src and tgt:
-            built_edges.append(
-                {
-                    "id": str(uuid.uuid4())[:8],
-                    "source_id": src,
-                    "target_id": tgt,
-                    "label": e.get("label", ""),
-                }
+        raw_src = str(e.get("source_id", ""))
+        raw_tgt = str(e.get("target_id", ""))
+        src = id_map.get(raw_src, "")
+        tgt = id_map.get(raw_tgt, "")
+        if not src or not tgt:
+            unknown = raw_src if not src else raw_tgt
+            return _t(
+                f"Fehler: Edge referenziert unbekannte Node-ID '{unknown}'. "
+                "Alle source_id/target_id müssen auf definierte Nodes zeigen.",
+                f"Error: Edge references unknown node id '{unknown}'. "
+                "All source_id/target_id must point to defined nodes.",
             )
+        built_edges.append(
+            {
+                "id": str(uuid.uuid4())[:8],
+                "source_id": src,
+                "target_id": tgt,
+                "label": e.get("label", ""),
+            }
+        )
+
+    from core.workflow_validation import validate_workflow_definition
+
+    validation_errors = validate_workflow_definition(built_nodes, built_edges)
+    if validation_errors:
+        return _t(
+            "Fehler: Workflow-Definition ungültig:\n- " + "\n- ".join(validation_errors),
+            "Error: Invalid workflow definition:\n- " + "\n- ".join(validation_errors),
+        )
 
     redis = get_redis()
     tenant_id = _current_tenant_id()
@@ -851,7 +870,7 @@ async def execute_workflow(workflow_name_or_id: str) -> str:
             for w in workflows
             if w["id"] == workflow_name_or_id
             or w["id"] == scoped_lookup_id
-            or w["name"].lower() == workflow_name_or_id.lower()
+            or str(w.get("name", "")).lower() == workflow_name_or_id.lower()
         ),
         None,
     )
@@ -994,9 +1013,14 @@ async def execute_workflow(workflow_name_or_id: str) -> str:
             trace += "\n</details>"
             return trace
 
+    public_id = _public_workflow_id(wf_id)
     return _t(
-        f"Warnung: Das Timeout (2 Minuten) für den Workflow '{wf.get('name')}' wurde erreicht. Er läuft möglicherweise noch im Hintergrund.",
-        f"Warning: The timeout (2 minutes) for workflow '{wf.get('name')}' was reached. It may still be running in the background.",
+        f"Warnung: Das Timeout (2 Minuten) für den Workflow '{wf.get('name')}' wurde erreicht. "
+        f"Er läuft möglicherweise noch im Hintergrund (Run-ID: {run_id}). "
+        f"Status abrufbar via GET /api/workflows/{public_id}/runs.",
+        f"Warning: The timeout (2 minutes) for workflow '{wf.get('name')}' was reached. "
+        f"It may still be running in the background (run id: {run_id}). "
+        f"Check status via GET /api/workflows/{public_id}/runs.",
     )
 
 
