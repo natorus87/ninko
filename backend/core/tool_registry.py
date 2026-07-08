@@ -142,6 +142,8 @@ _TOOL_STATUS_LABELS: dict[str, str] = {
     "forget_fact": _t(de="Suche zu löschende Fakten", en="Searching facts to forget"),
     "confirm_forget": _t(de="Lösche Fakten", en="Deleting facts"),
     "create_custom_agent": _t(de="Erstelle Agenten", en="Creating agent"),
+    "run_agent_job": _t(de="Starte Agent-Job", en="Starting agent job"),
+    "get_agent_job_result": _t(de="Lade Agent-Job-Ergebnis", en="Loading agent job result"),
     "install_skill": _t(de="Installiere Skill", en="Installing skill"),
     "get_fritzbox_status": _t(de="Lade FritzBox-Status", en="Loading FritzBox status"),
     "get_connected_devices": _t(
@@ -693,7 +695,9 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
         ToolMetadata("record_alert", "core", tier=ToolTier.WRITE_DATA),
         ToolMetadata("resolve_alert", "core", tier=ToolTier.WRITE_DATA),
         ToolMetadata("speak", "core", tier=ToolTier.WRITE_DATA),
+        ToolMetadata("get_agent_job_result", "core", readonly=True),
         # WRITE_SYSTEM — führt Aktionen aus / verändert Systemzustand
+        ToolMetadata("run_agent_job", "core", tier=ToolTier.WRITE_SYSTEM),
         ToolMetadata("call_module_agent", "core", tier=ToolTier.WRITE_SYSTEM),
         ToolMetadata("execute_cli_command", "core", tier=ToolTier.WRITE_SYSTEM),
         ToolMetadata("execute_workflow", "core", tier=ToolTier.WRITE_SYSTEM),
