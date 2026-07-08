@@ -61,11 +61,15 @@ def _validate_cron(cron_expr: str | None) -> None:
 @router.post("/tasks", status_code=201, response_model=ScheduledTaskInfo)
 async def create_task(request: Request, body: ScheduledTaskCreate) -> ScheduledTaskInfo:
     """Neue geplante Aufgabe erstellen."""
+    from core.auth import auth_tenant_id, resolve_request_auth
+
     _validate_cron(body.cron)
     scheduler = _get_scheduler(request)
 
     try:
-        task = await scheduler.create_task(body.model_dump())
+        data = body.model_dump()
+        data["tenant_id"] = auth_tenant_id(resolve_request_auth(request))
+        task = await scheduler.create_task(data)
         return ScheduledTaskInfo(**task)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -111,9 +115,9 @@ async def toggle_task(request: Request, task_id: str) -> ScheduledTaskInfo:
     return ScheduledTaskInfo(**task)
 
 
-@router.post("/tasks/{task_id}/run")
+@router.post("/tasks/{task_id}/run", status_code=202)
 async def run_task(request: Request, task_id: str) -> dict:
-    """Aufgabe sofort manuell ausführen."""
+    """Aufgabe sofort im Hintergrund starten (Ergebnis via WS-Event + Logs)."""
     scheduler = _get_scheduler(request)
     result = await scheduler.run_task_now(task_id)
 
@@ -122,10 +126,7 @@ async def run_task(request: Request, task_id: str) -> dict:
 
     return {
         "task_id": task_id,
-        "status": result.get("status", "unknown"),
-        "response_preview": result.get("response", "")[:300],
-        "duration_ms": result.get("duration_ms", 0),
-        "module_used": result.get("module_used"),
+        "status": result.get("status", "started"),
     }
 
 
