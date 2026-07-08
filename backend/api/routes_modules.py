@@ -125,10 +125,14 @@ async def get_module_frontend(
             return HTMLResponse(content="Zugriff verweigert.", status_code=403)
         if not file_path.is_file():
             if filename == "tab.html":
+                # Marker "ninko:no-dashboard": neues Frontend ersetzt den Inhalt durch
+                # den lokalisierten i18n-Text (module.noDashboard); der englische Text
+                # ist nur Fallback für ältere Frontends.
                 return HTMLResponse(
                     content=(
+                        "<!-- ninko:no-dashboard -->"
                         '<div class="module-tab-content">'
-                        '<p class="empty-state">Für dieses Modul ist kein Dashboard verfügbar.</p>'
+                        '<p class="empty-state">No dashboard available for this module.</p>'
                         "</div>"
                     ),
                     media_type="text/html",
