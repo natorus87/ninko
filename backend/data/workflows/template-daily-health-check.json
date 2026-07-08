@@ -1,0 +1,60 @@
+{
+  "id": "template-daily-health-check",
+  "name": "Daily Health Check",
+  "description": "Automatischer System-Health-Check mit Benachrichtigung bei Problemen.",
+  "nodes": [
+    {
+      "id": "node-1",
+      "type": "trigger",
+      "label": "Täglich 08:00",
+      "config": {"mode": "cron", "cron": "0 8 * * *"},
+      "position": {"x": 100, "y": 100}
+    },
+    {
+      "id": "node-2",
+      "type": "agent",
+      "label": "System-Check",
+      "config": {
+        "agent_id": "orchestrator",
+        "prompt": "Führe einen System-Health-Check aller verbundenen Module durch. Antworte mit 'PROBLEM' im Text, falls mindestens ein Dienst fehlerhaft ist, sonst mit 'ALLES OK'."
+      },
+      "position": {"x": 400, "y": 100}
+    },
+    {
+      "id": "node-3",
+      "type": "condition",
+      "label": "Probleme gefunden?",
+      "config": {
+        "expression": "output.contains('PROBLEM')",
+        "true_label": "Problem",
+        "false_label": "OK"
+      },
+      "position": {"x": 700, "y": 100}
+    },
+    {
+      "id": "node-4",
+      "type": "agent",
+      "label": "Benachrichtigung senden",
+      "config": {
+        "agent_id": "orchestrator",
+        "prompt": "Fasse folgende Health-Check-Probleme zusammen und sende eine Benachrichtigung an den Admin: {previous_output}"
+      },
+      "position": {"x": 1000, "y": 50}
+    },
+    {
+      "id": "node-5",
+      "type": "end",
+      "label": "Ende",
+      "config": {"status": "succeeded"},
+      "position": {"x": 1300, "y": 100}
+    }
+  ],
+  "edges": [
+    {"id": "edge-1", "source_id": "node-1", "target_id": "node-2"},
+    {"id": "edge-2", "source_id": "node-2", "target_id": "node-3"},
+    {"id": "edge-3", "source_id": "node-3", "target_id": "node-4", "label": "Problem"},
+    {"id": "edge-4", "source_id": "node-3", "target_id": "node-5", "label": "OK"},
+    {"id": "edge-5", "source_id": "node-4", "target_id": "node-5"}
+  ],
+  "variables": []
+}
