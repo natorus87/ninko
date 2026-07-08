@@ -596,13 +596,21 @@
                     </div>`;
                 } else if (k === 'mode' && node.type === 'trigger') {
                     html += `<div class="form-row"><label class="form-label">Modus</label>
-                        <select class="form-select" onchange="Ninko._wfUpdateNodeConfig('${nodeId}', 'mode', this.value)">
+                        <select class="form-select" onchange="Ninko._wfUpdateNodeConfig('${nodeId}', 'mode', this.value); Ninko._wfShowInspector('${nodeId}')">
                             <option value="manual" ${v === 'manual' ? 'selected' : ''}>Manuell</option>
                             <option value="cron" ${v === 'cron' ? 'selected' : ''}>Zeitplan (Cron)</option>
                             <option value="webhook" ${v === 'webhook' ? 'selected' : ''}>Webhook</option>
                             <option value="event" ${v === 'event' ? 'selected' : ''}>Event</option>
                         </select>
                     </div>`;
+                    if (v === 'cron') {
+                        html += `<div class="form-row"><label class="form-label">Cron-Ausdruck</label>
+                            <input type="text" class="form-input" value="${this._escapeHtml(String(node.config.cron ?? ''))}"
+                                placeholder="0 8 * * *"
+                                onchange="Ninko._wfUpdateNodeConfig('${nodeId}', 'cron', this.value)">
+                            <small style="color:var(--text-muted)">Beim Speichern wird automatisch eine geplante Automatisierung angelegt</small>
+                        </div>`;
+                    }
                 } else if (k === 'status' && node.type === 'end') {
                     html += `<div class="form-row"><label class="form-label">Status</label>
                         <select class="form-select" onchange="Ninko._wfUpdateNodeConfig('${nodeId}', 'status', this.value)">
