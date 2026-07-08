@@ -593,10 +593,11 @@ async def create_dag_workflow(
 
     nodes: Liste von Node-Dicts mit:
       - id: eindeutige Kurzkennung (z.B. "start", "check", "cond1")
-      - type: "trigger" | "agent" | "condition" | "loop" | "variable" | "end"
+      - type: "trigger" | "agent" | "condition" | "loop" | "variable" | "parallel" | "subflow" | "script" | "debate" | "end"
       - label: Anzeigename
       - config: typ-spezifische Konfiguration:
           trigger: {"mode": "manual"|"cron", "cron": "0 8 * * *"}
+                   (mode "cron" legt automatisch eine geplante Automatisierung an)
           agent:   {"agent_id": "orchestrator", "prompt": "Aufgabe mit {previous_output}"}
           condition: {"expression": "output.contains(\\"error\\")", "true_label": "true", "false_label": "false"}
           loop:    {"mode": "foreach", "variable": "items", "prompt": "Verarbeite: {loop_item}", "max_iterations": "10"}
@@ -747,10 +748,20 @@ async def create_dag_workflow(
         len(built_edges),
     )
 
+    from core.workflow_cron_sync import sync_workflow_cron_trigger
+
+    active_cron = await sync_workflow_cron_trigger(new_wf, tenant_id)
+    cron_note = ""
+    if active_cron:
+        cron_note = _t(
+            f" Cron-Trigger aktiv: '{active_cron}'.",
+            f" Cron trigger active: '{active_cron}'.",
+        )
+
     return _t(
         f"Workflow '{name}' (ID: {public_wf_id}) mit {len(built_nodes)} Nodes und {len(built_edges)} Edges wurde erfolgreich erstellt.",
         f"Workflow '{name}' (ID: {public_wf_id}) with {len(built_nodes)} nodes and {len(built_edges)} edges was successfully created.",
-    )
+    ) + cron_note
 
 
 @tool
@@ -838,6 +849,10 @@ async def create_linear_workflow(name: str, description: str, steps: list[str]) 
         public_wf_id,
         tenant_id,
     )
+
+    from core.workflow_cron_sync import sync_workflow_cron_trigger
+
+    await sync_workflow_cron_trigger(new_wf, tenant_id)
 
     return _t(
         f"Workflow '{name}' (ID: {public_wf_id}) wurde erfolgreich erstellt.",
