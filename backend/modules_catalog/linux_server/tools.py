@@ -6,9 +6,12 @@ SSH-based server management with password and RSA-key auth.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
 import os
 import io
+import re
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +26,12 @@ from core.vault import get_vault
 logger = logging.getLogger("ninko.modules.linux_server.tools")
 
 _KNOWN_HOSTS_PATH: Path | None = None
+_PACKAGE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.+:-]*$")
+_SYSTEMD_UNIT_RE = re.compile(r"^[A-Za-z0-9_.@:-]+$")
+_HOSTNAME_RE = re.compile(
+    r"^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)"
+    r"(?:\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*\.?$"
+)
 
 
 def _get_known_hosts_path() -> Path:
@@ -211,11 +220,8 @@ async def _run_ssh_command(
     elif cfg["password"]:
         connect_kwargs["password"] = cfg["password"]
 
-    try:
-        await asyncio.get_event_loop().run_in_executor(
-            None, lambda: client.connect(**connect_kwargs)
-        )
-
+    def _execute() -> dict:
+        client.connect(**connect_kwargs)
         stdin, stdout, stderr = client.exec_command(cmd, timeout=timeout)
         exit_code = stdout.channel.recv_exit_status()
         output = stdout.read().decode("utf-8", errors="replace")
@@ -227,6 +233,9 @@ async def _run_ssh_command(
             "error": error.strip(),
             "host": cfg["host"],
         }
+
+    try:
+        return await asyncio.get_running_loop().run_in_executor(None, _execute)
     finally:
         client.close()
 
@@ -262,6 +271,64 @@ def _error_message(e: Exception) -> str:
         ja=f"エラー: {e}",
         zh=f"错误: {e}",
     )
+
+
+def _invalid_input_message(field: str, value: object) -> str:
+    return _t(
+        de=f"Ungültiger Wert für {field}: {value!r}",
+        en=f"Invalid value for {field}: {value!r}",
+    )
+
+
+def _validate_systemd_unit(service: str) -> str:
+    service = service.strip()
+    if not service or not _SYSTEMD_UNIT_RE.fullmatch(service):
+        raise ValueError(_invalid_input_message("service", service))
+    return service
+
+
+def _quote_remote_path(path: str) -> str:
+    path = path.strip()
+    if not path or "\x00" in path or "\n" in path or "\r" in path:
+        raise ValueError(_invalid_input_message("path", path))
+    return shlex.quote(path)
+
+
+def _normalize_lines(lines: int, *, default: int = 50, maximum: int = 1000) -> int:
+    try:
+        value = int(lines)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(_invalid_input_message("lines", lines)) from exc
+    return min(max(value, 1), maximum)
+
+
+def _split_package_names(packages: str) -> list[str]:
+    names = packages.split()
+    if not names:
+        return []
+    invalid = [name for name in names if not _PACKAGE_NAME_RE.fullmatch(name)]
+    if invalid:
+        raise ValueError(_invalid_input_message("packages", ", ".join(invalid)))
+    return names
+
+
+def _validate_network_target(host: str, port: int) -> tuple[str, int]:
+    host = host.strip()
+    if not host or "\x00" in host or "/" in host:
+        raise ValueError(_invalid_input_message("host", host))
+    try:
+        ipaddress.ip_address(host)
+    except ValueError as exc:
+        if not _HOSTNAME_RE.fullmatch(host):
+            raise ValueError(_invalid_input_message("host", host)) from exc
+
+    try:
+        port_value = int(port)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(_invalid_input_message("port", port)) from exc
+    if not 1 <= port_value <= 65535:
+        raise ValueError(_invalid_input_message("port", port))
+    return host, port_value
 
 
 # ═══════════════════════════════════════════════════════
@@ -393,11 +460,12 @@ async def service_action(service: str, action: str, connection_id: str = "") -> 
         }
 
     try:
-        cmd = f"systemctl {action} {service}"
+        service_name = _validate_systemd_unit(service)
+        cmd = f"systemctl {action} {shlex.quote(service_name)}"
         result = await _run_ssh_command(cmd, connection_id)
-        logger.info("Service %s %s: exit_code=%d", service, action, result["exit_code"])
+        logger.info("Service %s %s: exit_code=%d", service_name, action, result["exit_code"])
         return {
-            "service": service,
+            "service": service_name,
             "action": action,
             "exit_code": result["exit_code"],
             "output": _truncate_output(result["output"] or result["error"]),
@@ -423,10 +491,11 @@ async def get_journal(
     lines: number of lines.
     """
     try:
-        unit_flag = f"-u {service}" if service else ""
-        cmd = f"journalctl {unit_flag} --no-pager -n {lines} --output=short-iso"
+        line_count = _normalize_lines(lines)
+        unit_flag = f"-u {shlex.quote(_validate_systemd_unit(service))}" if service else ""
+        cmd = f"journalctl {unit_flag} --no-pager -n {line_count} --output=short-iso"
         result = await _run_ssh_command(cmd, connection_id)
-        return _truncate_output(result["output"], max_lines=lines)
+        return _truncate_output(result["output"], max_lines=line_count)
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as e:
         return _error_message(e)
 
@@ -438,14 +507,15 @@ async def get_logfile(path: str, lines: int = 50, connection_id: str = "") -> st
     Example: path='/var/log/syslog', lines=100
     """
     try:
-        cmd = f"tail -n {lines} {path} 2>/dev/null"
+        line_count = _normalize_lines(lines)
+        cmd = f"tail -n {line_count} -- {_quote_remote_path(path)} 2>/dev/null"
         result = await _run_ssh_command(cmd, connection_id)
         if result["exit_code"] != 0:
             return _t(
                 de=f"Fehler: Datei '{path}' nicht lesbar oder nicht vorhanden.",
                 en=f"Error: File '{path}' is not readable or does not exist.",
             )
-        return _truncate_output(result["output"], max_lines=lines)
+        return _truncate_output(result["output"], max_lines=line_count)
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as e:
         return _error_message(e)
 
@@ -480,7 +550,11 @@ async def apt_upgrade(packages: str = "", connection_id: str = "") -> dict:
     """
     try:
         if packages:
-            cmd = f"DEBIAN_FRONTEND=noninteractive apt-get install --only-upgrade -y {packages} 2>&1"
+            package_args = " ".join(shlex.quote(name) for name in _split_package_names(packages))
+            cmd = (
+                "DEBIAN_FRONTEND=noninteractive apt-get install --only-upgrade -y "
+                f"{package_args} 2>&1"
+            )
         else:
             cmd = "DEBIAN_FRONTEND=noninteractive apt-get upgrade -y 2>&1"
         result = await _run_ssh_command(cmd, connection_id, timeout=300)
@@ -502,7 +576,14 @@ async def apt_install(packages: str, connection_id: str = "") -> dict:
     DESTRUCTIVE — requires confirmation.
     """
     try:
-        cmd = f"DEBIAN_FRONTEND=noninteractive apt-get install -y {packages} 2>&1"
+        package_args = " ".join(shlex.quote(name) for name in _split_package_names(packages))
+        if not package_args:
+            return {
+                "packages": packages,
+                "error": _invalid_input_message("packages", packages),
+                "success": False,
+            }
+        cmd = f"DEBIAN_FRONTEND=noninteractive apt-get install -y {package_args} 2>&1"
         result = await _run_ssh_command(cmd, connection_id, timeout=300)
         logger.info("apt install %s: exit_code=%d", packages, result["exit_code"])
         return {
@@ -527,7 +608,8 @@ async def read_file(path: str, max_lines: int = 200, connection_id: str = "") ->
     Example: path='/etc/nginx/nginx.conf'
     """
     try:
-        cmd = f"head -n {max_lines} {path} 2>/dev/null"
+        line_count = _normalize_lines(max_lines)
+        cmd = f"head -n {line_count} -- {_quote_remote_path(path)} 2>/dev/null"
         result = await _run_ssh_command(cmd, connection_id)
         if result["exit_code"] != 0:
             return _t(
@@ -542,7 +624,7 @@ async def read_file(path: str, max_lines: int = 200, connection_id: str = "") ->
                 ja=f"エラー：ファイル '{path}' が読み取れないか存在しません。",
                 zh=f"错误：文件 '{path}' 不可读或不存在。",
             )
-        return _truncate_output(result["output"], max_lines=max_lines)
+        return _truncate_output(result["output"], max_lines=line_count)
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as e:
         return _error_message(e)
 
@@ -554,7 +636,7 @@ async def list_directory(path: str = "/var/log", connection_id: str = "") -> str
     Example: path='/etc/nginx/sites-available'
     """
     try:
-        cmd = f"ls -lah {path} 2>/dev/null"
+        cmd = f"ls -lah -- {_quote_remote_path(path)} 2>/dev/null"
         result = await _run_ssh_command(cmd, connection_id)
         if result["exit_code"] != 0:
             return _t(
@@ -594,11 +676,15 @@ async def get_network_info(connection_id: str = "") -> str:
 async def check_port(host: str, port: int, connection_id: str = "") -> dict:
     """Check whether a port on a host is reachable (netcat or /dev/tcp)."""
     try:
-        cmd = f"timeout 3 bash -c 'echo > /dev/tcp/{host}/{port}' 2>&1 && echo 'OPEN' || echo 'CLOSED'"
+        checked_host, checked_port = _validate_network_target(host, port)
+        cmd = (
+            "timeout 3 bash -c 'echo > /dev/tcp/$1/$2' -- "
+            f"{shlex.quote(checked_host)} {checked_port} 2>&1 && echo 'OPEN' || echo 'CLOSED'"
+        )
         result = await _run_ssh_command(cmd, connection_id)
         return {
-            "host": host,
-            "port": port,
+            "host": checked_host,
+            "port": checked_port,
             "status": "open" if "OPEN" in result["output"] else "closed",
         }
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, asyncio.TimeoutError) as e:
