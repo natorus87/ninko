@@ -1,0 +1,71 @@
+{
+  "id": "template-incident-response",
+  "name": "Incident Response",
+  "description": "Strukturierte Eskalation bei Incidents: Diagnose → Ticket → Benachrichtigung.",
+  "nodes": [
+    {
+      "id": "node-1",
+      "type": "trigger",
+      "label": "Alert empfangen",
+      "config": {"mode": "manual"},
+      "position": {"x": 100, "y": 100}
+    },
+    {
+      "id": "node-2",
+      "type": "agent",
+      "label": "Erstdiagnose",
+      "config": {
+        "agent_id": "orchestrator",
+        "prompt": "Analysiere den gemeldeten Incident: {incident_beschreibung}. Erstelle eine kurze Diagnose und bewerte die Schwere. Antworte mit 'KRITISCH' im Text, wenn sofortiges Eingreifen nötig ist."
+      },
+      "position": {"x": 400, "y": 100}
+    },
+    {
+      "id": "node-3",
+      "type": "condition",
+      "label": "Kritisch?",
+      "config": {
+        "expression": "output.contains('KRITISCH')",
+        "true_label": "Kritisch",
+        "false_label": "Normal"
+      },
+      "position": {"x": 700, "y": 100}
+    },
+    {
+      "id": "node-4",
+      "type": "agent",
+      "label": "Ticket erstellen",
+      "config": {
+        "agent_id": "orchestrator",
+        "prompt": "Erstelle ein Incident-Ticket mit hoher Priorität basierend auf dieser Diagnose: {previous_output}"
+      },
+      "position": {"x": 1000, "y": 50}
+    },
+    {
+      "id": "node-5",
+      "type": "agent",
+      "label": "Team benachrichtigen",
+      "config": {
+        "agent_id": "orchestrator",
+        "prompt": "Benachrichtige das Ops-Team über den kritischen Incident mit dieser Zusammenfassung: {previous_output}"
+      },
+      "position": {"x": 1300, "y": 50}
+    },
+    {
+      "id": "node-6",
+      "type": "end",
+      "label": "Ende",
+      "config": {"status": "succeeded"},
+      "position": {"x": 1600, "y": 100}
+    }
+  ],
+  "edges": [
+    {"id": "edge-1", "source_id": "node-1", "target_id": "node-2"},
+    {"id": "edge-2", "source_id": "node-2", "target_id": "node-3"},
+    {"id": "edge-3", "source_id": "node-3", "target_id": "node-4", "label": "Kritisch"},
+    {"id": "edge-4", "source_id": "node-3", "target_id": "node-6", "label": "Normal"},
+    {"id": "edge-5", "source_id": "node-4", "target_id": "node-5"},
+    {"id": "edge-6", "source_id": "node-5", "target_id": "node-6"}
+  ],
+  "variables": [{"name": "incident_beschreibung", "value": ""}]
+}
