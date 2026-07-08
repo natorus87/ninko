@@ -58,3 +58,42 @@ class AgentListResponse(BaseModel):
     """Liste aller konfigurierten Agenten."""
     agents: list[AgentDefinition] = Field(default_factory=list)
     total: int = 0
+
+
+# ── Agent Jobs (einmalige Hintergrund-Ausführung) ────
+
+AgentJobStatus = Literal["pending", "running", "succeeded", "failed", "cancelled"]
+
+
+class AgentJobRunRequest(BaseModel):
+    """Payload für POST /api/agents/{agent_id}/run."""
+    prompt: str = Field(..., min_length=1, max_length=8000)
+
+
+class AgentJobInfo(BaseModel):
+    """Ein Agent-Job (tenant_id wird nach außen gestrippt)."""
+    id: str
+    agent_id: str
+    agent_name: str = ""
+    prompt: str = ""
+    status: AgentJobStatus = "pending"
+    result: Optional[str] = None
+    error: Optional[str] = None
+    triggered_by: str = "api"
+    created_at: Optional[str] = None
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    duration_ms: Optional[int] = None
+
+
+class AgentJobRunResponse(BaseModel):
+    """Antwort auf POST /api/agents/{agent_id}/run."""
+    job_id: str
+    agent_id: str
+    status: AgentJobStatus
+
+
+class AgentJobListResponse(BaseModel):
+    """Job-Historie eines Agenten."""
+    jobs: list[AgentJobInfo] = Field(default_factory=list)
+    total: int = 0
