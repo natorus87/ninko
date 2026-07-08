@@ -42,7 +42,7 @@ Microsoft deaktiviert Basic Auth für IMAP zunehmend. Ninko bietet nativen Micro
 Der `EmailAgent` greift auf folgende Tools zu:
 
 *   `send_email(to, subject, body, cc, bcc, is_html, attachments, connection_id)`: E-Mail via SMTP senden, optional mit Dateianhängen.
-    - `attachments`: Liste von absoluten Dateipfaden auf dem Server (z.B. `['/app/data/uploads/email/bericht.pdf']`). Fehlende Dateien werden übersprungen und geloggt.
+    - `attachments`: Liste von Pfaden aus `/app/data/uploads/email/` (z.B. `['/app/data/uploads/email/bericht.pdf']` oder `['bericht.pdf']`). Fehlende Dateien innerhalb dieses Verzeichnisses werden übersprungen und geloggt; Pfade außerhalb werden abgelehnt.
     - Text-Dateien (`.txt`, `.log`, `.csv` etc.) werden inline angehängt; Binärdateien (PDF, Bilder etc.) werden automatisch Base64-kodiert.
     - MIME-Typ wird automatisch über `mimetypes.guess_type()` erkannt; unbekannte Typen fallen auf `application/octet-stream` zurück.
     - Bei Anhängen wird `MIMEMultipart` verwendet, ohne Anhängen die leichtere `EmailMessage`-Struktur.
@@ -74,7 +74,7 @@ Der `EmailAgent` greift auf folgende Tools zu:
 - `400`: Kein Dateiname angegeben
 - `413`: Datei überschreitet 25 MB Limit
 
-Der zurückgegebene `file_path` wird direkt im `attachments`-Parameter von `send_email` verwendet. Fehlende Pfade werden vom Tool mit einem Warning-Log übersprungen – die E-Mail geht trotzdem raus.
+Der zurückgegebene `file_path` wird direkt im `attachments`-Parameter von `send_email` verwendet. Fehlende Pfade innerhalb des Upload-Verzeichnisses werden vom Tool mit einem Warning-Log übersprungen – die E-Mail geht trotzdem raus. Pfade außerhalb von `/app/data/uploads/email/` werden abgelehnt.
 
 ## Beispiel-Prompts
 
