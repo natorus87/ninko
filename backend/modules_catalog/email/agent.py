@@ -29,8 +29,7 @@ Tool execution rules:
 - If previous-step content is provided, use it directly as the email body.
 - If the sender is missing, use the configured sender address.
 - For IMAP search, use IMAP query syntax such as `FROM 'boss@company.com'`.
-- For attachments, pass absolute file paths in the `attachments` parameter.
-- If only a relative path or filename is given, check `/app/data/uploads/email/`.
+- For attachments, pass paths from `/app/data/uploads/email/`; relative filenames are resolved there.
 
 Output format:
 - For lists (Emails, Folders): ALWAYS use Markdown tables.
