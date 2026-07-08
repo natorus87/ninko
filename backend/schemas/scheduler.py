@@ -50,6 +50,8 @@ class ScheduledTaskInfo(BaseModel):
     last_run: Optional[datetime] = None
     next_run: Optional[datetime] = None
     last_result: Optional[str] = None  # "ok" | "error" | "pending"
+    tenant_id: Optional[str] = None
+    source: Optional[str] = None  # z.B. "workflow_trigger" für auto-synchronisierte Tasks
 
 
 class ScheduledTaskListResponse(BaseModel):
@@ -80,10 +82,7 @@ class ScheduledTaskDeleteResponse(BaseModel):
 
 
 class ScheduledTaskRunResponse(BaseModel):
-    """Response: Ergebnis eines manuellen Task-Runs."""
+    """Response: Manueller Task-Run wurde im Hintergrund gestartet."""
 
     task_id: str
-    status: str
-    response_preview: str
-    duration_ms: int
-    module_used: Optional[str] = None
+    status: str  # "started" | "already_running"
