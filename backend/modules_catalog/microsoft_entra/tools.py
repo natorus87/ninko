@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import os
 from typing import Optional
+from urllib.parse import quote
 
 import aiohttp
 from langchain_core.tools import tool
@@ -19,6 +20,36 @@ from core.vault import get_vault
 logger = logging.getLogger("ninko.modules.microsoft_entra.tools")
 
 GRAPH_URL = "https://graph.microsoft.com/v1.0"
+
+
+def _graph_user_path(user_principal_name: str) -> str:
+    """Return a Microsoft Graph /users path preserving UPN semantics."""
+    user = user_principal_name.strip()
+    if not user:
+        raise ValueError(
+            _t(
+                de="Benutzer-ID darf nicht leer sein.",
+                en="User ID must not be empty.",
+            )
+        )
+    return f"/users/{quote(user, safe='')}"
+
+
+def _escape_odata_string(value: str) -> str:
+    return value.replace("'", "''")
+
+
+async def _get_user_object_id(user_principal_name: str, token: str) -> str:
+    user = await _graph_request("GET", _graph_user_path(user_principal_name), token)
+    object_id = user.get("id")
+    if not object_id:
+        raise ValueError(
+            _t(
+                de=f"Benutzer-ID nicht gefunden für: {user_principal_name}",
+                en=f"User object ID not found for: {user_principal_name}",
+            )
+        )
+    return object_id
 
 
 async def _get_token(connection_id: str = "") -> str:
@@ -161,7 +192,7 @@ async def list_entra_users(connection_id: str = "") -> str:
         if total > shown:
             extra = total - shown
             lines.append(
-                f"\n💡 "
+                "\n💡 "
                 + _t(
                     de=f"+{extra} weitere Benutzer (insgesamt {total})",
                     en=f"+{extra} more users (total {total})",
@@ -177,7 +208,7 @@ async def list_entra_users(connection_id: str = "") -> str:
             )
         else:
             lines.append(
-                f"\n✓ "
+                "\n✓ "
                 + _t(
                     de=f"{total} Benutzer gesamt",
                     en=f"{total} users total",
@@ -239,7 +270,7 @@ async def search_entra_user(query: str, connection_id: str = "") -> str:
             )
 
         lines = [
-            f"🔍 "
+            "🔍 "
             + _t(
                 de="Suchergebnisse",
                 en="Search results",
@@ -289,8 +320,7 @@ async def get_user_details(user_principal_name: str, connection_id: str = "") ->
     """
     try:
         token = await _get_token(connection_id)
-        user_id = user_principal_name.replace("@", "_").replace(".", "_")
-        user = await _graph_request("GET", f"/users/{user_id}", token)
+        user = await _graph_request("GET", _graph_user_path(user_principal_name), token)
 
         lines = [
             "👤 "
@@ -395,7 +425,7 @@ async def list_entra_groups(connection_id: str = "") -> str:
 
         count = len(groups)
         lines.append(
-            f"\n✓ "
+            "\n✓ "
             + _t(
                 de=f"{count} Gruppen gesamt",
                 en=f"{count} groups total",
@@ -435,7 +465,8 @@ async def get_group_members(group_name: str, connection_id: str = "") -> str:
     """
     try:
         token = await _get_token(connection_id)
-        search = f"/groups?$filter=startswith(displayName,'{group_name}')"
+        group_filter = _escape_odata_string(group_name)
+        search = f"/groups?$filter=startswith(displayName,'{group_filter}')"
         data = await _graph_request("GET", search, token)
         groups = data.get("value", [])
         if not groups:
@@ -472,7 +503,7 @@ async def get_group_members(group_name: str, connection_id: str = "") -> str:
             )
 
         lines = [
-            f"👥 "
+            "👥 "
             + _t(
                 de="Gruppenmitglieder",
                 en="Group members",
@@ -557,7 +588,7 @@ async def list_entra_applications(connection_id: str = "") -> str:
             lines.append(f"  • {a.get('displayName', '-')}")
             if a.get("publisherDomain"):
                 lines.append(
-                    f"    "
+                    "    "
                     + _t(
                         de=f"Herausgeber: {a.get('publisherDomain')}",
                         en=f"Publisher: {a.get('publisherDomain')}",
@@ -574,7 +605,7 @@ async def list_entra_applications(connection_id: str = "") -> str:
 
         count = len(apps)
         lines.append(
-            f"\n✓ "
+            "\n✓ "
             + _t(
                 de=f"{count} Anwendungen gesamt",
                 en=f"{count} applications total",
@@ -652,7 +683,7 @@ async def list_entra_devices(connection_id: str = "") -> str:
 
         count = len(devices)
         lines.append(
-            f"\n✓ "
+            "\n✓ "
             + _t(
                 de=f"{count} Geräte gesamt",
                 en=f"{count} devices total",
@@ -750,10 +781,9 @@ async def disable_entra_user(user_principal_name: str, connection_id: str = "") 
     """
     try:
         token = await _get_token(connection_id)
-        user_id = user_principal_name.replace("@", "_").replace(".", "_")
         await _graph_request(
             "PATCH",
-            f"/users/{user_id}",
+            _graph_user_path(user_principal_name),
             token,
             json={"accountEnabled": False},
         )
@@ -798,10 +828,9 @@ async def reset_entra_user_password(
     """
     try:
         token = await _get_token(connection_id)
-        user_id = user_principal_name.replace("@", "_").replace(".", "_")
         await _graph_request(
             "PATCH",
-            f"/users/{user_id}",
+            _graph_user_path(user_principal_name),
             token,
             json={
                 "passwordProfile": {
@@ -899,7 +928,8 @@ async def add_user_to_group(
     try:
         token = await _get_token(connection_id)
 
-        search = f"/groups?$filter=displayName eq '{group_name}'"
+        group_filter = _escape_odata_string(group_name)
+        search = f"/groups?$filter=displayName eq '{group_filter}'"
         data = await _graph_request("GET", search, token)
         groups = data.get("value", [])
         if not groups:
@@ -918,7 +948,7 @@ async def add_user_to_group(
 
         group_id = groups[0]["id"]
 
-        user_id = user_principal_name.replace("@", "_").replace(".", "_")
+        user_id = await _get_user_object_id(user_principal_name, token)
         await _graph_request(
             "POST",
             f"/groups/{group_id}/members/$ref",
