@@ -10,6 +10,7 @@ import os
 from typing import Optional
 
 import aiohttp
+import defusedxml.ElementTree as ET
 from langchain_core.tools import tool
 
 from agents.base_agent import _t
@@ -107,7 +108,10 @@ async def _ocs_request(
     headers = {
         "OCS-APIREQUEST": "true",
         "Content-Type": "application/json",
+        "Accept": "application/json",
     }
+    separator = "&" if "?" in url else "?"
+    url = f"{url}{separator}format=json"
 
     async with aiohttp.ClientSession(
         auth=aiohttp.BasicAuth(client["user"], client["password"]),
@@ -122,8 +126,6 @@ async def _ocs_request(
 
 def _parse_webdav_list(xml_content: str) -> list[dict]:
     """Parse WebDAV PROPFIND response."""
-    import xml.etree.ElementTree as ET
-
     files = []
     try:
         root = ET.fromstring(xml_content)
@@ -154,7 +156,15 @@ def _parse_webdav_list(xml_content: str) -> list[dict]:
                     "size": size,
                 }
             )
-    except (RuntimeError, ValueError, TypeError, KeyError, aiohttp.ClientError, OSError) as e:
+    except (
+        ET.ParseError,
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        aiohttp.ClientError,
+        OSError,
+    ) as e:
         logger.warning("Failed to parse WebDAV response: %s", e)
 
     return files
