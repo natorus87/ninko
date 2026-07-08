@@ -6,7 +6,10 @@ Vordefinierte Workflow-Vorlagen für häufige IT-Operations-Use-Cases.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
+
+logger = logging.getLogger("ninko.workflow_templates")
 
 
 def _load_template(filename: str) -> dict | None:
@@ -76,6 +79,7 @@ WORKFLOW_TEMPLATES: list[dict] = [
         "category": "operations",
         "icon": "🏥",
         "tags": ["monitoring", "health", "daily", "automation"],
+        "template_file": "template-daily-health-check.json",
         "nodes_preview": [
             {"type": "trigger", "label": "Täglich 08:00"},
             {"type": "agent", "label": "System-Check"},
@@ -91,6 +95,7 @@ WORKFLOW_TEMPLATES: list[dict] = [
         "category": "operations",
         "icon": "🚨",
         "tags": ["incident", "escalation", "ticketing", "alert"],
+        "template_file": "template-incident-response.json",
         "nodes_preview": [
             {"type": "trigger", "label": "Alert empfangen"},
             {"type": "agent", "label": "Erstdiagnose"},
@@ -107,6 +112,7 @@ WORKFLOW_TEMPLATES: list[dict] = [
         "category": "operations",
         "icon": "💾",
         "tags": ["backup", "verification", "maintenance"],
+        "template_file": "template-backup-verification.json",
         "nodes_preview": [
             {"type": "trigger", "label": "Nächtlicher Cron"},
             {"type": "agent", "label": "Backup starten"},
@@ -141,6 +147,12 @@ def load_template_definition(template_id: str) -> dict | None:
         return _load_template(template_file)
 
     if "nodes_preview" in template:
+        # Fallback ohne template_file erzeugt Nodes MIT LEERER config —
+        # solche Workflows sind nicht lauffähig und fallen im Validator durch.
+        logger.warning(
+            "Template '%s' hat kein template_file — Fallback erzeugt leere Node-Configs.",
+            template_id,
+        )
         return {
             "id": template["id"],
             "name": template["name"],
