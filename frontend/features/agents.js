@@ -50,6 +50,7 @@
                                 <span class="agent-card-badge ${a.enabled ? 'badge-active' : 'badge-inactive'}">${a.enabled ? 'Aktiv' : 'Inaktiv'}</span>
                             </div>
                             <div class="agent-card-actions">
+                                <button class="btn-icon btn-icon-sm" data-action="run" title="Einmalig ausführen">${this._ic.play || '▶'}</button>
                                 <button class="btn-icon btn-icon-sm" data-action="edit" title="Bearbeiten">${this._ic.edit}</button>
                                 <button class="btn-icon btn-icon-sm" data-action="duplicate" title="Duplizieren">${this._ic.copy}</button>
                                 <button class="btn-icon btn-icon-sm" data-action="delete" title="Löschen" style="color:var(--error-color)">${this._ic.trash}</button>
@@ -67,6 +68,7 @@
                 container.querySelectorAll('.agent-card').forEach(card => {
                     const id = card.dataset.agentId;
                     const name = card.querySelector('.agent-card-name')?.textContent || '';
+                    card.querySelector('[data-action="run"]')?.addEventListener('click', () => this.openAgentJobsPanel(id, name));
                     card.querySelector('[data-action="edit"]')?.addEventListener('click', () => this.openAgentEditor(id));
                     card.querySelector('[data-action="duplicate"]')?.addEventListener('click', () => this.duplicateAgent(id));
                     card.querySelector('[data-action="delete"]')?.addEventListener('click', () => this.deleteAgent(id, name));
@@ -81,7 +83,7 @@
         // -------------------------------------------------------
 
         _allPanels() {
-            return ['agenten-overview', 'agenten-templates', 'agenten-skills', 'agenten-skill-editor', 'agenten-editor'];
+            return ['agenten-overview', 'agenten-templates', 'agenten-skills', 'agenten-skill-editor', 'agenten-editor', 'agenten-jobs'];
         },
 
         _showOnlyPanel(panelId) {
@@ -872,6 +874,147 @@
                 if (res.ok) { showNotification('Agent dupliziert', 'success'); this.loadAgents(); }
                 else showNotification('Fehler beim Duplizieren', 'error');
             } catch { showNotification('Verbindungsfehler', 'error'); }
+        },
+
+        // -------------------------------------------------------
+        //  AGENT-JOBS: Einmalige Hintergrund-Ausführung
+        // -------------------------------------------------------
+
+        _agentJobsAgentId: null,
+        _agentJobsPollTimer: null,
+
+        openAgentJobsPanel(agentId, agentName) {
+            this._agentJobsAgentId = agentId;
+            const nameEl = document.getElementById('agent-jobs-agent-name');
+            if (nameEl) nameEl.textContent = agentName || agentId;
+            const promptEl = document.getElementById('agent-job-prompt');
+            if (promptEl) promptEl.value = '';
+            this._showOnlyPanel('agenten-jobs');
+            this.loadAgentJobs();
+            promptEl?.focus();
+        },
+
+        closeAgentJobsPanel() {
+            this._stopAgentJobsPolling();
+            this._agentJobsAgentId = null;
+            this._showOnlyPanel('agenten-overview');
+            this.loadAgents();
+        },
+
+        async startAgentJob() {
+            const promptEl = document.getElementById('agent-job-prompt');
+            const prompt = (promptEl?.value || '').trim();
+            if (!prompt) {
+                showNotification('Bitte zuerst eine Aufgabe eingeben.', 'warning');
+                return;
+            }
+            try {
+                const res = await fetch(`/api/agents/${this._agentJobsAgentId}/run`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt }),
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.detail || res.statusText);
+                }
+                showNotification('Job gestartet — läuft im Hintergrund.', 'success');
+                if (promptEl) promptEl.value = '';
+                await this.loadAgentJobs();
+            } catch (e) {
+                showNotification(`Job-Start fehlgeschlagen: ${e.message}`, 'error');
+            }
+        },
+
+        async loadAgentJobs() {
+            const container = document.getElementById('agent-jobs-list');
+            if (!container || !this._agentJobsAgentId) return;
+            try {
+                const res = await fetch(`/api/agents/${this._agentJobsAgentId}/jobs?limit=20`);
+                if (!res.ok) throw new Error(res.statusText);
+                const data = await res.json();
+                const jobs = data.jobs || [];
+                this._renderAgentJobs(container, jobs);
+
+                // Nur pollen solange Jobs aktiv sind
+                if (jobs.some(j => j.status === 'pending' || j.status === 'running')) {
+                    this._startAgentJobsPolling();
+                } else {
+                    this._stopAgentJobsPolling();
+                }
+            } catch {
+                container.innerHTML = '<p class="empty-state">Fehler beim Laden der Jobs.</p>';
+            }
+        },
+
+        _renderAgentJobs(container, jobs) {
+            if (!jobs.length) {
+                container.innerHTML = '<p class="empty-state">Noch keine Jobs für diesen Agenten.</p>';
+                return;
+            }
+            const statusBadge = (s) => ({
+                pending: '<span class="task-badge">⏳ Wartet</span>',
+                running: '<span class="task-badge">▶ Läuft</span>',
+                succeeded: '<span class="task-badge badge-active">✅ Erfolgreich</span>',
+                failed: '<span class="task-badge badge-inactive">❌ Fehlgeschlagen</span>',
+                cancelled: '<span class="task-badge badge-inactive">⏹ Abgebrochen</span>',
+            }[s] || this._escapeHtml(s));
+
+            container.innerHTML = jobs.map(j => {
+                const active = j.status === 'pending' || j.status === 'running';
+                const output = j.result || j.error || '';
+                const started = j.created_at ? new Date(j.created_at).toLocaleString('de') : '';
+                const duration = j.duration_ms != null ? `${j.duration_ms} ms` : '–';
+                return `
+                <div class="agent-card" data-job-id="${this._escapeHtml(j.id)}">
+                    <div class="agent-card-header">
+                        <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;">
+                            ${statusBadge(j.status)}
+                            <span class="text-muted" style="font-size:0.8rem;">${started}</span>
+                            <span class="text-muted" style="font-size:0.8rem;">Dauer: ${duration}</span>
+                            <span class="text-muted" style="font-size:0.8rem;">via ${this._escapeHtml(j.triggered_by || 'api')}</span>
+                        </div>
+                        <div class="agent-card-actions">
+                            ${active ? `<button class="btn-icon btn-icon-sm" data-action="cancel" title="Abbrechen" style="color:var(--error-color)">⏹</button>` : ''}
+                        </div>
+                    </div>
+                    <p class="agent-card-desc" title="Prompt">${this._escapeHtml((j.prompt || '').slice(0, 200))}</p>
+                    ${output ? `<details><summary style="cursor:pointer;font-size:0.85rem;">Ergebnis anzeigen</summary>
+                        <pre style="white-space:pre-wrap;font-size:0.82rem;max-height:300px;overflow:auto;">${this._escapeHtml(output)}</pre></details>` : ''}
+                </div>`;
+            }).join('');
+
+            container.querySelectorAll('[data-action="cancel"]').forEach(btn => {
+                const jobId = btn.closest('.agent-card')?.dataset.jobId;
+                btn.addEventListener('click', () => this.cancelAgentJob(jobId));
+            });
+        },
+
+        async cancelAgentJob(jobId) {
+            if (!jobId) return;
+            try {
+                const res = await fetch(`/api/agents/jobs/${jobId}/cancel`, { method: 'POST' });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.detail || res.statusText);
+                }
+                showNotification('Job abgebrochen.', 'info');
+                await this.loadAgentJobs();
+            } catch (e) {
+                showNotification(`Abbrechen fehlgeschlagen: ${e.message}`, 'error');
+            }
+        },
+
+        _startAgentJobsPolling() {
+            if (this._agentJobsPollTimer) return;
+            this._agentJobsPollTimer = setInterval(() => this.loadAgentJobs(), 5000);
+        },
+
+        _stopAgentJobsPolling() {
+            if (this._agentJobsPollTimer) {
+                clearInterval(this._agentJobsPollTimer);
+                this._agentJobsPollTimer = null;
+            }
         },
     };
 
