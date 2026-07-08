@@ -62,6 +62,11 @@ def _response_indicates_error(response_text: str) -> bool:
     return stripped.startswith(_ERROR_RESPONSE_PREFIXES)
 
 
+def _task_tenant(task: dict) -> str:
+    """Tenant eines Tasks (Legacy-Tasks ohne tenant_id → 'default')."""
+    return (task.get("tenant_id") or "default").strip().lower() or "default"
+
+
 REDIS_KEY_TASKS = "ninko:scheduler:tasks"
 REDIS_KEY_LOG_PREFIX = "ninko:scheduler:log:"
 MAX_LOG_ENTRIES = 50
@@ -90,6 +95,8 @@ class SchedulerAgent:
         self._task: asyncio.Task | None = None
         # Verhindert Doppelläufe desselben Tasks (Scheduler-Zyklus vs. run_task_now)
         self._running_task_ids: set[str] = set()
+        # Referenzen auf manuell gestartete Hintergrund-Runs (run_task_now)
+        self._bg_manual_runs: set[asyncio.Task] = set()
 
     # ── Lifecycle ──────────────────────────────────────
 
@@ -195,6 +202,13 @@ class SchedulerAgent:
         workflow_id = task.get("workflow_id")
 
         agent_id = task.get("agent_id")
+        tenant_id = _task_tenant(task)
+
+        # Session-Kontext für Tools/Pool setzen: _current_tenant_id() und der
+        # Agent-Pool leiten den Tenant aus der status_bus-Session-ID ab.
+        from core import status_bus
+
+        status_bus.set_session_id(f"{tenant_id}:scheduler-{task_id}")
 
         try:
             response_text = ""
@@ -202,11 +216,22 @@ class SchedulerAgent:
             exec_status = "ok"
 
             if workflow_id:
-                # Workflow ausführen
-                from core.workflow_engine import WorkflowEngine
-                wf_raw = await self._redis.connection.get("ninko:workflows")
+                # Workflow ausführen — Storage ist tenant-scoped
+                # (ninko:workflows:<tenant>, IDs "tenant::public").
+                from core.workflow_engine import WorkflowEngine, _tenant_key
+
+                wf_key = _tenant_key("ninko:workflows", tenant_id)
+                wf_raw = await self._redis.connection.get(wf_key)
                 workflows = json.loads(wf_raw) if wf_raw else []
-                wf = next((w for w in workflows if w["id"] == workflow_id), None)
+                scoped_wf_id = f"{tenant_id}::{workflow_id}"
+                wf = next(
+                    (
+                        w
+                        for w in workflows
+                        if w.get("id") in (workflow_id, scoped_wf_id)
+                    ),
+                    None,
+                )
                 if not wf:
                     raise ValueError(f"Workflow '{workflow_id}' nicht gefunden.")
 
@@ -214,10 +239,11 @@ class SchedulerAgent:
                 logger.info("Starte Workflow '%s' für Task '%s' (Run: %s)", workflow_id, task["name"], run_id)
 
                 engine = WorkflowEngine(self._redis, self.orchestrator)
-                await engine.execute(wf, run_id)
+                await engine.execute(wf, run_id, triggered_by="schedule")
 
-                # Ergebnis aus Redis lesen
-                runs_raw = await self._redis.connection.get(f"ninko:workflow:runs:{workflow_id}")
+                # Ergebnis aus Redis lesen (tenant-scoped Runs-Key)
+                runs_key = f"{_tenant_key('ninko:workflow:runs:', tenant_id)}{wf['id']}"
+                runs_raw = await self._redis.connection.get(runs_key)
                 runs = json.loads(runs_raw) if runs_raw else []
                 run_result = next((r for r in runs if r["id"] == run_id), {})
                 status = run_result.get("status", "error")
@@ -233,9 +259,11 @@ class SchedulerAgent:
                 # Dynamischen Agenten aus dem Pool aufrufen
                 from core.agent_pool import get_agent_pool
                 pool = get_agent_pool()
-                # Scheduler ist ein System-Kontext ohne Session/Tenant → cross-tenant
-                # erlaubt, damit die (vom Owner erstellte) Task ihren Agenten findet.
-                agent, agent_name = pool.get_agent_by_id(agent_id, allow_cross_tenant=True)
+                # Tasks mit tenant_id laufen tenant-strikt (Session-Kontext oben
+                # gesetzt). Cross-tenant nur noch als Fallback für Legacy-Tasks
+                # ohne tenant_id.
+                allow_cross = "tenant_id" not in task
+                agent, agent_name = pool.get_agent_by_id(agent_id, allow_cross_tenant=allow_cross)
                 if agent is None:
                     raise ValueError(f"Agent '{agent_id}' nicht im Pool gefunden.")
 
@@ -361,6 +389,8 @@ class SchedulerAgent:
                 "agent_id": data.get("agent_id"),
                 "target_module": data.get("target_module"),
                 "enabled": data.get("enabled", True),
+                "tenant_id": (data.get("tenant_id") or "default").strip().lower() or "default",
+                "source": data.get("source"),
                 "last_run": None,
                 "next_run": None,
                 "last_result": None,
@@ -429,11 +459,31 @@ class SchedulerAgent:
         return task
 
     async def run_task_now(self, task_id: str) -> dict | None:
-        """Task sofort manuell ausführen."""
+        """Task sofort im Hintergrund starten (blockiert den Aufrufer nicht).
+
+        Das Ergebnis kommt asynchron über das WS-Event 'task_executed' und
+        die Task-Logs. Gibt {"status": "started"|"already_running"} zurück.
+        """
         task = await self.get_task(task_id)
         if not task:
             return None
-        return await self._run_task_guarded(task)
+        if task["id"] in self._running_task_ids:
+            return {"task_id": task_id, "status": "already_running"}
+
+        bg_task = asyncio.create_task(self._run_task_guarded(task))
+        self._bg_manual_runs.add(bg_task)
+
+        def _on_done(done: asyncio.Task) -> None:
+            self._bg_manual_runs.discard(done)
+            try:
+                exc = done.exception()
+            except asyncio.CancelledError:
+                return
+            if exc:
+                logger.exception("Manueller Task-Run abgestürzt: %s", exc)
+
+        bg_task.add_done_callback(_on_done)
+        return {"task_id": task_id, "status": "started"}
 
     # ── Logs ───────────────────────────────────────────
 
