@@ -10,7 +10,7 @@ async def check_zabbix_health(connection_id: str = "") -> dict:
     from .tools import get_zabbix_status
 
     try:
-        result = await get_zabbix_status(connection_id)
+        result = await get_zabbix_status.ainvoke({"connection_id": connection_id})
         return {"status": "ok", "detail": "Zabbix reachable", "info": result}
     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
         return {"status": "error", "detail": str(exc)}
