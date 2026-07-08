@@ -583,6 +583,13 @@ const Ninko = {
                         const htmlRes = await fetch(`/api/modules/${mod.name}/frontend/tab.html`);
                         if (htmlRes.ok) {
                             const html = await htmlRes.text();
+                            // Backend-Marker für "kein Dashboard": lokalisierten Empty-State
+                            // rendern statt des sprachneutralen Fallback-HTMLs
+                            if (html.includes('ninko:no-dashboard')) {
+                                setNoDashboard();
+                                mainContent.appendChild(panel);
+                                continue;
+                            }
                             panel.innerHTML = (typeof DOMPurify !== 'undefined')
                                 ? DOMPurify.sanitize(html, {
                                     ADD_ATTR: ['target', 'rel'],
@@ -654,17 +661,18 @@ const Ninko = {
     },
 
     _moduleCategoryLabel(category) {
-        const labels = {
-            infrastructure: '🏗️ Infrastructure',
-            network: '🌐 Network',
-            monitoring: '📊 Monitoring',
-            productivity: '📋 Productivity',
-            communication: '💬 Communication',
-            cloud: '☁️ Cloud & Hosting',
-            iot: '🏠 IoT & Smart Home',
-            other: '📦 Other',
+        const emojis = {
+            infrastructure: '🏗️',
+            network: '🌐',
+            monitoring: '📊',
+            productivity: '📋',
+            communication: '💬',
+            cloud: '☁️',
+            iot: '🏠',
+            other: '📦',
         };
-        return labels[category] || labels.other;
+        const key = Object.prototype.hasOwnProperty.call(emojis, category) ? category : 'other';
+        return `${emojis[key]} ${t('module.category.' + key)}`;
     },
 
     _loadModuleNavPrefs() {
@@ -761,11 +769,11 @@ const Ninko = {
             });
 
         if (favorites.length) {
-            parts.push('<div class="module-nav-group-label">⭐ Favorites</div>');
+            parts.push(`<div class="module-nav-group-label">⭐ ${t('module.group.favorites')}</div>`);
             parts.push(...renderUniqueRows(favorites));
         }
         if (recent.length) {
-            parts.push('<div class="module-nav-group-label">🕐 Recently Used</div>');
+            parts.push(`<div class="module-nav-group-label">🕐 ${t('module.group.recent')}</div>`);
             parts.push(...renderUniqueRows(recent));
         }
         order.forEach((category) => {
@@ -778,7 +786,7 @@ const Ninko = {
         });
 
         if (!parts.length) {
-            parts.push('<div class="module-subnav-empty">Keine Module gefunden.</div>');
+            parts.push(`<div class="module-subnav-empty">${t('module.noneFound')}</div>`);
         }
 
         list.innerHTML = parts.join('');
@@ -1929,7 +1937,22 @@ const Ninko = {
     renderWelcomeState() {
         const container = document.getElementById('chat-messages');
         if (!container) return;
-        container.innerHTML = this.getWelcomeHtml();
+        // In-place Update wenn das Welcome-Markup bereits steht (statisches HTML
+        // oder früherer Render): verhindert Logo-Remount, Bild-Reflash und
+        // Layout-Shift ("Dashboard-Flackern") bei Branding-/Sprach-/Theme-Updates.
+        const existing = container.querySelector('.welcome-message');
+        const h2 = existing?.querySelector('.dh-headline h2');
+        const img = existing?.querySelector('.dh-headline-icon');
+        if (existing && h2 && img && container.children.length === 1) {
+            const headline = this._getWelcomeMessageVariant(this._getTimePeriod());
+            const logoSrc = this._branding?.login_image_url || '/static/images/logo_dashboard_new.png?v=3';
+            if (h2.textContent !== headline) h2.textContent = headline;
+            // data-i18n entfernen, damit spätere i18n-Sweeps die Variante nicht überschreiben
+            h2.removeAttribute('data-i18n');
+            if (img.getAttribute('src') !== logoSrc) img.setAttribute('src', logoSrc);
+        } else {
+            container.innerHTML = this.getWelcomeHtml();
+        }
         this._setChatState('centered');
         this._updateChatInputState('ask');
     },
@@ -4051,6 +4074,8 @@ ${messagesHtml}
         localStorage.setItem('ninko_lang', lang);
         if (document.querySelector('.welcome-message')) this.renderWelcomeState();
         else this._updateChatInputState(this._chatMessages.length ? 'reply' : 'ask');
+        // JS-gerenderte Kategorie-Labels der Modul-Sidebar sofort in neuer Sprache zeigen
+        if (this._moduleNavItems?.length) this._renderModuleSidebar();
 
         // Aktiven Zustand der Sprach-Buttons aktualisieren
         document.querySelectorAll('.lang-btn').forEach(btn => {
@@ -5834,7 +5859,7 @@ ${messagesHtml}
             this._updateBulkUpdateButton();
 
             if (!modules.length) {
-                container.innerHTML = '<p class="empty-state">Keine Module gefunden.</p>';
+                container.innerHTML = `<p class="empty-state">${t('module.noneFound')}</p>`;
                 return;
             }
 
