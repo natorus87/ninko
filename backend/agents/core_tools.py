@@ -2325,3 +2325,123 @@ async def delete_scheduled_task(task_id: str) -> str:
     except (ValueError, *_CORE_TOOL_EXCEPTIONS) as exc:
         logger.error("delete_scheduled_task failed: %s", exc)
         return _t(f"Fehler: {exc}", f"Error: {exc}")
+
+
+@tool
+async def run_agent_job(agent_id_or_name: str, prompt: str) -> str:
+    """Startet einen Custom-Agenten einmalig als Hintergrund-Job (fire-and-forget).
+
+    Wann verwenden:
+    - Der User möchte einen erstellten Agenten EINMALIG eine Aufgabe ausführen lassen
+      (ohne Cron-Zeitplan und ohne den Chat zu blockieren)
+    - Für wiederkehrende Ausführung stattdessen create_scheduled_task nutzen
+
+    Args:
+        agent_id_or_name: ID oder eindeutiger Name des Agenten aus dem Agenten-Pool
+        prompt: Die Aufgabe, die der Agent einmalig ausführen soll
+
+    Returns:
+        Bestätigung mit Job-ID. Das Ergebnis ist später mit get_agent_job_result
+        abrufbar; zusätzlich informiert das Event 'agent_job_finished' das Dashboard.
+    """
+    try:
+        from core.agent_jobs import get_agent_job_manager
+        from core.agent_pool import get_agent_pool
+
+        pool = get_agent_pool()
+        lookup = agent_id_or_name.strip()
+        agent_id = lookup
+
+        # Name-Lookup, falls keine (Teil-)UUID übergeben wurde
+        agent, _name = pool.get_agent_by_id(lookup)
+        if agent is None:
+            candidates = [
+                a
+                for a in pool.list_agents()
+                if str(a.get("name", "")).strip().lower() == lookup.lower()
+            ]
+            if len(candidates) > 1:
+                ids = ", ".join(str(a.get("id", ""))[:8] for a in candidates)
+                return _t(
+                    f"Mehrdeutiger Agenten-Name '{lookup}': {ids}. Bitte ID angeben.",
+                    f"Ambiguous agent name '{lookup}': {ids}. Please provide the ID.",
+                )
+            if not candidates:
+                return _t(
+                    f"Fehler: Agent '{lookup}' nicht gefunden.",
+                    f"Error: Agent '{lookup}' not found.",
+                )
+            agent_id = str(candidates[0].get("id", ""))
+
+        manager = get_agent_job_manager()
+        job = await manager.start_job(
+            tenant_id=_current_tenant_id(),
+            agent_id=agent_id,
+            prompt=prompt,
+            triggered_by="orchestrator",
+        )
+        return _t(
+            f"✅ Agent-Job gestartet (Job-ID: {job['id']}, Agent: {job['agent_name']}). "
+            "Der Job läuft im Hintergrund — Ergebnis mit get_agent_job_result abrufbar.",
+            f"✅ Agent job started (job id: {job['id']}, agent: {job['agent_name']}). "
+            "The job runs in the background — fetch the result with get_agent_job_result.",
+        )
+
+    except (ValueError, *_CORE_TOOL_EXCEPTIONS) as exc:
+        logger.error("run_agent_job failed: %s", exc)
+        return _t(f"Fehler: {exc}", f"Error: {exc}")
+
+
+@tool
+async def get_agent_job_result(job_id: str) -> str:
+    """Ruft Status und Ergebnis eines zuvor gestarteten Agent-Jobs ab.
+
+    Args:
+        job_id: Die Job-ID aus run_agent_job (auch verkürzt, mind. 8 Zeichen)
+
+    Returns:
+        Status (pending/running/succeeded/failed/cancelled) und — falls
+        abgeschlossen — das Ergebnis bzw. die Fehlermeldung.
+    """
+    try:
+        from core.agent_jobs import get_agent_job_manager
+
+        manager = get_agent_job_manager()
+        tenant_id = _current_tenant_id()
+        job_id = job_id.strip()
+
+        job = await manager.get_job(tenant_id, job_id)
+        if job is None and len(job_id) >= 8 and len(job_id) < 36:
+            # Partial-ID-Match über die Jobs aller Agenten des Tenants
+            from core.agent_pool import get_agent_pool
+
+            for meta in get_agent_pool().list_agents():
+                jobs = await manager.list_jobs(tenant_id, str(meta.get("id", "")))
+                match = next((j for j in jobs if j["id"].startswith(job_id)), None)
+                if match:
+                    job = match
+                    break
+
+        if job is None:
+            return _t(
+                f"Fehler: Job '{job_id}' nicht gefunden.",
+                f"Error: Job '{job_id}' not found.",
+            )
+
+        status = job.get("status", "unknown")
+        header = _t(
+            f"Agent-Job {job['id'][:8]} (Agent: {job.get('agent_name', '')}) — Status: {status}",
+            f"Agent job {job['id'][:8]} (agent: {job.get('agent_name', '')}) — status: {status}",
+        )
+        if status in ("pending", "running"):
+            return header + _t(
+                "\nDer Job läuft noch — später erneut abfragen.",
+                "\nThe job is still running — check again later.",
+            )
+        if status == "succeeded":
+            return f"{header}\n\n{job.get('result', '')}"
+        return header + f"\n{job.get('error') or job.get('result') or ''}"
+
+    except (ValueError, *_CORE_TOOL_EXCEPTIONS) as exc:
+        logger.error("get_agent_job_result failed: %s", exc)
+        return _t(f"Fehler: {exc}", f"Error: {exc}")
