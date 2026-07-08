@@ -393,6 +393,23 @@ def test_duplicate_tool_names_resolve_with_module_context() -> None:
     assert registry.tier_of("start_container", "docker") == ToolTier.WRITE_SYSTEM
     assert registry.tier_of("start_container", "proxmox") == ToolTier.WRITE_SYSTEM
 
+    assert registry.get("restart_container", "docker").module == "docker"
+    assert registry.tier_of("restart_container", "docker") == ToolTier.WRITE_SYSTEM
+    assert registry.get("remove_container", "docker").module == "docker"
+    assert registry.tier_of("remove_container", "docker") == ToolTier.ADMIN
+
+
+def test_registry_falls_back_to_global_name_when_module_context_misses() -> None:
+    """Core tools must not drop to LLM fallback when called through a wrapper module."""
+    registry = get_tool_registry()
+
+    meta = registry.get("delete_scheduled_task", "orchestrator")
+
+    assert meta is not None
+    assert meta.module == "core"
+    assert registry.tier_of("delete_scheduled_task", "orchestrator") == ToolTier.ADMIN
+    assert registry.is_readonly("delete_scheduled_task", "orchestrator") is False
+
 
 def test_proxmox_power_tool_descriptions_include_german_restart_synonyms() -> None:
     """
