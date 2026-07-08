@@ -546,7 +546,9 @@ class ToolRegistry:
     def get(self, name: str, module: str | None = None) -> Optional[ToolMetadata]:
         """Ruft Metadaten für ein Tool auf."""
         if module:
-            return self._tools_by_module.get((module, name))
+            meta = self._tools_by_module.get((module, name))
+            if meta is not None:
+                return meta
         return self._tools.get(name)
 
     def is_readonly(self, name: str, module: str | None = None) -> bool | None:
@@ -1072,6 +1074,31 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
         ToolMetadata(
             "get_docker_disk_usage", "docker", readonly=True, required_bins=("docker",)
         ),
+        ToolMetadata(
+            "start_container",
+            "docker",
+            tier=ToolTier.WRITE_SYSTEM,
+            required_bins=("docker",),
+        ),
+        ToolMetadata(
+            "stop_container",
+            "docker",
+            tier=ToolTier.WRITE_SYSTEM,
+            required_bins=("docker",),
+        ),
+        ToolMetadata(
+            "restart_container",
+            "docker",
+            tier=ToolTier.WRITE_SYSTEM,
+            required_bins=("docker",),
+        ),
+        ToolMetadata(
+            "remove_container",
+            "docker",
+            destructive=True,
+            tier=ToolTier.ADMIN,
+            required_bins=("docker",),
+        ),
     ]
     registry.register_many(docker_tools)
 
@@ -1160,6 +1187,24 @@ def _populate_default_registry(registry: ToolRegistry) -> None:
         ToolMetadata("checkmk_search_services", "checkmk", readonly=True),
     ]
     registry.register_many(checkmk_tools)
+
+    # ── Zabbix ──────────────────────────────────────────────────────────────
+    zabbix_tools = [
+        ToolMetadata("get_zabbix_status", "zabbix", readonly=True),
+        ToolMetadata("list_zabbix_hosts", "zabbix", readonly=True),
+        ToolMetadata("get_zabbix_host", "zabbix", readonly=True),
+        ToolMetadata("list_zabbix_items", "zabbix", readonly=True),
+        ToolMetadata("list_zabbix_triggers", "zabbix", readonly=True),
+        ToolMetadata("get_zabbix_problems", "zabbix", readonly=True),
+        ToolMetadata("list_zabbix_graphs", "zabbix", readonly=True),
+        ToolMetadata("list_zabbix_actions", "zabbix", readonly=True),
+        ToolMetadata("get_zabbix_history", "zabbix", readonly=True),
+        ToolMetadata("get_zabbix_host_group", "zabbix", readonly=True),
+        ToolMetadata("list_zabbix_templates", "zabbix", readonly=True),
+        ToolMetadata("create_zabbix_host", "zabbix", tier=ToolTier.WRITE_SYSTEM),
+        ToolMetadata("delete_zabbix_host", "zabbix", destructive=True, tier=ToolTier.ADMIN),
+    ]
+    registry.register_many(zabbix_tools)
 
     # ── Synology ────────────────────────────────────────────────────────────
     synology_tools = [
