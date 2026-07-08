@@ -46,7 +46,7 @@ def is_valid_condition_expression(expr: str) -> bool:
 
 def _has_cycle(node_ids: list[str], edges: list[dict]) -> bool:
     """Zyklus-Erkennung via Kahn-Toposort auf den Edge-Paaren."""
-    indegree = {nid: 0 for nid in node_ids}
+    indegree = dict.fromkeys(node_ids, 0)
     outgoing: dict[str, list[str]] = {nid: [] for nid in node_ids}
     for edge in edges:
         src = edge.get("source_id", "")
