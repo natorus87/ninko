@@ -3649,6 +3649,13 @@ ${messagesHtml}
                 `Aufgabe "${data.task_name}" ausgeführt (${data.duration_ms}ms)`,
                 data.status === 'ok' ? 'success' : 'error'
             );
+        } else if (type === 'agent_job_finished') {
+            showNotification(
+                `Agent-Job "${data.agent_name}" beendet: ${data.status} (${data.duration_ms}ms)`,
+                data.status === 'succeeded' ? 'success' : 'error'
+            );
+            // Offenes Jobs-Panel aktualisieren
+            if (this._agentJobsAgentId === data.agent_id) this.loadAgentJobs();
         } else if (type === 'module_health') {
             // Update module health indicators
         } else if (type === 'log') {
