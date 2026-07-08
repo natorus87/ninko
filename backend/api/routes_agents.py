@@ -16,7 +16,15 @@ from pydantic import BaseModel, Field
 from core.auth import auth_tenant_id, resolve_request_auth
 from core.redis_client import get_redis
 from core.module_registry import get_registry
-from schemas.agents import AgentDefinition, AgentCreate, AgentListResponse
+from schemas.agents import (
+    AgentDefinition,
+    AgentCreate,
+    AgentListResponse,
+    AgentJobInfo,
+    AgentJobListResponse,
+    AgentJobRunRequest,
+    AgentJobRunResponse,
+)
 
 logger = logging.getLogger("ninko.api.agents")
 router = APIRouter(prefix="/api/agents", tags=["Agents"])
@@ -600,6 +608,73 @@ async def duplicate_agent(agent_id: str, request: Request) -> dict:
     await _sync_agent_pool(duplicate)
     logger.info("Agent dupliziert: %s → %s", agent_id, duplicate["id"])
     return {"id": duplicate["id"], "status": "created"}
+
+
+# ── Agent Jobs: einmalige Hintergrund-Ausführung ─────
+
+
+def _public_job(job: dict) -> AgentJobInfo:
+    j = dict(job)
+    j.pop("tenant_id", None)
+    return AgentJobInfo(**j)
+
+
+@router.post("/{agent_id}/run", status_code=202, response_model=AgentJobRunResponse)
+async def run_agent(agent_id: str, body: AgentJobRunRequest, request: Request) -> AgentJobRunResponse:
+    """Führt einen Agenten einmalig als Hintergrund-Job aus."""
+    from core.agent_jobs import get_agent_job_manager
+
+    tenant_id = auth_tenant_id(resolve_request_auth(request))
+    manager = get_agent_job_manager()
+    try:
+        job = await manager.start_job(
+            tenant_id=tenant_id,
+            agent_id=agent_id,
+            prompt=body.prompt,
+            triggered_by="api",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return AgentJobRunResponse(job_id=job["id"], agent_id=agent_id, status=job["status"])
+
+
+@router.get("/{agent_id}/jobs", response_model=AgentJobListResponse)
+async def list_agent_jobs(agent_id: str, request: Request, limit: int = 20) -> AgentJobListResponse:
+    """Job-Historie eines Agenten (neueste zuerst)."""
+    from core.agent_jobs import get_agent_job_manager
+
+    tenant_id = auth_tenant_id(resolve_request_auth(request))
+    jobs = await get_agent_job_manager().list_jobs(tenant_id, agent_id, limit=limit)
+    return AgentJobListResponse(jobs=[_public_job(j) for j in jobs], total=len(jobs))
+
+
+@router.get("/jobs/{job_id}", response_model=AgentJobInfo)
+async def get_agent_job(job_id: str, request: Request) -> AgentJobInfo:
+    """Status/Ergebnis eines einzelnen Agent-Jobs."""
+    from core.agent_jobs import get_agent_job_manager
+
+    tenant_id = auth_tenant_id(resolve_request_auth(request))
+    job = await get_agent_job_manager().get_job(tenant_id, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' nicht gefunden")
+    return _public_job(job)
+
+
+@router.post("/jobs/{job_id}/cancel", response_model=AgentJobInfo)
+async def cancel_agent_job(job_id: str, request: Request) -> AgentJobInfo:
+    """Bricht einen laufenden/wartenden Agent-Job ab."""
+    from core.agent_jobs import get_agent_job_manager
+
+    tenant_id = auth_tenant_id(resolve_request_auth(request))
+    manager = get_agent_job_manager()
+    try:
+        job = await manager.cancel_job(tenant_id, job_id)
+    except ValueError as exc:
+        detail = str(exc)
+        status_code = 404 if "nicht gefunden" in detail else 409
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+    return _public_job(job)
 
 
 async def _sync_agent_pool(agent: dict) -> None:
