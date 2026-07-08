@@ -3,9 +3,11 @@ Email Module — LangGraph @tool functions for SMTP/IMAP.
 """
 
 import asyncio
+import base64
 import email
 import mimetypes
 import os
+from pathlib import Path
 from email.message import EmailMessage
 from email.header import decode_header
 from email.mime.base import MIMEBase
@@ -31,6 +33,33 @@ from .schemas import (
 )
 
 logger = logging.getLogger("ninko.modules.email.tools")
+EMAIL_UPLOAD_DIR = Path(os.environ.get("EMAIL_UPLOAD_DIR", "/app/data/uploads/email"))
+
+
+def _xoauth2_auth_string(email_address: str, oauth_token: str) -> str:
+    return f"user={email_address}\x01auth=Bearer {oauth_token}\x01\x01"
+
+
+def _xoauth2_smtp_argument(email_address: str, oauth_token: str) -> str:
+    auth_bytes = _xoauth2_auth_string(email_address, oauth_token).encode("utf-8")
+    return base64.b64encode(auth_bytes).decode("ascii")
+
+
+def _resolve_attachment_path(file_path: str) -> Path:
+    upload_dir = EMAIL_UPLOAD_DIR.resolve()
+    path = Path(file_path)
+    candidate = path if path.is_absolute() else upload_dir / path
+    resolved = candidate.resolve(strict=False)
+    try:
+        resolved.relative_to(upload_dir)
+    except ValueError as exc:
+        raise ValueError(
+            _t(
+                de=f"Anhang liegt außerhalb des erlaubten Upload-Verzeichnisses: {file_path}",
+                en=f"Attachment is outside the allowed upload directory: {file_path}",
+            )
+        ) from exc
+    return resolved
 
 
 async def _get_auth_context(connection_id: str = "") -> dict:
@@ -129,7 +158,7 @@ def _create_imap_connection(ctx: dict) -> imaplib.IMAP4_SSL:
     mail = imaplib.IMAP4_SSL(ctx["imap_server"], ctx["imap_port"])
 
     if ctx["auth_type"] == "oauth2":
-        auth_string = f"user={ctx['email_address']}\\x01auth=Bearer {ctx['oauth_token']}\\x01\\x01"
+        auth_string = _xoauth2_auth_string(ctx["email_address"], ctx["oauth_token"])
         mail.authenticate("XOAUTH2", lambda x: auth_string.encode("utf-8"))
     else:
         mail.login(ctx["email_address"], ctx["password"])
@@ -157,8 +186,8 @@ async def check_connection(connection_id: str) -> dict:
 
             with server:
                 if ctx["auth_type"] == "oauth2":
-                    auth_string = f"user={ctx['email_address']}\\x01auth=Bearer {ctx['oauth_token']}\\x01\\x01"
-                    server.docmd("AUTH", "XOAUTH2 " + auth_string.encode("ascii").hex())
+                    auth_arg = _xoauth2_smtp_argument(ctx["email_address"], ctx["oauth_token"])
+                    server.docmd("AUTH", "XOAUTH2 " + auth_arg)
                 else:
                     server.login(ctx["email_address"], ctx["password"])
 
@@ -177,16 +206,17 @@ async def check_connection(connection_id: str) -> dict:
 
 def _attach_file(msg_multipart: MIMEMultipart, file_path: str) -> bool:
     """Attach a file to a MIMEMultipart message. Returns True on success."""
-    if not os.path.isfile(file_path):
-        logger.warning("send_email: attachment not found: %s", file_path)
+    resolved_path = _resolve_attachment_path(file_path)
+    if not resolved_path.is_file():
+        logger.warning("send_email: attachment not found: %s", resolved_path)
         return False
 
-    ctype, encoding = mimetypes.guess_type(file_path)
+    ctype, encoding = mimetypes.guess_type(str(resolved_path))
     if ctype is None or encoding is not None:
         ctype = "application/octet-stream"
     maintype, subtype = ctype.split("/", 1)
 
-    with open(file_path, "rb") as f:
+    with resolved_path.open("rb") as f:
         file_data = f.read()
 
     if maintype == "text":
@@ -196,7 +226,7 @@ def _attach_file(msg_multipart: MIMEMultipart, file_path: str) -> bool:
         part.set_payload(file_data)
         encoders.encode_base64(part)
 
-    filename = os.path.basename(file_path)
+    filename = resolved_path.name
     part.add_header("Content-Disposition", "attachment", filename=filename)
     msg_multipart.attach(part)
     return True
@@ -287,8 +317,8 @@ async def send_email(
 
         with server:
             if ctx["auth_type"] == "oauth2":
-                auth_string = f"user={ctx['email_address']}\\x01auth=Bearer {ctx['oauth_token']}\\x01\\x01"
-                server.docmd("AUTH", "XOAUTH2 " + auth_string.encode("ascii").hex())
+                auth_arg = _xoauth2_smtp_argument(ctx["email_address"], ctx["oauth_token"])
+                server.docmd("AUTH", "XOAUTH2 " + auth_arg)
             else:
                 server.login(ctx["email_address"], ctx["password"])
             refused = server.send_message(msg)
