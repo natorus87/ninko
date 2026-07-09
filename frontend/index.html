@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=67">
+    <link rel="stylesheet" href="/static/style.css?v=70">
 </head>
 
 <body>
@@ -68,43 +68,49 @@
                     </div>
 
                     <div id="sidebar-settings-subnav" class="sidebar-subnav" style="display:none">
-                        <div id="subnav-settings" class="subnav-section" style="display:none">
-                            <div class="settings-category-label">Intelligence</div>
+                        <div id="subnav-settings" class="subnav-section" role="navigation" aria-label="Einstellungen" style="display:none">
+                            <div class="settings-category-label" data-i18n="settings.category.ai">KI &amp; Provider</div>
                             <button class="settings-tab settings-tab-sub active" data-settings-tab="llm" data-action="switchSettingsTab" data-args='["llm"]'>
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-                                LLM Provider
+                                <span data-i18n="settings.llm">LLM Provider</span>
                             </button>
+                            <button class="settings-tab settings-tab-sub" data-settings-tab="skills" data-action="switchSettingsTab" data-args='["skills"]'>
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"></path></svg>
+                                <span data-i18n="settings.skills">Skills</span>
+                            </button>
+                            <button class="settings-tab settings-tab-sub" data-settings-tab="imagegen" data-action="switchSettingsTab" data-args='["imagegen"]'>
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                                <span data-i18n="settings.imagegen">Bildgenerierung</span>
+                            </button>
+                            <button class="settings-tab settings-tab-sub" data-settings-tab="tts" data-action="switchSettingsTab" data-args='["tts"]'>
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                                <span data-i18n="settings.speech">Sprache &amp; Audio</span>
+                            </button>
+
+                            <div class="settings-category-label" data-i18n="settings.category.security">Sicherheit</div>
                             <button class="settings-tab settings-tab-sub" data-settings-tab="safeguard" data-action="switchSettingsTab" data-args='["safeguard"]'>
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
                                 <span data-i18n="safeguard.settingsTab">SafeGuard</span>
                             </button>
+                            <button class="settings-tab settings-tab-sub" data-settings-tab="access" data-action="switchSettingsTab" data-args='["access"]'>
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><path d="M20 8v6"></path><path d="M23 11h-6"></path></svg>
+                                <span data-i18n="settings.access">Benutzer &amp; Rollen</span>
+                            </button>
 
-                            <div class="settings-category-label">Appearance</div>
+                            <div class="settings-category-label" data-i18n="settings.category.appearance">Darstellung</div>
                             <button class="settings-tab settings-tab-sub" data-settings-tab="themes" data-action="switchSettingsTab" data-args='["themes"]'>
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3L4 7.5v9L12 21l8-4.5v-9z"></path><path d="M12 12l8-4.5"></path><path d="M12 12L4 7.5"></path><path d="M12 12v9"></path></svg>
-                                Themes
+                                <span data-i18n="settings.themes">Themes</span>
                             </button>
                             <button class="settings-tab settings-tab-sub" data-settings-tab="language" data-action="switchSettingsTab" data-args='["language"]'>
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
                                 <span data-i18n="settings.language">Sprache</span>
                             </button>
-                            <button class="settings-tab settings-tab-sub" data-settings-tab="tts" data-action="switchSettingsTab" data-args='["tts"]'>
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-                                <span data-i18n="settings.tts">Sprachausgabe</span>
-                            </button>
-                            <button class="settings-tab settings-tab-sub" data-settings-tab="imagegen" data-action="switchSettingsTab" data-args='["imagegen"]'>
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-                                Bildgenerierung
-                            </button>
 
-                            <div class="settings-category-label">System</div>
+                            <div class="settings-category-label" data-i18n="settings.category.system">System</div>
                             <button class="settings-tab settings-tab-sub" data-settings-tab="modules" data-action="switchSettingsTab" data-args='["modules"]'>
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
-                                Module
-                            </button>
-                            <button class="settings-tab settings-tab-sub" data-settings-tab="access" data-action="switchSettingsTab" data-args='["access"]'>
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><path d="M20 8v6"></path><path d="M23 11h-6"></path></svg>
-                                Benutzer & Rollen
+                                <span data-i18n="settings.modules">Module</span>
                             </button>
                             <button class="settings-tab settings-tab-sub" data-settings-tab="alerts" data-action="switchSettingsTab" data-args='["alerts"]'>
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
@@ -131,7 +137,7 @@
                         <span class="sidebar-panel-title">Automatisierung</span>
                     </div>
                     <div class="sidebar-panel-body">
-                        <div id="subnav-automatisierung" class="subnav-section">
+                        <div id="subnav-automatisierung" class="subnav-section" role="navigation" aria-label="Automatisierung">
                             <button class="settings-tab" data-auto-tab="tasks" data-action="switchAutoTab" data-args='["tasks"]'>
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                                 <span data-i18n="nav.tasks">Aufgaben</span>
@@ -165,7 +171,7 @@
                         <button class="sidebar-back-btn" type="button" data-action="openSidebarPanel" data-args='["automatisierung"]' aria-label="Zurück">
                             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="M12 19l-7-7 7-7"></path></svg>
                         </button>
-                        <span class="sidebar-panel-title">Module</span>
+                        <span class="sidebar-panel-title" data-i18n="nav.modules">Module</span>
                     </div>
                     <div class="sidebar-panel-body sidebar-panel-body-modules">
                         <div id="subnav-modules" class="subnav-section subnav-section-modules">
@@ -597,7 +603,9 @@ print('Hello, World!')"></textarea>
                         <h2>Agent Builder</h2>
                         <div style="display:flex;gap:0.5rem;">
                             <button class="btn btn-outline" data-action="openSkillsPanel">Skills</button>
-                            <button class="btn btn-outline" data-action="openTemplatesPanel">⚡ Vorlagen</button>
+                            <button class="btn btn-outline" data-action="openTemplatesPanel">
+                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:text-bottom;margin-right:0.3rem;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>Vorlagen
+                            </button>
                             <button class="btn btn-primary" data-action="openAgentEditor" data-args='[null]'>+ Neuer Agent</button>
                         </div>
                     </div>
@@ -609,7 +617,7 @@ print('Hello, World!')"></textarea>
                 <!-- Template Gallery Panel -->
                 <div id="agenten-templates" class="module-dashboard hidden">
                     <div class="page-header">
-                        <h2>⚡ Agent-Vorlagen</h2>
+                        <h2>Agent-Vorlagen</h2>
                         <button class="btn btn-outline" data-action="closeTemplatesPanel">← Zurück</button>
                     </div>
                     <p class="text-muted" style="margin-bottom:1.25rem;font-size:0.88rem;">Wähle eine Vorlage als Ausgangspunkt – du kannst alles anpassen.</p>
@@ -718,7 +726,7 @@ print('Hello, World!')"></textarea>
                     <div class="page-header">
                         <h2 id="agent-editor-title">Neuer Agent</h2>
                         <div style="display:flex;gap:0.5rem;">
-                            <button class="btn btn-outline" data-action="openTemplatesPanel">⚡ Vorlage</button>
+                            <button class="btn btn-outline" data-action="openTemplatesPanel">Vorlage</button>
                             <button class="btn btn-outline" data-action="closeAgentEditor">Abbrechen</button>
                             <button class="btn btn-primary" data-action="saveAgent">Speichern</button>
                         </div>
@@ -809,8 +817,10 @@ print('Hello, World!')"></textarea>
                     <div class="page-header">
                         <h2>Workflows</h2>
                         <div style="display:flex;gap:0.5rem;">
-                            <button class="btn btn-outline" data-action="openWorkflowTemplateSelector">📋 Aus Template</button>
-                            <button class="btn btn-primary" data-action="openWorkflowEditor" data-args='[null]'>+ Neuer Workflow</button>
+                            <button class="btn btn-outline" data-action="openWorkflowTemplateSelector">
+                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:text-bottom;margin-right:0.3rem;"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect></svg><span data-i18n="wf.fromTemplate">Aus Template</span>
+                            </button>
+                            <button class="btn btn-primary" data-action="openWorkflowEditor" data-args='[null]' data-i18n="wf.new">+ Neuer Workflow</button>
                         </div>
                     </div>
                     <div id="workflows-list" class="workflows-grid">
@@ -830,25 +840,26 @@ print('Hello, World!')"></textarea>
                                     </svg>
                                 </button>
                                 <input id="wf-name-input" type="text" class="form-input wf-title-input"
-                                    placeholder="Workflow-Name…">
+                                    placeholder="Workflow-Name…" data-i18n-placeholder="wf.namePlaceholder">
                             </div>
                             <input id="wf-desc-input" type="text" class="form-input wf-desc-input-field"
-                                placeholder="Kurze Beschreibung (optional)…">
+                                placeholder="Kurze Beschreibung (optional)…" data-i18n-placeholder="wf.descPlaceholder">
                         </div>
                         <div class="wf-node-palette">
-                            <span class="palette-label">Hinzufügen:</span>
-                            <button class="btn btn-sm wf-palette-btn wf-palette-trigger" data-action="wfAddNode" data-args='["trigger"]' title="Startet den Workflow">⚡ Trigger</button>
-                            <button class="btn btn-sm wf-palette-btn wf-palette-agent" data-action="wfAddNode" data-args='["agent"]' title="Führt einen KI-Agenten aus">🤖 Agent</button>
-                            <button class="btn btn-sm wf-palette-btn wf-palette-condition" data-action="wfAddNode" data-args='["condition"]' title="Verzweigt anhand einer Bedingung">🔀 Bedingung</button>
-                            <button class="btn btn-sm wf-palette-btn wf-palette-loop" data-action="wfAddNode" data-args='["loop"]' title="Wiederholt einen Ablauf">🔁 Loop</button>
-                            <button class="btn btn-sm wf-palette-btn wf-palette-parallel" data-action="wfAddNode" data-args='["parallel"]' title="Führt mehrere Aufgaben parallel aus">⚡ Parallel</button>
-                            <button class="btn btn-sm wf-palette-btn wf-palette-subflow" data-action="wfAddNode" data-args='["subflow"]' title="Ruft einen anderen Workflow auf">📥 Subflow</button>
-                            <button class="btn btn-sm wf-palette-btn wf-palette-variable" data-action="wfAddNode" data-args='["variable"]' title="Setzt eine Variable">📦 Variable</button>
-                            <button class="btn btn-sm wf-palette-btn wf-palette-end" data-action="wfAddNode" data-args='["end"]' title="Beendet den Workflow">⏹ Ende</button>
+                            <span class="palette-label" data-i18n="wf.addLabel">Hinzufügen:</span>
+                            <button class="btn btn-sm wf-palette-btn wf-palette-trigger" data-action="wfAddNode" data-args='["trigger"]' title="Startet den Workflow" data-i18n="wf.trigger">Trigger</button>
+                            <button class="btn btn-sm wf-palette-btn wf-palette-agent" data-action="wfAddNode" data-args='["agent"]' title="Führt einen KI-Agenten aus" data-i18n="wf.agent">Agent</button>
+                            <button class="btn btn-sm wf-palette-btn wf-palette-condition" data-action="wfAddNode" data-args='["condition"]' title="Verzweigt anhand einer Bedingung" data-i18n="wf.condition">Bedingung</button>
+                            <button class="btn btn-sm wf-palette-btn wf-palette-loop" data-action="wfAddNode" data-args='["loop"]' title="Wiederholt einen Ablauf" data-i18n="wf.loop">Loop</button>
+                            <button class="btn btn-sm wf-palette-btn wf-palette-parallel" data-action="wfAddNode" data-args='["parallel"]' title="Führt mehrere Aufgaben parallel aus" data-i18n="wf.parallel">Parallel</button>
+                            <button class="btn btn-sm wf-palette-btn wf-palette-subflow" data-action="wfAddNode" data-args='["subflow"]' title="Ruft einen anderen Workflow auf" data-i18n="wf.subflow">Subflow</button>
+                            <button class="btn btn-sm wf-palette-btn wf-palette-script" data-action="wfAddNode" data-args='["script"]' title="Führt ein Python-Script aus" data-i18n="wf.script">Script</button>
+                            <button class="btn btn-sm wf-palette-btn wf-palette-variable" data-action="wfAddNode" data-args='["variable"]' title="Setzt eine Variable" data-i18n="wf.variable">Variable</button>
+                            <button class="btn btn-sm wf-palette-btn wf-palette-end" data-action="wfAddNode" data-args='["end"]' title="Beendet den Workflow" data-i18n="wf.end">Ende</button>
                         </div>
                         <div style="display:flex;gap:0.5rem;">
-                            <button class="btn btn-outline" data-action="closeWorkflowEditor">Abbrechen</button>
-                            <button class="btn btn-primary" data-action="saveWorkflow">Speichern</button>
+                            <button class="btn btn-outline" data-action="closeWorkflowEditor" data-i18n="common.cancel">Abbrechen</button>
+                            <button class="btn btn-primary" data-action="saveWorkflow" data-i18n="settings.save">Speichern</button>
                         </div>
                     </div>
                     <div class="wf-editor-body">
@@ -864,7 +875,7 @@ print('Hello, World!')"></textarea>
 
                             <svg id="wf-edges-svg" class="wf-edges-svg"></svg>
                             <div id="wf-canvas" class="wf-canvas">
-                                <div class="wf-canvas-hint">Node-Typ aus der Palette oben wählen → Nodes per Drag verschieben<br>Port-Punkt (●) anklicken → Ziel-Node anklicken zum Verbinden</div>
+                                <div class="wf-canvas-hint" data-i18n="wf.canvasHint">Node-Typ aus der Palette wählen, Nodes per Drag verschieben. Port-Punkt (●) anklicken, dann Ziel-Node anklicken zum Verbinden.</div>
                             </div>
 
                             <div id="wf-minimap" class="wf-minimap" title="Mini-Map (Klick zum Navigieren)">
@@ -878,13 +889,13 @@ print('Hello, World!')"></textarea>
 
                 <div id="wf-node-inspector" class="wf-inspector hidden">
                     <div class="wf-inspector-header">
-                        <h4 id="wf-inspector-title">Node-Einstellungen</h4>
+                        <h4 id="wf-inspector-title" data-i18n="wf.insp.title">Node-Einstellungen</h4>
                         <button class="btn-close" data-action="wfCloseInspector">✕</button>
                     </div>
                     <div id="wf-inspector-content"></div>
                     <div id="wf-inspector-footer" style="margin-top:auto; padding-top:1rem;">
                         <button id="wf-node-delete-btn" class="btn btn-sm" style="color:var(--error-color);width:100%;"
-                            data-action="wfDeleteSelectedNode">Node löschen</button>
+                            data-action="wfDeleteSelectedNode" data-i18n="wf.deleteNode">Node löschen</button>
                     </div>
                 </div>
                 <!-- Run Dashboard -->
@@ -918,14 +929,14 @@ print('Hello, World!')"></textarea>
                         </div>
                         <div id="wf-run-inspector" class="wf-run-inspector hidden">
                             <div class="wf-inspector-header">
-                                <h4 id="wf-run-inspector-title">Step-Details</h4>
+                                <h4 id="wf-run-inspector-title" data-i18n="wf.run.stepDetails">Step-Details</h4>
                                 <button class="btn-close" data-action="_wfRunCloseInspector">✕</button>
                             </div>
                             <div id="wf-run-inspector-content" style="display:flex;flex-direction:column;flex:1;gap:0.75rem;overflow-y:auto;min-height:0;"></div>
                         </div>
                     </div>
                     <div class="wf-run-history-bar">
-                        <span style="font-size:0.78rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Run-Historie</span>
+                        <span style="font-size:0.78rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;" data-i18n="wf.runHistory">Run-Historie</span>
                         <div id="run-history-list" class="wf-run-history-list"></div>
                     </div>
                 </div>
@@ -939,10 +950,13 @@ print('Hello, World!')"></textarea>
                     <div class="settings-main">
                         <!-- LLM Tab -->
                         <div class="settings-panel active" id="settings-panel-llm">
+                            <div class="settings-header">
+                                <h2 data-i18n="settings.llm">LLM Provider</h2>
+                                <p class="settings-description" data-i18n="settings.llmDesc">Sprachmodell-Provider, Modul-Routing und Embeddings konfigurieren.</p>
+                            </div>
                             <div class="setting-group">
-                                <div
-                                    style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-                                    <h4 style="margin:0;">LLM-Provider</h4>
+                                <div class="setting-group-header">
+                                    <h4>LLM-Provider</h4>
                                     <button class="btn btn-sm btn-primary" data-action="openProviderEditor" data-args='[null]'>+ Provider hinzufügen</button>
                                 </div>
                                 <div id="llm-providers-list">
@@ -972,7 +986,7 @@ print('Hello, World!')"></textarea>
                                 <div class="form-actions" style="margin-top:0.75rem;">
                                     <span id="fn-call-status" class="save-status" style="font-size:0.85rem;"></span>
                                     <button class="btn btn-outline btn-sm" data-action="testFnCall" data-i18n="settings.testFnCall">Test Function Calling</button>
-                                    <button class="btn btn-primary btn-sm" data-action="saveRoutingMode" data-i18n="settings.save">💾 Speichern</button>
+                                    <button class="btn btn-primary btn-sm" data-action="saveRoutingMode" data-i18n="settings.save">Speichern</button>
                                 </div>
                             </div>
 
@@ -1026,7 +1040,7 @@ print('Hello, World!')"></textarea>
 
                                 <div class="form-actions" style="margin-top:0.75rem;">
                                     <span id="embed-provider-status" class="save-status" style="font-size:0.85rem;"></span>
-                                    <button class="btn btn-sm btn-primary" data-action="saveEmbedProvider" data-i18n="settings.save">💾 Speichern</button>
+                                    <button class="btn btn-sm btn-primary" data-action="saveEmbedProvider" data-i18n="settings.save">Speichern</button>
                                 </div>
                             </div>
 
@@ -1107,26 +1121,30 @@ print('Hello, World!')"></textarea>
 
                         <!-- Modules Tab -->
                         <div class="settings-panel" id="settings-panel-modules">
-                            <!-- Plugin Upload Section -->
-                            <div class="setting-group module-upload-panel">
-                                <h4><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                                        style="vertical-align:text-bottom;margin-right:0.25rem;">
+                            <div class="settings-header">
+                                <h2 data-i18n="settings.modules">Module</h2>
+                                <p class="settings-description" data-i18n="settings.modulesDesc">Module installieren, aktualisieren und aus Marketplace-Repositories beziehen.</p>
+                            </div>
+
+                            <!-- Installed Modules Section -->
+                            <div class="settings-section-title-row">
+                                <h3 class="settings-section-title" data-i18n="settings.installedModules">Installierte Module</h3>
+                                <button id="btn-update-all-modules"
+                                    class="btn btn-primary btn-sm"
+                                    style="display:none;"
+                                    data-action="updateAllPlugins"
+                                    data-i18n-title="marketplace.updateAllTooltip"
+                                    title="Alle Module mit verfügbaren Updates nacheinander aktualisieren">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;vertical-align:middle;">
                                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                        <polyline points="17 8 12 3 7 8"></polyline>
-                                        <line x1="12" y1="3" x2="12" y2="15"></line>
-                                    </svg> Plugin installieren</h4>
-                                <p class="text-muted module-upload-copy">Lade ein
-                                    Ninko-Modul als ZIP-Datei hoch. Es wird ohne Neustart installiert und aktiviert.
-                                </p>
-                                <div class="form-row module-upload-row">
-                                    <input type="file" id="plugin-upload-file" accept=".zip" class="form-input"
-                                        >
-                                    <button class="btn btn-primary" data-action="uploadPlugin"
-                                        id="plugin-upload-btn">Installieren</button>
-                                </div>
-                                <div id="plugin-upload-status" class="save-status"
-                                    ></div>
+                                        <polyline points="7 10 12 15 17 10"></polyline>
+                                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                                    </svg>
+                                    <span id="btn-update-all-modules-label" data-i18n="marketplace.updateAll">Alle aktualisieren</span>
+                                </button>
+                            </div>
+                            <div id="settings-modules-list" class="modules-grid">
+                                <p class="text-muted">Lade Module…</p>
                             </div>
 
                             <!-- Marketplace Section -->
@@ -1176,42 +1194,45 @@ print('Hello, World!')"></textarea>
                                 </div>
                             </div>
 
-                            <div class="settings-section-title-row">
-                                <h3 class="settings-section-title" data-i18n="settings.installedModules">Installierte Module</h3>
-                                <button id="btn-update-all-modules"
-                                    class="btn btn-primary btn-sm"
-                                    style="display:none;"
-                                    data-action="updateAllPlugins"
-                                    data-i18n-title="marketplace.updateAllTooltip"
-                                    title="Alle Module mit verfügbaren Updates nacheinander aktualisieren">
-                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;vertical-align:middle;">
+                            <!-- Plugin Upload Section -->
+                            <div class="setting-group module-upload-panel">
+                                <h4><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                        style="vertical-align:text-bottom;margin-right:0.25rem;">
                                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                        <polyline points="7 10 12 15 17 10"></polyline>
-                                        <line x1="12" y1="15" x2="12" y2="3"></line>
-                                    </svg>
-                                    <span id="btn-update-all-modules-label" data-i18n="marketplace.updateAll">Alle aktualisieren</span>
-                                </button>
-                            </div>
-                            <div id="settings-modules-list" class="modules-grid">
-                                <p class="text-muted">Lade Module…</p>
+                                        <polyline points="17 8 12 3 7 8"></polyline>
+                                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                                    </svg> Plugin installieren</h4>
+                                <p class="text-muted module-upload-copy">Lade ein
+                                    Ninko-Modul als ZIP-Datei hoch. Es wird ohne Neustart installiert und aktiviert.
+                                </p>
+                                <div class="form-row module-upload-row">
+                                    <input type="file" id="plugin-upload-file" accept=".zip" class="form-input"
+                                        >
+                                    <button class="btn btn-primary" data-action="uploadPlugin"
+                                        id="plugin-upload-btn">Installieren</button>
+                                </div>
+                                <div id="plugin-upload-status" class="save-status"
+                                    ></div>
                             </div>
                         </div>
 
                         <!-- Skills Tab -->
                         <div class="settings-panel" id="settings-panel-skills">
-                            <div class="page-header" style="margin-bottom:1rem;">
-                                <h3>Skills</h3>
-                                <div style="display:flex;gap:0.5rem;">
-                                    <button class="btn btn-primary" data-action="openSkillsPanelFromSettings">Skills verwalten →</button>
-                                </div>
+                            <div class="settings-header">
+                                <h2 data-i18n="settings.skills">Skills</h2>
+                                <p class="settings-description" data-i18n="settings.skillsDesc">Prozedurales Domänenwissen für Agenten – wird automatisch injiziert, wenn die Beschreibung zur Anfrage passt.</p>
                             </div>
                             <div class="setting-group">
-                                <p class="setting-desc">Skills sind prozedurales Domänenwissen für Agenten. Sie werden <strong>automatisch injiziert</strong> wenn die Beschreibung mit der Anfrage übereinstimmt (Keyword-Match ≥ 12%).</p>
+                                <div class="setting-group-header">
+                                    <h4>Installierte Skills</h4>
+                                    <button class="btn btn-primary btn-sm" data-action="openSkillsPanelFromSettings">Skills verwalten →</button>
+                                </div>
                                 <div id="settings-skills-list" class="agents-grid">
                                     <p class="text-muted">Lade Skills…</p>
                                 </div>
                             </div>
-                            <div class="setting-group" style="margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid var(--border-color);">
+                            <div class="setting-group">
                                 <h4>Skill-Marketplace</h4>
                                 <p class="setting-desc">Remote Skills aus Repositories installieren.</p>
                                 <button class="btn btn-outline" data-action="openSkillMarketplaceFromSettings">Marketplace öffnen →</button>
@@ -1220,9 +1241,13 @@ print('Hello, World!')"></textarea>
 
                         <!-- System Tab -->
                         <div class="settings-panel" id="settings-panel-system">
+                            <div class="settings-header">
+                                <h2 data-i18n="settings.system">System</h2>
+                                <p class="settings-description" data-i18n="settings.systemDesc">Branding, Memory und Secrets der Plattform verwalten.</p>
+                            </div>
                             <div class="setting-group">
-                                <h4>Branding</h4>
-                                <p class="setting-desc">Passe Browser-Titel, Begrüßungstext und Login-Auftritt an. Das Markenbild wird nur noch im Login verwendet.</p>
+                                <h4>Branding – Dashboard</h4>
+                                <p class="setting-desc">Passe Browser-Titel und Begrüßungstext des Dashboards an.</p>
                                 <div class="form-row">
                                     <label class="form-label" for="branding-brand-name">Dashboard-Name</label>
                                     <input id="branding-brand-name" type="text" class="form-input" placeholder="Ninko">
@@ -1246,16 +1271,17 @@ print('Hello, World!')"></textarea>
                                     <label class="form-label" for="branding-welcome-text">Begrüßungstext</label>
                                     <textarea id="branding-welcome-text" class="form-input" rows="3" placeholder="Willkommen..."></textarea>
                                 </div>
-                                <div class="form-row" style="margin-top:0.35rem;">
-                                    <label class="form-label" style="font-weight:700;">Login Screen</label>
-                                </div>
+                            </div>
+                            <div class="setting-group">
+                                <h4>Branding – Login-Screen</h4>
+                                <p class="setting-desc">Titel, Bild und Stil der Login-Seite. Das Markenbild wird nur noch im Login verwendet.</p>
                                 <div class="form-row">
                                     <label class="form-label" for="branding-login-title">Login Titel</label>
                                     <input id="branding-login-title" type="text" class="form-input" placeholder="Ninko Login">
                                 </div>
                                 <div class="form-row">
                                     <label class="form-label" for="branding-login-subtitle">Login Untertitel</label>
-                                    <input id="branding-login-subtitle" type="text" class="form-input" placeholder="Please sign in...">
+                                    <input id="branding-login-subtitle" type="text" class="form-input" placeholder="Bitte mit dem Admin-Account anmelden.">
                                 </div>
                                 <div class="form-row">
                                     <label class="form-label" for="branding-login-help-url">Login Hilfe-Link (GitHub Docs)</label>
@@ -1322,7 +1348,7 @@ print('Hello, World!')"></textarea>
                                                 <div id="branding-login-preview-text" style="display:none; font-weight:800; letter-spacing:0.03em; font-size:1rem; color:var(--accent-blue);">NINKO</div>
                                             </div>
                                             <div id="branding-login-preview-title" style="font-weight:760; text-align:center; font-size:1.15rem;">Ninko Login</div>
-                                            <div id="branding-login-preview-subtitle" style="color:var(--text-secondary); text-align:center; font-size:0.86rem; margin-top:0.3rem;">Please sign in with your admin account.</div>
+                                            <div id="branding-login-preview-subtitle" style="color:var(--text-secondary); text-align:center; font-size:0.86rem; margin-top:0.3rem;">Bitte mit dem Admin-Account anmelden.</div>
                                             <div id="branding-login-preview-help-wrap" style="margin-top:0.55rem; text-align:center;">
                                                 <a id="branding-login-preview-help" href="#" target="_blank" rel="noopener noreferrer" style="font-size:0.82rem; color:var(--accent-blue);">Hilfe / Dokumentation</a>
                                             </div>
@@ -1351,12 +1377,49 @@ print('Hello, World!')"></textarea>
 
                         <!-- Themes Tab -->
                         <div class="settings-panel" id="settings-panel-themes">
+                            <div class="settings-header">
+                                <h2 data-i18n="settings.themes">Themes</h2>
+                                <p class="settings-description" data-i18n="settings.themesDesc">Themes, Hintergrundfarben und eigene Design-Tokens anpassen.</p>
+                            </div>
                             <div class="setting-group">
                                 <h4>Theme-Vorlagen</h4>
                                 <p class="setting-desc">Aktiviere ein Theme oder öffne es im Editor.</p>
                                 <div id="themes-active-indicator" class="save-status" style="margin-bottom:0.5rem;"></div>
                                 <div id="themes-presets-list" class="modules-grid">
                                     <p class="text-muted">Lade Themes…</p>
+                                </div>
+                            </div>
+
+                            <div class="setting-group">
+                                <h4 data-i18n="settings.background.title">Hintergrundfarben</h4>
+                                <p class="setting-desc" data-i18n="settings.background.desc">Passe die Basisfarben des App-Hintergrunds an – per Vorlage, Farbpalette oder Hex-Code.</p>
+                                <div id="bg-preset-list" class="bg-preset-list">
+                                    <!-- Populated by Ninko._renderBackgroundPresets() -->
+                                </div>
+                                <div class="form-row bg-color-row">
+                                    <label class="form-label" for="bg-picker-tint" data-i18n="settings.background.tint">Grundton</label>
+                                    <div class="bg-color-inputs">
+                                        <input type="color" id="bg-picker-tint" class="bg-color-picker" value="#070b24" data-bg-key="tint">
+                                        <input type="text" id="bg-hex-tint" class="form-input bg-hex-input" value="#070b24" maxlength="7" spellcheck="false" data-bg-key="tint">
+                                    </div>
+                                </div>
+                                <div class="form-row bg-color-row">
+                                    <label class="form-label" for="bg-picker-accent1" data-i18n="settings.background.accent1">Akzent 1</label>
+                                    <div class="bg-color-inputs">
+                                        <input type="color" id="bg-picker-accent1" class="bg-color-picker" value="#6d28d9" data-bg-key="accent1">
+                                        <input type="text" id="bg-hex-accent1" class="form-input bg-hex-input" value="#6d28d9" maxlength="7" spellcheck="false" data-bg-key="accent1">
+                                    </div>
+                                </div>
+                                <div class="form-row bg-color-row">
+                                    <label class="form-label" for="bg-picker-accent2" data-i18n="settings.background.accent2">Akzent 2</label>
+                                    <div class="bg-color-inputs">
+                                        <input type="color" id="bg-picker-accent2" class="bg-color-picker" value="#007aff" data-bg-key="accent2">
+                                        <input type="text" id="bg-hex-accent2" class="form-input bg-hex-input" value="#007aff" maxlength="7" spellcheck="false" data-bg-key="accent2">
+                                    </div>
+                                </div>
+                                <div class="form-actions">
+                                    <span id="bg-settings-status" class="save-status"></span>
+                                    <button class="btn btn-outline btn-sm" data-action="resetBackgroundSettings" data-i18n="settings.background.reset">Zurücksetzen</button>
                                 </div>
                             </div>
 
@@ -1448,6 +1511,10 @@ print('Hello, World!')"></textarea>
 
                         <!-- TTS Tab -->
                         <div class="settings-panel" id="settings-panel-tts">
+                            <div class="settings-header">
+                                <h2 data-i18n="settings.speech">Sprache &amp; Audio</h2>
+                                <p class="settings-description" data-i18n="settings.speechDesc">Spracheingabe (STT) und Sprachausgabe (TTS) konfigurieren.</p>
+                            </div>
 
                             <!-- STT (Spracheingabe) -->
                             <div class="setting-group">
@@ -1518,7 +1585,7 @@ print('Hello, World!')"></textarea>
                                 </div>
                                 <div class="form-actions">
                                     <span id="stt-save-status" class="save-status"></span>
-                                    <button class="btn btn-primary btn-sm" id="stt-save-btn" data-action="saveSttSettings" data-i18n="settings.save">💾 Speichern</button>
+                                    <button class="btn btn-primary btn-sm" id="stt-save-btn" data-action="saveSttSettings" data-i18n="settings.save">Speichern</button>
                                 </div>
                             </div>
 
@@ -1572,8 +1639,8 @@ print('Hello, World!')"></textarea>
 
                             <!-- Installierte Stimmen -->
                             <div class="setting-group">
-                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
-                                    <h4 style="margin:0;">Installierte Stimmen</h4>
+                                <div class="setting-group-header">
+                                    <h4>Installierte Stimmen</h4>
                                     <button class="btn btn-outline btn-sm" data-action="loadTtsVoices">Aktualisieren</button>
                                 </div>
                                 <div id="tts-voices-list"><p class="text-muted">Lade Stimmen…</p></div>
@@ -1725,6 +1792,10 @@ print('Hello, World!')"></textarea>
 
                         <!-- Image Generation Tab -->
                         <div class="settings-panel" id="settings-panel-imagegen">
+                            <div class="settings-header">
+                                <h2 data-i18n="settings.imagegen">Bildgenerierung</h2>
+                                <p class="settings-description" data-i18n="settings.imagegenDesc">Provider für Bildgenerierung und Bilderkennung (OCR/Vision) festlegen.</p>
+                            </div>
                             <div class="setting-group">
                                 <h4>Bildgenerierung – Provider konfigurieren</h4>
                                 <p class="text-muted" style="font-size:0.85rem;margin-bottom:1rem;">
@@ -1810,18 +1881,26 @@ print('Hello, World!')"></textarea>
 
                                 <div class="form-actions">
                                     <span id="ocr-save-status" class="save-status"></span>
-                                    <button class="btn btn-primary btn-sm" id="ocr-save-btn" data-action="saveOcrSettings">💾 Speichern</button>
+                                    <button class="btn btn-primary btn-sm" id="ocr-save-btn" data-action="saveOcrSettings">Speichern</button>
                                 </div>
                             </div>
                         </div>
 
                         <div class="settings-panel" id="settings-panel-access">
+                            <div class="settings-header">
+                                <h2 data-i18n="settings.access">Benutzer &amp; Rollen</h2>
+                                <p class="settings-description" data-i18n="settings.accessDesc">Benutzer, Rollen und Berechtigungen verwalten.</p>
+                            </div>
                             <div id="rbac-root">
                                 <p class="text-muted">Lade Benutzerverwaltung…</p>
                             </div>
                         </div>
                         <!-- SafeGuard Tab -->
                         <div class="settings-panel" id="settings-panel-safeguard">
+                            <div class="settings-header">
+                                <h2 data-i18n="safeguard.settingsTab">SafeGuard</h2>
+                                <p class="settings-description" data-i18n="safeguard.settingsDesc">Sicherheitsprüfungen für Nachrichten und Tool-Aufrufe steuern.</p>
+                            </div>
                             <!-- Global active profile -->
                             <div class="setting-group">
                                 <h4 data-i18n="safeguard.globalProfile">Globales Profil</h4>
@@ -1839,8 +1918,8 @@ print('Hello, World!')"></textarea>
 
                             <!-- Custom profiles list -->
                             <div class="setting-group">
-                                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
-                                    <h4 style="margin:0" data-i18n="safeguard.customProfiles">Eigene Profile</h4>
+                                <div class="setting-group-header">
+                                    <h4 data-i18n="safeguard.customProfiles">Eigene Profile</h4>
                                     <button class="btn btn-sm btn-outline" data-action="openSafeguardProfileEditor" data-i18n="safeguard.addProfile">+ Profil hinzufügen</button>
                                 </div>
                                 <div id="sg-custom-profiles-list">
@@ -1968,7 +2047,7 @@ print('Hello, World!')"></textarea>
     <div id="wf-template-modal" class="modal-overlay hidden" style="z-index:1100;">
         <div class="modal" style="max-width:800px;max-height:80vh;display:flex;flex-direction:column;">
             <div class="modal-header">
-                <h3>Workflow aus Template erstellen</h3>
+                <h3 data-i18n="wf.tpl.title">Workflow aus Template erstellen</h3>
                 <button class="btn btn-icon" data-action="closeWorkflowTemplateSelector">✕</button>
             </div>
             <div class="modal-body" style="overflow-y:auto;flex:1;">
@@ -1977,7 +2056,7 @@ print('Hello, World!')"></textarea>
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-outline" data-action="closeWorkflowTemplateSelector">Abbrechen</button>
+                <button class="btn btn-outline" data-action="closeWorkflowTemplateSelector" data-i18n="common.cancel">Abbrechen</button>
             </div>
         </div>
     </div>
@@ -2000,11 +2079,11 @@ print('Hello, World!')"></textarea>
     <script src="/static/vendor/marked.min.js"></script>
     <script src="/static/core/registry.js?v=1"></script>
     <script src="/static/core/api.js?v=1"></script>
-    <script src="/static/app.js?v=72"></script>
+    <script src="/static/app.js?v=76"></script>
     <script src="/static/features/command_palette.js?v=1"></script>
-    <script src="/static/features/agents.js?v=1"></script>
-    <script src="/static/features/workflows.js?v=1"></script>
-    <script src="/static/features/scripting.js?v=1"></script>
+    <script src="/static/features/agents.js?v=3"></script>
+    <script src="/static/features/workflows.js?v=4"></script>
+    <script src="/static/features/scripting.js?v=2"></script>
 </body>
 
 </html>
