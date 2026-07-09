@@ -18,6 +18,9 @@
 
         _wfNodes: [],
         _wfEdges: [],
+        _wfVariables: [],
+        _wfEnabled: true,
+        _wfSavedSnapshot: null,
         _wfSelectedNode: null,
         _wfConnecting: null,
         _wfRunRefreshTimer: null,
@@ -38,7 +41,15 @@
                 const data = await res.json();
                 const wfs = data.workflows || [];
                 if (!wfs.length) {
-                    container.innerHTML = '<p class="empty-state">Noch keine Workflows konfiguriert.<br><span style="font-size:0.85rem;opacity:0.7">Klicke auf „➕ Neuen Workflow erstellen", um loszulegen.</span></p>';
+                    container.innerHTML = this._renderEmptyStateCard({
+                        icon: '<svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="5" height="5" rx="1"/><rect x="16" y="3" width="5" height="5" rx="1"/><rect x="9.5" y="16" width="5" height="5" rx="1"/><path d="M5.5 8v3a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8"/><line x1="12" y1="13" x2="12" y2="16"/></svg>',
+                        title: t('wf.emptyTitle'),
+                        hint: t('wf.emptyHint'),
+                        actions: [
+                            { label: t('wf.fromTemplate'), action: 'openWorkflowTemplateSelector' },
+                            { label: t('wf.new'), action: 'openWorkflowEditor', args: [null], primary: true },
+                        ],
+                    });
                     return;
                 }
                 container.innerHTML = wfs.map(wf => `
@@ -49,15 +60,15 @@
                         </div>
                         <p class="workflow-card-desc">${this._escapeHtml(wf.description || '')}</p>
                         <div class="workflow-card-meta">
-                            <span>${(wf.nodes || []).length} Nodes</span>
-                            ${wf.last_run_at ? `<span>Letzter Run: ${new Date(wf.last_run_at).toLocaleString('de')}</span>` : ''}
+                            <span>${(wf.nodes || []).length} ${t('wf.nodes')}</span>
+                            ${wf.last_run_at ? `<span>${t('wf.lastRun')} ${new Date(wf.last_run_at).toLocaleString('de')}</span>` : ''}
                             ${wf.updated_at ? `<span title="Zuletzt gespeichert">${this._ic.clock} ${new Date(wf.updated_at).toLocaleDateString('de')}</span>` : ''}
                         </div>
                         <div class="workflow-card-actions">
                             <button class="btn btn-sm btn-primary" data-action="run">${this._ic.play} Run</button>
-                            <button class="btn btn-sm btn-outline" data-action="edit">${this._ic.edit} Bearbeiten</button>
-                            <button class="btn btn-sm btn-outline" data-action="logs">${this._ic.list} Logs</button>
-                            <button class="btn btn-sm btn-outline" data-action="delete" title="Löschen" style="color:var(--error-color)">${this._ic.trash} Löschen</button>
+                            <button class="btn btn-sm btn-outline" data-action="edit">${this._ic.edit} ${t('wf.edit')}</button>
+                            <button class="btn btn-sm btn-outline" data-action="logs">${this._ic.list} ${t('wf.logs')}</button>
+                            <button class="btn btn-sm btn-outline" data-action="delete" title="${t('wf.delete')}" style="color:var(--error-color)">${this._ic.trash} ${t('wf.delete')}</button>
                         </div>
                     </div>
                 `).join('');
@@ -69,12 +80,14 @@
                     card.querySelector('[data-action="logs"]')?.addEventListener('click', () => this.openRunHistory(id, name));
                     card.querySelector('[data-action="delete"]')?.addEventListener('click', () => this.deleteWorkflow(id, name));
                 });
-            } catch (err) { console.error('loadWorkflows failed:', err); container.innerHTML = '<p class="empty-state">Fehler beim Laden der Workflows.</p>'; }
+            } catch (err) { console.error('loadWorkflows failed:', err); container.innerHTML = `<p class="empty-state">${this._escapeHtml(t('common.loadError'))}</p>`; }
         },
 
         async openWorkflowEditor(wfId) {
             this._wfNodes = [];
             this._wfEdges = [];
+            this._wfVariables = [];
+            this._wfEnabled = true;
             this._wfSelectedNode = null;
             this._wfConnecting = null;
             this._wfZoom = 1;
@@ -88,12 +101,21 @@
             if (wfId) {
                 try {
                     const res = await fetch(`/api/workflows/${wfId}`);
+                    if (!res.ok) throw new Error(res.statusText);
                     const wf = await res.json();
                     document.getElementById('wf-name-input').value = wf.name || '';
                     document.getElementById('wf-desc-input').value = wf.description || '';
                     this._wfNodes = wf.nodes || [];
                     this._wfEdges = wf.edges || [];
-                } catch (err) { console.error('Failed to load workflow for editor:', err); }
+                    this._wfVariables = wf.variables || [];
+                    this._wfEnabled = wf.enabled !== false;
+                } catch (err) {
+                    console.error('Failed to load workflow for editor:', err);
+                    showNotification(t('wf.loadFailed'), 'error');
+                    this._wfSavedSnapshot = null;
+                    this.closeWorkflowEditor();
+                    return;
+                }
             } else {
                 document.getElementById('wf-name-input').value = '';
                 document.getElementById('wf-desc-input').value = '';
@@ -102,6 +124,7 @@
             this._wfApplyZoom();
             this._wfRenderCanvas();
             this._wfPushHistory();
+            this._wfSavedSnapshot = this._wfEditorStateJson();
 
             setTimeout(() => {
                 const container = document.getElementById('wf-canvas-container');
@@ -121,10 +144,41 @@
             }, 10);
         },
 
-        closeWorkflowEditor() {
+        async closeWorkflowEditor() {
+            if (this._wfSavedSnapshot && this._wfEditorStateJson() !== this._wfSavedSnapshot) {
+                const ok = await this.confirm(
+                    t('wf.discardMsg'),
+                    t('wf.discardTitle'),
+                    { okLabel: t('wf.discardOk') }
+                );
+                if (!ok) return;
+            }
+            this._wfSavedSnapshot = null;
+            this._wfCancelConnection();
             document.getElementById('workflow-editor').classList.add('hidden');
             document.getElementById('workflows-overview').classList.remove('hidden');
             this.loadWorkflows();
+        },
+
+        _wfEditorStateJson() {
+            return JSON.stringify({
+                name: document.getElementById('wf-name-input')?.value || '',
+                desc: document.getElementById('wf-desc-input')?.value || '',
+                ...this._wfSnapshot(),
+            });
+        },
+
+        _wfNewId() {
+            return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
+        },
+
+        // Canvas ist 3000×3000 (style.css .wf-canvas) — Nodes innerhalb der Welt halten,
+        // sonst sind sie per Scroll nicht mehr erreichbar.
+        _wfClampPos(x, y) {
+            return {
+                x: Math.max(0, Math.min(2830, x)),
+                y: Math.max(0, Math.min(2900, y)),
+            };
         },
 
         _wfSnapshot() {
@@ -320,6 +374,16 @@
                 const target = e.target;
                 const tag = (target?.tagName || '').toLowerCase();
                 const inInput = target?.isContentEditable || tag === 'input' || tag === 'textarea' || tag === 'select';
+                if (e.key === 'Escape' && !inInput) {
+                    if (this._wfConnecting) this._wfCancelConnection();
+                    else this.wfCloseInspector();
+                    return;
+                }
+                if ((e.key === 'Delete' || e.key === 'Backspace') && !inInput && this._wfSelectedNode) {
+                    e.preventDefault();
+                    this.wfDeleteSelectedNode();
+                    return;
+                }
                 const mod = e.ctrlKey || e.metaKey;
                 if (!mod || inInput) return;
                 const key = e.key.toLowerCase();
@@ -352,36 +416,40 @@
 
         _wfNodeDefaults(type) {
             const defaults = {
-                trigger: { label: 'Trigger', config: { mode: 'manual' } },
-                agent: { label: 'Agent', config: { agent_id: '', prompt: '' } },
-                condition: { label: 'Bedingung', config: { expression: 'output.contains("error")', true_label: 'true', false_label: 'false' } },
-                loop: { label: 'Loop', config: { mode: 'foreach', variable: 'items', prompt: 'Verarbeite: {loop_item}', max_iterations: '10' } },
-                parallel: { label: 'Parallel', config: { prompts: ['Task 1', 'Task 2'] } },
-                subflow: { label: 'Subflow', config: { workflow_id: '' } },
-                script: { label: 'Script', config: { script_id: '', input_var: '', timeout: '30' } },
-                variable: { label: 'Variable', config: { name: 'myVar', value: '' } },
-                end: { label: 'Ende', config: { status: 'succeeded' } },
+                trigger: { config: { mode: 'manual' } },
+                agent: { config: { agent_id: '', prompt: '' } },
+                condition: { config: { expression: 'output.contains("error")', true_label: 'true', false_label: 'false' } },
+                loop: { config: { mode: 'foreach', variable: 'items', prompt: 'Verarbeite: {loop_item}', max_iterations: '10' } },
+                parallel: { config: { prompts: ['Task 1', 'Task 2'] } },
+                subflow: { config: { workflow_id: '' } },
+                script: { config: { script_id: '', input_var: '', timeout: '30' } },
+                variable: { config: { name: 'myVar', value: '' } },
+                end: { config: { status: 'succeeded' } },
             };
-            return defaults[type] || { label: type, config: {} };
+            const def = defaults[type];
+            if (!def) return { label: type, config: {} };
+            return { label: t(`wf.${type}`), config: def.config };
         },
 
         wfAddNode(type) {
             const defs = this._wfNodeDefaults(type);
-            const id = Date.now().toString(36);
             const container = document.getElementById('wf-canvas-container');
             const cx = container ? (container.scrollLeft / this._wfZoom) + Math.floor(container.clientWidth / this._wfZoom / 2) - 75 : 1450;
             const cy = container ? (container.scrollTop / this._wfZoom) + Math.floor(container.clientHeight / this._wfZoom / 2) - 40 : 1450;
             const idx = this._wfNodes.length;
             const node = {
-                id,
+                id: this._wfNewId(),
                 type,
                 label: defs.label,
                 config: { ...defs.config },
-                position: { x: cx + (idx % 3) * 220, y: cy + Math.floor(idx / 3) * 160 }
+                position: this._wfClampPos(cx + (idx % 3) * 220, cy + Math.floor(idx / 3) * 160)
             };
             this._wfNodes.push(node);
             this._wfRenderCanvas();
             this._wfPushHistory();
+            // Im Verbindungsmodus nicht selektieren — _wfSelectNode würde sonst
+            // eine ungewollte Edge zum frisch angelegten Node erzeugen.
+            if (!this._wfConnecting) this._wfSelectNode(node.id);
         },
 
         _wfRenderCanvas() {
@@ -389,7 +457,9 @@
             const svg = document.getElementById('wf-edges-svg');
             if (!canvas || !svg) return;
 
-            canvas.innerHTML = '';
+            canvas.innerHTML = this._wfNodes.length
+                ? ''
+                : `<div class="wf-canvas-hint">${this._escapeHtml(t('wf.canvasHint'))}</div>`;
             this._wfNodes.forEach(node => {
                 const el = document.createElement('div');
                 el.className = `wf-node wf-node-${node.type}${this._wfSelectedNode === node.id ? ' wf-node-selected' : ''}`;
@@ -421,10 +491,7 @@
                     this._wfSelectedNode = null;
                     canvas.querySelectorAll('.wf-node').forEach(n => n.classList.remove('wf-node-selected'));
                     document.getElementById('wf-node-inspector')?.classList.add('hidden');
-                    if (this._wfConnecting) {
-                        this._wfConnecting = null;
-                        canvas.style.cursor = 'default';
-                    }
+                    this._wfCancelConnection();
                 }
             };
             this._wfUpdateMiniMap();
@@ -440,8 +507,7 @@
                 const onMove = (e) => {
                     const dx = (e.clientX - startX) / this._wfZoom;
                     const dy = (e.clientY - startY) / this._wfZoom;
-                    node.position.x = origX + dx;
-                    node.position.y = origY + dy;
+                    node.position = this._wfClampPos(origX + dx, origY + dy);
                     el.style.left = `${node.position.x}px`;
                     el.style.top = `${node.position.y}px`;
                     this._wfUpdateSvgEdges();
@@ -460,26 +526,47 @@
 
         _wfStartConnection(sourceId) {
             if (this._wfConnecting) {
-                document.querySelector('.wf-node-connecting')?.classList.remove('wf-node-connecting');
-                if (this._wfConnecting !== sourceId) {
-                    const exists = this._wfEdges.some(e => e.source_id === this._wfConnecting && e.target_id === sourceId);
-                    if (!exists) {
-                        this._wfEdges.push({ id: Date.now().toString(36), source_id: this._wfConnecting, target_id: sourceId, label: '' });
-                        this._wfUpdateSvgEdges();
-                        this._wfPushHistory();
-                        showNotification('Verbindung erstellt', 'info');
-                    } else {
-                        showNotification('Verbindung bereits vorhanden', 'info');
-                    }
-                }
-                this._wfConnecting = null;
-                document.getElementById('wf-canvas').style.cursor = 'default';
+                const source = this._wfConnecting;
+                this._wfCancelConnection();
+                if (source !== sourceId) this._wfCreateEdge(source, sourceId);
             } else {
                 this._wfConnecting = sourceId;
                 document.getElementById('wf-canvas').style.cursor = 'crosshair';
                 document.getElementById(`wf-node-${sourceId}`)?.classList.add('wf-node-connecting');
-                showNotification('Klicke auf einen Ziel-Node, um die Verbindung herzustellen', 'info');
+                showNotification(t('wf.connHint'), 'info');
             }
+        },
+
+        _wfCancelConnection() {
+            document.querySelector('.wf-node-connecting')?.classList.remove('wf-node-connecting');
+            this._wfConnecting = null;
+            const canvas = document.getElementById('wf-canvas');
+            if (canvas) canvas.style.cursor = 'default';
+        },
+
+        /** Erstellt eine Edge. Condition-Quellen bekommen automatisch das
+         *  true-/false-Label — die Engine verzweigt über Edge-Labels. */
+        _wfCreateEdge(sourceId, targetId) {
+            if (sourceId === targetId) return;
+            const exists = this._wfEdges.some(e => e.source_id === sourceId && e.target_id === targetId);
+            if (exists) {
+                showNotification(t('wf.connExists'), 'info');
+                return;
+            }
+            const source = this._wfNodes.find(n => n.id === sourceId);
+            let label = '';
+            if (source?.type === 'condition') {
+                const trueLabel = source.config?.true_label || 'true';
+                const falseLabel = source.config?.false_label || 'false';
+                const used = this._wfEdges.filter(e => e.source_id === sourceId).map(e => e.label);
+                if (!used.includes(trueLabel)) label = trueLabel;
+                else if (!used.includes(falseLabel)) label = falseLabel;
+            }
+            this._wfEdges.push({ id: this._wfNewId(), source_id: sourceId, target_id: targetId, label });
+            this._wfUpdateSvgEdges();
+            this._wfPushHistory();
+            if (this._wfSelectedNode) this._wfShowInspector(this._wfSelectedNode);
+            showNotification(label ? `${t('wf.connCreated')} (${label})` : t('wf.connCreated'), 'info');
         },
 
         _wfGetPortPos(nodeId, side) {
@@ -528,7 +615,7 @@
                 hitbox.setAttribute('data-edge-id', edge.id);
                 hitbox.addEventListener('click', async (e) => {
                     e.stopPropagation();
-                    if (await this.confirm('Verbindung löschen?')) {
+                    if (await this.confirm(t('wf.deleteEdgeConfirm'))) {
                         this._wfEdges = this._wfEdges.filter(ed => ed.id !== edge.id);
                         this._wfUpdateSvgEdges();
                         this._wfPushHistory();
@@ -552,16 +639,9 @@
 
         _wfSelectNode(nodeId) {
             if (this._wfConnecting && this._wfConnecting !== nodeId) {
-                const exists = this._wfEdges.some(e => e.source_id === this._wfConnecting && e.target_id === nodeId);
-                if (!exists) {
-                    this._wfEdges.push({ id: Date.now().toString(36), source_id: this._wfConnecting, target_id: nodeId, label: '' });
-                    this._wfPushHistory();
-                }
-                document.querySelector('.wf-node-connecting')?.classList.remove('wf-node-connecting');
-                this._wfConnecting = null;
-                document.getElementById('wf-canvas').style.cursor = 'default';
-                this._wfUpdateSvgEdges();
-                showNotification('Verbindung erstellt', 'info');
+                const source = this._wfConnecting;
+                this._wfCancelConnection();
+                this._wfCreateEdge(source, nodeId);
                 return;
             }
 
@@ -581,88 +661,104 @@
             inspector.classList.remove('hidden');
             if (deleteBtn) deleteBtn.style.display = 'block';
 
-            let html = `<div class="form-row"><label class="form-label">Label</label>
+            let html = `<div class="form-row"><label class="form-label">${t('wf.insp.label')}</label>
                 <input type="text" class="form-input" value="${this._escapeHtml(node.label)}"
                     onchange="Ninko._wfUpdateNode('${nodeId}', 'label', this.value)">
             </div>`;
 
             for (const [k, v] of Object.entries(node.config)) {
                 if (node.type === 'agent' && k === 'agent_id') {
-                    html += `<div class="form-row"><label class="form-label">Agent</label>
+                    html += `<div class="form-row"><label class="form-label">${t('wf.agent')}</label>
                         <select id="wf-inspect-agent_id" class="form-select"
                             onchange="Ninko._wfUpdateNodeConfig('${nodeId}', 'agent_id', this.value)">
-                            <option value="">– Laden… –</option>
+                            <option value="">${t('wf.insp.loading')}</option>
                         </select>
                     </div>`;
                 } else if (k === 'mode' && node.type === 'trigger') {
-                    html += `<div class="form-row"><label class="form-label">Modus</label>
+                    html += `<div class="form-row"><label class="form-label">${t('wf.insp.mode')}</label>
                         <select class="form-select" onchange="Ninko._wfUpdateNodeConfig('${nodeId}', 'mode', this.value); Ninko._wfShowInspector('${nodeId}')">
-                            <option value="manual" ${v === 'manual' ? 'selected' : ''}>Manuell</option>
-                            <option value="cron" ${v === 'cron' ? 'selected' : ''}>Zeitplan (Cron)</option>
+                            <option value="manual" ${v === 'manual' ? 'selected' : ''}>${t('wf.insp.modeManual')}</option>
+                            <option value="cron" ${v === 'cron' ? 'selected' : ''}>${t('wf.insp.modeCron')}</option>
                             <option value="webhook" ${v === 'webhook' ? 'selected' : ''}>Webhook</option>
                             <option value="event" ${v === 'event' ? 'selected' : ''}>Event</option>
                         </select>
                     </div>`;
                     if (v === 'cron') {
-                        html += `<div class="form-row"><label class="form-label">Cron-Ausdruck</label>
+                        html += `<div class="form-row"><label class="form-label">${t('wf.insp.cron')}</label>
                             <input type="text" class="form-input" value="${this._escapeHtml(String(node.config.cron ?? ''))}"
                                 placeholder="0 8 * * *"
                                 onchange="Ninko._wfUpdateNodeConfig('${nodeId}', 'cron', this.value)">
-                            <small style="color:var(--text-muted)">Beim Speichern wird automatisch eine geplante Automatisierung angelegt</small>
+                            <small style="color:var(--text-muted)">${t('wf.insp.cronHint')}</small>
                         </div>`;
                     }
                 } else if (k === 'status' && node.type === 'end') {
-                    html += `<div class="form-row"><label class="form-label">Status</label>
+                    html += `<div class="form-row"><label class="form-label">${t('wf.insp.status')}</label>
                         <select class="form-select" onchange="Ninko._wfUpdateNodeConfig('${nodeId}', 'status', this.value)">
-                            <option value="succeeded" ${v === 'succeeded' ? 'selected' : ''}>Erfolgreich</option>
-                            <option value="failed" ${v === 'failed' ? 'selected' : ''}>Fehlgeschlagen</option>
+                            <option value="succeeded" ${v === 'succeeded' ? 'selected' : ''}>${t('wf.insp.statusSucceeded')}</option>
+                            <option value="failed" ${v === 'failed' ? 'selected' : ''}>${t('wf.insp.statusFailed')}</option>
                         </select>
                     </div>`;
                 } else if (k === 'mode' && node.type === 'loop') {
-                    html += `<div class="form-row"><label class="form-label">Modus</label>
-                        <select class="form-select" onchange="Ninko._wfUpdateNodeConfig('${nodeId}', 'mode', this.value)">
-                            <option value="foreach" ${v === 'foreach' ? 'selected' : ''}>Foreach (Liste)</option>
-                            <option value="while" ${v === 'while' ? 'selected' : ''}>While (Bedingung)</option>
+                    html += `<div class="form-row"><label class="form-label">${t('wf.insp.mode')}</label>
+                        <select class="form-select" onchange="Ninko._wfUpdateNodeConfig('${nodeId}', 'mode', this.value); Ninko._wfShowInspector('${nodeId}')">
+                            <option value="foreach" ${v === 'foreach' ? 'selected' : ''}>${t('wf.insp.modeForeach')}</option>
+                            <option value="while" ${v === 'while' ? 'selected' : ''}>${t('wf.insp.modeWhile')}</option>
                         </select>
                     </div>`;
+                } else if (k === 'condition' && node.type === 'loop') {
+                    if (String(node.config.mode) === 'while') {
+                        html += `<div class="form-row"><label class="form-label">${t('wf.insp.whileCondition')}</label>
+                            <input type="text" class="form-input" value="${this._escapeHtml(String(v ?? ''))}"
+                                placeholder="output.contains('weiter')"
+                                onchange="Ninko._wfUpdateNodeConfig('${nodeId}', 'condition', this.value)">
+                            <small style="color:var(--text-muted)">${t('wf.insp.whileHint')}</small>
+                        </div>`;
+                    }
+                } else if (k === 'expression' && node.type === 'condition') {
+                    html += `<div class="form-row"><label class="form-label">${t('wf.insp.expression')}</label>
+                        <input type="text" class="form-input" value="${this._escapeHtml(String(v ?? ''))}"
+                            placeholder="output.contains('error')"
+                            onchange="Ninko._wfUpdateNodeConfig('${nodeId}', 'expression', this.value)">
+                        <small style="color:var(--text-muted)">${t('wf.insp.expressionHint')}</small>
+                    </div>`;
                 } else if (k === 'prompt' && (node.type === 'loop' || node.type === 'agent')) {
-                    html += `<div class="form-row"><label class="form-label">Prompt</label>
+                    html += `<div class="form-row"><label class="form-label">${t('wf.insp.prompt')}</label>
                         <textarea class="form-input" rows="3" style="resize:vertical"
                             onchange="Ninko._wfUpdateNodeConfig('${nodeId}', 'prompt', this.value)">${this._escapeHtml(String(v ?? ''))}</textarea>
                     </div>`;
                 } else if (k === 'prompts' && node.type === 'parallel') {
                     const promptsArr = Array.isArray(v) ? v : ['Task 1', 'Task 2'];
-                    html += `<div class="form-row"><label class="form-label">Prompts (JSON Array)</label>
+                    html += `<div class="form-row"><label class="form-label">${t('wf.insp.prompts')}</label>
                         <textarea class="form-input" rows="4" style="resize:vertical;font-family:monospace"
                             onchange="Ninko._wfUpdateNodeConfig('${nodeId}', 'prompts', this.value)">${this._escapeHtml(JSON.stringify(promptsArr, null, 2))}</textarea>
-                        <small style="color:var(--text-muted)">Array von Prompts für parallele Ausführung</small>
+                        <small style="color:var(--text-muted)">${t('wf.insp.promptsHint')}</small>
                     </div>`;
                 } else if (k === 'workflow_id' && node.type === 'subflow') {
-                    html += `<div class="form-row"><label class="form-label">Workflow</label>
+                    html += `<div class="form-row"><label class="form-label">${t('wf.insp.workflow')}</label>
                         <select id="wf-inspect-workflow_id" class="form-select"
                             onchange="Ninko._wfUpdateNodeConfig('${nodeId}', 'workflow_id', this.value)">
-                            <option value="">– Laden… –</option>
+                            <option value="">${t('wf.insp.loading')}</option>
                         </select>
                     </div>`;
                 } else if (node.type === 'script' && k === 'script_id') {
-                    html += `<div class="form-row"><label class="form-label">Script</label>
+                    html += `<div class="form-row"><label class="form-label">${t('wf.script')}</label>
                         <select id="wf-inspect-script_id" class="form-select"
                             onchange="Ninko._wfUpdateNodeConfig('${nodeId}', 'script_id', this.value)">
-                            <option value="">– Laden… –</option>
+                            <option value="">${t('wf.insp.loading')}</option>
                         </select>
                     </div>`;
                 } else if (node.type === 'script' && k === 'input_var') {
-                    html += `<div class="form-row"><label class="form-label">Input Variable (optional)</label>
+                    html += `<div class="form-row"><label class="form-label">${t('wf.insp.inputVar')}</label>
                         <input type="text" class="form-input" value="${this._escapeHtml(String(v ?? ''))}"
-                            placeholder="Variablenname für Script-Input"
+                            placeholder="${t('wf.insp.inputVarPh')}"
                             onchange="Ninko._wfUpdateNodeConfig('${nodeId}', 'input_var', this.value)">
-                        <small style="color:var(--text-muted)">Variable wird als {script_input} verfügbar</small>
+                        <small style="color:var(--text-muted)">${t('wf.insp.inputVarHint')}</small>
                     </div>`;
                 } else if (node.type === 'script' && k === 'timeout') {
-                    html += `<div class="form-row"><label class="form-label">Timeout (Sekunden)</label>
+                    html += `<div class="form-row"><label class="form-label">${t('wf.insp.timeout')}</label>
                         <input type="number" class="form-input" min="1" max="300" value="${this._escapeHtml(String(v ?? '30'))}"
                             onchange="Ninko._wfUpdateNodeConfig('${nodeId}', 'timeout', this.value)">
-                        <small style="color:var(--text-muted)">1-300 Sekunden (Default: 30)</small>
+                        <small style="color:var(--text-muted)">${t('wf.insp.timeoutHint')}</small>
                     </div>`;
                 } else {
                     html += `<div class="form-row"><label class="form-label">${this._escapeHtml(k)}</label>
@@ -676,19 +772,23 @@
             const inEdges = this._wfEdges.filter(e => e.target_id === nodeId);
             if (outEdges.length || inEdges.length) {
                 html += `<div class="form-row" style="margin-top:1rem;border-top:1px solid var(--border-color);padding-top:0.75rem">
-                    <label class="form-label" style="font-weight:600">Verbindungen</label>`;
+                    <label class="form-label" style="font-weight:600">${t('wf.insp.connections')}</label>`;
                 inEdges.forEach(e => {
                     const src = this._wfNodes.find(n => n.id === e.source_id);
                     html += `<div style="font-size:0.8rem;display:flex;align-items:center;justify-content:space-between;margin-bottom:0.3rem">
                         <span>↩ ${this._escapeHtml(src?.label || e.source_id)}</span>
-                        <button class="btn-icon btn-icon-sm" style="color:var(--error-color)" onclick="Ninko._wfDeleteEdge('${this._escapeHtml(e.id)}')" title="Entfernen">✕</button>
+                        <button class="btn-icon btn-icon-sm" style="color:var(--error-color)" onclick="Ninko._wfDeleteEdge('${this._escapeHtml(e.id)}')" title="${t('common.remove')}">✕</button>
                     </div>`;
                 });
                 outEdges.forEach(e => {
                     const tgt = this._wfNodes.find(n => n.id === e.target_id);
-                    html += `<div style="font-size:0.8rem;display:flex;align-items:center;justify-content:space-between;margin-bottom:0.3rem">
-                        <span>↪ ${this._escapeHtml(tgt?.label || e.target_id)}</span>
-                        <button class="btn-icon btn-icon-sm" style="color:var(--error-color)" onclick="Ninko._wfDeleteEdge('${this._escapeHtml(e.id)}')" title="Entfernen">✕</button>
+                    html += `<div style="font-size:0.8rem;display:flex;align-items:center;gap:0.4rem;margin-bottom:0.3rem">
+                        <span style="flex-shrink:0">↪ ${this._escapeHtml(tgt?.label || e.target_id)}</span>
+                        <input type="text" class="form-input" style="flex:1;min-width:0;padding:0.25rem 0.5rem;font-size:0.78rem"
+                            value="${this._escapeHtml(e.label || '')}" placeholder="${t('wf.insp.edgeLabelPh')}"
+                            title="${t('wf.insp.edgeLabelTitle')}"
+                            onchange="Ninko._wfSetEdgeLabel('${this._escapeHtml(e.id)}', this.value)">
+                        <button class="btn-icon btn-icon-sm" style="color:var(--error-color);flex-shrink:0" onclick="Ninko._wfDeleteEdge('${this._escapeHtml(e.id)}')" title="${t('common.remove')}">✕</button>
                     </div>`;
                 });
                 html += `</div>`;
@@ -702,7 +802,7 @@
                     const data = await res.json();
                     const sel = document.getElementById('wf-inspect-agent_id');
                     if (sel) {
-                        sel.innerHTML = '<option value="">– Agenten wählen –</option>' +
+                        sel.innerHTML = `<option value="">${t('wf.insp.selectAgent')}</option>` +
                             (data.agents || []).map(a =>
                                 `<option value="${this._escapeHtml(a.id)}" ${a.id === node.config.agent_id ? 'selected' : ''}>${this._escapeHtml(a.name)}</option>`
                             ).join('');
@@ -717,7 +817,7 @@
                     const data = await res.json();
                     const sel = document.getElementById('wf-inspect-workflow_id');
                     if (sel) {
-                        sel.innerHTML = '<option value="">– Workflow wählen –</option>' +
+                        sel.innerHTML = `<option value="">${t('wf.insp.selectWorkflow')}</option>` +
                             (data.workflows || []).map(wf =>
                                 `<option value="${this._escapeHtml(wf.id)}" ${wf.id === node.config.workflow_id ? 'selected' : ''}>${this._escapeHtml(wf.name)}</option>`
                             ).join('');
@@ -732,7 +832,7 @@
                     const data = await res.json();
                     const sel = document.getElementById('wf-inspect-script_id');
                     if (sel) {
-                        sel.innerHTML = '<option value="">– Script wählen –</option>' +
+                        sel.innerHTML = `<option value="">${t('wf.insp.selectScript')}</option>` +
                             (data.scripts || []).map(s =>
                                 `<option value="${this._escapeHtml(s.id)}" ${s.id === node.config.script_id ? 'selected' : ''}>${this._escapeHtml(s.name)}</option>`
                             ).join('');
@@ -757,15 +857,32 @@
 
         _wfUpdateNodeConfig(nodeId, key, value) {
             const node = this._wfNodes.find(n => n.id === nodeId);
-            if (node) {
-                if (node.type === 'parallel' && key === 'prompts') {
-                    try { node.config[key] = JSON.parse(value); }
-                    catch { node.config[key] = value; }
-                } else {
-                    node.config[key] = value;
+            if (!node) return;
+            if (node.type === 'parallel' && key === 'prompts') {
+                try {
+                    const parsed = JSON.parse(value);
+                    if (!Array.isArray(parsed)) throw new Error('kein Array');
+                    node.config[key] = parsed;
+                } catch {
+                    showNotification(t('wf.promptsInvalid'), 'error');
+                    return;
                 }
-                this._wfPushHistory();
+            } else {
+                node.config[key] = value;
             }
+            // While-Loops brauchen eine Bedingung — Feld beim Mode-Wechsel anlegen
+            if (node.type === 'loop' && key === 'mode' && value === 'while' && !('condition' in node.config)) {
+                node.config.condition = '';
+            }
+            this._wfPushHistory();
+        },
+
+        _wfSetEdgeLabel(edgeId, value) {
+            const edge = this._wfEdges.find(e => e.id === edgeId);
+            if (!edge) return;
+            edge.label = String(value || '').trim();
+            this._wfUpdateSvgEdges();
+            this._wfPushHistory();
         },
 
         _wfDeleteEdge(edgeId) {
@@ -783,7 +900,7 @@
 
         async wfDeleteSelectedNode() {
             if (!this._wfSelectedNode) return;
-            if (!await this.confirm('Möchtest du diesen Node wirklich löschen?')) return;
+            if (!await this.confirm(t('wf.deleteNodeConfirm'))) return;
 
             this._wfNodes = this._wfNodes.filter(n => n.id !== this._wfSelectedNode);
             this._wfEdges = this._wfEdges.filter(e => e.source_id !== this._wfSelectedNode && e.target_id !== this._wfSelectedNode);
@@ -795,35 +912,65 @@
 
         async saveWorkflow() {
             const name = document.getElementById('wf-name-input').value.trim();
-            if (!name) { showNotification('Name ist Pflichtfeld', 'error'); return; }
+            if (!name) { showNotification(t('wf.nameRequired'), 'error'); return; }
+            if (!this._wfNodes.length) { showNotification(t('wf.noNodes'), 'error'); return; }
             const saveBtn = document.querySelector('.wf-editor-toolbar .btn-primary');
             if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Speichern…'; }
             const wfId = document.getElementById('wf-edit-id').value;
             const description = document.getElementById('wf-desc-input')?.value.trim() || '';
-            const body = { name, description, nodes: this._wfNodes, edges: this._wfEdges, variables: [], enabled: true };
+            const body = {
+                name,
+                description,
+                nodes: this._wfNodes,
+                edges: this._wfEdges,
+                variables: this._wfVariables || [],
+                enabled: this._wfEnabled !== false,
+            };
             try {
                 const url = wfId ? `/api/workflows/${wfId}` : '/api/workflows/';
                 const method = wfId ? 'PUT' : 'POST';
                 const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-                if (res.ok) { showNotification(`Workflow "${name}" gespeichert`, 'success'); this.closeWorkflowEditor(); }
-                else showNotification('Fehler beim Speichern', 'error');
-            } catch { showNotification('Verbindungsfehler', 'error'); }
-            finally { if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Speichern'; } }
+                if (res.ok) {
+                    this._wfSavedSnapshot = this._wfEditorStateJson();
+                    showNotification(`${t('wf.saved')}: "${name}"`, 'success');
+                    this.closeWorkflowEditor();
+                } else {
+                    const err = await res.json().catch(() => ({}));
+                    this._wfShowSaveErrors(err.detail);
+                }
+            } catch { showNotification(t('common.connectionError'), 'error'); }
+            finally { if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = t('settings.save'); } }
+        },
+
+        /** Zeigt Validierungsfehler aus der API an.
+         *  422-Detail ist {"errors": [...]}, Pydantic liefert eine Objekt-Liste. */
+        _wfShowSaveErrors(detail) {
+            let messages = [];
+            if (detail && Array.isArray(detail.errors)) {
+                messages = detail.errors;
+            } else if (Array.isArray(detail)) {
+                messages = detail.map(d => d?.msg || JSON.stringify(d));
+            } else if (typeof detail === 'string') {
+                messages = [detail];
+            }
+            if (!messages.length) messages = [t('wf.saveFailed')];
+            messages.slice(0, 4).forEach(m => showNotification(String(m), 'error'));
+            if (messages.length > 4) showNotification(`… und ${messages.length - 4} weitere Fehler`, 'error');
         },
 
         async deleteWorkflow(id, name) {
             const displayName = name || 'Workflow';
-            if (!await this.confirm(`Workflow "${displayName}" wirklich unwiderruflich löschen?`)) return;
+            if (!await this.confirm(t('wf.deleteConfirm'), displayName)) return;
             try {
                 const res = await fetch(`/api/workflows/${id}`, { method: 'DELETE' });
                 if (res.ok) {
-                    showNotification(`Workflow "${displayName}" gelöscht`, 'info');
+                    showNotification(`${t('wf.deleted')}: "${displayName}"`, 'info');
                     this.loadWorkflows();
                 } else {
                     const err = await res.json().catch(() => ({}));
-                    showNotification(`Fehler beim Löschen: ${err.detail || 'Unbekannter Fehler'}`, 'error');
+                    showNotification(`${t('wf.deleteFailed')}: ${err.detail || ''}`, 'error');
                 }
-            } catch { showNotification('Verbindungsfehler', 'error'); }
+            } catch { showNotification(t('common.connectionError'), 'error'); }
         },
 
         async runWorkflow(id, name) {
@@ -831,10 +978,10 @@
                 const res = await fetch(`/api/workflows/${id}/run`, { method: 'POST' });
                 if (res.ok) {
                     const data = await res.json();
-                    showNotification(`Workflow "${name}" gestartet`, 'success');
+                    showNotification(`${t('wf.started')}: "${name}"`, 'success');
                     this.openRunDashboard(id, name, data.run_id);
-                } else showNotification('Fehler beim Starten', 'error');
-            } catch { showNotification('Verbindungsfehler', 'error'); }
+                } else showNotification(t('wf.startFailed'), 'error');
+            } catch { showNotification(t('common.connectionError'), 'error'); }
         },
 
         async openRunHistory(wfId, name) {
@@ -916,7 +1063,7 @@
                             <span>${r.started_at ? new Date(r.started_at).toLocaleString('de') : '–'}</span>
                             <span>${r.duration_ms ? (r.duration_ms / 1000).toFixed(1) + 's' : '–'}</span>
                         </div>
-                    `).join('') || '<p class="text-muted">Noch keine Runs.</p>';
+                    `).join('') || `<p class="text-muted">${this._escapeHtml(t('wf.noRuns'))}</p>`;
                 }
                 if (this._wfCurrentRunId && runs.length) {
                     const activeRun = runs.find(r => r.id === this._wfCurrentRunId) || runs[0];
@@ -1013,24 +1160,24 @@
                 `${this._wfNodeIcon(node.type)} ${this._escapeHtml(node.label)}`;
             const outputHtml = step.output
                 ? `<pre class="wf-run-output">${this._escapeHtml(step.output)}</pre>`
-                : '<p style="font-size:0.85rem;color:var(--text-muted);margin:0;">Keine Ausgabe.</p>';
+                : `<p style="font-size:0.85rem;color:var(--text-muted);margin:0;">${this._escapeHtml(t('wf.run.noOutput'))}</p>`;
             const stepIndex = step._stepIndex !== undefined ? step._stepIndex : (allSteps ? allSteps.indexOf(step) : -1);
             const retryBtn = (step.status === 'failed' && this._wfCurrentRunId && stepIndex >= 0)
-                ? `<div class="form-row"><button class="btn btn-sm btn-primary" onclick="Ninko._retryWorkflowStep(${stepIndex})">🔄 Step neu ausführen</button></div>`
+                ? `<div class="form-row"><button class="btn btn-sm btn-primary" onclick="Ninko._retryWorkflowStep(${stepIndex})">${t('wf.run.retryStep')}</button></div>`
                 : '';
             content.innerHTML = `
                 <div class="form-row">
-                    <label class="form-label">Status</label>
+                    <label class="form-label">${t('wf.insp.status')}</label>
                     <span class="run-status-badge run-${this._escapeHtml(step.status)}">${this._escapeHtml(step.status)}</span>
                 </div>
                 <div class="form-row">
-                    <label class="form-label">Dauer</label>
+                    <label class="form-label">${t('wf.run.duration')}</label>
                     <span style="font-size:0.85rem;">${step.duration_ms != null ? step.duration_ms + ' ms' : '–'}</span>
                 </div>
-                ${step.error ? `<div class="form-row"><label class="form-label" style="color:var(--error-color);">Fehler</label><div class="wf-run-error">${this._escapeHtml(step.error)}</div></div>` : ''}
+                ${step.error ? `<div class="form-row"><label class="form-label" style="color:var(--error-color);">${t('common.error')}</label><div class="wf-run-error">${this._escapeHtml(step.error)}</div></div>` : ''}
                 ${retryBtn}
                 <div class="form-row" style="flex:1;display:flex;flex-direction:column;min-height:0;">
-                    <label class="form-label">Ausgabe</label>
+                    <label class="form-label">${t('wf.run.output')}</label>
                     ${outputHtml}
                 </div>
             `;
@@ -1044,11 +1191,11 @@
                     headers: { 'Content-Type': 'application/json' }
                 });
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                showNotification('Step wird neu ausgeführt...', 'info');
+                showNotification(t('wf.run.retrying'), 'info');
                 // Poll für Update
                 setTimeout(() => this._refreshRunStatus(), 2000);
             } catch (e) {
-                showNotification(`Retry fehlgeschlagen: ${e.message}`, 'error');
+                showNotification(`${t('wf.run.retryFailed')}: ${e.message}`, 'error');
             }
         },
 
@@ -1072,43 +1219,8 @@
             const steps = run.steps || [];
             const done = steps.filter(s => ['succeeded', 'failed', 'skipped'].includes(s.status)).length;
             if (progressFill) progressFill.style.width = steps.length ? `${(done / steps.length) * 100}%` : '0%';
-            if (progressText) progressText.textContent = steps.length ? `${done} / ${steps.length} Schritte` : '';
+            if (progressText) progressText.textContent = steps.length ? `${done} / ${steps.length} ${t('wf.steps')}` : '';
             this._wfRunRenderCanvas(steps);
-        },
-
-        _showRunStepDetail(step) {
-            const inspector = document.getElementById('wf-node-inspector');
-            const content = document.getElementById('wf-inspector-content');
-            const deleteBtn = document.getElementById('wf-node-delete-btn');
-            if (!inspector || !content) return;
-
-            document.getElementById('wf-inspector-title').textContent = `Node: ${step.node_label || step.node_type}`;
-            inspector.classList.remove('hidden');
-            if (deleteBtn) deleteBtn.style.display = 'none';
-
-            let outputHtml = step.output ? this._formatOutput(step.output) : '<p class="text-muted">Keine Ausgabe vorhanden.</p>';
-            if (step.error) {
-                outputHtml += `<div class="error-box" style="margin-top:1rem; color:var(--error-color);"><strong>Fehler:</strong><br>${this._escapeHtml(step.error)}</div>`;
-            }
-
-            const statusClass = this._escapeHtml(String(step.status || ''));
-            const safeStatus = this._escapeHtml(step.status);
-            const safeDuration = (typeof step.duration_ms === 'number' && Number.isFinite(step.duration_ms))
-                ? step.duration_ms + 'ms' : '–';
-            content.innerHTML = `
-                <div class="setting-group">
-                    <label class="form-label">Status</label>
-                    <div class="run-status-badge run-${statusClass}">${safeStatus}</div>
-                </div>
-                <div class="setting-group">
-                    <label class="form-label">Dauer</label>
-                    <span>${safeDuration}</span>
-                </div>
-                <div class="setting-group" style="flex:1; display:flex; flex-direction:column; min-height:0;">
-                    <label class="form-label">Ausgabe</label>
-                    <div class="node-output-container" style="background:rgba(0,0,0,0.2); padding:1rem; border-radius:8px; font-family:monospace; font-size:0.9rem; white-space:pre-wrap; overflow-y:auto; flex:1;">${outputHtml}</div>
-                </div>
-            `;
         },
 
         async openWorkflowTemplateSelector() {
@@ -1122,7 +1234,7 @@
                 const templates = data.templates || [];
                 
                 if (!templates.length) {
-                    list.innerHTML = '<p class="text-muted">Keine Templates verfügbar.</p>';
+                    list.innerHTML = `<p class="text-muted">${this._escapeHtml(t('wf.tpl.none'))}</p>`;
                     return;
                 }
                 
@@ -1149,7 +1261,7 @@
                     });
                 });
             } catch (err) {
-                list.innerHTML = `<p class="text-muted">Fehler beim Laden: ${this._escapeHtml(err.message)}</p>`;
+                list.innerHTML = `<p class="text-muted">${this._escapeHtml(t('common.loadError'))}: ${this._escapeHtml(err.message)}</p>`;
             }
         },
 
@@ -1170,16 +1282,11 @@
                     this.loadWorkflows();
                     this.openWorkflowEditor(data.id);
                 } else {
-                    alert('Fehler: ' + (data.detail || 'Unbekannter Fehler'));
+                    showNotification(`${t('common.error')}: ` + (data.detail || ''), 'error');
                 }
             } catch (err) {
-                alert('Fehler beim Erstellen: ' + err.message);
+                showNotification(`${t('wf.tpl.createFailed')}: ` + err.message, 'error');
             }
-        },
-
-        _formatOutput(text) {
-            if (!text) return '';
-            return this.formatText(text);
         },
     };
 
