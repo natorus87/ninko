@@ -141,7 +141,7 @@ class BrandingSettings(BaseModel):
     welcome_show_eyes: bool = True
     show_quick_actions: bool = True
     login_title: str = "Ninko Login"
-    login_subtitle: str = "Please sign in with your admin account."
+    login_subtitle: str = "Bitte mit dem Admin-Account anmelden."
     login_help_url: str = "https://github.com/natorus87/ninko/blob/main/DOCS.md"
     login_head_mode: Literal["image", "text", "off"] = "image"
     login_image_url: str = "/static/images/logo_dashboard_new.png?v=3"
@@ -151,6 +151,23 @@ class BrandingSettings(BaseModel):
 
 
 class BrandingSettingsResponse(BrandingSettings):
+    source: str = "default"  # "default" | "redis"
+
+
+# ── Background Settings ───────────────────────────────
+
+_HEX_COLOR = r"^#[0-9a-fA-F]{6}$"
+
+
+class BackgroundSettings(BaseModel):
+    """Basisfarben des App-Hintergrunds (Settings → Themes → Hintergrundfarben)."""
+    preset: str = Field(default="default", pattern=r"^[a-z0-9_-]{1,32}$")
+    tint: str = Field(default="#070b24", pattern=_HEX_COLOR)
+    accent1: str = Field(default="#6d28d9", pattern=_HEX_COLOR)
+    accent2: str = Field(default="#007aff", pattern=_HEX_COLOR)
+
+
+class BackgroundSettingsResponse(BackgroundSettings):
     source: str = "default"  # "default" | "redis"
 
 
