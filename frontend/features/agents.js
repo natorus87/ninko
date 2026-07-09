@@ -32,8 +32,15 @@
                 this._buildModulePicker();
 
                 if (!agents.length) {
-                    container.innerHTML = `<p class="empty-state">Noch keine Agenten konfiguriert.<br>
-                        <span style="font-size:0.85rem;opacity:0.7">Klicke auf „⚡ Vorlagen" für einen schnellen Einstieg oder „+ Neuer Agent" für einen leeren Editor.</span></p>`;
+                    container.innerHTML = this._renderEmptyStateCard({
+                        icon: '<svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg>',
+                        title: t('empty.agents.title'),
+                        hint: t('empty.agents.hint'),
+                        actions: [
+                            { label: t('empty.agents.ctaTemplates'), action: 'openTemplatesPanel' },
+                            { label: t('empty.agents.ctaNew'), action: 'openAgentEditor', args: [null], primary: true },
+                        ],
+                    });
                     return;
                 }
                 container.innerHTML = agents.map(a => {
@@ -50,10 +57,10 @@
                                 <span class="agent-card-badge ${a.enabled ? 'badge-active' : 'badge-inactive'}">${a.enabled ? 'Aktiv' : 'Inaktiv'}</span>
                             </div>
                             <div class="agent-card-actions">
-                                <button class="btn-icon btn-icon-sm" data-action="run" title="Einmalig ausführen">${this._ic.play || '▶'}</button>
-                                <button class="btn-icon btn-icon-sm" data-action="edit" title="Bearbeiten">${this._ic.edit}</button>
-                                <button class="btn-icon btn-icon-sm" data-action="duplicate" title="Duplizieren">${this._ic.copy}</button>
-                                <button class="btn-icon btn-icon-sm" data-action="delete" title="Löschen" style="color:var(--error-color)">${this._ic.trash}</button>
+                                <button class="btn-icon btn-icon-sm" data-action="run" title="${t('agents.runOnce')}">${this._ic.play || '▶'}</button>
+                                <button class="btn-icon btn-icon-sm" data-action="edit" title="${t('common.edit')}">${this._ic.edit}</button>
+                                <button class="btn-icon btn-icon-sm" data-action="duplicate" title="${t('common.duplicate')}">${this._ic.copy}</button>
+                                <button class="btn-icon btn-icon-sm" data-action="delete" title="${t('common.delete')}" style="color:var(--error-color)">${this._ic.trash}</button>
                             </div>
                         </div>
                         <p class="agent-card-desc">${a.description ? this._escapeHtml(a.description) : '<em style="color:var(--text-muted)">Keine Beschreibung</em>'}</p>
@@ -74,7 +81,7 @@
                     card.querySelector('[data-action="delete"]')?.addEventListener('click', () => this.deleteAgent(id, name));
                 });
             } catch (e) {
-                container.innerHTML = '<p class="empty-state">Fehler beim Laden der Agenten.</p>';
+                container.innerHTML = `<p class="empty-state">${this._escapeHtml(t('common.loadError'))}</p>`;
             }
         },
 
@@ -112,7 +119,7 @@
                 const data = await res.json();
                 const templates = data.templates || [];
                 if (!templates.length) {
-                    container.innerHTML = '<p class="empty-state">Keine Vorlagen verfügbar.</p>';
+                    container.innerHTML = `<p class="empty-state">${this._escapeHtml(t('tpl.none'))}</p>`;
                     return;
                 }
                 container.innerHTML = templates.map(tpl => `
@@ -135,7 +142,7 @@
                     card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } });
                 });
             } catch (e) {
-                container.innerHTML = '<p class="empty-state">Fehler beim Laden der Vorlagen.</p>';
+                container.innerHTML = `<p class="empty-state">${this._escapeHtml(t('common.loadError'))}</p>`;
             }
         },
 
@@ -168,7 +175,7 @@
                     const checked = suggestedModules.includes(m.name) ? 'checked' : '';
                     return `<label class="module-checkbox-item"><input type="checkbox" id="agent-mod-${this._escapeHtml(m.name)}" value="${this._escapeHtml(m.name)}" ${checked}><span>${this._escapeHtml(m.display_name || m.name)}</span></label>`;
                 }).join('');
-            } catch { container.innerHTML = '<p class="text-muted">Fehler beim Laden.</p>'; }
+            } catch { container.innerHTML = `<p class="text-muted">${this._escapeHtml(t('common.loadError'))}</p>`; }
         },
 
         // -------------------------------------------------------
@@ -178,7 +185,7 @@
         async generateAgentWithAI() {
             const usecase = document.getElementById('agent-usecase')?.value?.trim();
             if (!usecase) {
-                showNotification('Bitte zuerst einen Use-Case beschreiben.', 'warning');
+                showNotification(t('agents.useCaseFirst'), 'warning');
                 return;
             }
             const btn = document.getElementById('agent-generate-btn');
@@ -220,10 +227,10 @@
                         'success'
                     );
                 } else {
-                    showNotification('Agent-Spezifikation erfolgreich generiert ✨', 'success');
+                    showNotification(t('agents.specGenerated'), 'success');
                 }
             } catch (e) {
-                showNotification(`Generierung fehlgeschlagen: ${e.message}`, 'error');
+                showNotification(`${t('agents.generateFailed')}: ${e.message}`, 'error');
             } finally {
                 if (btn) { btn.disabled = false; btn.textContent = '✨ Generieren'; }
             }
@@ -253,7 +260,7 @@
                 const res = await fetch('/api/skills/');
                 const skills = await res.json();
                 if (!skills.length) {
-                    container.innerHTML = '<p class="empty-state">Keine Skills vorhanden.</p>';
+                    container.innerHTML = `<p class="empty-state">${this._escapeHtml(t('skill.none'))}</p>`;
                     return;
                 }
                 container.innerHTML = skills.map(s => {
@@ -270,7 +277,7 @@
                             </div>
                             <div class="agent-card-actions">
                                 <button class="btn-icon btn-icon-sm" data-action="edit-skill" data-skill-name="${this._escapeHtml(s.name)}" title="${s.builtin ? 'Ansehen/Override' : 'Bearbeiten'}">${this._ic.edit}</button>
-                                ${!s.builtin ? `<button class="btn-icon btn-icon-sm" data-action="delete-skill" data-skill-name="${this._escapeHtml(s.name)}" title="Löschen" style="color:var(--error-color);">${this._ic.trash}</button>` : ''}
+                                ${!s.builtin ? `<button class="btn-icon btn-icon-sm" data-action="delete-skill" data-skill-name="${this._escapeHtml(s.name)}" title="${t('common.delete')}" style="color:var(--error-color);">${this._ic.trash}</button>` : ''}
                             </div>
                         </div>
                         <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-top:0.5rem;">
@@ -286,7 +293,7 @@
                     btn.addEventListener('click', () => this.deleteSkill(btn.dataset.skillName || ''));
                 });
             } catch {
-                container.innerHTML = '<p class="empty-state text-error">Fehler beim Laden.</p>';
+                container.innerHTML = `<p class="empty-state text-error">${this._escapeHtml(t('common.loadError'))}</p>`;
             }
         },
 
@@ -314,7 +321,7 @@
                 const res = await fetch('/api/skills/');
                 const skills = await res.json();
                 if (!skills.length) {
-                    container.innerHTML = '<p class="empty-state">Keine Skills vorhanden.</p>';
+                    container.innerHTML = `<p class="empty-state">${this._escapeHtml(t('skill.none'))}</p>`;
                     return;
                 }
                 container.innerHTML = skills.map(s => {
@@ -337,7 +344,7 @@
                     </div>`;
                 }).join('');
             } catch {
-                container.innerHTML = '<p class="empty-state text-error">Fehler beim Laden.</p>';
+                container.innerHTML = `<p class="empty-state text-error">${this._escapeHtml(t('common.loadError'))}</p>`;
             }
         },
 
@@ -366,7 +373,7 @@
                 const res = await fetch('/api/skills/marketplace');
                 const skills = await res.json();
                 if (!skills.length) {
-                    container.innerHTML = '<p class="empty-state">Keine Skills im Marketplace verfügbar.</p>';
+                    container.innerHTML = `<p class="empty-state">${this._escapeHtml(t('skill.marketplaceEmpty'))}</p>`;
                     return;
                 }
                 container.innerHTML = skills.map(s => `
@@ -394,13 +401,13 @@
                     </div>
                 `).join('');
             } catch {
-                container.innerHTML = '<p class="empty-state text-error">Fehler beim Laden des Marketplace.</p>';
+                container.innerHTML = `<p class="empty-state text-error">${this._escapeHtml(t('common.loadError'))}</p>`;
             }
         },
 
         async installMarketplaceSkill(name, skillUrl, modules) {
             try {
-                showNotification('Installiere Skill…', 'info');
+                showNotification(t('skill.installing'), 'info');
                 const res = await fetch('/api/skills/marketplace/install', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -410,11 +417,11 @@
                     const err = await res.json().catch(() => ({}));
                     throw new Error(err.detail || `HTTP ${res.status}`);
                 }
-                showNotification(`Skill "${name}" installiert!`, 'success');
+                showNotification(`${t('skill.installed')}: "${name}"`, 'success');
                 this.loadSkillMarketplace();
                 this.loadSkillsList();
             } catch (e) {
-                showNotification(`Installation fehlgeschlagen: ${e.message}`, 'error');
+                showNotification(`${t('skill.installFailed')}: ${e.message}`, 'error');
             }
         },
 
@@ -447,7 +454,7 @@
                 `;
                 container.innerHTML = html;
             } catch {
-                container.innerHTML = '<p class="empty-state text-error">Fehler beim Laden.</p>';
+                container.innerHTML = `<p class="empty-state text-error">${this._escapeHtml(t('common.loadError'))}</p>`;
             }
         },
 
@@ -455,7 +462,7 @@
             const id = document.getElementById('new-repo-id')?.value?.trim();
             const name = document.getElementById('new-repo-name')?.value?.trim();
             const url = document.getElementById('new-repo-url')?.value?.trim();
-            if (!id || !url) { showNotification('ID und URL sind erforderlich.', 'error'); return; }
+            if (!id || !url) { showNotification(t('skill.repoRequired'), 'error'); return; }
             try {
                 const res = await fetch('/api/skills/repos', {
                     method: 'POST',
@@ -466,7 +473,7 @@
                     const err = await res.json().catch(() => ({}));
                     throw new Error(err.detail || `HTTP ${res.status}`);
                 }
-                showNotification(`Repo "${id}" hinzugefügt!`, 'success');
+                showNotification(`${t('skill.repoAdded')}: "${id}"`, 'success');
                 this.loadSkillRepos();
             } catch (e) {
                 showNotification(`Fehler: ${e.message}`, 'error');
@@ -474,14 +481,14 @@
         },
 
         async removeSkillRepo(repoId) {
-            if (!confirm(`Repo "${repoId}" wirklich entfernen?`)) return;
+            if (!await this.confirm(t('skill.repoRemoveConfirm'), repoId)) return;
             try {
                 const res = await fetch(`/api/skills/repos/${encodeURIComponent(repoId)}`, { method: 'DELETE' });
                 if (!res.ok) {
                     const err = await res.json().catch(() => ({}));
                     throw new Error(err.detail || `HTTP ${res.status}`);
                 }
-                showNotification(`Repo "${repoId}" entfernt.`, 'success');
+                showNotification(`${t('skill.repoRemoved')}: "${repoId}"`, 'success');
                 this.loadSkillRepos();
             } catch (e) {
                 showNotification(`Fehler: ${e.message}`, 'error');
@@ -518,7 +525,7 @@
                     document.getElementById('skill-content').value = s.content;
                     const saveBtn = document.getElementById('skill-save-btn');
                     if (saveBtn) saveBtn.textContent = s.builtin ? '💾 Als Override speichern' : '💾 Speichern';
-                } catch { showNotification('Fehler beim Laden des Skills', 'error'); }
+                } catch { showNotification(t('common.loadError'), 'error'); }
             } else {
                 document.getElementById('skill-editor-title').textContent = 'Neuer Skill';
                 this._clearSkillEditor();
@@ -570,11 +577,11 @@
             const modules = modulesRaw ? modulesRaw.split(',').map(m => m.trim()).filter(Boolean) : [];
 
             if (!name || !description || !content) {
-                showNotification('Name, Beschreibung und Inhalt sind Pflichtfelder.', 'error');
+                showNotification(t('skill.fieldsRequired'), 'error');
                 return;
             }
             if (!/^[a-z0-9\-]+$/.test(name)) {
-                showNotification('Name darf nur Kleinbuchstaben, Zahlen und Bindestriche enthalten.', 'error');
+                showNotification(t('skill.nameFormat'), 'error');
                 return;
             }
 
@@ -593,28 +600,28 @@
                     body: JSON.stringify(bodyToSend),
                 });
                 if (res.ok) {
-                    showNotification(`Skill "${name}" gespeichert.`, 'success');
+                    showNotification(`${t('skill.saved')}: "${name}"`, 'success');
                     this.closeSkillEditor();
                 } else {
                     const err = await res.json();
-                    showNotification('Fehler: ' + (err.detail || res.statusText), 'error');
+                    showNotification(`${t('common.error')}: ` + (err.detail || res.statusText), 'error');
                 }
-            } catch { showNotification('Verbindungsfehler', 'error'); }
+            } catch { showNotification(t('common.connectionError'), 'error'); }
             finally { if (btn) btn.disabled = false; }
         },
 
         async deleteSkill(name) {
-            if (!await this.confirm(`Skill "${name}" löschen?`)) return;
+            if (!await this.confirm(t('skill.deleteConfirm'), name)) return;
             try {
                 const res = await fetch(`/api/skills/${encodeURIComponent(name)}`, { method: 'DELETE' });
                 if (res.ok || res.status === 204) {
-                    showNotification(`Skill "${name}" gelöscht.`, 'info');
+                    showNotification(`${t('skill.deleted')}: "${name}"`, 'info');
                     this.loadSkillsList();
                 } else {
                     const err = await res.json().catch(() => ({}));
-                    showNotification('Fehler: ' + (err.detail || 'Unbekannt'), 'error');
+                    showNotification(`${t('common.error')}: ` + (err.detail || ''), 'error');
                 }
-            } catch { showNotification('Verbindungsfehler', 'error'); }
+            } catch { showNotification(t('common.connectionError'), 'error'); }
         },
 
         async _populateAgentSkills() {
@@ -629,7 +636,7 @@
                     return !modules.length || modules.includes(agentName);
                 });
                 if (!relevant.length) {
-                    container.innerHTML = '<p class="text-muted" style="font-size:0.82rem;">Keine Skills vorhanden.</p>';
+                    container.innerHTML = `<p class="text-muted" style="font-size:0.82rem;">${this._escapeHtml(t('skill.none'))}</p>`;
                     return;
                 }
                 container.innerHTML = relevant.map(s => `
@@ -646,7 +653,7 @@
                     btn.addEventListener('click', () => this.openSkillEditorFromAgentWithName(btn.dataset.skillName || ''));
                 });
             } catch {
-                container.innerHTML = '<p class="text-muted" style="font-size:0.82rem;">Fehler beim Laden.</p>';
+                container.innerHTML = `<p class="text-muted" style="font-size:0.82rem;">${this._escapeHtml(t('common.loadError'))}</p>`;
             }
         },
 
@@ -728,7 +735,7 @@
                         <span>${m.display_name || m.name}</span>
                     </label>
                 `).join('');
-            } catch { container.innerHTML = '<p class="text-muted">Fehler beim Laden.</p>'; }
+            } catch { container.innerHTML = `<p class="text-muted">${this._escapeHtml(t('common.loadError'))}</p>`; }
         },
 
         _renderAgentSteps() {
@@ -813,7 +820,7 @@
 
         async saveAgent() {
             const name = document.getElementById('agent-name').value.trim();
-            if (!name) { showNotification('Name ist Pflichtfeld', 'error'); return; }
+            if (!name) { showNotification(t('common.nameRequired'), 'error'); return; }
             const saveBtn = document.querySelector('#agenten-editor .btn-primary');
             if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Speichern…'; }
             const selectedModules = [...document.querySelectorAll('#agent-modules-list input[type=checkbox]:checked')].map(cb => cb.value);
@@ -848,32 +855,32 @@
                             }
                         } catch { }
                     }
-                    showNotification(`Agent "${name}" gespeichert`, 'success');
+                    showNotification(`${t('agents.saved')}: "${name}"`, 'success');
                     this.closeAgentEditor();
                 } else {
-                    showNotification('Fehler beim Speichern', 'error');
+                    showNotification(t('common.saveFailed'), 'error');
                 }
-            } catch { showNotification('Verbindungsfehler', 'error'); }
+            } catch { showNotification(t('common.connectionError'), 'error'); }
             finally {
                 if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Speichern'; }
             }
         },
 
         async deleteAgent(id, name) {
-            if (!await this.confirm(`Agent "${name}" löschen?`)) return;
+            if (!await this.confirm(t('agents.deleteConfirm'), name)) return;
             try {
                 const res = await fetch(`/api/agents/${id}`, { method: 'DELETE' });
-                if (res.ok) { showNotification(`Agent "${name}" gelöscht`, 'info'); this.loadAgents(); }
-                else showNotification('Fehler beim Löschen', 'error');
-            } catch { showNotification('Verbindungsfehler', 'error'); }
+                if (res.ok) { showNotification(`${t('agents.deleted')}: "${name}"`, 'info'); this.loadAgents(); }
+                else showNotification(t('common.deleteFailed'), 'error');
+            } catch { showNotification(t('common.connectionError'), 'error'); }
         },
 
         async duplicateAgent(id) {
             try {
                 const res = await fetch(`/api/agents/${id}/duplicate`, { method: 'POST' });
-                if (res.ok) { showNotification('Agent dupliziert', 'success'); this.loadAgents(); }
-                else showNotification('Fehler beim Duplizieren', 'error');
-            } catch { showNotification('Verbindungsfehler', 'error'); }
+                if (res.ok) { showNotification(t('agents.duplicated'), 'success'); this.loadAgents(); }
+                else showNotification(t('agents.duplicateFailed'), 'error');
+            } catch { showNotification(t('common.connectionError'), 'error'); }
         },
 
         // -------------------------------------------------------
@@ -943,7 +950,7 @@
                     this._stopAgentJobsPolling();
                 }
             } catch {
-                container.innerHTML = '<p class="empty-state">Fehler beim Laden der Jobs.</p>';
+                container.innerHTML = `<p class="empty-state">${this._escapeHtml(t('common.loadError'))}</p>`;
             }
         },
 
