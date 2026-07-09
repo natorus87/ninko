@@ -28,6 +28,8 @@ from schemas.settings import (
     K8sClusterListResponse,
     BrandingSettings,
     BrandingSettingsResponse,
+    BackgroundSettings,
+    BackgroundSettingsResponse,
     EmbedModelResponse,
     normalize_llm_backend,
 )
@@ -56,6 +58,7 @@ REDIS_KEY_MODULES = "ninko:settings:modules"
 REDIS_KEY_K8S_CLUSTERS = "ninko:settings:k8s_clusters"
 REDIS_KEY_LLM_PROVIDERS = "ninko:settings:llm_providers"
 REDIS_KEY_BRANDING = "ninko:settings:branding"
+REDIS_KEY_BACKGROUND = "ninko:settings:background"
 REDIS_KEY_ROUTING_MODE = "ninko:settings:routing_mode"
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -64,7 +67,8 @@ _BRANDING_DIR = (
     if Path("/app/data").exists()
     else (_REPO_ROOT / "data" / "branding")
 )
-_BRANDING_DIR.mkdir(parents=True, exist_ok=True)
+# Kein mkdir zur Import-Zeit (bricht Importe in read-only Umgebungen wie Tests) —
+# das Verzeichnis wird beim Upload angelegt, siehe upload_branding_asset().
 _BRANDING_ALLOWED_MIME = {
     "image/png",
     "image/jpeg",
@@ -445,6 +449,50 @@ async def reset_branding_settings() -> BrandingSettingsResponse:
     return BrandingSettingsResponse(**payload, source="redis")
 
 
+# ═══════════════════════════════════════════════════════
+#  Background Settings (Hintergrundfarben)
+# ═══════════════════════════════════════════════════════
+
+
+@router.get("/background", response_model=BackgroundSettingsResponse)
+async def get_background_settings() -> BackgroundSettingsResponse:
+    """Hintergrundfarben abrufen (Redis → Default)."""
+    redis = get_redis()
+    raw = await redis.connection.get(REDIS_KEY_BACKGROUND)
+    defaults = BackgroundSettings().model_dump()
+    if raw:
+        try:
+            data = json.loads(raw)
+            merged = {**defaults, **(data or {})}
+            return BackgroundSettingsResponse(**merged, source="redis")
+        except _SETTINGS_RECOVERABLE_EXCEPTIONS as exc:
+            logger.warning(
+                "Background-Settings aus Redis nicht lesbar, Defaults verwendet: %s",
+                exc,
+            )
+    return BackgroundSettingsResponse(**defaults, source="default")
+
+
+@router.put("/background", response_model=BackgroundSettingsResponse)
+async def update_background_settings(body: BackgroundSettings) -> BackgroundSettingsResponse:
+    """Hintergrundfarben persistieren."""
+    redis = get_redis()
+    payload = body.model_dump()
+    await redis.connection.set(REDIS_KEY_BACKGROUND, json.dumps(payload))
+    logger.info("Background-Settings aktualisiert: preset=%s", payload.get("preset", "default"))
+    return BackgroundSettingsResponse(**payload, source="redis")
+
+
+@router.post("/background/reset", response_model=BackgroundSettingsResponse)
+async def reset_background_settings() -> BackgroundSettingsResponse:
+    """Hintergrundfarben auf Defaults zurücksetzen."""
+    redis = get_redis()
+    payload = BackgroundSettings().model_dump()
+    await redis.connection.set(REDIS_KEY_BACKGROUND, json.dumps(payload))
+    logger.info("Background-Settings auf Defaults zurückgesetzt.")
+    return BackgroundSettingsResponse(**payload, source="redis")
+
+
 @router.post("/branding/upload")
 async def upload_branding_asset(file: UploadFile = File(...)) -> dict:
     """Branding-Bild hochladen und persistieren."""
@@ -531,6 +579,7 @@ async def upload_branding_asset(file: UploadFile = File(...)) -> dict:
         )
 
     safe_name = f"{uuid.uuid4().hex}{ext}"
+    _BRANDING_DIR.mkdir(parents=True, exist_ok=True)
     target = _BRANDING_DIR / safe_name
     target.write_bytes(raw)
     return {
