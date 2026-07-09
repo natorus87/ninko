@@ -198,6 +198,7 @@ const Ninko = {
             });
             this.sessionId = this.getSessionId();
             this.restoreTheme();
+            this.loadBackgroundSettings();
             await this.loadActiveTheme();
             this.applyActiveThemeTokens();
             await this.loadHistory();
@@ -443,7 +444,7 @@ const Ninko = {
             const auto = document.querySelector('#subnav-automatisierung .settings-tab.active span')?.textContent?.trim();
             if (auto) parts.push(auto);
         } else if (tab === 'settings') {
-            parts.push('Settings');
+            parts.push(t('nav.settings'));
             const set = document.querySelector('#subnav-settings .settings-tab.active span')?.textContent?.trim()
                 || document.querySelector('#subnav-settings .settings-tab.active')?.textContent?.trim();
             if (set) parts.push(set.replace(/\s+/g, ' '));
@@ -661,18 +662,9 @@ const Ninko = {
     },
 
     _moduleCategoryLabel(category) {
-        const emojis = {
-            infrastructure: '🏗️',
-            network: '🌐',
-            monitoring: '📊',
-            productivity: '📋',
-            communication: '💬',
-            cloud: '☁️',
-            iot: '🏠',
-            other: '📦',
-        };
-        const key = Object.prototype.hasOwnProperty.call(emojis, category) ? category : 'other';
-        return `${emojis[key]} ${t('module.category.' + key)}`;
+        const known = ['infrastructure', 'network', 'monitoring', 'productivity', 'communication', 'cloud', 'iot', 'other'];
+        const key = known.includes(category) ? category : 'other';
+        return t('module.category.' + key);
     },
 
     _loadModuleNavPrefs() {
@@ -699,6 +691,24 @@ const Ninko = {
         } catch {
             // ignore localStorage errors
         }
+    },
+
+    /** Zentrierte Empty-State-Karte für Listen-Ansichten.
+     *  actions: [{label, action, args?, primary?}] — nutzt das data-action-Dispatching. */
+    _renderEmptyStateCard({ icon = '', title = '', hint = '', actions = [] }) {
+        const buttons = actions.map((a) => `
+            <button class="btn btn-sm ${a.primary ? 'btn-primary' : 'btn-outline'}"
+                data-action="${this._escapeHtml(a.action)}"
+                ${a.args !== undefined ? `data-args='${JSON.stringify(a.args)}'` : ''}>${this._escapeHtml(a.label)}</button>
+        `).join('');
+        return `
+            <div class="empty-state-card">
+                ${icon}
+                <div class="empty-state-title">${this._escapeHtml(title)}</div>
+                ${hint ? `<div class="empty-state-hint">${this._escapeHtml(hint)}</div>` : ''}
+                ${buttons ? `<div class="empty-state-actions">${buttons}</div>` : ''}
+            </div>
+        `;
     },
 
     filterModuleSidebar(query) {
@@ -749,7 +759,7 @@ const Ninko = {
             const active = this._activeModuleTab === item.tabId ? ' active' : '';
             return `
                 <div class="module-nav-row">
-                    <button class="settings-tab settings-tab-sub module-nav-btn${active}" data-module-tab="${this._escapeHtml(item.tabId)}">
+                    <button class="settings-tab settings-tab-sub module-nav-btn${active}"${active ? ' aria-current="page"' : ''} data-module-tab="${this._escapeHtml(item.tabId)}">
                         ${item.icon}<span>${this._escapeHtml(item.label)}</span>
                     </button>
                     <button class="module-fav-btn${isFavorite ? ' is-favorite' : ''}" data-fav-tab="${this._escapeHtml(item.tabId)}" title="Favorit">
@@ -769,11 +779,11 @@ const Ninko = {
             });
 
         if (favorites.length) {
-            parts.push(`<div class="module-nav-group-label">⭐ ${t('module.group.favorites')}</div>`);
+            parts.push(`<div class="module-nav-group-label">${t('module.group.favorites')}</div>`);
             parts.push(...renderUniqueRows(favorites));
         }
         if (recent.length) {
-            parts.push(`<div class="module-nav-group-label">🕐 ${t('module.group.recent')}</div>`);
+            parts.push(`<div class="module-nav-group-label">${t('module.group.recent')}</div>`);
             parts.push(...renderUniqueRows(recent));
         }
         order.forEach((category) => {
@@ -1144,11 +1154,16 @@ const Ninko = {
     },
 
     _setAutomationSubnavActive(tabId) {
-        document.querySelectorAll('#subnav-automatisierung .settings-tab').forEach(t => t.classList.remove('active'));
-        document.querySelector(
+        document.querySelectorAll('#subnav-automatisierung .settings-tab').forEach(t => {
+            t.classList.remove('active');
+            t.removeAttribute('aria-current');
+        });
+        const btn = document.querySelector(
             `#subnav-automatisierung .settings-tab[data-auto-tab="${tabId}"], ` +
             `#subnav-automatisierung .settings-tab[data-auto-link="${tabId}"]`
-        )?.classList.add('active');
+        );
+        btn?.classList.add('active');
+        btn?.setAttribute('aria-current', 'page');
     },
 
     // --- Module Sub-Tab Switching ---
@@ -1344,15 +1359,26 @@ const Ninko = {
         const menu = document.getElementById('chat-plus-dropdown');
         if (!wrap || !menu) return;
         const isOpen = menu.style.display !== 'none';
-        menu.style.display = isOpen ? 'none' : 'block';
-        wrap.classList.toggle('open', !isOpen);
+        if (isOpen) {
+            this.closeChatPlusMenu();
+            return;
+        }
+        menu.style.display = 'block';
+        wrap.classList.add('open');
+        // Aufklapprichtung dynamisch: nach oben, wenn unter dem Trigger nicht genug Platz ist
+        // (z.B. wenn die Chatbox bei laufendem Chat am unteren Viewport-Rand sitzt).
+        const trigger = document.getElementById('chat-plus-trigger') || wrap;
+        const rect = trigger.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const needed = menu.offsetHeight + 16;
+        wrap.classList.toggle('drop-up', spaceBelow < needed && rect.top > spaceBelow);
     },
 
     closeChatPlusMenu() {
         const wrap = document.getElementById('chat-plus-menu');
         const menu = document.getElementById('chat-plus-dropdown');
         if (menu) menu.style.display = 'none';
-        if (wrap) wrap.classList.remove('open');
+        if (wrap) wrap.classList.remove('open', 'drop-up');
     },
 
     // --- Spracheingabe ---
@@ -2142,6 +2168,168 @@ ${messagesHtml}
         }
     },
 
+
+    // --- Hintergrundfarben (Settings → Themes → Hintergrundfarben) ---
+
+    _background: null,
+    _bgSaveTimer: null,
+    _bgUiBound: false,
+
+    _bgDefaults() {
+        return { preset: 'default', tint: '#070b24', accent1: '#6d28d9', accent2: '#007aff' };
+    },
+
+    _bgPresets() {
+        return [
+            { id: 'default', tint: '#070b24', accent1: '#6d28d9', accent2: '#007aff' },
+            { id: 'ocean', tint: '#041526', accent1: '#0891b2', accent2: '#38bdf8' },
+            { id: 'emerald', tint: '#04160f', accent1: '#059669', accent2: '#34d399' },
+            { id: 'sunset', tint: '#1c0b05', accent1: '#ea580c', accent2: '#f59e0b' },
+            { id: 'crimson', tint: '#1b0511', accent1: '#be123c', accent2: '#ec4899' },
+            { id: 'graphite', tint: '#0b0d12', accent1: '#475569', accent2: '#64748b' },
+        ];
+    },
+
+    _isHexColor(v) {
+        return typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v);
+    },
+
+    /** Leitet Mittel- und Tiefton des Basis-Verlaufs aus dem Grundton ab.
+     *  Für den Default (#070b24) ergeben sich exakt die bisherigen Stops. */
+    _deriveTintStops(hex) {
+        const n = parseInt(hex.slice(1), 16);
+        const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+        const clamp = (x) => Math.max(0, Math.min(255, Math.round(x)));
+        const toHex = (rr, gg, bb) =>
+            '#' + [rr, gg, bb].map((x) => x.toString(16).padStart(2, '0')).join('');
+        return {
+            mid: toHex(clamp(r + 2), clamp(g + 2), clamp(b + 10)),
+            deep: toHex(clamp(r * 0.3), clamp(g * 0.55), clamp(b * 0.65)),
+        };
+    },
+
+    _applyBackgroundColors(cfg) {
+        const c = { ...this._bgDefaults(), ...(cfg || {}) };
+        if (!this._isHexColor(c.tint) || !this._isHexColor(c.accent1) || !this._isHexColor(c.accent2)) return;
+        const stops = this._deriveTintStops(c.tint);
+        const root = document.documentElement.style;
+        root.setProperty('--bg-tint', c.tint);
+        root.setProperty('--bg-tint-mid', stops.mid);
+        root.setProperty('--bg-tint-deep', stops.deep);
+        root.setProperty('--bg-accent-1', c.accent1);
+        root.setProperty('--bg-accent-2', c.accent2);
+        this._background = c;
+    },
+
+    async loadBackgroundSettings() {
+        // Schneller Pfad: zuletzt angewendete Farben aus localStorage (kein Flash)
+        try {
+            const cached = JSON.parse(localStorage.getItem('ninko_background') || 'null');
+            if (cached) this._applyBackgroundColors(cached);
+        } catch { /* ignore */ }
+        try {
+            const res = await fetch('/api/settings/background', { cache: 'no-store' });
+            if (!res.ok) return;
+            const data = await res.json();
+            this._applyBackgroundColors(data);
+            localStorage.setItem('ninko_background', JSON.stringify(this._background));
+        } catch { /* Netzwerkfehler: Cache/Defaults bleiben aktiv */ }
+    },
+
+    _persistBackgroundSettings() {
+        clearTimeout(this._bgSaveTimer);
+        this._bgSaveTimer = setTimeout(async () => {
+            const status = document.getElementById('bg-settings-status');
+            try {
+                const res = await fetch('/api/settings/background', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this._background),
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                localStorage.setItem('ninko_background', JSON.stringify(this._background));
+                if (status) {
+                    status.textContent = t('settings.background.saved');
+                    setTimeout(() => { if (status.textContent === t('settings.background.saved')) status.textContent = ''; }, 2000);
+                }
+            } catch (e) {
+                if (status) status.textContent = t('common.error');
+                console.warn('Hintergrund-Settings konnten nicht gespeichert werden:', e);
+            }
+        }, 400);
+    },
+
+    _setBackground(cfg) {
+        this._applyBackgroundColors(cfg);
+        this._syncBackgroundForm();
+        this._renderBackgroundPresets();
+        this._persistBackgroundSettings();
+    },
+
+    async resetBackgroundSettings() {
+        this._setBackground(this._bgDefaults());
+    },
+
+    _syncBackgroundForm() {
+        const c = this._background || this._bgDefaults();
+        for (const key of ['tint', 'accent1', 'accent2']) {
+            const picker = document.getElementById(`bg-picker-${key}`);
+            const hexInput = document.getElementById(`bg-hex-${key}`);
+            if (picker) picker.value = c[key];
+            if (hexInput) {
+                hexInput.value = c[key];
+                hexInput.classList.remove('invalid');
+            }
+        }
+    },
+
+    _renderBackgroundPresets() {
+        const list = document.getElementById('bg-preset-list');
+        if (!list) return;
+        const active = this._background?.preset || 'default';
+        list.innerHTML = this._bgPresets().map((p) => `
+            <button type="button" class="bg-preset-chip${p.id === active ? ' active' : ''}" data-bg-preset="${p.id}"
+                    title="${this._escapeHtml(t('settings.background.preset.' + p.id))}">
+                <span class="bg-preset-swatch" style="background:
+                    radial-gradient(circle at 30% 25%, ${p.accent1} 0%, transparent 55%),
+                    radial-gradient(circle at 72% 70%, ${p.accent2} 0%, transparent 55%),
+                    ${p.tint};"></span>
+                <span class="bg-preset-name">${this._escapeHtml(t('settings.background.preset.' + p.id))}</span>
+            </button>
+        `).join('');
+        list.querySelectorAll('[data-bg-preset]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const preset = this._bgPresets().find((p) => p.id === btn.dataset.bgPreset);
+                if (preset) {
+                    const { id, ...colors } = preset;
+                    this._setBackground({ preset: id, ...colors });
+                }
+            });
+        });
+    },
+
+    initBackgroundSettingsUI() {
+        this._renderBackgroundPresets();
+        this._syncBackgroundForm();
+        if (this._bgUiBound) return;
+        this._bgUiBound = true;
+        for (const key of ['tint', 'accent1', 'accent2']) {
+            const picker = document.getElementById(`bg-picker-${key}`);
+            const hexInput = document.getElementById(`bg-hex-${key}`);
+            picker?.addEventListener('input', () => {
+                this._setBackground({ ...(this._background || this._bgDefaults()), preset: 'custom', [key]: picker.value });
+            });
+            hexInput?.addEventListener('input', () => {
+                const val = hexInput.value.trim().toLowerCase();
+                if (!this._isHexColor(val)) {
+                    hexInput.classList.add('invalid');
+                    return;
+                }
+                hexInput.classList.remove('invalid');
+                this._setBackground({ ...(this._background || this._bgDefaults()), preset: 'custom', [key]: val });
+            });
+        }
+    },
 
     sendQuick(textOrKey) {
         if (!textOrKey || textOrKey === 'undefined') return;
@@ -4043,10 +4231,15 @@ ${messagesHtml}
         const fallbackTab = tabButtons[0]?.dataset.settingsTab || 'llm';
         const targetTab = validTabs.has(tabId) ? tabId : fallbackTab;
 
-        document.querySelectorAll('#subnav-settings .settings-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('#subnav-settings .settings-tab').forEach(t => {
+            t.classList.remove('active');
+            t.removeAttribute('aria-current');
+        });
         document.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
 
-        document.querySelector(`#subnav-settings .settings-tab[data-settings-tab="${targetTab}"]`)?.classList.add('active');
+        const activeBtn = document.querySelector(`#subnav-settings .settings-tab[data-settings-tab="${targetTab}"]`);
+        activeBtn?.classList.add('active');
+        activeBtn?.setAttribute('aria-current', 'page');
         document.getElementById(`settings-panel-${targetTab}`)?.classList.add('active');
 
         // Load content when switching tabs
@@ -4055,7 +4248,6 @@ ${messagesHtml}
         if (targetTab === 'skills') { this.loadSettingsSkillsList(); }
         if (targetTab === 'system') this.loadBrandingForm();
         if (targetTab === 'themes') this.loadThemesSettings();
-        if (targetTab === 'k8s') this.loadK8sClusters();
         if (targetTab === 'language') this.renderLanguageTab();
         if (targetTab === 'tts') { this.loadSttSettings(); this.loadTtsSettings(); this.loadTtsVoices(); }
         if (targetTab === 'imagegen') { this.loadImageGenProvider(); this.loadOcrSettings(); }
@@ -4076,6 +4268,8 @@ ${messagesHtml}
         else this._updateChatInputState(this._chatMessages.length ? 'reply' : 'ask');
         // JS-gerenderte Kategorie-Labels der Modul-Sidebar sofort in neuer Sprache zeigen
         if (this._moduleNavItems?.length) this._renderModuleSidebar();
+        // Preset-Namen der Hintergrundfarben ebenfalls live umschalten
+        if (document.getElementById('bg-preset-list')) this._renderBackgroundPresets();
 
         // Aktiven Zustand der Sprach-Buttons aktualisieren
         document.querySelectorAll('.lang-btn').forEach(btn => {
@@ -4114,9 +4308,12 @@ ${messagesHtml}
         ];
 
         container.innerHTML = `
+            <div class="settings-header">
+                <h2 data-i18n="settings.language">${t('settings.language')}</h2>
+                <p class="settings-description" data-i18n="settings.langDesc">${t('settings.langDesc')}</p>
+            </div>
             <div class="setting-group">
                 <h4 data-i18n="settings.langTitle">${t('settings.langTitle')}</h4>
-                <p class="setting-desc" data-i18n="settings.langDesc">${t('settings.langDesc')}</p>
                 <div class="lang-grid">
                     ${languages.map(l => `
                         <button class="lang-btn ${l.code === currentLang ? 'lang-btn-active' : ''}"
@@ -4141,6 +4338,7 @@ ${messagesHtml}
         await this.loadThemesCatalog();
         await this.loadThemeRepos();
         this._renderThemeCards();
+        this.initBackgroundSettingsUI();
     },
 
     async loadThemesCatalog() {
@@ -5191,6 +5389,8 @@ ${messagesHtml}
         el.innerHTML = ok
             ? `<span class="sf sf-ok">${this._escapeHtml(message)}</span>`
             : `<span class="sf sf-error">${this._escapeHtml(message)}</span>`;
+        clearTimeout(this._rbacStatusTimer);
+        if (ok) this._rbacStatusTimer = setTimeout(() => { el.innerHTML = ''; }, 4000);
     },
 
     _renderRbacUsersTable() {
@@ -5201,18 +5401,20 @@ ${messagesHtml}
                 <td>${u.active ? 'aktiv' : 'inaktiv'}</td>
                 <td>${this._escapeHtml((u.roles || []).join(', ') || '-')}</td>
                 <td>${this._escapeHtml((u.groups || []).join(', ') || '-')}</td>
-                <td style="display:flex; gap:0.35rem;">
-                    <button class="btn btn-outline btn-sm" data-action="toggleRbacUserActive" data-args="${JSON.stringify([u.username, !u.active]).replace(/\"/g, '&quot;')}">${u.active ? 'Deaktivieren' : 'Aktivieren'}</button>
-                    <button class="btn btn-outline btn-sm" data-action="setRbacUserPassword" data-args="${JSON.stringify([u.username]).replace(/\"/g, '&quot;')}">Passwort</button>
-                    <button class="btn btn-outline btn-sm" data-action="openRbacUserSettings" data-args="${JSON.stringify([u.username]).replace(/\"/g, '&quot;')}">Settings</button>
-                    <button class="btn btn-outline btn-sm" data-action="openRbacUserTokens" data-args="${JSON.stringify([u.username]).replace(/\"/g, '&quot;')}">API-Token</button>
-                    <button class="btn btn-outline btn-sm" style="color:var(--error-color);" data-action="deleteRbacUser" data-args="${JSON.stringify([u.username]).replace(/\"/g, '&quot;')}">Löschen</button>
+                <td style="white-space:nowrap;">
+                    <div style="display:inline-flex; gap:0.35rem;">
+                        <button class="btn btn-outline btn-sm" data-action="toggleRbacUserActive" data-args="${JSON.stringify([u.username, !u.active]).replace(/\"/g, '&quot;')}">${u.active ? 'Deaktivieren' : 'Aktivieren'}</button>
+                        <button class="btn btn-outline btn-sm" data-action="setRbacUserPassword" data-args="${JSON.stringify([u.username]).replace(/\"/g, '&quot;')}">Passwort</button>
+                        <button class="btn btn-outline btn-sm" data-action="openRbacUserSettings" data-args="${JSON.stringify([u.username]).replace(/\"/g, '&quot;')}">Settings</button>
+                        <button class="btn btn-outline btn-sm" data-action="openRbacUserTokens" data-args="${JSON.stringify([u.username]).replace(/\"/g, '&quot;')}">API-Token</button>
+                        <button class="btn btn-outline btn-sm" style="color:var(--error-color);" data-action="deleteRbacUser" data-args="${JSON.stringify([u.username]).replace(/\"/g, '&quot;')}">Löschen</button>
+                    </div>
                 </td>
             </tr>
         `).join('');
         return `
             <div style="overflow:auto;">
-                <table class="log-table">
+                <table class="log-table log-table-auto">
                     <thead><tr><th>User</th><th>Status</th><th>Rollen</th><th>Gruppen</th><th>Aktionen</th></tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
@@ -6605,7 +6807,12 @@ ${messagesHtml}
             const tasks = data.tasks || [];
 
             if (tasks.length === 0) {
-                container.innerHTML = '<p class="empty-state">Keine geplanten Aufgaben vorhanden.<br><span style="font-size:0.85rem;opacity:0.7">Klicke auf „➕ Neue Aufgabe", um loszulegen.</span></p>';
+                container.innerHTML = this._renderEmptyStateCard({
+                    icon: '<svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+                    title: t('empty.tasks.title'),
+                    hint: t('empty.tasks.hint'),
+                    actions: [{ label: t('empty.tasks.cta'), action: 'openTaskEditor', primary: true }],
+                });
                 return;
             }
 
