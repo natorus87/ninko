@@ -30,7 +30,12 @@
                 this._scripts = data.scripts || [];
                 
                 if (!this._scripts.length) {
-                    container.innerHTML = '<p class="empty-state">Noch keine Scripts erstellt.<br><span style="font-size:0.85rem;opacity:0.7">Klicke auf „+ Neues Script", um loszulegen.</span></p>';
+                    container.innerHTML = this._renderEmptyStateCard({
+                        icon: '<svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
+                        title: t('empty.scripts.title'),
+                        hint: t('empty.scripts.hint'),
+                        actions: [{ label: t('empty.scripts.cta'), action: 'openScriptEditor', args: [null], primary: true }],
+                    });
                     return;
                 }
                 
