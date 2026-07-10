@@ -92,6 +92,14 @@ async def _ocr_llm_vision(
     if not api_key:
         raise RuntimeError("OCR_VISION_API_KEY ist nicht gesetzt.")
 
+    # SSRF-Schutz: benutzerkonfigurierte Vision-URL vor dem Request prüfen.
+    from core.net_guard import BlockedOutboundURLError, assert_safe_outbound_url
+
+    try:
+        assert_safe_outbound_url(base_url, purpose="OCR-Vision")
+    except BlockedOutboundURLError as exc:
+        raise RuntimeError(str(exc)) from exc
+
     b64 = base64.b64encode(image_bytes).decode("ascii")
     data_url = f"data:{mime_type};base64,{b64}"
     endpoint = f"{_prepare_vision_base_url(base_url)}/chat/completions"
