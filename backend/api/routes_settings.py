@@ -31,6 +31,10 @@ from schemas.settings import (
     BackgroundSettings,
     BackgroundSettingsResponse,
     EmbedModelResponse,
+    EmbedModelRequest,
+    LanguageRequest,
+    DefaultLlmProviderRequest,
+    EmbedProviderRequest,
     normalize_llm_backend,
 )
 from core.config import get_settings
@@ -208,9 +212,9 @@ async def get_embed_model() -> EmbedModelResponse:
 
 
 @router.put("/llm/embed-model")
-async def set_embed_model(body: dict) -> dict:
+async def set_embed_model(body: EmbedModelRequest) -> dict:
     """Globales Embedding-Modell setzen. Achtung: Vorhandene ChromaDB-Einträge wurden mit dem alten Modell erzeugt."""
-    model = body.get("embed_model", "").strip()
+    model = body.embed_model.strip()
     if not model:
         raise HTTPException(
             status_code=400,
@@ -277,7 +281,7 @@ async def get_embed_provider() -> dict:
 
 
 @router.put("/llm/embed-provider")
-async def set_embed_provider(body: dict) -> dict:
+async def set_embed_provider(body: EmbedProviderRequest) -> dict:
     """
     Embedding-Provider-Konfiguration setzen.
 
@@ -290,11 +294,11 @@ async def set_embed_provider(body: dict) -> dict:
     """
     import json as _json
 
-    use_custom = bool(body.get("use_custom", False))
-    backend = body.get("backend", "lmstudio").strip()
-    base_url = body.get("base_url", "").strip()
-    api_key = body.get("api_key", "").strip()
-    model = body.get("model", "").strip()
+    use_custom = body.use_custom
+    backend = body.backend.strip()
+    base_url = body.base_url.strip()
+    api_key = body.api_key.strip()
+    model = body.model.strip()
 
     if use_custom and base_url:
         _assert_provider_url_safe(base_url, "Embedding-Provider")
@@ -749,9 +753,9 @@ async def get_language() -> dict:
 
 
 @router.put("/language")
-async def set_language(body: dict) -> dict:
+async def set_language(body: LanguageRequest) -> dict:
     """Sprache in Redis speichern und sofort in ENV übernehmen."""
-    lang = body.get("language", "de")
+    lang = body.language
     if lang not in SUPPORTED_LANGUAGES:
         raise HTTPException(
             status_code=400,
@@ -1263,9 +1267,9 @@ async def get_context_window() -> dict:
 
 
 @router.put("/llm/default")
-async def set_default_llm_provider(body: dict) -> dict:
+async def set_default_llm_provider(body: DefaultLlmProviderRequest) -> dict:
     """Standard-LLM-Provider setzen."""
-    provider_id = body.get("provider_id", "")
+    provider_id = body.provider_id
     redis = get_redis()
     providers = await _load_providers(redis)
     found = False
