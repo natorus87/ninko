@@ -576,36 +576,34 @@ async def lifespan(app: FastAPI) -> object:
         Path(__file__).resolve().parent / "frontend",  # /app/frontend (Docker)
         Path(__file__).resolve().parent.parent / "frontend",  # ../frontend (local dev)
     ]
-    for _fdir in _possible_frontend:
-        if _fdir.is_dir():
-            _frontend_dir = _fdir
+    _frontend_dir = next((d for d in _possible_frontend if d.is_dir()), None)
+    if _frontend_dir is not None:
 
-            @app.get("/", include_in_schema=False)
-            async def serve_index(request: Request) -> object:
-                if settings.API_AUTH_ENABLED and resolve_request_role(request) is None:
-                    return RedirectResponse(url="/login", status_code=302)
-                response = FileResponse(str(_frontend_dir / "index.html"))
-                response.headers["Cache-Control"] = (
-                    "no-cache, no-store, must-revalidate"
-                )
-                response.headers["Pragma"] = "no-cache"
-                response.headers["Expires"] = "0"
-                return response
-
-            @app.get("/login", include_in_schema=False)
-            async def serve_login(request: Request) -> object:
-                if not settings.API_AUTH_ENABLED:
-                    return RedirectResponse(url="/", status_code=302)
-                if resolve_request_role(request) is not None:
-                    return RedirectResponse(url="/", status_code=302)
-                return FileResponse(str(_frontend_dir / "login.html"))
-
-            app.mount("/static", StaticFiles(directory=str(_fdir)), name="static")
-            app.mount(
-                "/", StaticFiles(directory=str(_fdir), html=True), name="frontend"
+        @app.get("/", include_in_schema=False)
+        async def serve_index(request: Request) -> object:
+            if settings.API_AUTH_ENABLED and resolve_request_role(request) is None:
+                return RedirectResponse(url="/login", status_code=302)
+            response = FileResponse(str(_frontend_dir / "index.html"))
+            response.headers["Cache-Control"] = (
+                "no-cache, no-store, must-revalidate"
             )
-            logger.info("Frontend served from: %s", _fdir)
-            break
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+            return response
+
+        @app.get("/login", include_in_schema=False)
+        async def serve_login(request: Request) -> object:
+            if not settings.API_AUTH_ENABLED:
+                return RedirectResponse(url="/", status_code=302)
+            if resolve_request_role(request) is not None:
+                return RedirectResponse(url="/", status_code=302)
+            return FileResponse(str(_frontend_dir / "login.html"))
+
+        app.mount("/static", StaticFiles(directory=str(_frontend_dir)), name="static")
+        app.mount(
+            "/", StaticFiles(directory=str(_frontend_dir), html=True), name="frontend"
+        )
+        logger.info("Frontend served from: %s", _frontend_dir)
 
     logger.info("═" * 60)
     logger.info("  Ninko bereit! Module: %d", len(registry.list_modules()))
