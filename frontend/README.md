@@ -20,14 +20,77 @@ The frontend is a modular, SPA-like interface built with vanilla JavaScript (no 
 - **index.html** — Main HTML structure with all tab panels, forms, and layout containers
 
 ### Core Application
-- **app.js** — Main `Ninko` object containing:
-  - Chat UI and messaging
-  - Module system integration
-  - Settings management
-  - Agent/Skill/Workflow CRUD
-  - Voice input (WebRTC)
-  - Text-to-Speech playback
-  - Theme switching + runtime token themes
+- **app.js** (~4.2k Zeilen) — Der Kern des globalen `Ninko`-Objekts:
+  - Init/Boot, i18n-Loader, SVG-Icon-Library
+  - Navigation/Tabs, Route-Persistence, Settings-Shell
+  - Der komplette **Chat** (WS-Streaming, Tool-/Trace-Events, Markdown-Rendering,
+    TTS-Wiedergabe, History, Export, Context-Indicator)
+  - WebSocket, Command-Palette-Hooks, Resizing/Textarea-Utilities
+  - Geteilte Helfer (`_escapeHtml`, `_esc`, `_ic`) und der State, den die Features nutzen
+  - Kleine init-nahe Reste: Legacy-LLM-Settings, Hintergrundfarben, Language, Memory/Secrets
+
+### Feature-Module (`features/*.js`)
+
+Früher war `app.js` ein ~8.400-Zeilen-Monolith. Große, klar abgegrenzte Panels
+wurden in **Feature-Module** ausgelagert (Stand: 15 Module). Muster:
+
+```js
+(function () {
+    'use strict';
+    const XyzFeature = {
+        async loadXyz() { /* … this.* verweist auf das Ninko-Objekt … */ },
+    };
+    if (typeof window.Ninko !== 'undefined') {
+        Object.assign(window.Ninko, XyzFeature);   // Methoden auf Ninko mergen
+    } else {
+        window.XyzFeature = XyzFeature;
+    }
+})();
+```
+
+**Warum das funktioniert (wichtige Konventionen):**
+- Alle Feature-Methoden greifen über `this.` auf andere Methoden, geteilte Helfer
+  (`this._escapeHtml`) und State (`this._rbacUsers`) zu. Nach dem `Object.assign`
+  liegen sie alle auf demselben `window.Ninko`-Objekt — die Aufrufe bleiben gültig.
+- **State kann in app.js bleiben**, auch wenn die zugehörigen Methoden im Feature
+  liegen: die Property-Deklaration (z.B. `_themes: []` im Init-Bereich) landet auf
+  Ninko und ist für die Feature-Methoden via `this.` erreichbar. State, der *im*
+  extrahierten Block deklariert ist (z.B. `_alertsCache`), wandert mit ins Feature.
+- **Ladereihenfolge:** Feature-Scripts stehen in `index.html` **nach** `app.js`
+  (das `window.Ninko` definiert). Der Boot läuft über `DOMContentLoaded` — das
+  feuert erst nach allen synchronen Script-Tags, daher sind auch init-kritische
+  Methoden (`initSafeguard`, `applyBranding`) zum Init-Zeitpunkt bereits gemergt.
+
+**Module und Inhalt:**
+
+| Datei | Inhalt |
+|---|---|
+| `agents.js` | Agenten-CRUD, Templates, KI-Generierung, Skills-Verwaltung |
+| `workflows.js` | Visueller Workflow-Editor (Canvas, Nodes, Edges, Run-Dashboard) |
+| `scripting.js` | Python-Scripting-Panel |
+| `command_palette.js` | Befehls-Palette (Cmd/Ctrl+K) |
+| `tasks.js` | Geplante Aufgaben (Editor, CRUD, Aktionen) |
+| `marketplace.js` | Modul-Marketplace (Repo-Verwaltung, Modul-Install) |
+| `rbac.js` | Benutzer-/Gruppen-/Rollenverwaltung, API-Tokens, Modulrechte |
+| `module_settings.js` | Modul-Aktivierung + Connection-CRUD (`ACTION_FIELDS`-Formulardefs) |
+| `safeguard.js` | SafeGuard-Profile, Picker, Bestätigungs-Flow, Settings-Panel |
+| `themes.js` | Theme-Katalog, Custom-Editor, Theme-Repos |
+| `speech_settings.js` | STT (Whisper), OCR (Vision), TTS (Piper) |
+| `llm_provider.js` | LLM-Provider-CRUD, Embedding-Provider, Function-Calling-Routing |
+| `image_gen.js` | Bildgenerierungs-Provider |
+| `alerts.js` | Alert-Management (Laden, Tabelle, Auflösen, WS-Live-Update) |
+| `branding.js` | Dashboard-/Login-Branding, Asset-Upload, Live-Vorschau |
+
+**Einen weiteren Block extrahieren** (falls `app.js` weiter verkleinert wird):
+1. Zusammenhängenden Methodenblock per String-Match an den Methodengrenzen isolieren
+   (Sektions-Kommentare sind teils irreführend — Nachbarschaft aktiv prüfen).
+2. Geteilte Helfer (`_escapeHtml`) und State, der auch außerhalb genutzt wird, in
+   app.js **belassen** (via `this.` erreichbar).
+3. Methoden mit +4 Indent ins `XyzFeature`-Objekt-Literal setzen, IIFE-Wrapper drum.
+4. Block aus app.js entfernen, Naht auf eine Leerzeile normalisieren.
+5. `<script>`-Tag nach app.js in `index.html`, `app.js?v=`-Cache-Version bumpen.
+6. Per Playwright-Smoke-Test des betroffenen Panels verifizieren (Methoden auf
+   `Ninko` vorhanden, Panel lädt, State befüllt, keine Konsolen-Fehler).
 
 ### Styling
 - **style.css** — CSS custom properties design system with dark/light themes
