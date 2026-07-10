@@ -123,13 +123,15 @@ class BaseMiddleware(ABC):
         """
         ...
 
-    async def post_process(self, ctx: MiddlewareContext) -> None:
+    async def post_process(self, ctx: MiddlewareContext) -> None:  # noqa: B027
         """
         Post-processing hook. Runs AFTER the LLM call.
 
-        Default implementation does nothing.
+        Optionaler Hook mit bewusster Leer-Default-Implementierung — Middlewares
+        ohne Post-Processing sollen ihn NICHT implementieren müssen (deshalb kein
+        @abstractmethod).
         """
-        pass
+        return None
 
     def __repr__(self) -> str:
         return (
