@@ -375,6 +375,92 @@
                 if (status) status.textContent = err.message || 'Fehler';
             }
         },
+
+        async toggleScheduledTask(id) {
+            try {
+                const res = await fetch(`/api/scheduler/tasks/${id}/toggle`, { method: 'PUT' });
+                const task = await res.json();
+                showNotification(
+                    `Aufgabe "${task.name}" ${task.enabled ? 'aktiviert' : 'deaktiviert'}.`,
+                    'info'
+                );
+                await this.loadScheduledTasks();
+            } catch (err) {
+                showNotification(`Fehler: ${err.message}`, 'error');
+            }
+        },
+
+        async runScheduledTask(id) {
+            try {
+                const res = await fetch(`/api/scheduler/tasks/${id}/run`, { method: 'POST' });
+                const result = await res.json();
+                // Läuft asynchron im Backend — Ergebnis kommt via WS-Event 'task_executed'
+                showNotification(
+                    result.status === 'already_running'
+                        ? 'Aufgabe läuft bereits.'
+                        : 'Aufgabe gestartet — Ergebnis erscheint in den Logs.',
+                    'info'
+                );
+                await this.loadScheduledTasks();
+            } catch (err) {
+                showNotification(`Fehler: ${err.message}`, 'error');
+            }
+        },
+
+        async viewTaskLogs(taskId, taskName) {
+            const section = document.getElementById('tasks-logs');
+            const list = document.getElementById('scheduler-logs-list');
+            const nameEl = document.getElementById('scheduler-log-task-name');
+            if (!section || !list) return;
+
+            document.getElementById('tasks-overview')?.classList.add('hidden');
+            document.getElementById('tasks-editor')?.classList.add('hidden');
+            nameEl.textContent = taskName;
+            section.classList.remove('hidden');
+            list.innerHTML = 'Lade…';
+
+            try {
+                const res = await fetch(`/api/scheduler/tasks/${taskId}/logs?limit=20`);
+                if (!res.ok) throw new Error(res.statusText);
+                const logs = await res.json();
+
+                if (!logs || logs.length === 0) {
+                    list.innerHTML = '<p class="text-muted"><em>Noch keine Ausführungen.</em></p>';
+                    return;
+                }
+
+                list.innerHTML = logs.map(log => {
+                    const statusIcon = log.status === 'ok' ? this._ic.check : this._ic.xcircle;
+                    const time = new Date(log.timestamp).toLocaleString('de-DE');
+                    const response = log.response ? log.response.substring(0, 300) : '—';
+                    const truncated = log.response?.length > 300 ? '…' : '';
+                    return `
+                        <div class="log-entry log-entry-${this._escapeHtml(log.status)}">
+                            <div class="log-entry-header">
+                                <span>${statusIcon} ${time}</span>
+                                <span class="log-meta">${Number(log.duration_ms) || 0}ms${log.module_used ? ' · ' + this._escapeHtml(log.module_used) : ''}</span>
+                            </div>
+                            <div class="log-entry-response">${this._escapeHtml(response)}${truncated}</div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (err) {
+                list.innerHTML = `<p class="text-error">Fehler: ${this._escapeHtml(err.message)}</p>`;
+            }
+        },
+
+        hideTaskLogs() {
+            document.getElementById('tasks-logs')?.classList.add('hidden');
+            document.getElementById('tasks-overview')?.classList.remove('hidden');
+        },
+
+
+        applyCronPreset() {
+            const preset = document.getElementById('sched-cron-preset')?.value;
+            if (preset) {
+                document.getElementById('sched-cron').value = preset;
+            }
+        },
     };
 
     if (typeof window.Ninko !== 'undefined') {
