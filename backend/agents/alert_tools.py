@@ -205,7 +205,10 @@ async def resolve_alert(alert_id: str, resolution: str = "") -> str:
                     "alert_id": alert_id,
                     "resolved": False,
                     "was_active": False,
-                    "message": f"Alert {alert_id} war nicht aktiv (bereits resolved oder nie existiert)",
+                    "message": (
+                        f"Alert {alert_id} war nicht aktiv "
+                        "(bereits resolved oder nie existiert)"
+                    ),
                 },
                 indent=2,
             )
