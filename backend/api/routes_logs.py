@@ -41,7 +41,7 @@ async def get_logs(
     raw_entries = await redis.connection.lrange(REDIS_LOG_KEY, 0, MAX_LOG_ENTRIES - 1)
 
     entries = []
-    levels_filter = {l.strip().upper() for l in level.split(",")} if level else None
+    levels_filter = {lv.strip().upper() for lv in level.split(",")} if level else None
 
     for raw in raw_entries:
         try:

@@ -49,7 +49,7 @@ async def ha_get_entity_state(entity_id: str, connection_id: str = "") -> str:
     """
     Reads the current state of an entity from Home Assistant (e.g. light.living_room, sensor.temperature).
     Use this tool to check if a light is on/off, what the temperature is, or to query any sensor values from the smart home.
-    
+
     Args:
         entity_id: The full Home Assistant entity ID (e.g. 'light.wohnzimmer', 'switch.steckdose_tv')
         connection_id: The ID of the connection to use (optional)
@@ -57,16 +57,16 @@ async def ha_get_entity_state(entity_id: str, connection_id: str = "") -> str:
     try:
         client_config = await _get_api_client(connection_id)
         url = f"{client_config['base_url']}/api/states/{entity_id}"
-        
+
         async with httpx.AsyncClient() as client:
             response = await client.get(url, headers=client_config["headers"], timeout=10.0)
             response.raise_for_status()
             data = response.json()
-            
+
             state = data.get("state")
             attributes = data.get("attributes", {})
             friendly_name = attributes.get("friendly_name", entity_id)
-            
+
             return f"Entity '{friendly_name}' ({entity_id}) currently has state '{state}'."
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
@@ -112,7 +112,7 @@ async def ha_call_service(service_name: str, entity_id: str, service_data_json: 
                 if isinstance(extra, dict):
                     payload.update(extra)
                 else:
-                    return f"Error: service_data_json must be a JSON object (e.g. {{\"temperature\": 22}})."
+                    return "Error: service_data_json must be a JSON object (e.g. {\"temperature\": 22})."
             except json.JSONDecodeError as e:
                 return f"Error: service_data_json is not valid JSON: {e}"
 

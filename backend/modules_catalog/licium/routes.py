@@ -133,7 +133,7 @@ async def get_log(connection_id: str = "") -> dict:
             resp.raise_for_status()
             content = resp.json().get("content_markdown", "") or ""
 
-            lines = [l for l in content.split("\n") if l.startswith("## [")]
+            lines = [ln for ln in content.split("\n") if ln.startswith("## [")]
             return {"status": "ok", "entries": lines[-20:]}
     except (ValueError, RuntimeError, Exception) as exc:
         logger.error("licium log route failed: %s", exc)

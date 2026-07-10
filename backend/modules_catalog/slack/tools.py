@@ -298,7 +298,7 @@ async def get_slack_channel_history(channel_name: str, connection_id: str = "") 
             )
 
         lines = [
-            f"💬 "
+            "💬 "
             + _t(
                 de="Nachrichten in",
                 en="Messages in",
@@ -370,7 +370,7 @@ async def search_slack_messages(query: str, connection_id: str = "") -> str:
             )
 
         lines = [
-            f"🔍 "
+            "🔍 "
             + _t(
                 de="Suchergebnisse",
                 en="Search results",

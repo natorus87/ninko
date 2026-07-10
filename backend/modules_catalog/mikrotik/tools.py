@@ -249,12 +249,12 @@ async def list_mikrotik_dhcp_leases(connection_id: str = "") -> str:
             leases = await mt.request("GET", "/ip/dhcp-server/lease")
 
         lines = ["📱 " + _t(de="DHCP-Leases", en="DHCP leases", fr="Baux DHCP", es="Concesiones DHCP", it="Lease DHCP", nl="DHCP leases", pl="Dzierżawy DHCP", pt="Leases DHCP", ja="DHCPリース", zh="DHCP租约")]
-        for l in leases[:15]:
-            status = l.get("status", "unknown")
+        for lease in leases[:15]:
+            status = lease.get("status", "unknown")
             status_icon = "🟢" if status == "bound" else "🟡"
-            addr = l.get("address", "-")
-            mac = l.get("mac-address", "-")
-            host = l.get("host-name", "")
+            addr = lease.get("address", "-")
+            mac = lease.get("mac-address", "-")
+            host = lease.get("host-name", "")
             lines.append(f"  {status_icon} {addr} ({mac})")
             if host:
                 lines.append(f"      {host}")

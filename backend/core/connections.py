@@ -195,10 +195,14 @@ class ConnectionManager:
                 return None
 
             # Metadaten updaten
-            if data.name is not None: target.name = data.name
-            if data.environment is not None: target.environment = data.environment
-            if data.description is not None: target.description = data.description
-            if data.config is not None: target.config = data.config
+            if data.name is not None:
+                target.name = data.name
+            if data.environment is not None:
+                target.environment = data.environment
+            if data.description is not None:
+                target.description = data.description
+            if data.config is not None:
+                target.config = data.config
 
             # Default Logik
             if data.is_default:

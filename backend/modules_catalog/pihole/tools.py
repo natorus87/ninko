@@ -23,19 +23,19 @@ async def _get_pihole_config(connection_id: str = "") -> dict:
     from core.connections import ConnectionManager
     from core.vault import get_vault
     import os
-    
+
     vault = get_vault()
 
     if connection_id:
         conn = await ConnectionManager.get_default_connection("pihole") if connection_id == "default" else await ConnectionManager.get_connection("pihole", connection_id)
         if not conn:
             raise ValueError(f"Pi-hole connection with ID '{connection_id}' not found.")
-            
+
         url = conn.config.get("url", "").rstrip("/")
         password = ""
         if "password" in conn.vault_keys:
             password = await vault.get_secret(conn.vault_keys["password"]) or ""
-            
+
         return {"url": url, "password": password}
 
     # Try via ConnectionManager without ID (default)
@@ -49,7 +49,7 @@ async def _get_pihole_config(connection_id: str = "") -> dict:
 
     # FALLBACK: legacy env vars (from routes_settings)
     fallback_url = os.environ.get("PIHOLE_URL", "").rstrip("/")
-    
+
     # If not in env vars, try loading directly from legacy settings in Redis
     if not fallback_url:
         try:
@@ -445,7 +445,7 @@ async def add_domain_to_list(
 
     body = {
         "domain": domain,
-        "comment": comment or f"Added via Ninko",
+        "comment": comment or "Added via Ninko",
     }
 
     await _pihole_request("POST", f"/domains/{list_type}/{kind}", body=body, connection_id=connection_id)
@@ -563,20 +563,20 @@ async def get_custom_dns_records(connection_id: str = "") -> dict:
     """
     data = await _pihole_request("GET", "/config", connection_id=connection_id)
     hosts = []
-    
+
     if "config" in data and "dns" in data["config"] and "hosts" in data["config"]["dns"]:
         hosts = data["config"]["dns"]["hosts"]
     elif "dns" in data and "hosts" in data["dns"]:
         # Fallback for other API response structures
         hosts = data["dns"]["hosts"]
-        
+
     records = {}
     for entry in hosts:
         parts = str(entry).split(" ", 1)
         if len(parts) == 2:
             ip, domain = parts
             records[domain.strip()] = ip.strip()
-            
+
     return {"custom_dns_records": records}
 
 
@@ -590,12 +590,12 @@ async def add_custom_dns_record(domain: str, ip: str, connection_id: str = "") -
         ip: IP address the domain should resolve to (e.g. '192.168.1.100')
     """
     import urllib.parse
-    
+
     # URL-encoded path for PUT request in v6: /api/config/dns/hosts/{IP}%20{domain}
     encoded_entry = urllib.parse.quote(f"{ip} {domain}")
-    
+
     await _pihole_request("PUT", f"/config/dns/hosts/{encoded_entry}", connection_id=connection_id)
-    
+
     return _t(
         de=f"Local DNS Eintrag hinzugefügt: {domain} -> {ip}",
         en=f"Local DNS entry added: {domain} -> {ip}",
@@ -614,17 +614,17 @@ async def add_custom_dns_record(domain: str, ip: str, connection_id: str = "") -
 async def remove_custom_dns_record(domain: str, ip: str, connection_id: str = "") -> str:
     """
     Delete a local DNS entry (custom DNS host) in Pi-hole.
-    
+
     Args:
         domain: Domain name (e.g. 'service.local')
         ip: Assigned IP address of the entry (must match exactly)
     """
     import urllib.parse
-    
+
     encoded_entry = urllib.parse.quote(f"{ip} {domain}")
-    
+
     await _pihole_request("DELETE", f"/config/dns/hosts/{encoded_entry}", connection_id=connection_id)
-    
+
     return _t(
         de=f"Local DNS Eintrag gelöscht: {domain} -> {ip}",
         en=f"Local DNS entry deleted: {domain} -> {ip}",
@@ -651,13 +651,13 @@ async def get_cname_records(connection_id: str = "") -> dict:
         cnames = data["config"]["dns"]["cnameRecords"]
     elif "dns" in data and "cnameRecords" in data["dns"]:
         cnames = data["dns"]["cnameRecords"]
-        
+
     records = {}
     for entry in cnames:
         parts = str(entry).split(",", 1)
         if len(parts) == 2:
             records[parts[0].strip()] = parts[1].strip()
-            
+
     return {"cname_records": records}
 
 
@@ -665,7 +665,7 @@ async def get_cname_records(connection_id: str = "") -> dict:
 async def add_cname_record(domain: str, target: str, connection_id: str = "") -> str:
     """
     Add a new local CNAME record.
-    
+
     Args:
         domain: Domain name (e.g. 'alias.local')
         target: Target the CNAME should point to (e.g. 'server.local')
@@ -691,7 +691,7 @@ async def add_cname_record(domain: str, target: str, connection_id: str = "") ->
 async def remove_cname_record(domain: str, target: str, connection_id: str = "") -> str:
     """
     Delete a local CNAME record in Pi-hole.
-    
+
     Args:
         domain: Domain name (e.g. 'alias.local')
         target: Assigned target (must match exactly)
@@ -727,7 +727,7 @@ async def get_dhcp_leases(connection_id: str = "") -> list[dict]:
 async def delete_dhcp_lease(ip: str, connection_id: str = "") -> str:
     """
     Delete an active DHCP lease by IP address.
-    
+
     Args:
         ip: IP address whose lease should be deleted (e.g. '192.168.1.50')
     """
@@ -841,7 +841,7 @@ async def get_system_messages(connection_id: str = "") -> list[dict]:
 async def dismiss_system_message(message_id: str, connection_id: str = "") -> str:
     """
     Delete/dismiss a specific system warning in Pi-hole by ID.
-    
+
     Args:
         message_id: ID of the message to delete.
     """

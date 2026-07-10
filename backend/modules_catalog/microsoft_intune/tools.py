@@ -242,7 +242,7 @@ async def get_intune_device(device_name: str, connection_id: str = "") -> str:
         lines.append(f"  📋 {d.get('userDisplayName', '-')}")
         lines.append(f"  Compliance: {d.get('complianceState', 'unknown')}")
         lines.append(
-            f"  "
+            "  "
             + _t(
                 de="Letzte Sync",
                 en="Last sync",
@@ -266,7 +266,7 @@ async def get_intune_device(device_name: str, connection_id: str = "") -> str:
         jailbreak_marker = yes if d.get("jailBreakDetectedState") else no
         managed_marker = yes if d.get("isManaged") else no
         lines.append(
-            f"  "
+            "  "
             + _t(
                 de="Jailbreak",
                 en="Jailbreak",
@@ -282,7 +282,7 @@ async def get_intune_device(device_name: str, connection_id: str = "") -> str:
             + f": {jailbreak_marker}"
         )
         lines.append(
-            f"  "
+            "  "
             + _t(
                 de="Verwaltet",
                 en="Managed",

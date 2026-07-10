@@ -15,13 +15,13 @@ class ConnectionCreate(BaseModel):
     environment: EnvironmentLabel = Field("unknown", description="Umgebungskontext für KI-Awareness")
     description: Optional[str] = Field(None, description="Zusätzliche Infos")
     is_default: bool = Field(False, description="Ist dies die Standardverbindung für das Modul")
-    
+
     config: Dict[str, str] = Field(
-        default_factory=dict, 
+        default_factory=dict,
         description="Nicht-geheime Parameter (Base URL, Options etc.)"
     )
     secrets: Dict[str, str] = Field(
-        default_factory=dict, 
+        default_factory=dict,
         description="Sensible Daten (Tokens, Passwörter), werden im Vault gespeichert und im Read-Modell nicht zurückgegeben"
     )
 
@@ -44,7 +44,7 @@ class ConnectionRead(BaseModel):
     is_default: bool
     config: Dict[str, str]
     vault_keys: Dict[str, str] = Field(..., description="Welche Geheimnisse im Vault unter welchen Schlüsseln liegen")
-    
+
     # Optional runtime status, e.g. for health checks
     status: Optional[str] = None
 

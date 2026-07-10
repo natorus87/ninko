@@ -288,8 +288,8 @@ class VaultClient:
         encrypted = self._encrypt(value)
         await db.execute(
             """
-            UPDATE secrets 
-            SET value = ?, updated_at = CURRENT_TIMESTAMP 
+            UPDATE secrets
+            SET value = ?, updated_at = CURRENT_TIMESTAMP
             WHERE key = ?
             """,
             (encrypted, key),

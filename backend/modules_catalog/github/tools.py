@@ -668,7 +668,7 @@ async def list_github_issues(
                 "state": issue.get("state"),
                 "html_url": issue.get("html_url"),
                 "user": issue.get("user", {}).get("login"),
-                "labels": [l.get("name") for l in issue.get("labels", [])],
+                "labels": [lbl.get("name") for lbl in issue.get("labels", [])],
                 "created_at": issue.get("created_at"),
             }
         )

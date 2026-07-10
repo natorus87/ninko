@@ -215,7 +215,7 @@ class ModuleRegistry:
             return
 
         # Finde alle Unter-Packages
-        for importer, modname, ispkg in pkgutil.iter_modules([str(modules_dir)]):
+        for _importer, modname, ispkg in pkgutil.iter_modules([str(modules_dir)]):
             if not ispkg:
                 continue
 
@@ -235,7 +235,7 @@ class ModuleRegistry:
             if backend_dir not in sys.path:
                 sys.path.insert(0, backend_dir)
 
-            for importer, modname, ispkg in pkgutil.iter_modules([str(plugins_dir)]):
+            for _importer, modname, ispkg in pkgutil.iter_modules([str(plugins_dir)]):
                 if not ispkg:
                     continue
                 try:
@@ -363,7 +363,7 @@ class ModuleRegistry:
     # ── Route-Registration ──────────────────────────────
     def register_routes(self, app: FastAPI) -> None:
         """Registriert alle Modul-Router an der FastAPI-App."""
-        for name, mod in self._modules.items():
+        for _name, mod in self._modules.items():
             if mod.router is not None and mod.manifest.api_prefix:
                 app.include_router(
                     mod.router,

@@ -195,5 +195,5 @@ async def get_audit_stats(date: str | None = None) -> dict[str, Any]:
         "readonly_count": readonly_count,
         "error_count": error_count,
         "unique_agents": len(agents),
-        "agents": sorted(list(agents)),
+        "agents": sorted(agents),
     }

@@ -3,7 +3,7 @@ import logging
 import sys
 
 sys.path.append("/app")
-from modules.fritzbox.tools import get_fritz_wan_status, get_fritz_bandwidth
+from modules_catalog.fritzbox.tools import get_fritz_wan_status, get_fritz_bandwidth
 
 logger = logging.getLogger(__name__)
 

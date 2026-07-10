@@ -44,9 +44,12 @@ def _guess_category(logger_name: str) -> str:
     return "system"
 
 def _normalize_level(levelno: int) -> str:
-    if levelno >= logging.CRITICAL: return "CRIT"
-    if levelno >= logging.ERROR: return "ERROR"
-    if levelno >= logging.WARNING: return "WARN"
+    if levelno >= logging.CRITICAL:
+        return "CRIT"
+    if levelno >= logging.ERROR:
+        return "ERROR"
+    if levelno >= logging.WARNING:
+        return "WARN"
     return "INFO"
 
 
@@ -67,16 +70,16 @@ class RedisLogHandler(logging.Handler):
         # Rekursions-Schutz
         if getattr(record, "_redis_logged", False):
             return
-        
+
         try:
-            setattr(record, "_redis_logged", True)
-            
+            record._redis_logged = True
+
             # Basis-Daten extrahieren
             try:
                 msg = record.getMessage()
             except (ValueError, TypeError, AttributeError):
                 msg = str(record.msg)
-            
+
             entry = {
                 "timestamp": datetime.datetime.fromtimestamp(record.created).strftime("%Y-%m-%d %H:%M:%S"),
                 "timestamp_unix": getattr(record, "created", 0),
@@ -94,7 +97,7 @@ class RedisLogHandler(logging.Handler):
             if session_id:
                 entry["session_id"] = session_id
             entry["tenant_id"] = _tenant_from_session_id(session_id)
-            
+
             if record.exc_info:
                 try:
                     import traceback
@@ -103,12 +106,12 @@ class RedisLogHandler(logging.Handler):
                     pass
 
             serialized = json.dumps(entry, ensure_ascii=False)
-            
+
             try:
                 self._queue.put_nowait(serialized)
             except queue.Full:
                 pass # Queue voll -> logs verwerfen
-            
+
         except _LOG_HANDLER_EXCEPTIONS as e:
             try:
                 import os
@@ -123,16 +126,16 @@ class RedisLogHandler(logging.Handler):
         # Da aioredis async ist, brauchen wir hier einen eigenen Loop
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        
+
         async def _upload_loop() -> None:
             import redis.asyncio as aioredis
             from core.config import get_settings
-            
+
             settings = get_settings()
             redis_conn = None
-            
+
             logging.getLogger("ninko.log_handler").debug("RedisLogWorker started.")
-            
+
             while not self._stop_event.is_set():
                 try:
                     # Batch-Processing für Effizienz
@@ -144,7 +147,8 @@ class RedisLogHandler(logging.Handler):
                         for _ in range(49):
                             batch.append(self._queue.get_nowait())
                     except queue.Empty:
-                        if not batch: continue
+                        if not batch:
+                            continue
 
                     if redis_conn is None:
                         try:

@@ -215,7 +215,7 @@ class PipelineResult(BaseModel):
     def to_markdown(self) -> str:
         """Formatiert das Ergebnis als Markdown für die Chat-Antwort."""
         lines: list[str] = []
-        for i, step in enumerate(self.steps):
+        for _i, step in enumerate(self.steps):
             if step.status == StepStatus.COMPLETED:
                 lines.append(f"**{step.module}:**\n{step.result}")
             elif step.status == StepStatus.FAILED:
@@ -417,7 +417,7 @@ class PipelineEngine:
                         ],
                         return_exceptions=True,
                     )
-                    for i, raw_sr in zip(pending_group, raw_group_results):
+                    for i, raw_sr in zip(pending_group, raw_group_results, strict=False):
                         if isinstance(raw_sr, BaseException):
                             sr = StepResult(
                                 step_id=steps[i].step_id,

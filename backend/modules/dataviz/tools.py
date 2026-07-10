@@ -255,7 +255,7 @@ def create_interactive_chart_plotly(data_json: str, chart_type: str, title: str)
                         y=[d["value"] for d in data],
                         mode="lines+markers",
                         fill="tozeroy" if chart_type == "area" else None,
-                        line=dict(color="steelblue", width=2),
+                        line={"color": "steelblue", "width": 2},
                     )
                 ]
             )

@@ -1163,16 +1163,16 @@ async def delete_opnsense_virtual_ip(
             )
 
         return _t(
-            de=f"Fehler beim Löschen der virtuellen IP",
-            en=f"Error deleting virtual IP",
-            fr=f"Erreur lors de la suppression de l'IP virtuelle",
-            es=f"Error al eliminar la IP virtual",
-            it=f"Errore durante l'eliminazione dell'IP virtuale",
-            nl=f"Fout bij het verwijderen van virtueel IP",
-            pl=f"Błąd podczas usuwania wirtualnego IP",
-            pt=f"Erro ao excluir IP virtual",
-            ja=f"仮想IPの削除中にエラーが発生しました",
-            zh=f"删除虚拟IP时出错",
+            de="Fehler beim Löschen der virtuellen IP",
+            en="Error deleting virtual IP",
+            fr="Erreur lors de la suppression de l'IP virtuelle",
+            es="Error al eliminar la IP virtual",
+            it="Errore durante l'eliminazione dell'IP virtuale",
+            nl="Fout bij het verwijderen van virtueel IP",
+            pl="Błąd podczas usuwania wirtualnego IP",
+            pt="Erro ao excluir IP virtual",
+            ja="仮想IPの削除中にエラーが発生しました",
+            zh="删除虚拟IP时出错",
         )
 
     except (RuntimeError, ValueError, TypeError, KeyError, httpx.HTTPError) as e:

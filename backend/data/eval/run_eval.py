@@ -52,7 +52,7 @@ def main() -> int:
     corpus = load_corpus()
     descriptions = load_module_descriptions()
 
-    modules_in_corpus = set(q["module"] for q in corpus)
+    modules_in_corpus = {q["module"] for q in corpus}
     modules_in_registry = set(descriptions.keys())
     unknown = modules_in_corpus - modules_in_registry
 

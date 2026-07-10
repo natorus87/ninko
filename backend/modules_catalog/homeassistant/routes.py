@@ -20,12 +20,12 @@ async def get_homeassistant_status(connection_id: str = "") -> Dict[str, Any]:
     try:
         client_config = await _get_api_client(connection_id)
         url = f"{client_config['base_url']}/api/config"
-        
+
         async with httpx.AsyncClient() as client:
             response = await client.get(url, headers=client_config["headers"], timeout=5.0)
             response.raise_for_status()
             data = response.json()
-            
+
             return {
                 "connected": True,
                 "url": client_config["base_url"],
@@ -42,7 +42,7 @@ async def trigger_action(req: ActionRequest) -> object:
     """
     if req.action_type == "test":
         return {"message": "Test action successful from Home Assistant!"}
-        
+
     if req.action_type == "fetch_lights":
         try:
             client_config = await _get_api_client(req.connection_id)
@@ -51,7 +51,7 @@ async def trigger_action(req: ActionRequest) -> object:
                 response = await client.get(url, headers=client_config["headers"], timeout=10.0)
                 response.raise_for_status()
                 data = response.json()
-                
+
                 # Filter logic for lights
                 lights = [item for item in data if item.get("entity_id", "").startswith("light.")]
                 return {"message": f"Data fetched successfully. {len(lights)} lights found.", "lights": lights[:10]}

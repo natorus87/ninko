@@ -43,7 +43,7 @@ async def check_slack_health() -> dict:
                     if data.get("ok"):
                         return {
                             "status": "ok",
-                            "detail": f"Slack workspace reachable (Env)",
+                            "detail": "Slack workspace reachable (Env)",
                         }
                     return {"status": "error", "detail": data.get("error", "Unknown")}
 

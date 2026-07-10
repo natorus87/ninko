@@ -14,10 +14,10 @@ async def check_web_search_health() -> dict:
     """Health-Check für SearXNG-Verbindung."""
     try:
         searxng_url = os.getenv("SEARXNG_URL", "http://localhost:8080").rstrip("/")
-        
+
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get(searxng_url)
-            
+
             if response.status_code == 200:
                 return {
                     "status": "ok",
@@ -41,7 +41,7 @@ module_manifest = ModuleManifest(
     version="1.0.1",
     author="Ninko Team",
     enabled_by_default=True,
-    env_prefix="NINKO_MODULE_WEB_SEARCH", 
+    env_prefix="NINKO_MODULE_WEB_SEARCH",
     required_secrets=[],
     optional_secrets=[],
     routing_keywords=[

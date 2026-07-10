@@ -22,7 +22,7 @@ async def dns_lookup(hostname: str) -> str:
     """
     try:
         addr_info = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC)
-        ips = sorted(set(info[4][0] for info in addr_info))
+        ips = sorted({info[4][0] for info in addr_info})
         return f"DNS-Lookup für {hostname}:\n" + "\n".join(f"  {ip}" for ip in ips)
     except socket.gaierror as exc:
         return f"DNS-Lookup für {hostname} fehlgeschlagen: {exc}"
@@ -158,7 +158,7 @@ async def get_network_info(hostname: str) -> dict[str, Any]:
     """
     try:
         addr_info = socket.getaddrinfo(hostname, 80, socket.AF_UNSPEC)
-        ips = sorted(set(info[4][0] for info in addr_info))
+        ips = sorted({info[4][0] for info in addr_info})
 
         info: dict[str, Any] = {
             "hostname": hostname,

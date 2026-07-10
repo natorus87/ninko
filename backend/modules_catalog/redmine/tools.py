@@ -901,10 +901,10 @@ async def get_redmine_issue_counts(
 
         issues = result.get("issues", [])
         open_count = sum(
-            1 for i in issues if i.get("status", {}).get("is_closed") == False
+            1 for i in issues if not i.get("status", {}).get("is_closed")
         )
         closed_count = sum(
-            1 for i in issues if i.get("status", {}).get("is_closed") == True
+            1 for i in issues if i.get("status", {}).get("is_closed")
         )
 
         return {

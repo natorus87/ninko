@@ -334,7 +334,7 @@ class AlertStateManager:
         values = await self._redis.connection.mget(keys)
         alerts = []
 
-        for key, value in zip(keys, values):
+        for _key, value in zip(keys, values, strict=False):
             if value:
                 alert = json.loads(value)
                 if module is None or alert.get("module") == module:

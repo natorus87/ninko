@@ -21,7 +21,7 @@ async def check_ionos_health() -> dict:
             zone_count = len(result)
         else:
             zone_count = 0
-            
+
         return {
             "status": "ok",
             "detail": f"IONOS verbunden, {zone_count} Zonen gefunden",

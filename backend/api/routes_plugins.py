@@ -1109,7 +1109,7 @@ async def list_repo_modules(request: Request, repo_id: str) -> MarketplaceModule
                 }
 
             manifests = await asyncio.gather(*[_fetch_manifest(n) for n in dirs])
-            for mod_name, info in zip(dirs, manifests):
+            for mod_name, info in zip(dirs, manifests, strict=False):
                 all_modules.append(
                     {
                         "name": mod_name,

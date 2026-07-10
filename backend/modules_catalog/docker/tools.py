@@ -337,7 +337,7 @@ async def get_container_stats(container_id: str, connection_id: str = "") -> dic
 
     net_rx = 0
     net_tx = 0
-    for net_name, net_stats in stats.get("networks", {}).items():
+    for _net_name, net_stats in stats.get("networks", {}).items():
         net_rx += net_stats.get("rx_bytes", 0)
         net_tx += net_stats.get("tx_bytes", 0)
 

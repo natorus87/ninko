@@ -354,7 +354,7 @@ async def get_tasmota_group_devices(
         if not host:
             return {"error": "No Tasmota host configured"}
 
-        result = await _tasmota_request(host, f"Status 13")
+        result = await _tasmota_request(host, "Status 13")
         devices = result.get("StatusNET", {}).get("Friendly", [])
 
         return [

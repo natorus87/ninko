@@ -140,7 +140,7 @@ class DebateService:
             return_exceptions=True,
         )
 
-        for participant, contribution_result in zip(active_participants, contributions):
+        for participant, contribution_result in zip(active_participants, contributions, strict=False):
             if isinstance(contribution_result, Exception):
                 logger.error(
                     "Participant %s failed in round %d: %s",
