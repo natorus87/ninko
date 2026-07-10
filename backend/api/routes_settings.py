@@ -296,6 +296,9 @@ async def set_embed_provider(body: dict) -> dict:
     api_key = body.get("api_key", "").strip()
     model = body.get("model", "").strip()
 
+    if use_custom and base_url:
+        _assert_provider_url_safe(base_url, "Embedding-Provider")
+
     if not model:
         raise HTTPException(
             status_code=400,
@@ -1027,12 +1030,27 @@ async def list_llm_providers() -> list:
     return [_sanitize_provider(p) for p in providers]
 
 
+def _assert_provider_url_safe(base_url: str, purpose: str) -> None:
+    """SSRF-Schutz: benutzerkonfigurierte Provider-URL vor dem Speichern prüfen.
+
+    Blockt Link-Local/Cloud-Metadata-Ziele (422). Admin-Aktion, daher ist die
+    DNS-Auflösung im Handler unkritisch (kein Hot-Path).
+    """
+    from core.net_guard import BlockedOutboundURLError, assert_safe_outbound_url
+
+    try:
+        assert_safe_outbound_url(base_url, purpose=purpose)
+    except BlockedOutboundURLError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @router.post("/llm/providers", status_code=201)
 async def create_llm_provider(body: LLMProviderCreate) -> dict:
     """Neuen LLM-Provider anlegen."""
     import uuid
     from datetime import datetime, timezone
 
+    _assert_provider_url_safe(body.base_url, "LLM-Provider")
     redis = get_redis()
     providers = await _load_providers(redis)
 
@@ -1063,6 +1081,7 @@ async def create_llm_provider(body: LLMProviderCreate) -> dict:
 @router.put("/llm/providers/{provider_id}")
 async def update_llm_provider(provider_id: str, body: LLMProviderCreate) -> dict:
     """LLM-Provider bearbeiten."""
+    _assert_provider_url_safe(body.base_url, "LLM-Provider")
     redis = get_redis()
     providers = await _load_providers(redis)
     idx = next((i for i, p in enumerate(providers) if p["id"] == provider_id), None)
