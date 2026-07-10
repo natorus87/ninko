@@ -22,7 +22,7 @@
         async loadScripts() {
             const container = document.getElementById('scripts-list');
             if (!container) return;
-            container.innerHTML = '<p class="empty-state">Lade Scripts…</p>';
+            container.innerHTML = `<p class="empty-state">${this._escapeHtml(t('common.loading'))}</p>`;
             try {
                 const res = await fetch('/api/scripting/scripts');
                 if (!res.ok) throw new Error(res.statusText);
@@ -63,7 +63,7 @@
                     </div>
                 `).join('');
             } catch (e) {
-                container.innerHTML = '<p class="empty-state text-error">Fehler beim Laden der Scripts.</p>';
+                container.innerHTML = `<p class="empty-state text-error">${this._escapeHtml(t('common.loadError'))}</p>`;
             }
         },
 
@@ -73,7 +73,7 @@
             document.getElementById('scripting-editor').classList.remove('hidden');
             
             document.getElementById('script-execution-status').style.display = 'none';
-            document.getElementById('script-execution-history').innerHTML = '<p class="text-muted">Lade Historie…</p>';
+            document.getElementById('script-execution-history').innerHTML = `<p class="text-muted">${this._escapeHtml(t('common.loading'))}</p>`;
             
             if (scriptId) {
                 document.getElementById('script-editor-title').textContent = 'Script bearbeiten';
@@ -97,7 +97,7 @@
                     document.getElementById('script-code').value = codeData.code || '';
                     await this._loadScriptExecutionHistory(scriptId);
                 } catch {
-                    showNotification('Fehler beim Laden des Scripts', 'error');
+                    showNotification(t('common.loadError'), 'error');
                 }
             } else {
                 document.getElementById('script-editor-title').textContent = 'Neues Script';
@@ -107,7 +107,7 @@
                 document.getElementById('script-timeout').value = 30;
                 document.getElementById('script-tags').value = '';
                 document.getElementById('script-code').value = '#!/usr/bin/env python3\n# Dein Python-Code hier\nprint("Hello, World!")';
-                document.getElementById('script-execution-history').innerHTML = '<p class="text-muted">Noch keine Ausführungen.</p>';
+                document.getElementById('script-execution-history').innerHTML = `<p class="text-muted">${this._escapeHtml(t('script.noRuns'))}</p>`;
                 document.getElementById('script-tool-enabled').checked = false;
                 document.getElementById('script-tool-name').value = '';
                 document.getElementById('script-tool-description').value = '';
@@ -144,15 +144,15 @@
             const toolSchemaStr = document.getElementById('script-tool-schema').value.trim();
 
             if (!name) {
-                showNotification('Name ist ein Pflichtfeld', 'error');
+                showNotification(t('common.nameRequired'), 'error');
                 return;
             }
             if (!code) {
-                showNotification('Code ist ein Pflichtfeld', 'error');
+                showNotification(t('script.codeRequired'), 'error');
                 return;
             }
             if (toolEnabled && !toolName) {
-                showNotification('Tool-Name ist erforderlich wenn "Als Tool verfügbar" aktiviert ist', 'error');
+                showNotification(t('script.toolNameRequired'), 'error');
                 return;
             }
 
@@ -174,7 +174,7 @@
                     try {
                         body.tool_input_schema = JSON.parse(toolSchemaStr);
                     } catch (e) {
-                        showNotification('Input-Schema ist kein gültiges JSON', 'error');
+                        showNotification(t('script.schemaInvalid'), 'error');
                         return;
                     }
                 } else {
@@ -196,39 +196,39 @@
 
                 if (res.ok) {
                     const result = await res.json();
-                    showNotification(`Script "${name}" gespeichert`, 'success');
+                    showNotification(`${t('script.saved')}: "${name}"`, 'success');
                     this._currentScriptId = result.id || scriptId;
                     document.getElementById('script-edit-id').value = this._currentScriptId;
                     document.getElementById('script-editor-title').textContent = 'Script bearbeiten';
                 } else {
                     const err = await res.json().catch(() => ({}));
-                    showNotification('Fehler: ' + (err.detail || res.statusText), 'error');
+                    showNotification(`${t('common.error')}: ` + (err.detail || res.statusText), 'error');
                 }
             } catch {
-                showNotification('Verbindungsfehler', 'error');
+                showNotification(t('common.connectionError'), 'error');
             } finally {
                 if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Speichern'; }
             }
         },
 
         async deleteScript(scriptId) {
-            if (!await this.confirm('Script wirklich löschen?')) return;
+            if (!await this.confirm(t('script.deleteConfirm'))) return;
             try {
                 const res = await fetch(`/api/scripting/scripts/${scriptId}`, { method: 'DELETE' });
                 if (res.ok) {
-                    showNotification('Script gelöscht', 'info');
+                    showNotification(t('script.deleted'), 'info');
                     this.loadScripts();
                 } else {
-                    showNotification('Fehler beim Löschen', 'error');
+                    showNotification(t('common.deleteFailed'), 'error');
                 }
             } catch {
-                showNotification('Verbindungsfehler', 'error');
+                showNotification(t('common.connectionError'), 'error');
             }
         },
 
         async runScript(scriptId) {
             try {
-                showNotification('Script wird ausgeführt…', 'info');
+                showNotification(t('script.running'), 'info');
                 const res = await fetch(`/api/scripting/scripts/${scriptId}/execute`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
@@ -237,15 +237,15 @@
                 if (!res.ok) throw new Error(res.statusText);
                 const result = await res.json();
                 
-                const statusText = result.status === 'succeeded' ? 'erfolgreich' : 'fehlgeschlagen';
-                const notifType = result.status === 'succeeded' ? 'success' : 'error';
-                showNotification(`Script ${statusText} (${result.duration_ms.toFixed(0)}ms)`, notifType);
+                const ok = result.status === 'succeeded';
+                const statusText = ok ? t('script.runSucceeded') : t('script.runFailed');
+                showNotification(`${statusText} (${result.duration_ms.toFixed(0)}ms)`, ok ? 'success' : 'error');
                 
                 this.loadScripts();
                 
                 return result;
             } catch (e) {
-                showNotification('Ausführung fehlgeschlagen: ' + e.message, 'error');
+                showNotification(`${t('script.runFailed')}: ` + e.message, 'error');
                 throw e;
             }
         },
@@ -253,7 +253,7 @@
         async runCurrentScript() {
             const scriptId = document.getElementById('script-edit-id').value;
             if (!scriptId) {
-                showNotification('Bitte speichere das Script zuerst', 'warning');
+                showNotification(t('script.saveFirst'), 'warning');
                 return;
             }
             
@@ -294,7 +294,7 @@
                 const executions = data.executions || [];
                 
                 if (!executions.length) {
-                    container.innerHTML = '<p class="text-muted">Noch keine Ausführungen.</p>';
+                    container.innerHTML = `<p class="text-muted">${this._escapeHtml(t('script.noRuns'))}</p>`;
                     return;
                 }
                 
@@ -309,7 +309,7 @@
                     </div>
                 `).join('');
             } catch {
-                container.innerHTML = '<p class="text-muted">Fehler beim Laden der Historie.</p>';
+                container.innerHTML = `<p class="text-muted">${this._escapeHtml(t('common.loadError'))}</p>`;
             }
         }
     };
