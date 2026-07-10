@@ -15,6 +15,7 @@ import contextvars
 import hashlib
 import hmac
 import json
+import logging
 import time
 import uuid
 from typing import Any
@@ -23,6 +24,8 @@ from fastapi import Request
 from fastapi import WebSocket
 
 from core.config import get_settings
+
+logger = logging.getLogger("ninko.auth")
 
 ROLE_ADMIN = "admin"
 ROLE_WRITE = "write"
@@ -258,7 +261,13 @@ async def _is_token_blacklisted(token: str) -> bool:
         redis = get_redis()
         result = await redis.connection.get(_session_blacklist_key(token))
         return result is not None
-    except Exception:
+    except Exception as exc:
+        # Bewusst fail-open: Bei Redis-Ausfall würde fail-closed (True) JEDEN
+        # Request ablehnen und den gesamten Dienst lahmlegen. Der Trade-off ist,
+        # dass die Logout-Invalidierung während einer Redis-Downtime nicht greift
+        # (Tokens bleiben bis zu ihrem exp gültig). Wird geloggt, um solche
+        # Fenster sichtbar zu machen.
+        logger.warning("Token-Blacklist-Prüfung fehlgeschlagen (fail-open): %s", exc)
         return False
 
 
@@ -301,7 +310,9 @@ async def is_active_api_token(username: str, raw_token: str) -> bool:
                 return False
             return True
         return False
-    except Exception:
+    except Exception as exc:
+        # Fail-closed: bei Fehler Token ablehnen (kein Zugriff).
+        logger.warning("API-Token-Aktivprüfung fehlgeschlagen (fail-closed): %s", exc)
         return False
 
 
@@ -330,7 +341,9 @@ async def is_active_session_user(username: str) -> bool:
         if not isinstance(user, dict):
             return False
         return bool(user.get("active", True))
-    except Exception:
+    except Exception as exc:
+        # Fail-closed: bei Fehler Session ablehnen (kein Zugriff).
+        logger.warning("Session-User-Aktivprüfung fehlgeschlagen (fail-closed): %s", exc)
         return False
 
 
