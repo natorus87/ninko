@@ -96,7 +96,9 @@ def alert_mgr(fake_redis):
     from core.alert_state import AlertStateManager
 
     mgr = AlertStateManager()
-    mgr._redis.connection = fake_redis
+    # `connection` ist eine read-only property (→ self._redis); daher das
+    # zugrundeliegende Attribut patchen statt der Property.
+    mgr._redis._redis = fake_redis
     return mgr
 
 
