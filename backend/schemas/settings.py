@@ -388,3 +388,30 @@ class BrandingAssetDeleteResponse(BaseModel):
     """Response after deleting a branding asset."""
     deleted: bool
     filename: str
+
+
+# ── Request-Bodies mit festem Feld-Schema ─────────────
+# (tts/stt/ocr bleiben bewusst dict: dynamische Allowlist-Settings.)
+
+class EmbedModelRequest(BaseModel):
+    """Body für PUT /llm/embed-model."""
+    embed_model: str = ""
+
+
+class LanguageRequest(BaseModel):
+    """Body für PUT /settings/language."""
+    language: str = "de"
+
+
+class DefaultLlmProviderRequest(BaseModel):
+    """Body für PUT /llm/providers/default."""
+    provider_id: str = ""
+
+
+class EmbedProviderRequest(BaseModel):
+    """Body für PUT /llm/embed-provider."""
+    use_custom: bool = False
+    backend: str = "lmstudio"
+    base_url: str = ""
+    api_key: str = ""
+    model: str = ""
