@@ -286,7 +286,12 @@ def _encrypt_token(token: str) -> str:
         return token
     fernet = _get_fernet()
     if fernet is None:
-        return token
+        # Kein Klartext-Fallback: lieber die Token-Speicherung ablehnen als einen
+        # GitHub-Token unverschlüsselt in Redis abzulegen (CWE-256/312).
+        raise HTTPException(
+            status_code=503,
+            detail="Token-Speicherung erfordert ein gesetztes SESSION_SECRET.",
+        )
     return _TOKEN_PREFIX + fernet.encrypt(token.encode()).decode()
 
 
