@@ -1,0 +1,177 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ninko"
+version = "0.1.0"
+description = "Ninko - AI-powered IT Operations Platform"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "Ninko Team"}
+]
+keywords = ["ai", "automation", "it-ops", "workflows", "agents"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Systems Administration",
+]
+
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "redis>=5.0.0",
+    "httpx>=0.25.0",
+    "defusedxml>=0.7.1",
+    "langchain>=0.1.0",
+    "langchain-core>=0.1.0",
+    "python-multipart>=0.0.6",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "pytest-xdist>=3.3.0",
+    "httpx>=0.25.0",
+    "respx>=0.20.0",
+]
+lint = [
+    "ruff>=0.1.0",
+    "black>=23.0.0",
+    "mypy>=1.7.0",
+]
+test = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/ninko/ninko"
+Documentation = "https://docs.ninko.io"
+Repository = "https://github.com/ninko/ninko"
+Issues = "https://github.com/ninko/ninko/issues"
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["backend"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short --strict-markers"
+markers = [
+    "unit: Unit tests (fast, isolated)",
+    "integration: Integration tests (may use external services)",
+    "e2e: End-to-end tests (full system tests)",
+    "slow: Slow tests (skip with -m 'not slow')",
+    "redis: Tests requiring Redis",
+    "llm: Tests requiring LLM providers",
+]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # Pyflakes
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+]
+ignore = [
+    # E501 (line-too-long) wurde im Codebase nie durchgesetzt (~690 Verstöße,
+    # überwiegend 10-sprachige _t()-Aufrufe und lange LLM-Prompts). Ein
+    # codebase-weites Umbrechen brächte massiven Diff-Lärm ohne Mehrwert; der
+    # Formatter (falls aktiviert) übernimmt Zeilenlänge ohnehin sinnvoller.
+    "E501",
+    # B008: Funktionsaufrufe in Argument-Defaults sind das idiomatische
+    # FastAPI-Muster (Depends(), File(), Query(), …) — kein Bug.
+    "B008",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"backend/tests/**/*.py" = ["S"]  # Skip security checks for tests
+"backend/test_*.py" = ["S"]
+# E402 (import-not-at-top): bewusste Imports nach Vorbereitungscode
+# (Logging-Setup mit Secret-Redaction in main.py, Kompatibilitäts-try/except
+# in pipeline_engine, conditional/lazy Provider-Imports in Modulen) sowie
+# Test-Dateien mit sys.path-Setup vor den Imports.
+"backend/main.py" = ["E402"]
+"backend/core/pipeline_engine.py" = ["E402"]
+"backend/core/tts/__init__.py" = ["E402"]
+"backend/modules/dataviz/agent.py" = ["E402"]
+"backend/modules/message_hub/agent.py" = ["E402"]
+"backend/test_e2e_critical_paths.py" = ["E402"]
+"backend/tests/test_routing_keyword_linter.py" = ["E402"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = false
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["backend"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/venv/*",
+    "*/.venv/*",
+]
+
+[tool.coverage.report]
+precision = 2
+skip_covered = false
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]

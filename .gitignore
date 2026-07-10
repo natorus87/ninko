@@ -114,7 +114,6 @@ RELEASE_PLAN_v1.2.0.md
 dashboard_main.png
 login_state.png
 deploy.sh
-pyproject.toml
 pytest.ini
 test_pihole.py
 
