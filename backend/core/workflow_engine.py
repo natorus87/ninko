@@ -786,8 +786,15 @@ class WorkflowEngine:
 
         m = CONDITION_PATTERNS["matches"].match(expr)
         if m:
+            pattern = m.group(1)
+            # ReDoS-Schutz: user-kontrollierter Regex ohne Timeout. Pattern- und
+            # Input-Länge begrenzen entzieht katastrophalen Backtracking-Mustern
+            # die Grundlage (exponentielle Laufzeit braucht langen Input).
+            if len(pattern) > 200:
+                raise ValueError("Condition-Regex zu lang (max 200 Zeichen).")
+            haystack = previous[:10000]
             try:
-                return bool(re.search(m.group(1), previous))
+                return bool(re.search(pattern, haystack))
             except re.error:
                 return False
 
