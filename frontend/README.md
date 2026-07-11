@@ -26,7 +26,7 @@ The frontend is a modular, SPA-like interface built with vanilla JavaScript (no 
   - Der komplette **Chat** (WS-Streaming, Tool-/Trace-Events, Markdown-Rendering,
     TTS-Wiedergabe, History, Export, Context-Indicator)
   - WebSocket, Command-Palette-Hooks, Resizing/Textarea-Utilities
-  - Geteilte Helfer (`_escapeHtml`, `_esc`, `_ic`) und der State, den die Features nutzen
+  - Geteilte Helfer (`_escapeHtml`, `_escapeAttr`, `_esc`, `_ic`) und der State, den die Features nutzen
   - Kleine init-nahe Reste: Legacy-LLM-Settings, Language, Memory/Secrets
 
 ### Feature-Module (`features/*.js`)
