@@ -101,6 +101,28 @@ class SessionMessagesResponse(BaseModel):
 # ── History replace (PLAN.md 2.4, M1 Security) ────────────────────
 
 
+class StepTraceEntry(BaseModel):
+    """Ein einzelner persistierter Denkschritt (Trace-Step) einer AI-Antwort.
+
+    Snapshot des bereits fertig gerenderten Frontend-Steps (siehe
+    ``_serializeStepsFromWrapper`` in app.js) — keine rohen/unredigierten
+    Tool-Argumente, sondern die bereits sanitisierten Anzeige-Texte.
+    """
+
+    model_config = {"extra": "ignore"}
+
+    phase: str | None = Field(default=None, max_length=64)
+    phaseLabel: str = Field(default="", max_length=64)
+    label: str = Field(default="", max_length=300)
+    hint: str = Field(default="", max_length=300)
+    state: Literal["done", "error"] = "done"
+    duration: str = Field(default="", max_length=32)
+    args: str = Field(default="", max_length=2000)
+    preview: str = Field(default="", max_length=2000)
+    isThinking: bool = False
+    thinking: str = Field(default="", max_length=2000)
+
+
 class HistoryMessage(BaseModel):
     """Eine einzelne Nachricht in der Chat-History (PUT /api/chat/history).
 
@@ -117,6 +139,7 @@ class HistoryMessage(BaseModel):
     role: Literal["user", "assistant"]
     content: str = Field(default="", max_length=32_768)
     text: str | None = Field(default=None, max_length=32_768)
+    steps: list[StepTraceEntry] | None = Field(default=None, max_length=40)
 
     @model_validator(mode="before")
     @classmethod
