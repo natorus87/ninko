@@ -81,7 +81,7 @@
       "name": "kubernetes",
       "display_name": "Kubernetes",
       "description": "Kubernetes Cluster Management – Pods, Deployments, Services, Health-Monitoring",
-      "version": "1.3.1",
+      "version": "1.3.3",
       "author": "Ninko Team"
     },
     {
@@ -151,7 +151,7 @@
       "name": "proxmox",
       "display_name": "Proxmox",
       "description": "Proxmox VE Management – VMs, Container, Nodes, Snapshots",
-      "version": "1.1.4",
+      "version": "1.1.9",
       "author": "Ninko Team"
     },
     {
