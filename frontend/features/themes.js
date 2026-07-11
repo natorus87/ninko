@@ -224,11 +224,19 @@
 
         /** Kuratierte Liste aller themebaren CSS-Custom-Properties (frontend/style.css :root). */
         _THEMEABLE_TOKENS: [
-            '--bg-primary', '--bg-secondary', '--bg-tertiary', '--bg-panel', '--bg-card-solid', '--bg-hover',
+            '--bg-main', '--bg-tint', '--bg-tint-mid', '--bg-tint-deep', '--bg-accent-1', '--bg-accent-2',
+            '--bg-primary', '--bg-secondary', '--bg-tertiary',
+            '--bg-panel', '--bg-panel-rgb', '--bg-panel-strong', '--bg-panel-soft', '--bg-panel-soft-rgb',
+            '--bg-card', '--bg-card-solid', '--bg-card-solid-rgb', '--bg-sidenav',
+            '--bg-chat-user', '--bg-hover', '--bg-active', '--bg-body',
+            '--bg-surface', '--bg-surface-rgb',
             '--text-primary', '--text-secondary', '--text-muted',
-            '--border-color', '--border-strong',
-            '--primary-color', '--primary-color-rgb',
-            '--accent-blue', '--accent-blue-rgb', '--accent-cyan', '--accent-cyan-rgb',
+            '--border-color', '--border-soft', '--border-strong', '--border-active',
+            '--shadow-sm', '--shadow-md', '--shadow-lg', '--shadow-glow', '--shadow-card', '--shadow-surface',
+            '--primary-color', '--primary-color-rgb', '--primary-gradient', '--primary-gradient-hover',
+            '--accent-gradient-soft',
+            '--accent-blue', '--accent-blue-rgb', '--accent-blue-soft', '--accent-blue-soft-rgb',
+            '--accent-cyan', '--accent-cyan-rgb',
             '--accent-purple', '--accent-green', '--accent-green-rgb',
             '--accent-yellow', '--accent-yellow-rgb', '--accent-orange', '--accent-orange-rgb',
             '--accent-red', '--error-color', '--error-color-rgb',
