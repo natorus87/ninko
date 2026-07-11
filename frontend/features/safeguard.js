@@ -33,13 +33,14 @@
         toggleSafeguardPicker(event) {
             event.stopPropagation();
             const picker = document.getElementById('safeguard-picker');
+            const anchor = document.getElementById('btn-safeguard');
             if (!picker) return;
             if (this._safeguardPickerOpen) {
                 this._closeSafeguardPicker();
                 return;
             }
             this._renderSafeguardPicker(picker);
-            picker.style.display = 'block';
+            this._positionFloatingPopover(picker, anchor, { align: 'right' });
             this._safeguardPickerOpen = true;
             // Außerhalb klicken → schließen
             setTimeout(() => {
@@ -51,6 +52,11 @@
             const picker = document.getElementById('safeguard-picker');
             if (picker && !picker.contains(e.target)) {
                 Ninko._closeSafeguardPicker();
+            } else if (Ninko._safeguardPickerOpen) {
+                // Klick innerhalb des Pickers hat den once-Listener konsumiert,
+                // ohne zu schließen — neu registrieren, damit der nächste
+                // Außenklick den Picker weiterhin schließt.
+                document.addEventListener('click', Ninko._onPickerOutsideClick, { once: true });
             }
         },
 
