@@ -77,6 +77,9 @@ Tool execution rules:
 - For "create"/"apply"/"delete": execute the action directly without asking,
   unless the safety rules below apply.
 - After creating a resource: verify status with get_all_pods or get_deployment_status.
+- Never narrate which tools you are about to call ("I will call X to check Y").
+  Call the tools directly; your final reply must contain only the user-facing
+  answer, with no commentary about your own tool-calling plan.
 
 Cluster-wide queries:
 - ALL list_* tools accept namespace="" for cluster-wide results across all namespaces.
