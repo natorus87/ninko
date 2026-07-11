@@ -6,6 +6,7 @@ import ast
 import asyncio
 import json
 import logging
+import re
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.messages import AIMessage, ToolMessage
@@ -78,6 +79,7 @@ class ResponseExtractionMiddleware(BaseMiddleware):
         if ai_msgs:
             raw = _extract_text(ai_msgs[-1].content)
             response = _strip_thinking(raw)
+            response = _strip_tool_plan_narration(response)
             if response:
                 if ctx.agent_name == "web_search" and tool_msgs:
                     web_details = _format_web_search_tool_fallback(
@@ -226,6 +228,53 @@ def _strip_thinking(text: str) -> str:
 
     cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
     return cleaned
+
+
+_NARRATION_VERB_RE = re.compile(
+    r"\b(?:i will|i['’]ll|i am going to|let me|first,? i will|"
+    r"ich werde|ich rufe|ich prüfe zunächst)\b",
+    re.IGNORECASE,
+)
+_TOOL_MENTION_RE = re.compile(
+    # Englisch: Verb vor dem Tool-Namen ("call get_cluster_status").
+    r"\b(?:call|invoke|use|using|checking)\b(?:(?!\.).){0,40}?\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b"
+    # Deutsch: Verb steht bei "werde X aufrufen" satzfinal nach dem Tool-Namen.
+    r"|\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b(?:(?!\.).){0,40}?\b(?:aufrufen|aufgerufen|nutzen|nutzt)\b"
+    r"|\btool[s]?\b",
+    re.IGNORECASE,
+)
+# Marker darf am Zeilenanfang stehen ODER direkt (auch ohne Leerzeichen) auf
+# Satzende-Interpunktion folgen — deckt den beobachteten "…overview.✅ Status…"-Fall
+# ab, bei dem das Modell keine Trennung zwischen Narration und Antwort einfügt.
+_CONTENT_START_RE = re.compile(r"(?:^|\n\s*|(?<=[.!?]))(?:#{1,6}\s|[✅⚠️❌]|\|.+\|)")
+
+
+def _strip_tool_plan_narration(response: str) -> str:
+    """Strips a leading "I will call X to check Y…" plan narration, if present.
+
+    Some completions leak the model's tool-calling plan as prose into the
+    final (no-more-tool_calls) message instead of only the user-facing
+    answer — the leaked prose sometimes runs directly into the real content
+    with no separating whitespace (e.g. "…overview.✅ Status …"). Only
+    strips when the response *starts* with narration language AND the
+    prefix mentions tools repeatedly, to avoid touching legitimate replies
+    that happen to open with an unrelated "I will …" sentence.
+    """
+    if not response:
+        return response
+    head = response[:400]
+    if not (_NARRATION_VERB_RE.search(head) and _TOOL_MENTION_RE.search(head)):
+        return response
+    match = _CONTENT_START_RE.search(response)
+    if not match or match.start() == 0:
+        return response
+    prefix, remainder = response[: match.start()], response[match.start() :].lstrip()
+    if len(remainder) < 20:
+        return response
+    if len(_TOOL_MENTION_RE.findall(prefix)) < 2:
+        return response
+    logger.debug("Stripped tool-plan narration prefix (%d chars).", len(prefix))
+    return remainder
 
 
 def _is_unhelpful_web_search_response(response: str) -> bool:
