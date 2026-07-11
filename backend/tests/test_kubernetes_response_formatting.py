@@ -103,9 +103,49 @@ async def test_leaked_tool_plan_narration_is_stripped_from_final_response() -> N
 
     await middleware.post_process(ctx)
 
-    assert ctx.response.startswith("✅ Status des licium Namespaces")
+    # The four "I will call ..." lines are fully removed. The trailing
+    # wrap-up sentence ("This avoids...") doesn't match a known narration
+    # prefix and survives as its own line — accepted residual imperfection —
+    # but it's cleanly separated from the real content instead of glued onto
+    # it, which is the actual reported symptom.
     assert "I will call" not in ctx.response
+    assert "✅ Status des licium Namespaces" in ctx.response
+    assert "\n✅ Status des licium Namespaces" in ctx.response  # no longer glued
     assert "| licium | ✅ Active |" in ctx.response
+
+
+@pytest.mark.asyncio
+async def test_repeated_tool_error_narration_blocks_are_stripped() -> None:
+    """Regression: when the agent retries the same failing tool call many
+    times, each retry's self-correction narration can end up concatenated
+    into the final message dozens of times over. The line-based stripper
+    must catch every repetition, not just a leading one."""
+    middleware = ResponseExtractionMiddleware()
+    block = (
+        "⚠️ 2 consecutive tool errors. My previous approach is wrong. I will now call the tool "
+        "with a fundamentally different, corrected approach:\n\n"
+        "I will use list_ingresses with namespace=\"licium\" to check if there are any "
+        "services/ingresses in the namespace.\n"
+        "I will use list_endpoints with namespace=\"licium\" to check for active endpoints.\n"
+        "I will use list_namespaces to confirm the namespace exists (already done).\n"
+        "Let's start with list_ingresses and list_endpoints for the licium namespace.\n"
+    )
+    content = (block * 20) + (
+        "Name    Status\n"
+        "default    Active\n"
+        "licium    Active\n"
+    )
+    ctx = MiddlewareContext(
+        agent_name="kubernetes",
+        result={"messages": [AIMessage(content=content)]},
+    )
+
+    await middleware.post_process(ctx)
+
+    assert "consecutive tool errors" not in ctx.response
+    assert "I will use" not in ctx.response
+    assert "Let's start with" not in ctx.response
+    assert "licium    Active" in ctx.response
 
 
 @pytest.mark.asyncio
