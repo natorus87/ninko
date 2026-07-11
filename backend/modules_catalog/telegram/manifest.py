@@ -69,7 +69,15 @@ async def check_telegram_health(connection_id: str = "") -> dict:
                     "detail": f"HTTP {resp.status_code}: {resp.text[:100]}",
                 }
 
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ImportError) as exc:
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        ImportError,
+        httpx.HTTPError,
+    ) as exc:
         return {"status": "error", "detail": f"Telegram API unreachable: {exc}"}
 
 
@@ -80,7 +88,7 @@ module_manifest = ModuleManifest(
         "Telegram chat: chat with the Ninko orchestrator via Telegram messages, "
         "groups, or channels."
     ),
-    version="1.2.6",
+    version="1.2.7",
     author="Ninko Team",
     enabled_by_default=True,
     env_prefix="TELEGRAM_",
