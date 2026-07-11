@@ -13,6 +13,8 @@ import base64
 import logging
 import os
 import re
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 import httpx
@@ -74,6 +76,19 @@ logger = logging.getLogger("ninko.modules.telegram.bot")
 
 # Maximum message length (Telegram limit: 4096)
 _MAX_MSG_LEN = 4000
+
+# Recoverable errors around Telegram API calls. httpx errors inherit from
+# neither OSError nor asyncio.TimeoutError — without httpx.HTTPError here a
+# plain network blip would escape the handlers (and kill the poll loop).
+_RECOVERABLE_ERRORS = (
+    RuntimeError,
+    ValueError,
+    TypeError,
+    KeyError,
+    OSError,
+    asyncio.TimeoutError,
+    httpx.HTTPError,
+)
 
 
 def _telegram_commands() -> list[dict[str, str]]:
@@ -226,9 +241,13 @@ class TelegramBot:
         self.offset = 0
         # Tracks sessions that were cleared while a request was in flight
         self._cleared_sessions: set[str] = set()
+        # In-flight request counter per session (guards _cleared_sessions)
+        self._inflight_sessions: dict[str, int] = {}
         # Track background tasks to prevent memory leaks
         self._background_tasks: set[asyncio.Task] = set()
         self._pairing_ttl = 3600  # 1 hour
+        # Shared HTTP client (lazy; avoids a TLS handshake per API call)
+        self._http: httpx.AsyncClient | None = None
 
     async def _get_connection_config(self) -> dict[str, Any]:
         """Get Telegram connection config with defaults."""
@@ -240,13 +259,18 @@ class TelegramBot:
         return {}
 
     async def _is_user_authorized(
-        self, user_id: int, chat_id: int, is_group: bool = False
+        self,
+        user_id: int,
+        chat_id: int,
+        is_group: bool = False,
+        config: dict[str, Any] | None = None,
     ) -> tuple[bool, str]:
         """
         Check if user is authorized based on DM policy and allowlists.
         Returns (authorized, reason).
         """
-        config = await self._get_connection_config()
+        if config is None:
+            config = await self._get_connection_config()
 
         # DM Policy: pairing | allowlist | open | disabled
         dm_policy = config.get("dm_policy", "pairing")
@@ -313,6 +337,11 @@ class TelegramBot:
         # Delete pairing code
         await redis.connection.delete(pairing_key)
 
+        logger.info(
+            "Telegram pairing approved for user %s (approved by %s).",
+            user_id,
+            admin_user_id if admin_user_id is not None else "dashboard",
+        )
         return True
 
     async def get_token(self) -> str | None:
@@ -335,6 +364,16 @@ class TelegramBot:
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
         return task
+
+    @asynccontextmanager
+    async def _client(self) -> AsyncIterator[httpx.AsyncClient]:
+        """Yield the shared HTTP client (created lazily, closed in stop()).
+
+        Long-running calls override the 10s default via per-request timeouts.
+        """
+        if self._http is None or self._http.is_closed:
+            self._http = httpx.AsyncClient(timeout=10.0)
+        yield self._http
 
     async def start(self) -> None:
         """Start the polling loop as a background task."""
@@ -374,6 +413,10 @@ class TelegramBot:
             await asyncio.gather(*self._background_tasks, return_exceptions=True)
             self._background_tasks.clear()
 
+        if self._http is not None and not self._http.is_closed:
+            await self._http.aclose()
+        self._http = None
+
         logger.info("Telegram bot polling stopped.")
 
     async def _register_commands(self, token: str) -> None:
@@ -384,7 +427,7 @@ class TelegramBot:
         commands = _telegram_commands()
 
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with self._client() as client:
                 url = f"https://api.telegram.org/bot{token}/setMyCommands"
                 resp = await client.post(url, json={"commands": commands})
                 if resp.status_code == 200 and resp.json().get("ok"):
@@ -415,7 +458,7 @@ class TelegramBot:
                 continue
 
             try:
-                async with httpx.AsyncClient(timeout=timeout_s + 5.0) as poll_client:
+                async with self._client() as poll_client:
                     url = f"https://api.telegram.org/bot{token}/getUpdates"
                     params: dict[str, Any] = {
                         "offset": self.offset,
@@ -423,7 +466,9 @@ class TelegramBot:
                         "allowed_updates": ["message", "callback_query"],
                     }
 
-                    resp = await poll_client.get(url, params=params)
+                    resp = await poll_client.get(
+                        url, params=params, timeout=timeout_s + 5.0
+                    )
                     if resp.status_code == 200:
                         data = resp.json()
                         if data.get("ok"):
@@ -465,14 +510,7 @@ class TelegramBot:
                 break
             except httpx.ReadTimeout:
                 continue  # Normal for long-polling with no new messages
-            except (
-                RuntimeError,
-                ValueError,
-                TypeError,
-                KeyError,
-                OSError,
-                asyncio.TimeoutError,
-            ) as e:
+            except _RECOVERABLE_ERRORS as e:
                 logger.exception("Error in Telegram polling loop: %s", e)
                 await asyncio.sleep(10)
 
@@ -496,7 +534,7 @@ class TelegramBot:
             payload["reply_to_message_id"] = reply_to_message_id
 
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with self._client() as client:
                 resp = await client.post(
                     f"https://api.telegram.org/bot{token}/sendMessage",
                     json=payload,
@@ -520,14 +558,7 @@ class TelegramBot:
                     "sendMessage error: %s %s", resp.status_code, resp.text[:100]
                 )
                 return False
-        except (
-            RuntimeError,
-            ValueError,
-            TypeError,
-            KeyError,
-            OSError,
-            asyncio.TimeoutError,
-        ) as exc:
+        except _RECOVERABLE_ERRORS as exc:
             logger.error("_send error: %s", exc)
             return False
 
@@ -552,7 +583,7 @@ class TelegramBot:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with self._client() as client:
                 resp = await client.post(
                     f"https://api.telegram.org/bot{token}/sendMessage",
                     json=payload,
@@ -565,14 +596,7 @@ class TelegramBot:
                     resp.text[:100],
                 )
                 return False
-        except (
-            RuntimeError,
-            ValueError,
-            TypeError,
-            KeyError,
-            OSError,
-            asyncio.TimeoutError,
-        ) as exc:
+        except _RECOVERABLE_ERRORS as exc:
             logger.error("_send_with_keyboard error: %s", exc)
             return False
 
@@ -632,7 +656,7 @@ class TelegramBot:
     ) -> None:
         """Set an emoji reaction on a message (best-effort, no error propagation)."""
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with self._client() as client:
                 await client.post(
                     f"https://api.telegram.org/bot{token}/setMessageReaction",
                     json={
@@ -641,34 +665,20 @@ class TelegramBot:
                         "reaction": [{"type": "emoji", "emoji": emoji}],
                     },
                 )
-        except (
-            RuntimeError,
-            ValueError,
-            TypeError,
-            KeyError,
-            OSError,
-            asyncio.TimeoutError,
-        ):
+        except _RECOVERABLE_ERRORS:
             pass
 
     async def _keep_typing(self, token: str, chat_id: int) -> None:
         """Send a 'typing' action every 4s until the task is cancelled."""
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with self._client() as client:
                 while True:
                     try:
                         await client.post(
                             f"https://api.telegram.org/bot{token}/sendChatAction",
                             json={"chat_id": chat_id, "action": "typing"},
                         )
-                    except (
-                        RuntimeError,
-                        ValueError,
-                        TypeError,
-                        KeyError,
-                        OSError,
-                        asyncio.TimeoutError,
-                    ):
+                    except _RECOVERABLE_ERRORS:
                         pass
                     await asyncio.sleep(4)
         except asyncio.CancelledError:
@@ -687,10 +697,11 @@ class TelegramBot:
         try:
             from api.routes_transcription import transcribe_bytes_extended
 
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with self._client() as client:
                 r = await client.get(
                     f"https://api.telegram.org/bot{token}/getFile",
                     params={"file_id": file_id},
+                    timeout=30.0,
                 )
                 r.raise_for_status()
                 file_path = r.json().get("result", {}).get("file_path", "")
@@ -699,6 +710,7 @@ class TelegramBot:
 
                 r2 = await client.get(
                     f"https://api.telegram.org/file/bot{token}/{file_path}",
+                    timeout=30.0,
                 )
                 r2.raise_for_status()
                 audio_bytes = r2.content
@@ -708,14 +720,7 @@ class TelegramBot:
                 audio_bytes, filename
             )
             return (text or None), confidence, detected_lang
-        except (
-            RuntimeError,
-            ValueError,
-            TypeError,
-            KeyError,
-            OSError,
-            asyncio.TimeoutError,
-        ) as exc:
+        except _RECOVERABLE_ERRORS as exc:
             logger.error("Error transcribing Telegram voice message: %s", exc)
             return None, -2.0, "de"
 
@@ -725,11 +730,12 @@ class TelegramBot:
         Expects OGG/Opus bytes (Telegram requirement for voice messages).
         """
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with self._client() as client:
                 resp = await client.post(
                     f"https://api.telegram.org/bot{token}/sendVoice",
                     data={"chat_id": str(chat_id)},
                     files={"voice": ("voice.ogg", ogg_bytes, "audio/ogg")},
+                    timeout=30.0,
                 )
                 if resp.status_code == 200 and resp.json().get("ok"):
                     return True
@@ -737,14 +743,7 @@ class TelegramBot:
                     "sendVoice Fehler: %s %s", resp.status_code, resp.text[:100]
                 )
                 return False
-        except (
-            RuntimeError,
-            ValueError,
-            TypeError,
-            KeyError,
-            OSError,
-            asyncio.TimeoutError,
-        ) as exc:
+        except _RECOVERABLE_ERRORS as exc:
             logger.error("_send_voice error: %s", exc)
             return False
 
@@ -789,7 +788,7 @@ class TelegramBot:
             }
             mime = mime_types.get(ext, "image/png")
 
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with self._client() as client:
                 resp = await client.post(
                     f"https://api.telegram.org/bot{token}/sendPhoto",
                     data={
@@ -798,6 +797,7 @@ class TelegramBot:
                         "parse_mode": "HTML",
                     },
                     files={"photo": (img_file.name, image_bytes, mime)},
+                    timeout=30.0,
                 )
                 if resp.status_code == 200 and resp.json().get("ok"):
                     return True
@@ -805,14 +805,7 @@ class TelegramBot:
                     "sendPhoto Fehler: %s %s", resp.status_code, resp.text[:200]
                 )
                 return False
-        except (
-            RuntimeError,
-            ValueError,
-            TypeError,
-            KeyError,
-            OSError,
-            asyncio.TimeoutError,
-        ) as exc:
+        except _RECOVERABLE_ERRORS as exc:
             logger.error("_send_photo error: %s", exc)
             return False
 
@@ -826,7 +819,7 @@ class TelegramBot:
     ) -> bool:
         """Send raw image bytes as a photo via Telegram."""
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with self._client() as client:
                 resp = await client.post(
                     f"https://api.telegram.org/bot{token}/sendPhoto",
                     data={
@@ -835,6 +828,7 @@ class TelegramBot:
                         "parse_mode": "HTML",
                     },
                     files={"photo": ("chart", image_bytes, mime)},
+                    timeout=30.0,
                 )
                 if resp.status_code == 200 and resp.json().get("ok"):
                     return True
@@ -842,16 +836,10 @@ class TelegramBot:
                     "sendPhoto (bytes) Fehler: %s %s", resp.status_code, resp.text[:200]
                 )
                 return False
-        except (
-            RuntimeError,
-            ValueError,
-            TypeError,
-            KeyError,
-            OSError,
-            asyncio.TimeoutError,
-        ) as exc:
+        except _RECOVERABLE_ERRORS as exc:
             logger.error("_send_photo_bytes error: %s", exc)
             return False
+
     async def _send_preview_message(
         self, token: str, chat_id: int, reply_to_message_id: int | None = None
     ) -> int | None:
@@ -860,7 +848,7 @@ class TelegramBot:
         Returns the message_id for editing.
         """
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with self._client() as client:
                 payload: dict[str, Any] = {
                     "chat_id": chat_id,
                     "text": "💭...",
@@ -898,7 +886,7 @@ class TelegramBot:
             if parse_mode:
                 payload["parse_mode"] = parse_mode
 
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with self._client() as client:
                 resp = await client.post(
                     f"https://api.telegram.org/bot{token}/editMessageText",
                     json=payload,
@@ -1047,7 +1035,7 @@ class TelegramBot:
 
         # Acknowledge immediately (removes spinner on the button)
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with self._client() as client:
                 await client.post(
                     f"https://api.telegram.org/bot{token}/answerCallbackQuery",
                     json={"callback_query_id": callback_query.get("id")},
@@ -1156,11 +1144,12 @@ class TelegramBot:
                     session_id=session_id, role="assistant", content=response_text
                 )
                 if did_compact:
-                    summary = (route_meta or {}).get("compaction_summary")
+                    # resume_tool_execution returns no route_meta, so there is
+                    # no compaction summary to include here.
                     await redis.store_chat_message(
                         session_id=session_id,
                         role="system_compaction",
-                        content=summary or "Conversation history has been compressed.",
+                        content="Conversation history has been compressed.",
                     )
                 await self._send(
                     token,
@@ -1248,7 +1237,16 @@ class TelegramBot:
         user_id = user.get("id")
         is_group = msg.get("chat", {}).get("type") in ["group", "supergroup"]
 
-        authorized, reason = await self._is_user_authorized(user_id, chat_id, is_group)
+        # Fetch the connection once per update; auth check, /status and the
+        # voice-reply settings below all read from the same config.
+        from core.connections import ConnectionManager
+
+        conn = await ConnectionManager.get_default_connection("telegram")
+        config: dict[str, Any] = conn.config if conn else {}
+
+        authorized, reason = await self._is_user_authorized(
+            user_id, chat_id, is_group, config=config
+        )
 
         if cmd == "/chatid":
             await self._send(
@@ -1286,13 +1284,12 @@ class TelegramBot:
             return
 
         if cmd == "/status":
-            cfg = await self._get_connection_config()
-            streaming = str(cfg.get("streaming", "false")).lower() in (
+            streaming = str(config.get("streaming", "false")).lower() in (
                 "true",
                 "1",
                 "yes",
             )
-            voice_reply = str(cfg.get("voice_reply", "false")).lower() in (
+            voice_reply = str(config.get("voice_reply", "false")).lower() in (
                 "true",
                 "1",
                 "yes",
@@ -1322,6 +1319,22 @@ class TelegramBot:
 
         if cmd == "/pair":
             if cmd_args and user_id:
+                # Approval requires an already authorized user — otherwise an
+                # unauthorized user could approve their own pairing code.
+                if not authorized:
+                    await self._send(
+                        token,
+                        chat_id,
+                        _t(
+                            "🔒 Nur bereits autorisierte Benutzer können Pairing-Codes "
+                            "bestätigen. Bitte lass den Code von einem Admin im "
+                            "Ninko-Dashboard bestätigen.",
+                            "🔒 Only already authorized users can approve pairing "
+                            "codes. Please ask an admin to approve the code in the "
+                            "Ninko dashboard.",
+                        ),
+                    )
+                    return
                 code = cmd_args.split()[0].upper()
                 success = await self._approve_pairing(code, user_id)
                 if success:
@@ -1375,30 +1388,28 @@ class TelegramBot:
             )
             return
 
-        # Legacy allowlist check (chat-based, for backward compatibility)
-        # Übersprungen wenn User bereits via Pairing oder Policy autorisiert ist.
-        from core.connections import ConnectionManager
-
-        conn = await ConnectionManager.get_default_connection("telegram")
-        if conn and not authorized:
-            allowed_raw = conn.config.get("allowed_chat_ids", "")
-            if allowed_raw:
-                allowed_ids = {
-                    s.strip() for s in str(allowed_raw).split(",") if s.strip()
-                }
-                if str(chat_id) not in allowed_ids:
-                    logger.warning(
-                        "Telegram: Access denied for chat ID %s (not in allowlist)",
-                        chat_id,
-                    )
-                    return
+        # Legacy allowlist check (chat-based, for backward compatibility).
+        # Only reached for unauthorized group chats — unauthorized DMs were
+        # rejected above. Without a configured chat allowlist, unauthorized
+        # group messages are ignored (silently, to avoid group spam).
+        if not authorized:
+            allowed_raw = config.get("allowed_chat_ids", "")
+            allowed_ids = {
+                s.strip() for s in str(allowed_raw).split(",") if s.strip()
+            }
+            if str(chat_id) not in allowed_ids:
+                logger.warning(
+                    "Telegram: unauthorized message from user %s in group chat %s "
+                    "ignored (%s).",
+                    user_id,
+                    chat_id,
+                    "not in allowed_chat_ids" if allowed_ids else "no allowed_chat_ids configured",
+                )
+                return
 
         # Read voice-reply configuration from connection
-        voice_lang: str | None = None
-        voice_name: str | None = None
-        if conn:
-            voice_lang = conn.config.get("voice_lang") or None
-            voice_name = conn.config.get("voice_name") or None
+        voice_lang = config.get("voice_lang") or None
+        voice_name = config.get("voice_name") or None
 
         logger.info("Telegram message from chat %s: %s…", chat_id, text[:60])
 
@@ -1407,19 +1418,15 @@ class TelegramBot:
             try:
                 redis = get_redis()
                 await redis.clear_chat_history(session_id_local)
-                # Race-condition protection: in-flight requests should not write back history
-                self._cleared_sessions.add(session_id_local)
+                # Race-condition protection: in-flight requests should not
+                # write back history. Only flag when a request is actually in
+                # flight — otherwise the NEXT message would skip its history.
+                if self._inflight_sessions.get(session_id_local):
+                    self._cleared_sessions.add(session_id_local)
                 await self._send(
                     token, chat_id, "♻️ Chat history cleared. How can I help?"
                 )
-            except (
-                RuntimeError,
-                ValueError,
-                TypeError,
-                KeyError,
-                OSError,
-                asyncio.TimeoutError,
-            ) as exc:
+            except _RECOVERABLE_ERRORS as exc:
                 logger.error("Error clearing chat history for %s: %s", chat_id, exc)
                 await self._send(token, chat_id, f"❌ Error clearing history: {exc}")
             return
@@ -1444,6 +1451,10 @@ class TelegramBot:
             asyncio.create_task(self._keep_typing(token, chat_id))
         )
 
+        session_id = f"telegram_{chat_id}"
+        self._inflight_sessions[session_id] = (
+            self._inflight_sessions.get(session_id, 0) + 1
+        )
         try:
             from core.safeguard import is_bot_confirmation, SAFEGUARD_PENDING_KEY
             from agents.base_agent import _TOOL_SAFEGUARD_SENTINEL
@@ -1451,7 +1462,6 @@ class TelegramBot:
 
             orchestrator = self.app.state.orchestrator
             redis = get_redis()
-            session_id = f"telegram_{chat_id}"
 
             # ── Safeguard check ────────────────────────────────────────────────
             safeguard = getattr(self.app.state, "safeguard", None)
@@ -1542,13 +1552,10 @@ class TelegramBot:
                     return
 
             history = await redis.get_chat_history(session_id)
-            streaming_enabled = bool(
-                conn
-                and str(conn.config.get("streaming", "false")).lower() in (
-                    "true",
-                    "1",
-                    "yes",
-                )
+            streaming_enabled = str(config.get("streaming", "false")).lower() in (
+                "true",
+                "1",
+                "yes",
             )
             if streaming_enabled:
                 logger.debug("Telegram streaming preview enabled for chat %s.", chat_id)
@@ -1715,14 +1722,7 @@ class TelegramBot:
                                     age_seconds,
                                     image_path,
                                 )
-                except (
-                    RuntimeError,
-                    ValueError,
-                    TypeError,
-                    KeyError,
-                    OSError,
-                    asyncio.TimeoutError,
-                ) as e:
+                except _RECOVERABLE_ERRORS as e:
                     logger.debug("Error searching for newest image: %s", e)
 
             if image_path:
@@ -1734,14 +1734,7 @@ class TelegramBot:
                 caption = format_for_telegram(caption)[:1024]  # Telegram caption limit
                 try:
                     await self._send_photo(token, chat_id, image_path, caption)
-                except (
-                    RuntimeError,
-                    ValueError,
-                    TypeError,
-                    KeyError,
-                    OSError,
-                    asyncio.TimeoutError,
-                ) as exc:
+                except _RECOVERABLE_ERRORS as exc:
                     logger.warning(
                         "Image send failed, falling back to text: %s", exc
                     )
@@ -1827,6 +1820,11 @@ class TelegramBot:
                 reply_to_message_id=message_id,
             )
         finally:
+            remaining = self._inflight_sessions.get(session_id, 1) - 1
+            if remaining > 0:
+                self._inflight_sessions[session_id] = remaining
+            else:
+                self._inflight_sessions.pop(session_id, None)
             typing_task.cancel()
             try:
                 await typing_task
@@ -1876,14 +1874,7 @@ class TelegramBot:
                 )
             else:
                 logger.warning("Voice-Reply sendVoice failed for chat %s", chat_id)
-        except (
-            RuntimeError,
-            ValueError,
-            TypeError,
-            KeyError,
-            OSError,
-            asyncio.TimeoutError,
-        ) as exc:
+        except _RECOVERABLE_ERRORS as exc:
             logger.error("Voice-Reply error for chat %s: %s", chat_id, exc)
 
 
