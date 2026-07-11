@@ -179,7 +179,7 @@
       "name": "telegram",
       "display_name": "Telegram",
       "description": "Telegram Bot – Chatten mit Ninko über Messenger, Voice Messages, persistentes Chat-Memory.",
-      "version": "1.2.4",
+      "version": "1.2.7",
       "author": "Ninko Team"
     },
     {
