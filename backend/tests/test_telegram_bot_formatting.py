@@ -216,6 +216,8 @@ class _FakeRedis:
 
 
 class _FakeAsyncClient:
+    is_closed = False
+
     def __init__(self, *args, **kwargs) -> None:
         pass
 
@@ -303,3 +305,201 @@ async def test_callback_confirm_yes_ignores_stale_button(
     )
 
     bot._send.assert_not_awaited()
+
+
+def _install_connection_stub(monkeypatch, conn) -> None:
+    """Stub core.connections so handle_update can fetch the default connection."""
+    cm_module = types.ModuleType("core.connections")
+
+    class _ConnectionManager:
+        @staticmethod
+        async def get_default_connection(module_name: str):
+            return conn
+
+    cm_module.ConnectionManager = _ConnectionManager
+    monkeypatch.setitem(sys.modules, "core.connections", cm_module)
+
+
+@pytest.mark.asyncio
+async def test_callback_confirm_tool_yes_with_compaction_stores_notice(
+    telegram_bot, monkeypatch
+) -> None:
+    """Regression: did_compact=True crashed with NameError (route_meta undefined)."""
+    fake_redis = _FakeRedis()
+    monkeypatch.setattr(telegram_bot, "get_redis", lambda: fake_redis)
+    monkeypatch.setattr(telegram_bot.httpx, "AsyncClient", _FakeAsyncClient)
+
+    app = types.SimpleNamespace(
+        state=types.SimpleNamespace(
+            orchestrator=types.SimpleNamespace(
+                resume_tool_execution=AsyncMock(return_value=("done", True))
+            )
+        )
+    )
+    bot = telegram_bot.TelegramBot(app)
+    bot._keep_typing = AsyncMock()
+    bot._send = AsyncMock(return_value=True)
+
+    await bot._handle_callback_query(
+        {
+            "id": "cb-1",
+            "data": "confirm_tool_yes",
+            "message": {"chat": {"id": 123}},
+        },
+        "token",
+    )
+
+    roles = [role for _, role, _ in fake_redis.messages]
+    assert "assistant" in roles
+    assert "system_compaction" in roles
+    bot._send.assert_awaited()
+    sent_text = bot._send.await_args.args[2]
+    assert "❌" not in sent_text
+
+
+@pytest.mark.asyncio
+async def test_pair_approval_rejected_for_unauthorized_user(
+    telegram_bot, monkeypatch
+) -> None:
+    """Regression: unauthorized users could approve their own pairing code."""
+    fake_redis = _FakeRedis()
+    monkeypatch.setattr(telegram_bot, "get_redis", lambda: fake_redis)
+    monkeypatch.setattr(telegram_bot.httpx, "AsyncClient", _FakeAsyncClient)
+    _install_connection_stub(monkeypatch, None)  # keine Connection → dm_policy pairing
+
+    app = types.SimpleNamespace(state=types.SimpleNamespace())
+    bot = telegram_bot.TelegramBot(app)
+    bot._send = AsyncMock(return_value=True)
+    bot._approve_pairing = AsyncMock(return_value=True)
+
+    await bot.handle_update(
+        {
+            "update_id": 1,
+            "message": {
+                "message_id": 10,
+                "chat": {"id": 123, "type": "private"},
+                "from": {"id": 456},
+                "text": "/pair ABC123",
+            },
+        },
+        "token",
+    )
+
+    bot._approve_pairing.assert_not_awaited()
+    bot._send.assert_awaited_once()
+    denial = bot._send.await_args.args[2]
+    assert "autorisiert" in denial or "authorized" in denial
+
+
+@pytest.mark.asyncio
+async def test_unauthorized_group_message_ignored_without_allowlist(
+    telegram_bot, monkeypatch
+) -> None:
+    """Regression: groups without allowed_chat_ids processed unauthorized users."""
+    fake_redis = _FakeRedis()
+    monkeypatch.setattr(telegram_bot, "get_redis", lambda: fake_redis)
+    monkeypatch.setattr(telegram_bot.httpx, "AsyncClient", _FakeAsyncClient)
+    conn = types.SimpleNamespace(config={"dm_policy": "pairing"}, vault_keys={})
+    _install_connection_stub(monkeypatch, conn)
+
+    orchestrator = types.SimpleNamespace(route=AsyncMock())
+    app = types.SimpleNamespace(state=types.SimpleNamespace(orchestrator=orchestrator))
+    bot = telegram_bot.TelegramBot(app)
+    bot._send = AsyncMock(return_value=True)
+    bot._react = AsyncMock()
+    bot._keep_typing = AsyncMock()
+
+    await bot.handle_update(
+        {
+            "update_id": 2,
+            "message": {
+                "message_id": 11,
+                "chat": {"id": -100987, "type": "supergroup"},
+                "from": {"id": 456},
+                "text": "restart production cluster",
+            },
+        },
+        "token",
+    )
+
+    orchestrator.route.assert_not_awaited()
+    bot._send.assert_not_awaited()  # still: keine Antwort in die Gruppe
+
+
+@pytest.mark.asyncio
+async def test_clear_without_inflight_keeps_next_history(
+    telegram_bot, monkeypatch
+) -> None:
+    """Regression: /clear flagged the session even without in-flight requests,
+    silently dropping the history of the NEXT message."""
+
+    class _FakeRedisWithClear(_FakeRedis):
+        def __init__(self) -> None:
+            super().__init__()
+            self.cleared: list[str] = []
+
+        async def clear_chat_history(self, session_id: str) -> None:
+            self.cleared.append(session_id)
+
+    fake_redis = _FakeRedisWithClear()
+    monkeypatch.setattr(telegram_bot, "get_redis", lambda: fake_redis)
+    monkeypatch.setattr(telegram_bot.httpx, "AsyncClient", _FakeAsyncClient)
+    conn = types.SimpleNamespace(config={"dm_policy": "open"}, vault_keys={})
+    _install_connection_stub(monkeypatch, conn)
+
+    app = types.SimpleNamespace(state=types.SimpleNamespace())
+    bot = telegram_bot.TelegramBot(app)
+    bot._send = AsyncMock(return_value=True)
+
+    await bot.handle_update(
+        {
+            "update_id": 3,
+            "message": {
+                "message_id": 12,
+                "chat": {"id": 123, "type": "private"},
+                "from": {"id": 456},
+                "text": "/clear",
+            },
+        },
+        "token",
+    )
+
+    assert fake_redis.cleared == ["telegram_123"]
+    assert bot._cleared_sessions == set()
+
+
+@pytest.mark.asyncio
+async def test_poll_loop_survives_httpx_connect_error(
+    telegram_bot, monkeypatch
+) -> None:
+    """Regression: httpx.ConnectError killed the poll loop permanently."""
+    app = types.SimpleNamespace(state=types.SimpleNamespace())
+    bot = telegram_bot.TelegramBot(app)
+    bot.get_token = AsyncMock(return_value="token")
+    monkeypatch.setattr(telegram_bot.asyncio, "sleep", AsyncMock())
+
+    calls = {"n": 0}
+
+    class _FlakyClient:
+        is_closed = False
+
+        async def get(self, *args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise telegram_bot.httpx.ConnectError("network blip")
+            bot.running = False
+
+            class _Response:
+                status_code = 200
+
+                def json(self):
+                    return {"ok": True, "result": []}
+
+            return _Response()
+
+    bot._http = _FlakyClient()
+    bot.running = True
+
+    await bot._poll_loop()
+
+    assert calls["n"] == 2  # zweiter Durchlauf → Loop hat den Fehler überlebt
