@@ -31,7 +31,7 @@ async def get_bot_status(request: Request) -> dict[str, Any]:
                     me = resp.json().get("result", {})
                     result["username"] = me.get("username")
                     result["first_name"] = me.get("first_name")
-    except (RuntimeError, ValueError, TypeError, KeyError, OSError):
+    except (RuntimeError, ValueError, TypeError, KeyError, OSError, httpx.HTTPError):
         pass
 
     # Default chat ID and allowlist from connection config for the dashboard
@@ -235,7 +235,10 @@ async def get_pending_pairings() -> dict[str, Any]:
     from core.redis_client import get_redis
 
     redis = get_redis()
-    keys = await redis.connection.keys("ninko:telegram:pairing:*")
+    # SCAN statt KEYS: blockiert Redis nicht bei vielen Einträgen
+    keys = [
+        key async for key in redis.connection.scan_iter("ninko:telegram:pairing:*")
+    ]
     pending = []
     for key in keys:
         code = key.decode().split(":")[-1] if isinstance(key, bytes) else key.split(":")[-1]
