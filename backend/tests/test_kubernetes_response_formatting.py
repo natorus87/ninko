@@ -75,6 +75,58 @@ async def test_kubernetes_short_ai_response_gets_tool_table_appended() -> None:
     assert "| Pods gesamt | 19 |" in ctx.response
 
 
+@pytest.mark.asyncio
+async def test_leaked_tool_plan_narration_is_stripped_from_final_response() -> None:
+    """Regression: the model sometimes leaks its tool-calling plan as prose into
+    the final (no-more-tool_calls) message instead of only the user-facing
+    answer, with no separator between narration and real content."""
+    middleware = ResponseExtractionMiddleware()
+    ctx = MiddlewareContext(
+        agent_name="kubernetes",
+        result={
+            "messages": [
+                AIMessage(
+                    content=(
+                        "I will call get_cluster_status to get the overall cluster status.\n"
+                        "I will call list_namespaces to confirm the licium namespace exists.\n"
+                        "I will call list_ingresses with namespace=\"licium\" to check for services.\n"
+                        "I will call list_endpoints with namespace=\"licium\" to check for active services.\n"
+                        "This avoids the non-existent list_pods tool and uses the available tools "
+                        "to provide a status overview.✅ Status des licium Namespaces\n\n"
+                        "Der Namespace licium ist aktiv und im Cluster vorhanden.\n\n"
+                        "| Namespace | Status |\n|---|---|\n| licium | ✅ Active |\n"
+                    )
+                ),
+            ]
+        },
+    )
+
+    await middleware.post_process(ctx)
+
+    assert ctx.response.startswith("✅ Status des licium Namespaces")
+    assert "I will call" not in ctx.response
+    assert "| licium | ✅ Active |" in ctx.response
+
+
+@pytest.mark.asyncio
+async def test_legitimate_response_starting_with_i_will_is_not_touched() -> None:
+    """The narration filter must not touch replies that merely happen to open
+    with an "I will …" sentence unrelated to tool-calling."""
+    middleware = ResponseExtractionMiddleware()
+    original = (
+        "I will explain how Kubernetes namespaces work in general terms.\n\n"
+        "## Übersicht\nNamespaces isolieren Ressourcen innerhalb eines Clusters."
+    )
+    ctx = MiddlewareContext(
+        agent_name="kubernetes",
+        result={"messages": [AIMessage(content=original)]},
+    )
+
+    await middleware.post_process(ctx)
+
+    assert ctx.response == original
+
+
 def test_simple_cluster_status_request_uses_fast_path_detector(monkeypatch) -> None:
     import importlib
 
