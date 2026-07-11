@@ -3,8 +3,8 @@
  *
  * Theme-Katalog, Custom-Theme-Editor und Theme-Repos. Aus app.js extrahiert;
  * via Object.assign gemergt. Der _themes/_activeThemeId/_themeRepos-State und
- * loadActiveTheme/applyActiveThemeTokens/initBackgroundSettingsUI bleiben in
- * app.js (Init- bzw. Hintergrundfarben-Bereich).
+ * loadActiveTheme/applyActiveThemeTokens bleiben in app.js (Init-Bereich);
+ * initBackgroundSettingsUI liegt in features/background_settings.js.
  */
 
 (function() {
