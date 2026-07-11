@@ -282,7 +282,7 @@
                         </div>
                         <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-top:0.5rem;">
                             ${s.builtin ? '<span class="status-badge status-unknown" style="font-size:0.7rem;">built-in</span>' : '<span class="status-badge status-ok" style="font-size:0.7rem;">custom</span>'}
-                            ${modules.length ? modules.map(m => `<span class="status-badge" style="font-size:0.7rem;background:rgba(92,158,235,0.15);color:var(--accent-blue);border:1px solid var(--accent-blue);">${this._escapeHtml(m)}</span>`).join('') : '<span class="status-badge status-unknown" style="font-size:0.7rem;">alle Agenten</span>'}
+                            ${modules.length ? modules.map(m => `<span class="status-badge" style="font-size:0.7rem;background:rgba(var(--accent-blue-rgb),0.15);color:var(--accent-blue);border:1px solid var(--accent-blue);">${this._escapeHtml(m)}</span>`).join('') : '<span class="status-badge status-unknown" style="font-size:0.7rem;">alle Agenten</span>'}
                         </div>
                     </div>`;
                 }).join('');
@@ -339,7 +339,7 @@
                         </div>
                         <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-top:0.5rem;">
                             ${s.builtin ? '<span class="status-badge status-unknown" style="font-size:0.7rem;">built-in</span>' : '<span class="status-badge status-ok" style="font-size:0.7rem;">custom</span>'}
-                            ${modules.length ? modules.map(m => `<span class="status-badge" style="font-size:0.7rem;background:rgba(92,158,235,0.15);color:var(--accent-blue);border:1px solid var(--accent-blue);">${this._escapeHtml(m)}</span>`).join('') : '<span class="status-badge status-unknown" style="font-size:0.7rem;">alle Agenten</span>'}
+                            ${modules.length ? modules.map(m => `<span class="status-badge" style="font-size:0.7rem;background:rgba(var(--accent-blue-rgb),0.15);color:var(--accent-blue);border:1px solid var(--accent-blue);">${this._escapeHtml(m)}</span>`).join('') : '<span class="status-badge status-unknown" style="font-size:0.7rem;">alle Agenten</span>'}
                         </div>
                     </div>`;
                 }).join('');
@@ -394,8 +394,8 @@
                             </div>
                         </div>
                         <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-top:0.5rem;">
-                            ${(s.tags || []).map(t => `<span class="status-badge" style="font-size:0.65rem;background:rgba(92,158,235,0.1);color:var(--accent-blue);border:1px solid rgba(92,158,235,0.3);">${this._esc(t)}</span>`).join('')}
-                            ${(s.modules || []).map(m => `<span class="status-badge" style="font-size:0.65rem;background:rgba(168,85,247,0.1);color:var(--purple,#a855f7);border:1px solid rgba(168,85,247,0.3);">${this._esc(m)}</span>`).join('')}
+                            ${(s.tags || []).map(t => `<span class="status-badge" style="font-size:0.65rem;background:rgba(var(--accent-blue-rgb),0.1);color:var(--accent-blue);border:1px solid rgba(var(--accent-blue-rgb),0.3);">${this._esc(t)}</span>`).join('')}
+                            ${(s.modules || []).map(m => `<span class="status-badge" style="font-size:0.65rem;background:rgba(var(--primary-color-rgb),0.1);color:var(--primary-color);border:1px solid rgba(var(--primary-color-rgb),0.3);">${this._esc(m)}</span>`).join('')}
                             <span class="status-badge status-unknown" style="font-size:0.65rem;">${this._esc(s.repo_name || 'unknown')}</span>
                         </div>
                     </div>
