@@ -339,6 +339,10 @@ class OrchestratorAgent(BaseAgent):
         self._router: KeywordRouter = KeywordRouter({})
         self._refresh_routing_map()
 
+    def _known_module_names(self) -> set[str]:
+        """Modulnamen, die als Function-Calling-Routing-Ziele gültig sind."""
+        return {m.name for m in self.registry.list_modules()}
+
     def _build_module_tools_schema(self) -> list[dict]:
         """JSON Tool-Defs aus Modul-Manifesten für Function Calling."""
         tools: list[dict] = []
@@ -422,7 +426,14 @@ class OrchestratorAgent(BaseAgent):
             raw = await redis.connection.get(key)
             if raw:
                 data = _json.loads(raw)
-                return data.get("module_names")
+                names = data.get("module_names") or []
+                known = self._known_module_names()
+                if names and all(n in known for n in names):
+                    return names
+                # Vergifteter/veralteter Eintrag (z.B. halluzinierter Tool-Name
+                # wie 'call_module_agent') → löschen statt weiter ausliefern.
+                logger.warning("Exact route cache entry invalid, purging: %s", names)
+                await redis.connection.delete(key)
         except Exception as exc:
             logger.debug("Exact cache miss: %s", exc)
         return None
@@ -481,7 +492,15 @@ class OrchestratorAgent(BaseAgent):
                     if score > best_score:
                         best_score, best_key = score, key
             if best_key and best_score >= self._SEMANTIC_THRESHOLD:
-                return module_payloads.get(best_key, {}).get("module_names")
+                names = module_payloads.get(best_key, {}).get("module_names") or []
+                known = self._known_module_names()
+                if names and all(n in known for n in names):
+                    return names
+                # Vergifteter/veralteter Eintrag → aus Cache und Index entfernen,
+                # damit ähnliche Anfragen nicht bis zum TTL-Ablauf fehlschlagen.
+                logger.warning("Semantic route cache entry invalid, purging: %s", names)
+                await redis_client.connection.zrem(self._SEMANTIC_INDEX_KEY, best_key)
+                await redis_client.connection.delete(best_key)
         except Exception as exc:
             logger.debug("Semantic cache miss: %s", exc)
         return None
@@ -819,6 +838,36 @@ class OrchestratorAgent(BaseAgent):
                 False,
                 _meta_factory(tier=2, confidence=0.0),
             )
+
+        # Nur Tool-Calls akzeptieren, die dem angebotenen Modul-Schema entsprechen.
+        # LLMs halluzinieren gelegentlich Tools aus dem ReAct-System-Prompt
+        # (call_module_agent, run_pipeline) — die existieren hier nicht als Modul
+        # und dürfen weder dispatcht noch gecacht werden.
+        offered_names = {t.get("function", {}).get("name") for t in tools}
+        invalid_names = [
+            tc.get("name") for tc in tool_calls if tc.get("name") not in offered_names
+        ]
+        if invalid_names:
+            logger.warning(
+                "Function calling returned unknown tool(s) %s — not in module schema.",
+                invalid_names,
+            )
+            await status_bus.emit_trace(
+                session_id,
+                phase="routing",
+                label="Routing-LLM wählte unbekannte Tools",
+                detail=", ".join(str(n) for n in invalid_names),
+                data={"invalid_tools": invalid_names},
+                status="error",
+            )
+            tool_calls = [tc for tc in tool_calls if tc.get("name") in offered_names]
+            if not tool_calls:
+                # z.B. halluziniertes call_module_agent: der ReAct-Loop besitzt
+                # dieses Tool wirklich — dort kann die Anfrage korrekt laufen.
+                return await self._fallback_to_react_loop(
+                    message, chat_history, session_id, confirmed, wants_stream,
+                    token_callback, cancellation_check, _meta_factory=_meta_factory,
+                )
 
         await status_bus.emit_trace(
             session_id,
