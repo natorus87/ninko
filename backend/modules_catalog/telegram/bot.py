@@ -22,6 +22,7 @@ from fastapi import FastAPI
 
 from core.redis_client import get_redis
 from agents.base_agent import _t
+from agents.middleware.postprocess import _strip_agent_meta_chatter
 from .formatter import format_for_telegram
 
 
@@ -123,60 +124,13 @@ def _strip_pipeline_headers(text: str) -> str:
     return text.strip()
 
 
-def _strip_agent_meta_chatter(text: str) -> str:
-    """Remove planning/retry meta text that should not be sent over Telegram."""
-    if not text:
-        return ""
-
-    lines = text.splitlines()
-    cleaned: list[str] = []
-    skip_numbered_plan = False
-
-    for line in lines:
-        stripped = line.strip()
-        folded = stripped.casefold()
-
-        if not stripped:
-            if cleaned and cleaned[-1] != "":
-                cleaned.append("")
-            skip_numbered_plan = False
-            continue
-
-        if re.search(r"\bconsecutive\s+tool\s+errors\b", folded):
-            skip_numbered_plan = True
-            continue
-
-        if folded.startswith(
-            (
-                "let's try once more",
-                "lets try once more",
-                "i will call ",
-                "i will not repeat",
-                "i will now call",
-                "i will report ",
-                "my previous approach is wrong",
-            )
-        ):
-            skip_numbered_plan = True
-            continue
-
-        if re.match(r"^\d+\.\s+i\s+will\b", folded):
-            skip_numbered_plan = True
-            continue
-
-        if skip_numbered_plan and re.match(r"^\d+\.\s+", stripped):
-            continue
-
-        cleaned.append(line)
-        skip_numbered_plan = False
-
-    text = "\n".join(cleaned)
-    text = re.sub(r"\n{3,}", "\n\n", text)
-    return text.strip()
-
-
 def _clean_final_response(text: str) -> str:
-    """Apply all Telegram-specific response cleanup before final delivery."""
+    """Apply all Telegram-specific response cleanup before final delivery.
+
+    ``_strip_agent_meta_chatter`` (tool-plan/retry narration removal) lives in
+    agents.middleware.postprocess, shared with the core chat response
+    pipeline — see ResponseExtractionMiddleware.post_process.
+    """
     return _strip_agent_meta_chatter(_strip_pipeline_headers(text))
 
 
