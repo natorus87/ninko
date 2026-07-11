@@ -79,7 +79,7 @@ class ResponseExtractionMiddleware(BaseMiddleware):
         if ai_msgs:
             raw = _extract_text(ai_msgs[-1].content)
             response = _strip_thinking(raw)
-            response = _strip_tool_plan_narration(response)
+            response = _strip_agent_meta_chatter(response)
             if response:
                 if ctx.agent_name == "web_search" and tool_msgs:
                     web_details = _format_web_search_tool_fallback(
@@ -230,51 +230,83 @@ def _strip_thinking(text: str) -> str:
     return cleaned
 
 
-_NARRATION_VERB_RE = re.compile(
-    r"\b(?:i will|i['’]ll|i am going to|let me|first,? i will|"
-    r"ich werde|ich rufe|ich prüfe zunächst)\b",
+_META_TRIGGER_RE = re.compile(r"\bconsecutive\s+tool\s+errors\b", re.IGNORECASE)
+_META_PREFIX_RE = re.compile(
+    r"^(?:"
+    r"let'?s try once more|"
+    r"my previous approach is wrong|"
+    r"i will call |"
+    r"i will not repeat|"
+    r"i will now call|"
+    r"i will report |"
+    r"i will use |"
+    r"i will now use |"
+    r"i will invoke |"
+    r"i will check |"
+    r"let'?s start with"
+    r")",
     re.IGNORECASE,
 )
-_TOOL_MENTION_RE = re.compile(
-    # Englisch: Verb vor dem Tool-Namen ("call get_cluster_status").
-    r"\b(?:call|invoke|use|using|checking)\b(?:(?!\.).){0,40}?\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b"
-    # Deutsch: Verb steht bei "werde X aufrufen" satzfinal nach dem Tool-Namen.
-    r"|\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b(?:(?!\.).){0,40}?\b(?:aufrufen|aufgerufen|nutzen|nutzt)\b"
-    r"|\btool[s]?\b",
-    re.IGNORECASE,
-)
-# Marker darf am Zeilenanfang stehen ODER direkt (auch ohne Leerzeichen) auf
-# Satzende-Interpunktion folgen — deckt den beobachteten "…overview.✅ Status…"-Fall
-# ab, bei dem das Modell keine Trennung zwischen Narration und Antwort einfügt.
-_CONTENT_START_RE = re.compile(r"(?:^|\n\s*|(?<=[.!?]))(?:#{1,6}\s|[✅⚠️❌]|\|.+\|)")
+_NUMBERED_PLAN_RE = re.compile(r"^\d+\.\s+i\s+will\b", re.IGNORECASE)
+_NUMBERED_LINE_RE = re.compile(r"^\d+\.\s+")
+# Some completions glue the real answer directly onto meta chatter with no
+# separator at all (e.g. "...overview.✅ Status ..."). Insert a newline before
+# the content-start marker so the per-line stripping below can still see it
+# as its own line instead of it being trapped inside an unrecognized sentence.
+_GLUED_CONTENT_START_RE = re.compile(r"(?<=[.!?])(?=[✅⚠️❌]|#{1,6}\s|\|.+\|)")
 
 
-def _strip_tool_plan_narration(response: str) -> str:
-    """Strips a leading "I will call X to check Y…" plan narration, if present.
+def _strip_agent_meta_chatter(text: str) -> str:
+    """Removes tool-call planning/retry meta text leaked into a final response.
 
-    Some completions leak the model's tool-calling plan as prose into the
-    final (no-more-tool_calls) message instead of only the user-facing
-    answer — the leaked prose sometimes runs directly into the real content
-    with no separating whitespace (e.g. "…overview.✅ Status …"). Only
-    strips when the response *starts* with narration language AND the
-    prefix mentions tools repeatedly, to avoid touching legitimate replies
-    that happen to open with an unrelated "I will …" sentence.
+    Some completions leak the model's tool-calling plan or self-correction
+    narration ("I will call X…", "⚠️ N consecutive tool errors. My previous
+    approach is wrong…") as prose into the final message instead of only the
+    user-facing answer — occasionally with no separating whitespace before
+    the real content, and occasionally repeated many times when the agent
+    retries the same failing tool call. Works line-by-line so it catches
+    every occurrence, not just a leading prefix. Originally Telegram-only
+    (modules_catalog/telegram/bot.py); shared here so the same protection
+    applies to every chat surface.
     """
-    if not response:
-        return response
-    head = response[:400]
-    if not (_NARRATION_VERB_RE.search(head) and _TOOL_MENTION_RE.search(head)):
-        return response
-    match = _CONTENT_START_RE.search(response)
-    if not match or match.start() == 0:
-        return response
-    prefix, remainder = response[: match.start()], response[match.start() :].lstrip()
-    if len(remainder) < 20:
-        return response
-    if len(_TOOL_MENTION_RE.findall(prefix)) < 2:
-        return response
-    logger.debug("Stripped tool-plan narration prefix (%d chars).", len(prefix))
-    return remainder
+    if not text:
+        return ""
+
+    text = _GLUED_CONTENT_START_RE.sub("\n", text)
+    lines = text.splitlines()
+    cleaned: list[str] = []
+    skip_numbered_plan = False
+
+    for line in lines:
+        stripped = line.strip()
+
+        if not stripped:
+            if cleaned and cleaned[-1] != "":
+                cleaned.append("")
+            skip_numbered_plan = False
+            continue
+
+        if _META_TRIGGER_RE.search(stripped):
+            skip_numbered_plan = True
+            continue
+
+        if _META_PREFIX_RE.match(stripped):
+            skip_numbered_plan = True
+            continue
+
+        if _NUMBERED_PLAN_RE.match(stripped):
+            skip_numbered_plan = True
+            continue
+
+        if skip_numbered_plan and _NUMBERED_LINE_RE.match(stripped):
+            continue
+
+        cleaned.append(line)
+        skip_numbered_plan = False
+
+    result = "\n".join(cleaned)
+    result = re.sub(r"\n{3,}", "\n\n", result)
+    return result.strip()
 
 
 def _is_unhelpful_web_search_response(response: str) -> bool:
