@@ -294,6 +294,12 @@
                                                             <div id="safeguard-picker" class="safeguard-picker" style="display:none;"></div>
                                                         </div>
                                                         <div class="chat-plus-row">
+                                                            <span class="chat-plus-label">Debug</span>
+                                                            <button class="btn-debug-mode debug-off" id="btn-debug-mode" type="button" data-action="toggleDebugMode" aria-label="Debug-Modus" title="Alle Zwischenschritte anzeigen (SafeGuard, Routing, Kontext, Pipeline)">
+                                                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="6" width="8" height="12" rx="4"></rect><path d="M8 10H4M8 14H4M16 10h4M16 14h4M10 6V4M14 6V4M9 3l1 2M15 3l-1 2"></path></svg>
+                                                            </button>
+                                                        </div>
+                                                        <div class="chat-plus-row">
                                                             <span class="chat-plus-label">Kontext</span>
                                                             <div class="ctx-indicator" id="ctx-indicator" title="">
                                                                 <svg class="ctx-ring" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
@@ -1453,7 +1459,10 @@ print('Hello, World!')"></textarea>
                                     </div>
                                 </div>
                                 <div class="form-row">
-                                    <label class="form-label" for="theme-editor-tokens-dark">Tokens Dark (JSON)</label>
+                                    <label class="form-label" for="theme-editor-tokens-dark" style="display:flex; justify-content:space-between; align-items:center;">
+                                        <span>Tokens Dark (JSON)</span>
+                                        <button type="button" class="btn btn-outline btn-sm" data-action="prefillThemeEditorTokens">Aktuelle Werte übernehmen</button>
+                                    </label>
                                     <textarea id="theme-editor-tokens-dark" class="form-input" rows="7" placeholder='{"--primary-color":"#3b8ee8"}'></textarea>
                                 </div>
                                 <div class="form-row">
@@ -1688,7 +1697,7 @@ print('Hello, World!')"></textarea>
                             </div>
                             <div id="alerts-content">
                                 <div id="alerts-empty-state" style="display:none; text-align:center; padding:2rem;">
-                                    <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="#22c55e" stroke-width="2" style="margin-bottom:1rem;">
+                                    <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="var(--status-ok)" stroke-width="2" style="margin-bottom:1rem;">
                                         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
                                         <polyline points="22 4 12 14.01 9 11.01"></polyline>
                                     </svg>
@@ -2025,7 +2034,7 @@ print('Hello, World!')"></textarea>
             <div class="modal-header">
                 <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="var(--error-color)"
                     stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
-                    style="margin-bottom: 0.5rem; filter: drop-shadow(0 0 8px rgba(220, 53, 69, 0.4));">
+                    style="margin-bottom: 0.5rem; filter: drop-shadow(0 0 8px rgba(var(--error-color-rgb), 0.4));">
                     <polyline points="3 6 5 6 21 6"></polyline>
                     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                     <line x1="10" y1="11" x2="10" y2="17"></line>
@@ -2079,17 +2088,17 @@ print('Hello, World!')"></textarea>
     <script src="/static/vendor/marked.min.js"></script>
     <script src="/static/core/registry.js?v=1"></script>
     <script src="/static/core/api.js?v=1"></script>
-    <script src="/static/app.js?v=89"></script>
+    <script src="/static/app.js?v=90"></script>
     <script src="/static/features/command_palette.js?v=1"></script>
-    <script src="/static/features/agents.js?v=3"></script>
+    <script src="/static/features/agents.js?v=4"></script>
     <script src="/static/features/workflows.js?v=4"></script>
     <script src="/static/features/scripting.js?v=3"></script>
     <script src="/static/features/tasks.js?v=2"></script>
     <script src="/static/features/marketplace.js?v=1"></script>
     <script src="/static/features/rbac.js?v=1"></script>
     <script src="/static/features/module_settings.js?v=1"></script>
-    <script src="/static/features/safeguard.js?v=1"></script>
-    <script src="/static/features/themes.js?v=1"></script>
+    <script src="/static/features/safeguard.js?v=2"></script>
+    <script src="/static/features/themes.js?v=2"></script>
     <script src="/static/features/speech_settings.js?v=1"></script>
     <script src="/static/features/llm_provider.js?v=1"></script>
     <script src="/static/features/image_gen.js?v=1"></script>
