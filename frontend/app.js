@@ -199,7 +199,7 @@ const Ninko = {
             this.sessionId = this.getSessionId();
             this.restoreTheme();
             this.restoreDebugMode();
-            this.loadBackgroundSettings();
+            await this.loadBackgroundSettings();
             await this.loadActiveTheme();
             this.applyActiveThemeTokens();
             await this.loadHistory();
