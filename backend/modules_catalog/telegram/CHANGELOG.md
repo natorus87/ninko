@@ -5,6 +5,36 @@ All notable changes to this module will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.7] - 2026-07-11
+
+### Security
+- `/pair <code>` no longer allows unauthorized users to approve pairing codes
+  (self-approval defeated the entire pairing flow). In-Telegram approval now
+  requires an already authorized user; dashboard approval is unchanged.
+- Unauthorized group messages are now ignored when no `allowed_chat_ids`
+  allowlist is configured. Previously any group member could issue commands as
+  soon as the bot was in the group.
+
+### Fixed
+- Tool-level safeguard confirmation (`confirm_tool_yes`) no longer crashes with
+  a `NameError` when the conversation was compacted during resume.
+- Network errors from httpx (ConnectError, ConnectTimeout, etc.) no longer kill
+  the polling loop permanently — they inherit from neither `OSError` nor
+  `asyncio.TimeoutError` and previously escaped every error handler (new shared
+  `_RECOVERABLE_ERRORS` tuple, also used by send/photo/voice paths, health
+  check, and status route).
+- `/clear` no longer suppresses history persistence of the next message: the
+  cleared-session flag is only set while a request is actually in flight.
+
+### Changed
+- All Telegram API calls share one persistent `httpx.AsyncClient` (created
+  lazily, closed on `stop()`) instead of opening a new TLS connection per call
+  — noticeable during streaming previews and typing indicators.
+- Connection config is fetched once per update instead of up to three times.
+- `/pairing/pending` uses Redis `SCAN` instead of blocking `KEYS`.
+- Marketplace catalog version aligned with the module version (was stale at
+  1.2.4).
+
 ## [1.2.6] - 2026-07-05
 
 ### Added
