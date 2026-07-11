@@ -20,19 +20,19 @@ The frontend is a modular, SPA-like interface built with vanilla JavaScript (no 
 - **index.html** — Main HTML structure with all tab panels, forms, and layout containers
 
 ### Core Application
-- **app.js** (~4.2k Zeilen) — Der Kern des globalen `Ninko`-Objekts:
+- **app.js** (~3.7k Zeilen) — Der Kern des globalen `Ninko`-Objekts:
   - Init/Boot, i18n-Loader, SVG-Icon-Library
   - Navigation/Tabs, Route-Persistence, Settings-Shell
   - Der komplette **Chat** (WS-Streaming, Tool-/Trace-Events, Markdown-Rendering,
     TTS-Wiedergabe, History, Export, Context-Indicator)
   - WebSocket, Command-Palette-Hooks, Resizing/Textarea-Utilities
   - Geteilte Helfer (`_escapeHtml`, `_esc`, `_ic`) und der State, den die Features nutzen
-  - Kleine init-nahe Reste: Legacy-LLM-Settings, Hintergrundfarben, Language, Memory/Secrets
+  - Kleine init-nahe Reste: Legacy-LLM-Settings, Language, Memory/Secrets
 
 ### Feature-Module (`features/*.js`)
 
 Früher war `app.js` ein ~8.400-Zeilen-Monolith. Große, klar abgegrenzte Panels
-wurden in **Feature-Module** ausgelagert (Stand: 15 Module). Muster:
+wurden in **Feature-Module** ausgelagert (Stand: 18 Module). Muster:
 
 ```js
 (function () {
@@ -80,6 +80,9 @@ wurden in **Feature-Module** ausgelagert (Stand: 15 Module). Muster:
 | `image_gen.js` | Bildgenerierungs-Provider |
 | `alerts.js` | Alert-Management (Laden, Tabelle, Auflösen, WS-Live-Update) |
 | `branding.js` | Dashboard-/Login-Branding, Asset-Upload, Live-Vorschau |
+| `background_settings.js` | Hintergrundfarben (Presets, Farb-Picker, Persistenz) |
+| `plugins.js` | Plugin-Verwaltung (ZIP-Upload, Deinstallation, Einzel-/Bulk-Update) |
+| `logs.js` | Log-Viewer (Polling, Filter, Detail-Panel, CSV-/JSON-Export) |
 
 **Einen weiteren Block extrahieren** (falls `app.js` weiter verkleinert wird):
 1. Zusammenhängenden Methodenblock per String-Match an den Methodengrenzen isolieren
