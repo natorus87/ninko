@@ -9,6 +9,23 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Chat trace steps ("Denkschritte") persistence** (`backend/schemas/chat.py`, `frontend/app.js`): a new `StepTraceEntry` model and `HistoryMessage.steps` field let the already-rendered trace-step wrapper of an AI reply be snapshotted (`_serializeStepsFromWrapper`) and saved alongside the message via `POST /api/chat/ui-history`. `loadHistoryEntry()` rebuilds the same wrapper (`_buildStaticStepsWrapper`) on reload/history-switch instead of losing the steps, which previously only lived in the live DOM. Snapshot fields are capped client-side to the schema's `max_length` limits so an oversized trace preview can no longer make the whole history save silently fail with 422.
+- **Debug-mode toggle for trace-step phases** (`frontend/app.js`, `frontend/style.css`, `frontend/index.html`): new quick-toggle button in the chat "+" menu (`toggleDebugMode`, persisted in `localStorage`). By default only `agent`/`llm`/`tool` phases and thinking-content are shown; `safeguard`/`routing`/`context`/`pipeline`/`request` phases (internal wiring) are hidden via `body.debug-mode .typing-step[data-phase=...]` CSS rules and only revealed with debug mode on.
+- **Theme editor "adopt current values" button** (`frontend/features/themes.js`): `prefillThemeEditorTokens()` reads a curated list of ~55 themeable CSS custom properties via `getComputedStyle` and writes them as JSON into the Tokens-Dark textarea, giving custom-theme authors a discoverable starting point instead of guessing token names.
+
+### Changed
+
+- **Theme system now reaches nearly all UI surfaces** (`frontend/style.css`, `frontend/index.html`, `frontend/features/agents.js`, `backend/themes/arctic/theme.json`): ~300 previously hardcoded hex/rgba color literals (hover/border/glass overlays, status/priority badges, SafeGuard category colors, mic-recording state, favorite-star, workflow-node-palette) were extracted into new CSS custom properties (`--fg-rgb`, `--shadow-rgb`, `--status-*`, `--sg-*`, `--wf-node-*`, `--accent-favorite`, `--error-color(-rgb)`, plus missing `--accent-*-rgb` companions) with the previous literal as default, so a theme switch now visibly re-skins those areas instead of only base colors. The built-in "Arctic Flow" theme was extended with a representative subset of the new tokens to demonstrate the wider reach.
+- **Chat "+" menu widened** (`frontend/style.css`): `.chat-plus-dropdown` from 296px to 328px.
+
+### Fixed
+
+- **Chat "+" menu popovers no longer clipped/forced into scroll** (`frontend/app.js`, `frontend/features/safeguard.js`, `frontend/style.css`): the SafeGuard-profile picker and module-picker dropdown were `position: absolute` descendants of `.chat-plus-dropdown`, whose `overflow-y: auto` either clipped them or turned the whole menu scrollable when they opened. New `_positionFloatingPopover()` helper detaches the popover to `document.body` and positions it `position: fixed` relative to its trigger (flipping upward when there isn't room below), immune to any ancestor's overflow. Outside-click and menu-close handling were updated so clicks inside a detached popover no longer prematurely close the parent "+" menu, and closing the "+" menu now cascades to close any open popover. Also fixed a resize-doesn't-reposition edge case (closes on `resize`) and a SafeGuard-picker outside-click listener that could be permanently consumed by an inner click.
+- **Built-in theme activation was broken in Docker/Kubernetes** (`backend/core/theme_manager.py`): `BUILTIN_THEMES_DIR` was computed as `<repo-root>/backend/themes`, which only exists in the local dev checkout — inside the container (`WORKDIR /app`, `COPY backend/ .`) the themes live at `/app/themes`, so every non-default theme returned 404 on activation. Now checks `/app/themes` first, falling back to the repo-root path for local/non-container runs.
+- **Missing/mismatched `role` after history reload** (`frontend/app.js`): the backend normalizes `role: "ai"` to `role: "assistant"` when persisting via `HistoryMessage`. `loadHistoryEntry()` replayed the raw stored role, so `role === 'ai'` checks (trace-step embedding, retry button, TTS button) silently stopped working for any message loaded from history. Now normalized back to `'ai'` at the replay call site.
+
 ## [1.3.9] – 2026-07-04
 
 ### Changed
