@@ -22,7 +22,7 @@ from modules.security.executor import (
     ScanTimeoutError,
     _sanitize_job_name,
 )
-from modules.security.scanner_adapter import ExecutionSpec, NetworkPolicy, VolumeMount
+from modules.security.scanner_adapter import ExecutionSpec, InitContainerSpec, NetworkPolicy, VolumeMount
 
 pytestmark = pytest.mark.unit
 
@@ -251,3 +251,82 @@ async def test_wait_and_collect_no_pod_found_raises_execution_error():
 
     with pytest.raises(ScanExecutionError):
         await executor._wait_and_collect("job-name", _spec(), time.monotonic())
+
+
+# ── Init-Container / Secret-Mounting (Task 7) ─────────────────────────────
+
+
+def test_job_manifest_without_init_containers_has_no_workspace_volume():
+    executor = _executor()
+    job = executor._build_job_manifest(_spec(), "job-name", "run-1")
+    pod_spec = job.spec.template.spec
+    assert pod_spec.init_containers is None
+    volume_names = {v.name for v in pod_spec.volumes}
+    assert "workspace" not in volume_names
+
+
+def test_job_manifest_with_init_container_shares_workspace_volume():
+    executor = _executor()
+    init = InitContainerSpec(
+        name="git-clone", image="alpine/git:2.45.2",
+        command=["git", "clone", "--depth", "1", "https://example.com/repo.git", "/workspace"],
+    )
+    spec = _spec(init_containers=[init])
+    job = executor._build_job_manifest(spec, "job-name", "run-1")
+    pod_spec = job.spec.template.spec
+
+    assert len(pod_spec.init_containers) == 1
+    assert pod_spec.init_containers[0].name == "git-clone"
+    assert pod_spec.init_containers[0].command == init.command
+
+    volume_names = {v.name for v in pod_spec.volumes}
+    assert "workspace" in volume_names
+
+    main_mount_paths = {m.mount_path for m in pod_spec.containers[0].volume_mounts}
+    init_mount_paths = {m.mount_path for m in pod_spec.init_containers[0].volume_mounts}
+    assert "/workspace" in main_mount_paths
+    assert "/workspace" in init_mount_paths
+
+
+def test_job_manifest_init_container_hardened_security_context():
+    executor = _executor()
+    init = InitContainerSpec(name="git-clone", image="alpine/git:2.45.2", command=["git", "clone", "x", "/workspace"])
+    spec = _spec(init_containers=[init])
+    job = executor._build_job_manifest(spec, "job-name", "run-1")
+    init_sc = job.spec.template.spec.init_containers[0].security_context
+    assert init_sc.allow_privilege_escalation is False
+    assert init_sc.run_as_non_root is True
+    assert init_sc.capabilities.drop == ["ALL"]
+
+
+def test_job_manifest_rejects_init_container_shell_string():
+    executor = _executor()
+    init = InitContainerSpec(name="bad", image="x", command=["git clone x; rm -rf /"])
+    spec = _spec(init_containers=[init])
+    with pytest.raises(ValueError):
+        executor._build_job_manifest(spec, "job-name", "run-1")
+
+
+def test_job_manifest_secret_refs_mounted_read_only():
+    executor = _executor()
+    spec = _spec(secret_refs=["kubeconfig-prod-cluster"])
+    job = executor._build_job_manifest(spec, "job-name", "run-1")
+    container = job.spec.template.spec.containers[0]
+    secret_mount = next(m for m in container.volume_mounts if m.mount_path == "/secrets/kubeconfig-prod-cluster")
+    assert secret_mount.read_only is True
+
+    secret_volume = next(v for v in job.spec.template.spec.volumes if v.name == "secret-kubeconfig-prod-cluster")
+    assert secret_volume.secret.secret_name == "kubeconfig-prod-cluster"
+
+
+def test_job_manifest_secret_refs_also_mounted_in_init_containers():
+    executor = _executor()
+    init = InitContainerSpec(
+        name="git-clone", image="alpine/git:2.45.2",
+        command=["git", "clone", "https://example.com/repo.git", "/workspace"],
+        env={"GIT_ASKPASS": "/secrets/git-token/askpass.sh"},
+    )
+    spec = _spec(secret_refs=["git-token"], init_containers=[init])
+    job = executor._build_job_manifest(spec, "job-name", "run-1")
+    init_mount_paths = {m.mount_path for m in job.spec.template.spec.init_containers[0].volume_mounts}
+    assert "/secrets/git-token" in init_mount_paths
