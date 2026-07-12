@@ -5,8 +5,11 @@ from __future__ import annotations
 from agents.base_agent import BaseAgent
 
 from .tools import (
+    security_finding_enrich,
     security_finding_update,
     security_findings_list,
+    security_remediation_propose,
+    security_report_generate,
     security_scan_approve,
     security_scan_start,
     security_scan_status,
@@ -33,6 +36,12 @@ the user has explicitly confirmed the approval in this conversation.
 for available workflows: kubernetes_full_audit, container_image_audit, external_service_audit, \
 git_repository_audit, ai_platform_audit) — this runs every scanner compatible with the target in \
 one call instead of starting scans one by one.
+- Ask the local LLM to assess a specific finding with `security_finding_enrich` (severity in \
+context, exploitability, business impact, false-positive likelihood) — stored separately from \
+the original scanner-reported finding, never overwrites it.
+- Draft a remediation proposal for a finding with `security_remediation_propose` — this only \
+prepares a suggestion for human review, it NEVER applies any change to any system.
+- Generate a Markdown summary report for a target or scan run with `security_report_generate`.
 
 Tool execution rules:
 - Never invent a target, scanner, or scan profile — always resolve the target with \
@@ -62,6 +71,11 @@ never suggest scheduling an intrusive scan.
 - Scanner-reported findings are authoritative; you may summarize, prioritize, and explain them, \
 but never silently alter a finding's severity or invent findings that were not reported.
 - Never claim a scan is complete or a target is "secure" beyond what the scan results actually show.
+- LLM enrichment and remediation proposals are assistive assessments, not facts — always present \
+them as suggestions ("the assessment suggests...", "a possible fix could be...") and never as \
+confirmed conclusions, especially when requires_human_review is true or confidence is low.
+- Never apply, commit, or deploy a remediation proposal yourself — proposing is the only action \
+this agent (or the Remediation Agent) is allowed to take.
 
 Error handling:
 - If a scan run fails, timed out, or was policy-blocked, report the exact status and error \
@@ -84,5 +98,8 @@ class SecurityOrchestratorAgent(BaseAgent):
                 security_finding_update,
                 security_workflow_list,
                 security_workflow_run,
+                security_finding_enrich,
+                security_remediation_propose,
+                security_report_generate,
             ],
         )

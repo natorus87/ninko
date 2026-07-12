@@ -13,6 +13,7 @@ from langchain_core.tools import tool
 from core.tool_schema import ToolResponse
 
 from . import db
+from .enrichment import enrich_finding
 from .models import FindingStatus, Severity, TriggerType
 from .policy import PolicyViolation
 from .scan_service import resume_after_approval, start_scan
@@ -24,10 +25,13 @@ TOOL_REGISTRY_OVERRIDES = {
     "security_scan_status": {"readonly": True},
     "security_findings_list": {"readonly": True},
     "security_workflow_list": {"readonly": True},
+    "security_report_generate": {"readonly": True},
     "security_scan_start": {"tier": "WRITE_SYSTEM"},
     "security_scan_approve": {"tier": "WRITE_SYSTEM"},
     "security_workflow_run": {"tier": "WRITE_SYSTEM"},
     "security_finding_update": {"tier": "WRITE_DATA"},
+    "security_finding_enrich": {"tier": "WRITE_DATA"},
+    "security_remediation_propose": {"tier": "WRITE_DATA"},
 }
 
 
@@ -170,3 +174,66 @@ async def security_finding_update(finding_id: str, status: str, remediation: str
     if updated is None:
         return str(ToolResponse.fail(f"Unbekanntes Finding: {finding_id}"))
     return str(ToolResponse.ok(updated.model_dump(mode="json")))
+
+
+@tool
+async def security_finding_enrich(finding_id: str) -> str:
+    """Ask the local LLM to assess a finding: effective severity, exploitability,
+    business impact, false-positive likelihood, and remediation steps. Stored
+    separately from the original finding — never overwrites scanner-reported
+    data. Use this before proposing remediation for a specific finding."""
+    try:
+        enrichment = await enrich_finding(finding_id)
+    except ValueError as exc:
+        return str(ToolResponse.fail(str(exc)))
+    return str(ToolResponse.ok(enrichment.model_dump(mode="json")))
+
+
+@tool
+async def security_remediation_propose(finding_id: str) -> str:
+    """Propose a concrete remediation (steps + optional patch) for a finding.
+    This NEVER applies any change — it only drafts a proposal for human review.
+    Internally runs the same LLM enrichment as security_finding_enrich and
+    returns just the remediation-relevant fields."""
+    try:
+        enrichment = await enrich_finding(finding_id)
+    except ValueError as exc:
+        return str(ToolResponse.fail(str(exc)))
+    return str(ToolResponse.ok({
+        "finding_id": finding_id,
+        "remediation_proposal": enrichment.remediation_proposal,
+        "patch_proposal": enrichment.patch_proposal,
+        "requires_human_review": enrichment.requires_human_review,
+        "confidence": enrichment.confidence,
+    }))
+
+
+@tool
+async def security_report_generate(target_id: str = "", scan_run_id: str = "") -> str:
+    """Generate a Markdown security report summarizing findings for a target or
+    a specific scan run, grouped by severity. Read-only, nothing is persisted —
+    the caller (chat/workflow) is responsible for delivering the report text."""
+    if not target_id and not scan_run_id:
+        return str(ToolResponse.fail("target_id oder scan_run_id ist erforderlich."))
+    findings = await db.list_findings(target_id=target_id or None, scan_run_id=scan_run_id or None, limit=500)
+    active = [f for f in findings if f.status not in (
+        FindingStatus.RESOLVED, FindingStatus.FALSE_POSITIVE, FindingStatus.RISK_ACCEPTED,
+    )]
+
+    lines = ["# Security Report", ""]
+    scope = f"Target: {target_id}" if target_id else f"Scan-Run: {scan_run_id}"
+    lines.append(scope)
+    lines.append(f"Aktive Findings: {len(active)} von {len(findings)} insgesamt")
+    lines.append("")
+
+    for severity in (Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW, Severity.INFO):
+        group = [f for f in active if f.severity == severity]
+        if not group:
+            continue
+        lines.append(f"## {severity.value.upper()} ({len(group)})")
+        for f in group:
+            cve = f" ({f.cve})" if f.cve else ""
+            lines.append(f"- **{f.title}**{cve} — {f.resource_identifier or f.location or 'n/a'} [{f.status.value}]")
+        lines.append("")
+
+    return str(ToolResponse.ok("\n".join(lines)))
