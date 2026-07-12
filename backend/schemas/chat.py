@@ -184,3 +184,4 @@ class UiHistoryEntry(BaseModel):
     # Optional: vom Frontend gesendete Backend-Session-ID. Wird in Redis
     # mitgespeichert, ist aber für die UI-Persistenz nicht zwingend nötig.
     sessionId: str | None = Field(default=None, max_length=256)
+    pinned: bool = False
