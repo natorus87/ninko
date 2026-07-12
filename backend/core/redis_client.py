@@ -177,6 +177,10 @@ class RedisClient:
         """Löscht einen Konversationseintrag."""
         await self._redis.hdel(self._ui_history_key(tenant_id), conv_id)
 
+    async def ui_history_clear_all(self, *, tenant_id: str = "default") -> None:
+        """Löscht den gesamten Chatverlauf eines Tenants."""
+        await self._redis.delete(self._ui_history_key(tenant_id))
+
     # ── Cache ──────────────────────────────────────────
     async def cache_set(self, key: str, value: Any, ttl: int = 300) -> None:
         """Setzt einen Cache-Eintrag mit TTL (Standard: 5 Min)."""
