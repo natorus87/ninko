@@ -811,11 +811,18 @@ print('Hello, World!')"></textarea>
                             </div>
                             <div class="setting-group">
                                 <h4>Skills</h4>
-                                <p class="setting-desc">Skills die für diesen Agenten verfügbar sind. ✓ = Modul-gebunden oder universal.</p>
+                                <p class="setting-desc">Skills, die dieser Agent nutzen darf. Angehakte Skills werden bei passender Anfrage automatisch in den System-Prompt eingebunden.</p>
                                 <div id="agent-skills-list" style="display:flex;flex-direction:column;gap:0.4rem;margin-bottom:0.75rem;">
                                     <p class="text-muted" style="font-size:0.82rem;">Lade Skills…</p>
                                 </div>
                                 <button class="btn btn-sm btn-outline" data-action="openSkillEditorFromAgent">+ Skill erstellen</button>
+                            </div>
+                            <div class="setting-group">
+                                <h4>Scripts</h4>
+                                <p class="setting-desc">Als Tool freigegebene Scripts aus dem Scripting-Modul, die dieser Agent aufrufen darf.</p>
+                                <div id="agent-scripts-list" class="agent-modules-checklist">
+                                    <p class="text-muted">Lade Scripts…</p>
+                                </div>
                             </div>
                             <div class="setting-group">
                                 <h4>Ausführungsschritte</h4>
@@ -2102,7 +2109,7 @@ print('Hello, World!')"></textarea>
     <script src="/static/core/api.js?v=1"></script>
     <script src="/static/app.js?v=93"></script>
     <script src="/static/features/command_palette.js?v=1"></script>
-    <script src="/static/features/agents.js?v=4"></script>
+    <script src="/static/features/agents.js?v=5"></script>
     <script src="/static/features/workflows.js?v=4"></script>
     <script src="/static/features/scripting.js?v=3"></script>
     <script src="/static/features/tasks.js?v=2"></script>
