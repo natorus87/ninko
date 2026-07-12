@@ -1,0 +1,36 @@
+{
+  "id": "template-security-ai-platform-audit",
+  "name": "Security: AI Platform Audit",
+  "description": "Fuehrt Garak-Sicherheitsprobing (Prompt Injection, Leakage) gegen einen LLM- oder OpenAI-kompatiblen Endpoint aus. Intrusiv — benoetigt explizite Freigabe.",
+  "nodes": [
+    {
+      "id": "node-1",
+      "type": "trigger",
+      "label": "Start",
+      "config": {"mode": "manual"},
+      "position": {"x": 100, "y": 100}
+    },
+    {
+      "id": "node-2",
+      "type": "agent",
+      "label": "AI Platform Audit",
+      "config": {
+        "agent_id": "security",
+        "prompt": "Run the security workflow 'ai_platform_audit' by calling security_workflow_run with workflow_id='ai_platform_audit' and target_id='{target_id}'. This uses an intrusive scanner and will likely pause with status waiting_for_approval — explain that to the user and report the scan_run_id they need to approve."
+      },
+      "position": {"x": 400, "y": 100}
+    },
+    {
+      "id": "node-3",
+      "type": "end",
+      "label": "Fertig",
+      "config": {"status": "succeeded"},
+      "position": {"x": 700, "y": 100}
+    }
+  ],
+  "edges": [
+    {"id": "edge-1", "source_id": "node-1", "target_id": "node-2"},
+    {"id": "edge-2", "source_id": "node-2", "target_id": "node-3"}
+  ],
+  "variables": [{"name": "target_id", "value": ""}]
+}

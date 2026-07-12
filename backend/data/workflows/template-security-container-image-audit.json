@@ -1,0 +1,36 @@
+{
+  "id": "template-security-container-image-audit",
+  "name": "Security: Container Image Audit",
+  "description": "Fuehrt einen Trivy-Vulnerability-Scan gegen ein Container-Image aus.",
+  "nodes": [
+    {
+      "id": "node-1",
+      "type": "trigger",
+      "label": "Start",
+      "config": {"mode": "manual"},
+      "position": {"x": 100, "y": 100}
+    },
+    {
+      "id": "node-2",
+      "type": "agent",
+      "label": "Container Image Audit",
+      "config": {
+        "agent_id": "security",
+        "prompt": "Run the security workflow 'container_image_audit' by calling security_workflow_run with workflow_id='container_image_audit' and target_id='{target_id}'. Summarize the resulting findings by severity."
+      },
+      "position": {"x": 400, "y": 100}
+    },
+    {
+      "id": "node-3",
+      "type": "end",
+      "label": "Fertig",
+      "config": {"status": "succeeded"},
+      "position": {"x": 700, "y": 100}
+    }
+  ],
+  "edges": [
+    {"id": "edge-1", "source_id": "node-1", "target_id": "node-2"},
+    {"id": "edge-2", "source_id": "node-2", "target_id": "node-3"}
+  ],
+  "variables": [{"name": "target_id", "value": ""}]
+}

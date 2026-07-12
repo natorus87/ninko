@@ -1,0 +1,36 @@
+{
+  "id": "template-security-external-service-audit",
+  "name": "Security: External Service Audit",
+  "description": "Fuehrt Nmap-Discovery, TLS-Konfigurationspruefung (testssl.sh) und Nuclei-Safe-Templates gegen einen erlaubten Host aus.",
+  "nodes": [
+    {
+      "id": "node-1",
+      "type": "trigger",
+      "label": "Start",
+      "config": {"mode": "manual"},
+      "position": {"x": 100, "y": 100}
+    },
+    {
+      "id": "node-2",
+      "type": "agent",
+      "label": "External Service Audit",
+      "config": {
+        "agent_id": "security",
+        "prompt": "Run the security workflow 'external_service_audit' by calling security_workflow_run with workflow_id='external_service_audit' and target_id='{target_id}'. Summarize the resulting findings by severity."
+      },
+      "position": {"x": 400, "y": 100}
+    },
+    {
+      "id": "node-3",
+      "type": "end",
+      "label": "Fertig",
+      "config": {"status": "succeeded"},
+      "position": {"x": 700, "y": 100}
+    }
+  ],
+  "edges": [
+    {"id": "edge-1", "source_id": "node-1", "target_id": "node-2"},
+    {"id": "edge-2", "source_id": "node-2", "target_id": "node-3"}
+  ],
+  "variables": [{"name": "target_id", "value": ""}]
+}
