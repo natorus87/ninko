@@ -1110,6 +1110,64 @@ select {
     transform: translateY(-1px);
 }
 
+.history-item-pin {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    background: none;
+    border: none;
+    padding: 4px;
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    line-height: 1;
+    transition: opacity var(--transition-fast), color var(--transition-fast), background var(--transition-fast), transform var(--transition-fast);
+}
+
+.history-item:hover .history-item-pin,
+.history-item-pin.is-pinned {
+    opacity: 1;
+}
+
+.history-item-pin:hover {
+    color: var(--accent-favorite);
+    background: rgba(var(--fg-rgb), 0.08);
+    transform: translateY(-1px);
+}
+
+.history-item-pin.is-pinned {
+    color: var(--accent-favorite);
+}
+
+.sidebar-history-pinned {
+    border-bottom: 1px solid var(--border-soft);
+    margin-bottom: 0.3rem;
+    padding-bottom: 0.3rem;
+}
+
+.history-clear-all-btn {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    padding: 4px;
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: color var(--transition-fast), background var(--transition-fast), transform var(--transition-fast);
+}
+
+.history-clear-all-btn:hover {
+    color: #e05c5c;
+    background: rgba(var(--error-color-rgb), 0.12);
+    transform: translateY(-1px);
+}
+
 .history-empty {
     text-align: center;
     padding: 2rem 1rem;
