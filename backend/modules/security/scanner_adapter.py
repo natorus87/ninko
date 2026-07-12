@@ -47,6 +47,28 @@ class VolumeMount(BaseModel):
     read_only: bool = True
 
 
+class InitContainerSpec(BaseModel):
+    """Vorbereitungsschritt vor dem eigentlichen Scanner-Container (z.B. Git-Checkout).
+
+    Laeuft im selben Pod, teilt sich das `workspace`-Volume mit dem Hauptcontainer.
+    Gleiche Regel wie ExecutionSpec.command: Argument-Array, kein Shell-String.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    image: str
+    command: list[str]
+    env: dict[str, str] = Field(default_factory=dict)
+
+    def assert_no_shell_string(self) -> None:
+        if len(self.command) == 1 and any(ch in self.command[0] for ch in (";", "|", "&&", "$(", "`")):
+            raise ValueError(
+                f"InitContainerSpec({self.name}).command sieht wie ein Shell-String aus — "
+                "Argument-Array erforderlich."
+            )
+
+
 class ExecutionSpec(BaseModel):
     """Vollstaendig validierte, deterministisch aus Adapter-Logik gebaute Job-Spezifikation.
 
@@ -73,6 +95,8 @@ class ExecutionSpec(BaseModel):
     service_account: str = "ninko-security-scanner"
     output_paths: list[str] = Field(default_factory=list)
     max_output_bytes: int = 5_000_000
+    init_containers: list[InitContainerSpec] = Field(default_factory=list)
+    workspace_mount_path: str = "/workspace"
 
     def assert_no_shell_string(self) -> None:
         """Verteidigungslinie: command darf niemals ein einzelnes Shell-String-Element sein."""
@@ -81,6 +105,8 @@ class ExecutionSpec(BaseModel):
                 "ExecutionSpec.command sieht wie ein Shell-String aus — "
                 "Argument-Array erforderlich, kein konkateniertes Kommando."
             )
+        for init in self.init_containers:
+            init.assert_no_shell_string()
 
 
 class ScannerExecutionResult(BaseModel):
