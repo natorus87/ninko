@@ -97,6 +97,46 @@ class K8sJobExecutor:
             )
             volumes.append(k8s_client.V1Volume(name=vol_name, empty_dir=k8s_client.V1EmptyDirVolumeSource()))
 
+        # Secret-Refs: jeder Eintrag ist der Name eines bereits im Cluster existierenden
+        # K8s-Secrets (z.B. Kubeconfig fuer Kubescape, Access-Token fuer privaten Git-Clone),
+        # read-only unter /secrets/<name> gemountet. Ninko legt diese Secrets NICHT selbst
+        # an (kein Vault-Sync in dieser Phase) — Administratoren muessen sie vorab im
+        # ninko-security-Namespace anlegen. Dokumentierte MVP-Limitation.
+        secret_mounts = []
+        for secret_name in spec.secret_refs:
+            vol_name = f"secret-{secret_name}"[:63]
+            volumes.append(k8s_client.V1Volume(
+                name=vol_name, secret=k8s_client.V1SecretVolumeSource(secret_name=secret_name)
+            ))
+            secret_mounts.append(
+                k8s_client.V1VolumeMount(name=vol_name, mount_path=f"/secrets/{secret_name}", read_only=True)
+            )
+        volume_mounts.extend(secret_mounts)
+
+        # Workspace-Volume: geteilt zwischen Init-Containern (z.B. Git-Checkout) und dem
+        # Hauptcontainer, nur angelegt wenn tatsaechlich Init-Container definiert sind.
+        init_containers: list[k8s_client.V1Container] = []
+        if spec.init_containers:
+            volumes.append(
+                k8s_client.V1Volume(name="workspace", empty_dir=k8s_client.V1EmptyDirVolumeSource())
+            )
+            workspace_mount = k8s_client.V1VolumeMount(name="workspace", mount_path=spec.workspace_mount_path)
+            volume_mounts.append(workspace_mount)
+            for init in spec.init_containers:
+                init_containers.append(k8s_client.V1Container(
+                    name=init.name,
+                    image=init.image,
+                    command=init.command,
+                    env=[k8s_client.V1EnvVar(name=k, value=v) for k, v in init.env.items()] or None,
+                    security_context=k8s_client.V1SecurityContext(
+                        allow_privilege_escalation=False,
+                        read_only_root_filesystem=False,  # git braucht Schreibzugriff im Workspace
+                        run_as_non_root=True,
+                        capabilities=k8s_client.V1Capabilities(drop=["ALL"]),
+                    ),
+                    volume_mounts=[workspace_mount, *secret_mounts],
+                ))
+
         container = k8s_client.V1Container(
             name="scanner",
             image=spec.container_image,
@@ -127,6 +167,7 @@ class K8sJobExecutor:
                 run_as_user=65532,
                 seccomp_profile=k8s_client.V1SeccompProfile(type="RuntimeDefault"),
             ),
+            init_containers=init_containers or None,
             containers=[container],
             volumes=volumes,
         )
