@@ -342,3 +342,76 @@ async def test_second_scan_resolves_findings_absent_in_new_run(fake_registry, se
     cve1 = next(f for f in findings if f.scanner_finding_id == "CVE-1")
     assert cve1.status == FindingStatus.NEW
     assert cve1.occurrence_count == 2
+
+
+# ── queue_scan / execute_queued_run (Task 10: Background-Task-Split) ──────
+
+
+@pytest.mark.asyncio
+async def test_queue_scan_creates_run_without_executing(fake_registry, security_db, redis_patch):
+    from modules.security.scan_service import queue_scan
+
+    patch_fn, _ = fake_registry
+    adapter = _FakeAdapter("trivy", findings=[])
+    patch_fn("trivy", adapter)
+    target = await security_db.create_target(_target())
+
+    run = await queue_scan(target_id=target.id, scanner_id="trivy", profile_id="passive")
+    assert run.status == ScanRunStatus.QUEUED
+    assert adapter.execute_called is False
+
+
+@pytest.mark.asyncio
+async def test_execute_queued_run_runs_the_scan(fake_registry, security_db, redis_patch):
+    from modules.security.scan_service import execute_queued_run, queue_scan
+
+    patch_fn, _ = fake_registry
+    adapter = _FakeAdapter("trivy", findings=[])
+    patch_fn("trivy", adapter)
+    target = await security_db.create_target(_target())
+
+    queued = await queue_scan(target_id=target.id, scanner_id="trivy", profile_id="passive")
+    assert adapter.execute_called is False
+
+    completed = await execute_queued_run(queued.id)
+    assert completed.status == ScanRunStatus.COMPLETED
+    assert adapter.execute_called is True
+
+
+@pytest.mark.asyncio
+async def test_execute_queued_run_rejects_unknown_run(fake_registry, security_db, redis_patch):
+    from modules.security.scan_service import execute_queued_run
+
+    with pytest.raises(PolicyViolation, match="Unbekannter Scan-Run"):
+        await execute_queued_run("does-not-exist")
+
+
+@pytest.mark.asyncio
+async def test_execute_queued_run_rejects_already_executed_run(fake_registry, security_db, redis_patch):
+    from modules.security.scan_service import execute_queued_run, queue_scan
+
+    patch_fn, _ = fake_registry
+    patch_fn("trivy", _FakeAdapter("trivy", findings=[]))
+    target = await security_db.create_target(_target())
+
+    queued = await queue_scan(target_id=target.id, scanner_id="trivy", profile_id="passive")
+    await execute_queued_run(queued.id)
+
+    with pytest.raises(PolicyViolation, match="nicht QUEUED"):
+        await execute_queued_run(queued.id)
+
+
+@pytest.mark.asyncio
+async def test_start_scan_still_fully_synchronous_after_refactor(fake_registry, security_db, redis_patch):
+    """Regressionsschutz: start_scan() (Tool-/Scheduler-Pfad) muss weiterhin in
+    einem einzigen await Ergebnis+Ausfuehrung liefern."""
+    from modules.security.scan_service import start_scan
+
+    patch_fn, _ = fake_registry
+    adapter = _FakeAdapter("trivy", findings=[])
+    patch_fn("trivy", adapter)
+    target = await security_db.create_target(_target())
+
+    run = await start_scan(target_id=target.id, scanner_id="trivy", profile_id="passive")
+    assert run.status == ScanRunStatus.COMPLETED
+    assert adapter.execute_called is True
