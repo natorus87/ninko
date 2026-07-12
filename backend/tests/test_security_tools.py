@@ -18,6 +18,8 @@ from modules.security.tools import (
     security_scan_start,
     security_scan_status,
     security_target_resolve,
+    security_workflow_list,
+    security_workflow_run,
 )
 
 pytestmark = pytest.mark.unit
@@ -98,3 +100,57 @@ async def test_security_finding_update_success_returns_updated_finding():
         raw = await security_finding_update.ainvoke({"finding_id": "f1", "status": "resolved"})
     data = _ok(raw)
     assert data["status"] == "resolved"
+
+
+@pytest.mark.asyncio
+async def test_security_workflow_list_returns_all_five():
+    raw = await security_workflow_list.ainvoke({})
+    data = _ok(raw)
+    assert len(data) == 5
+    assert {"id", "name", "description", "target_types", "scanners"} <= set(data[0].keys())
+
+
+@pytest.mark.asyncio
+async def test_security_workflow_run_unknown_target_returns_failure():
+    with patch("modules.security.tools.db.get_target", AsyncMock(return_value=None)):
+        raw = await security_workflow_run.ainvoke({"workflow_id": "container_image_audit", "target_id": "nope"})
+    _fail(raw)
+
+
+@pytest.mark.asyncio
+async def test_security_workflow_run_policy_violation_returns_failure():
+    from modules.security.models import SecurityTarget, TargetType
+
+    target = SecurityTarget(name="t", target_type=TargetType.URL, locator="https://example.com")
+    with (
+        patch("modules.security.tools.db.get_target", AsyncMock(return_value=target)),
+        patch(
+            "modules.security.tools.run_security_workflow",
+            AsyncMock(side_effect=PolicyViolation("Target-Typ passt nicht")),
+        ),
+    ):
+        raw = await security_workflow_run.ainvoke({"workflow_id": "container_image_audit", "target_id": "t1"})
+    result = _fail(raw)
+    assert "Target-Typ passt nicht" in result
+
+
+@pytest.mark.asyncio
+async def test_security_workflow_run_success_summarizes_steps():
+    from types import SimpleNamespace
+
+    from modules.security.models import SecurityTarget, TargetType
+
+    target = SecurityTarget(name="t", target_type=TargetType.CONTAINER_IMAGE, locator="img:1")
+    fake_run = SimpleNamespace(id="run-1", status=SimpleNamespace(value="completed"), finding_count=2)
+    fake_result = SimpleNamespace(
+        workflow_id="container_image_audit", target_id="t1", total_findings=2,
+        steps=[SimpleNamespace(scanner_id="trivy", run=fake_run, skipped_reason=None)],
+    )
+    with (
+        patch("modules.security.tools.db.get_target", AsyncMock(return_value=target)),
+        patch("modules.security.tools.run_security_workflow", AsyncMock(return_value=fake_result)),
+    ):
+        raw = await security_workflow_run.ainvoke({"workflow_id": "container_image_audit", "target_id": "t1"})
+    data = _ok(raw)
+    assert data["total_findings"] == 2
+    assert data["steps"][0]["scan_run_id"] == "run-1"
