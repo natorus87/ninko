@@ -197,6 +197,13 @@ class DynamicAgentPool:
         module_names = set((agent_def or {}).get("module_names", []) or [])
         if module_names & _CLI_CAPABLE_MODULES:
             tools.insert(0, execute_cli_command)
+
+        script_tool_names = set((agent_def or {}).get("script_tool_names", []) or [])
+        if script_tool_names:
+            from agents.script_tools import make_scoped_script_tools
+
+            tools.extend(make_scoped_script_tools(frozenset(script_tool_names)))
+
         return tools
 
     def _instantiate(self, agent_def: dict) -> "BaseAgent":
