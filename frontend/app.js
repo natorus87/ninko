@@ -1809,13 +1809,20 @@ const Ninko = {
     },
 
     async clearAllHistory() {
-        if (!this.chatHistory.length) return;
+        // Pinned entries are intentionally kept — "clear all" means "clear
+        // everything except what I pinned", both here and server-side.
+        if (!this.chatHistory.some(h => !h.pinned)) return;
         if (!await this.confirm(t('history.deleteAllConfirm'))) return;
         try {
             await fetch('/api/chat/ui-history', { method: 'DELETE' });
         } catch (err) { console.warn('clearAllHistory failed', err); }
-        this.chatHistory = [];
-        this.newChat();
+        const currentIsPinned = this.chatHistory.some(h => h.id === this.currentHistoryId && h.pinned);
+        this.chatHistory = this.chatHistory.filter(h => h.pinned);
+        if (currentIsPinned) {
+            this.renderHistory();
+        } else {
+            this.newChat();
+        }
     },
 
     _renderHistoryItem(h) {
