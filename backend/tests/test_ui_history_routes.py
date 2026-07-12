@@ -39,7 +39,7 @@ def client(redis_mock, monkeypatch):
     return TestClient(app)
 
 
-def test_delete_all_ui_history_clears_the_whole_tenant_history(client, redis_mock):
+def test_delete_all_ui_history_delegates_to_clear_all(client, redis_mock):
     res = client.delete("/api/chat/ui-history")
 
     assert res.status_code == 200
