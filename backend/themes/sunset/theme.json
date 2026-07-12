@@ -58,7 +58,11 @@
     "--sg-injection-rgb": "129, 140, 248",
     "--wf-node-agent": "#fb923c",
     "--wf-node-agent-rgb": "251, 146, 60",
-    "--accent-favorite": "#facc15"
+    "--accent-favorite": "#facc15",
+    "--bg-tint-rgb": "28, 11, 5",
+    "--bg-panel-strong-rgb": "46, 32, 29",
+    "--bg-card-start-rgb": "46, 32, 29",
+    "--bg-card-end-rgb": "28, 11, 5"
   },
   "tokens_light": {
     "--bg-main": "#efeeee",
@@ -113,6 +117,10 @@
     "--sg-injection-rgb": "79, 70, 229",
     "--wf-node-agent": "#dd8035",
     "--wf-node-agent-rgb": "221, 128, 53",
-    "--accent-favorite": "#ca8a04"
+    "--accent-favorite": "#ca8a04",
+    "--bg-tint-rgb": "242, 241, 240",
+    "--bg-panel-strong-rgb": "213, 210, 207",
+    "--bg-card-start-rgb": "224, 221, 218",
+    "--bg-card-end-rgb": "242, 241, 240"
   }
 }
