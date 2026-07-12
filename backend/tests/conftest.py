@@ -59,6 +59,7 @@ def mock_redis():
     redis_mock.ui_history_get_all = AsyncMock(return_value=[])
     redis_mock.ui_history_save = AsyncMock(return_value=True)
     redis_mock.ui_history_delete = AsyncMock(return_value=True)
+    redis_mock.ui_history_clear_all = AsyncMock(return_value=True)
     return redis_mock
 
 
