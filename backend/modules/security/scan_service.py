@@ -25,7 +25,7 @@ from .scanner_registry import get_scan_profile, get_scanner_registry
 logger = logging.getLogger("ninko.modules.security.scan_service")
 
 
-async def start_scan(
+async def queue_scan(
     *,
     target_id: str,
     scanner_id: str,
@@ -37,10 +37,12 @@ async def start_scan(
     agent_capabilities: list[str] | None = None,
     denied_capabilities: list[str] | None = None,
 ) -> ScanRun:
-    """Startet einen Scan. Wirft PolicyViolation, wenn irgendeine Regel verletzt
-    wird (Target unbekannt, Scanner/Profil nicht erlaubt, Scope verletzt, fehlende
-    Capability). Bei intrusive Profilen wird der Run auf WAITING_FOR_APPROVAL
-    gesetzt und NICHT ausgefuehrt, bis `resume_after_approval` aufgerufen wird.
+    """Validiert Policy und legt den ScanRun an (QUEUED oder WAITING_FOR_APPROVAL),
+    fuehrt aber NICHT aus. Fuer die API-Schicht: schnelle, synchrone Antwort mit
+    einer Run-ID, die eigentliche Ausfuehrung laeuft per Background-Task ueber
+    `execute_queued_run()` — ein HTTP-Request darf nicht bis zum Scan-Timeout
+    (bis zu mehreren Minuten) blockieren. Tools/Scheduler nutzen stattdessen
+    `start_scan()`, das beides synchron in einem Aufruf erledigt.
     """
     target = await db.get_target(target_id, tenant_id=tenant_id)
     if target is None:
@@ -76,8 +78,49 @@ async def start_scan(
             requested_by=requested_by,
         )
         logger.info("Scan-Run %s wartet auf Freigabe (intrusive Profil %s)", run.id, profile_id)
+
+    return run
+
+
+async def execute_queued_run(run_id: str, *, tenant_id: str = "") -> ScanRun:
+    """Fuehrt einen zuvor per `queue_scan()` angelegten QUEUED-Run aus.
+    Fuer WAITING_FOR_APPROVAL-Runs siehe `resume_after_approval()` stattdessen."""
+    run = await db.get_scan_run(run_id, tenant_id=tenant_id)
+    if run is None:
+        raise PolicyViolation(f"Unbekannter Scan-Run: {run_id}")
+    if run.status != ScanRunStatus.QUEUED:
+        raise PolicyViolation(f"Scan-Run {run_id} ist nicht QUEUED (Status: {run.status.value}).")
+    target = await db.get_target(run.target_id, tenant_id=tenant_id)
+    if target is None:
+        raise PolicyViolation(f"Target {run.target_id} existiert nicht mehr.")
+    return await _execute_scan(run, target)
+
+
+async def start_scan(
+    *,
+    target_id: str,
+    scanner_id: str,
+    profile_id: str,
+    parameters: dict | None = None,
+    requested_by: str = "",
+    trigger_type: TriggerType = TriggerType.MANUAL,
+    tenant_id: str = "",
+    agent_capabilities: list[str] | None = None,
+    denied_capabilities: list[str] | None = None,
+) -> ScanRun:
+    """Startet einen Scan vollstaendig synchron (Policy + Ausfuehrung in einem
+    Aufruf). Fuer Agent-Tools und den Scheduler, wo Blockieren bis zum Scan-Ende
+    akzeptabel/erwuenscht ist. Die HTTP-API nutzt stattdessen `queue_scan()` +
+    Background-Task (siehe `execute_queued_run`)."""
+    run = await queue_scan(
+        target_id=target_id, scanner_id=scanner_id, profile_id=profile_id, parameters=parameters,
+        requested_by=requested_by, trigger_type=trigger_type, tenant_id=tenant_id,
+        agent_capabilities=agent_capabilities, denied_capabilities=denied_capabilities,
+    )
+    if run.status == ScanRunStatus.WAITING_FOR_APPROVAL:
         return run
 
+    target = await db.get_target(target_id, tenant_id=tenant_id)
     return await _execute_scan(run, target)
 
 
