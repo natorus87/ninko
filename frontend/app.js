@@ -1006,6 +1006,7 @@ const Ninko = {
 
     _doSwitchTab(tabId) {
         const automationTabs = ['automatisierung', 'scripting', 'modules'];
+        const previousTab = this.activeTab;
 
         // Deactivate all nav tabs and tab panels
         document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
@@ -1027,6 +1028,13 @@ const Ninko = {
         if (panel) panel.classList.add('active');
 
         this.activeTab = tabId;
+
+        // Returning to chat from Automatisierung (incl. its tasks/agents/skills/
+        // workflows sub-tabs, which all route through 'automatisierung') resets
+        // to "Neuer Chat" instead of resuming whatever history entry was open.
+        if (tabId === 'chat' && previousTab === 'automatisierung') {
+            this.newChat();
+        }
 
         // Show/hide sidebar history section (only in chat tab)
         const historySection = document.getElementById('sidebar-history-section');
@@ -1721,6 +1729,7 @@ const Ninko = {
             messages: [],
             createdAt: Date.now(),
             updatedAt: Date.now(),
+            pinned: false,
         };
         this.chatHistory.unshift(conversation);
         if (this.chatHistory.length > 50) this.chatHistory.pop();
@@ -1791,31 +1800,71 @@ const Ninko = {
         this.renderHistory();
     },
 
-    renderHistory() {
-        const list = document.getElementById('history-list');
-        if (!list) return;
+    async togglePinHistoryEntry(id) {
+        const entry = this.chatHistory.find(h => h.id === id);
+        if (!entry) return;
+        entry.pinned = !entry.pinned;
+        await this.saveHistory(entry);
+        this.renderHistory();
+    },
 
-        if (this.chatHistory.length === 0) {
-            list.innerHTML = `<div class="history-empty">${t('chat.noHistory')}</div>`;
-            return;
-        }
+    async clearAllHistory() {
+        if (!this.chatHistory.length) return;
+        if (!await this.confirm(t('history.deleteAllConfirm'))) return;
+        try {
+            await fetch('/api/chat/ui-history', { method: 'DELETE' });
+        } catch (err) { console.warn('clearAllHistory failed', err); }
+        this.chatHistory = [];
+        this.newChat();
+    },
 
-        list.innerHTML = this.chatHistory.map(h => {
-            const historyId = this._escapeHtml(h.id);
-            const plainTitle = this._stripHistoryDecorations(h.title || '');
-            const historyTitle = this._escapeHtml(plainTitle);
-            const historyTitleAttr = this._escapeAttr(h.title);
-            return `
+    _renderHistoryItem(h) {
+        const historyId = this._escapeHtml(h.id);
+        const plainTitle = this._stripHistoryDecorations(h.title || '');
+        const historyTitle = this._escapeHtml(plainTitle);
+        const historyTitleAttr = this._escapeAttr(h.title);
+        const isPinned = !!h.pinned;
+        const pinTitle = this._escapeAttr(isPinned ? t('history.unpinTitle') : t('history.pinTitle'));
+        return `
             <div class="history-item ${h.id === this.currentHistoryId ? 'active' : ''}"
                 data-action="loadHistoryEntry" data-args="${JSON.stringify([historyId]).replace(/\"/g, '&quot;')}"
                 title="${historyTitleAttr}">
                 <span class="history-item-text">${historyTitle}</span>
+                <button class="history-item-pin${isPinned ? ' is-pinned' : ''}" data-action="togglePinHistoryEntry" data-args="${JSON.stringify([historyId]).replace(/\"/g, '&quot;')}" data-stop-propagation="true" title="${pinTitle}">★</button>
                 <button class="history-item-delete" data-action="deleteHistoryEntry" data-args="${JSON.stringify([historyId]).replace(/\"/g, '&quot;')}" data-stop-propagation="true" title="Chat löschen">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m5 0V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
                 </button>
             </div>
         `;
-        }).join('');
+    },
+
+    renderHistory() {
+        const pinnedContainer = document.getElementById('sidebar-history-pinned');
+        const pinnedList = document.getElementById('history-list-pinned');
+        const list = document.getElementById('history-list');
+        if (!list) return;
+
+        const pinned = this.chatHistory.filter(h => h.pinned);
+        const unpinned = this.chatHistory.filter(h => !h.pinned);
+
+        if (pinnedContainer && pinnedList) {
+            if (pinned.length) {
+                pinnedContainer.style.display = '';
+                pinnedList.innerHTML = pinned.map(h => this._renderHistoryItem(h)).join('');
+            } else {
+                pinnedContainer.style.display = 'none';
+                pinnedList.innerHTML = '';
+            }
+        }
+
+        if (unpinned.length === 0) {
+            list.innerHTML = pinned.length === 0
+                ? `<div class="history-empty">${t('chat.noHistory')}</div>`
+                : '';
+            return;
+        }
+
+        list.innerHTML = unpinned.map(h => this._renderHistoryItem(h)).join('');
     },
 
     _stripHistoryDecorations(title) {
