@@ -631,29 +631,58 @@
             try {
                 const res = await fetch('/api/skills/');
                 const skills = await res.json();
-                const relevant = skills.filter(s => {
-                    const modules = Array.isArray(s.modules) ? s.modules : [];
-                    return !modules.length || modules.includes(agentName);
-                });
-                if (!relevant.length) {
+                // Für den Speichern-Diff gebraucht (welche Skills hatten diesen
+                // Agentennamen schon in ihrem modules-Feld, bevor der Nutzer
+                // Checkboxen umgeschaltet hat).
+                this._agentSkillsCatalog = skills;
+                if (!skills.length) {
                     container.innerHTML = `<p class="text-muted" style="font-size:0.82rem;">${this._escapeHtml(t('skill.none'))}</p>`;
                     return;
                 }
-                container.innerHTML = relevant.map(s => `
+                container.innerHTML = skills.map(s => {
+                    const modules = Array.isArray(s.modules) ? s.modules : [];
+                    const checked = !!agentName && modules.includes(agentName);
+                    return `
                     <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;padding:0.3rem 0.5rem;border-radius:4px;background:var(--bg-body);border:1px solid var(--border-color);">
-                        <div style="min-width:0;">
-                            <span style="font-size:0.82rem;color:var(--text-color);font-weight:500;">${this._escapeHtml(s.name)}</span>
-                            ${s.builtin ? '<span class="status-badge status-unknown" style="font-size:0.68rem;margin-left:4px;">built-in</span>' : ''}
-                            <div style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${this._escapeHtml(s.description || '')}</div>
-                        </div>
+                        <label style="display:flex;align-items:center;gap:0.5rem;min-width:0;cursor:pointer;flex:1;">
+                            <input type="checkbox" class="agent-skill-checkbox" value="${this._escapeHtml(s.name)}"${checked ? ' checked' : ''}>
+                            <div style="min-width:0;">
+                                <span style="font-size:0.82rem;color:var(--text-color);font-weight:500;">${this._escapeHtml(s.name)}</span>
+                                ${s.builtin ? '<span class="status-badge status-unknown" style="font-size:0.68rem;margin-left:4px;">built-in</span>' : ''}
+                                <div style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${this._escapeHtml(s.description || '')}</div>
+                            </div>
+                        </label>
                         <button class="btn-icon btn-icon-sm" data-action="edit-agent-skill" data-skill-name="${this._escapeHtml(s.name)}" title="Bearbeiten" style="flex-shrink:0;">${this._ic.edit}</button>
                     </div>
-                `).join('');
+                `;
+                }).join('');
                 container.querySelectorAll('[data-action="edit-agent-skill"]').forEach(btn => {
                     btn.addEventListener('click', () => this.openSkillEditorFromAgentWithName(btn.dataset.skillName || ''));
                 });
             } catch {
                 container.innerHTML = `<p class="text-muted" style="font-size:0.82rem;">${this._escapeHtml(t('common.loadError'))}</p>`;
+            }
+        },
+
+        async _populateAgentScripts() {
+            const container = document.getElementById('agent-scripts-list');
+            if (!container) return;
+            try {
+                const res = await fetch('/api/scripting/tools');
+                if (!res.ok) throw new Error(res.statusText);
+                const scripts = await res.json();
+                if (!scripts.length) {
+                    container.innerHTML = '<p class="text-muted">Keine Tool-Scripts vorhanden. Lege im Scripting-Modul ein Script an und aktiviere "Als Tool verfügbar".</p>';
+                    return;
+                }
+                container.innerHTML = scripts.map(s => `
+                    <label class="module-checkbox-item">
+                        <input type="checkbox" id="agent-script-${this._escapeHtml(s.tool_name)}" value="${this._escapeHtml(s.tool_name)}">
+                        <span>${this._escapeHtml(s.tool_description || s.name)}</span>
+                    </label>
+                `).join('');
+            } catch {
+                container.innerHTML = `<p class="text-muted">${this._escapeHtml(t('common.loadError'))}</p>`;
             }
         },
 
@@ -675,6 +704,7 @@
 
             await this._populateLlmDropdown('agent-llm');
             await this._populateModuleChecklist();
+            await this._populateAgentScripts();
 
             if (agentId) {
                 document.getElementById('agent-editor-title').textContent = 'Agent bearbeiten';
@@ -689,6 +719,10 @@
                     this._agentSteps = a.steps || [];
                     (a.module_names || []).forEach(name => {
                         const cb = document.getElementById(`agent-mod-${name}`);
+                        if (cb) cb.checked = true;
+                    });
+                    (a.script_tool_names || []).forEach(toolName => {
+                        const cb = document.getElementById(`agent-script-${toolName}`);
                         if (cb) cb.checked = true;
                     });
                     await this._populateAgentSafeguardSelect(agentId);
@@ -818,12 +852,44 @@
             this._renderAgentSteps();
         },
 
+        /** Trägt den Agentennamen in modules[] jedes an-/abgehakten Skills ein bzw.
+         *  aus. Skills haben kein eigenes Feld auf AgentDefinition — Zuweisung läuft
+         *  über das bestehende skill.modules-Feld (Liste von Agentennamen), das die
+         *  Skill-Middleware zur Laufzeit für Prompt-Injection auswertet. */
+        async _syncAgentSkillAttachments(agentName) {
+            const catalog = this._agentSkillsCatalog || [];
+            const selected = new Set(
+                [...document.querySelectorAll('#agent-skills-list .agent-skill-checkbox:checked')].map(cb => cb.value)
+            );
+            for (const skill of catalog) {
+                const modules = Array.isArray(skill.modules) ? skill.modules : [];
+                const wasAttached = modules.includes(agentName);
+                const shouldBeAttached = selected.has(skill.name);
+                if (wasAttached === shouldBeAttached) continue;
+                try {
+                    const detailRes = await fetch(`/api/skills/${encodeURIComponent(skill.name)}`);
+                    if (!detailRes.ok) continue;
+                    const detail = await detailRes.json();
+                    const currentModules = Array.isArray(detail.modules) ? detail.modules : [];
+                    const newModules = shouldBeAttached
+                        ? [...currentModules.filter(m => m !== agentName), agentName]
+                        : currentModules.filter(m => m !== agentName);
+                    await fetch(`/api/skills/${encodeURIComponent(skill.name)}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ description: detail.description, content: detail.content, modules: newModules }),
+                    });
+                } catch { /* Ein einzelner Skill-Sync-Fehler soll den Agent-Save nicht kippen */ }
+            }
+        },
+
         async saveAgent() {
             const name = document.getElementById('agent-name').value.trim();
             if (!name) { showNotification(t('common.nameRequired'), 'error'); return; }
             const saveBtn = document.querySelector('#agenten-editor .btn-primary');
             if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Speichern…'; }
             const selectedModules = [...document.querySelectorAll('#agent-modules-list input[type=checkbox]:checked')].map(cb => cb.value);
+            const selectedScriptTools = [...document.querySelectorAll('#agent-scripts-list input[type=checkbox]:checked')].map(cb => cb.value);
             const body = {
                 name,
                 description: document.getElementById('agent-desc').value,
@@ -831,6 +897,7 @@
                 llm_provider_id: document.getElementById('agent-llm').value || null,
                 enabled: document.getElementById('agent-enabled').checked,
                 module_names: selectedModules,
+                script_tool_names: selectedScriptTools,
                 steps: this._agentSteps,
             };
             try {
@@ -855,6 +922,7 @@
                             }
                         } catch { }
                     }
+                    await this._syncAgentSkillAttachments(name);
                     showNotification(`${t('agents.saved')}: "${name}"`, 'success');
                     this.closeAgentEditor();
                 } else {
