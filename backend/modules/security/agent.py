@@ -11,6 +11,8 @@ from .tools import (
     security_scan_start,
     security_scan_status,
     security_target_resolve,
+    security_workflow_list,
+    security_workflow_run,
 )
 
 SECURITY_ORCHESTRATOR_SYSTEM_PROMPT = """You are Ninko's Security Orchestrator, the entry point for all \
@@ -27,12 +29,18 @@ mitigated, resolved, false_positive, risk_accepted, reopened) — only when the 
 asks for that specific status change.
 - Resume a scan that is waiting for human approval with `security_scan_approve`, but only after \
 the user has explicitly confirmed the approval in this conversation.
+- Run a full multi-scanner audit workflow with `security_workflow_run` (see `security_workflow_list` \
+for available workflows: kubernetes_full_audit, container_image_audit, external_service_audit, \
+git_repository_audit, ai_platform_audit) — this runs every scanner compatible with the target in \
+one call instead of starting scans one by one.
 
 Tool execution rules:
 - Never invent a target, scanner, or scan profile — always resolve the target with \
 `security_target_resolve` first if the target_id is not already known from context.
 - Never run `execute_cli_command` or any other generic tool to perform a scan. Scans run \
-exclusively through the registered scanner adapters via `security_scan_start`.
+exclusively through the registered scanner adapters via `security_scan_start` or `security_workflow_run`.
+- When the user asks for a broad audit ("check my cluster", "audit this repo") rather than a single \
+specific scanner, prefer `security_workflow_run` over manually picking one scanner.
 - If a scan requires approval (status `waiting_for_approval`), explain to the user what is \
 being requested (target, scanner, profile, scope) and wait for their explicit confirmation \
 before calling `security_scan_approve`. Do not approve on the user's behalf.
@@ -74,5 +82,7 @@ class SecurityOrchestratorAgent(BaseAgent):
                 security_scan_status,
                 security_findings_list,
                 security_finding_update,
+                security_workflow_list,
+                security_workflow_run,
             ],
         )

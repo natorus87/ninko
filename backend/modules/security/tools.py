@@ -16,14 +16,17 @@ from . import db
 from .models import FindingStatus, Severity, TriggerType
 from .policy import PolicyViolation
 from .scan_service import resume_after_approval, start_scan
+from .workflows import SECURITY_WORKFLOWS, run_security_workflow
 
 TOOL_REGISTRY_DEFAULTS = {"required_bins": (), "required_envs": ()}
 TOOL_REGISTRY_OVERRIDES = {
     "security_target_resolve": {"readonly": True},
     "security_scan_status": {"readonly": True},
     "security_findings_list": {"readonly": True},
+    "security_workflow_list": {"readonly": True},
     "security_scan_start": {"tier": "WRITE_SYSTEM"},
     "security_scan_approve": {"tier": "WRITE_SYSTEM"},
+    "security_workflow_run": {"tier": "WRITE_SYSTEM"},
     "security_finding_update": {"tier": "WRITE_DATA"},
 }
 
@@ -100,6 +103,57 @@ async def security_findings_list(
         target_id=target_id or None, scan_run_id=scan_run_id or None, severity=sev, status=st,
     )
     return str(ToolResponse.ok([f.model_dump(mode="json") for f in findings]))
+
+
+@tool
+async def security_workflow_list() -> str:
+    """List available security audit workflows (kubernetes_full_audit,
+    container_image_audit, external_service_audit, git_repository_audit,
+    ai_platform_audit) with their supported target types."""
+    return str(ToolResponse.ok([
+        {
+            "id": wf.id, "name": wf.name, "description": wf.description,
+            "target_types": [t.value for t in wf.target_types],
+            "scanners": wf.preferred_scanner_ids,
+        }
+        for wf in SECURITY_WORKFLOWS.values()
+    ]))
+
+
+@tool
+async def security_workflow_run(workflow_id: str, target_id: str, requested_by: str = "") -> str:
+    """Run a multi-scanner security audit workflow against a target. Runs every
+    scanner in the workflow that is compatible with the target's type and
+    allowed by the target's own allowlist; incompatible scanners are skipped,
+    not treated as failures. Use security_workflow_list to see available
+    workflows and security_target_resolve to find a valid target_id.
+    Individual scan steps may pause for approval (intrusive scanners like
+    Garak) — check security_scan_status on the returned run IDs."""
+    target = await db.get_target(target_id)
+    if target is None:
+        return str(ToolResponse.fail(f"Unbekanntes Security-Target: {target_id}"))
+    try:
+        result = await run_security_workflow(
+            workflow_id, target=target, requested_by=requested_by, trigger_type=TriggerType.MANUAL,
+        )
+    except (PolicyViolation, ValueError) as exc:
+        return str(ToolResponse.fail(str(exc)))
+
+    return str(ToolResponse.ok({
+        "workflow_id": result.workflow_id,
+        "target_id": result.target_id,
+        "total_findings": result.total_findings,
+        "steps": [
+            {
+                "scanner_id": s.scanner_id,
+                "scan_run_id": s.run.id if s.run else None,
+                "status": s.run.status.value if s.run else "skipped",
+                "finding_count": s.run.finding_count if s.run else 0,
+                "skipped_reason": s.skipped_reason,
+            }
+            for s in result.steps
+        ],
+    }))
 
 
 @tool
