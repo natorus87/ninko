@@ -178,8 +178,20 @@ class RedisClient:
         await self._redis.hdel(self._ui_history_key(tenant_id), conv_id)
 
     async def ui_history_clear_all(self, *, tenant_id: str = "default") -> None:
-        """Löscht den gesamten Chatverlauf eines Tenants."""
-        await self._redis.delete(self._ui_history_key(tenant_id))
+        """Löscht den Chatverlauf eines Tenants, außer angepinnten Einträgen."""
+        key = self._ui_history_key(tenant_id)
+        raw = await self.hgetall_paginated(key)
+        unpinned_ids = []
+        for conv_id, value in raw.items():
+            try:
+                conversation = json.loads(value)
+            except (json.JSONDecodeError, ValueError):
+                unpinned_ids.append(conv_id)  # malformed entry — purge it too
+                continue
+            if not conversation.get("pinned"):
+                unpinned_ids.append(conv_id)
+        if unpinned_ids:
+            await self._redis.hdel(key, *unpinned_ids)
 
     # ── Cache ──────────────────────────────────────────
     async def cache_set(self, key: str, value: Any, ttl: int = 300) -> None:
