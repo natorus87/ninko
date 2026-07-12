@@ -231,17 +231,15 @@ async def _load_invocations(tenant_id: str) -> list[dict]:
     return []
 
 
-@tool
-async def run_script_tool(tool_name: str, input_data: dict | None = None) -> str:
-    """Führt ein als Tool registriertes Script aus.
+async def _run_script_tool_impl(
+    tool_name: str,
+    input_data: dict | None = None,
+    *,
+    allowed: frozenset[str] | None = None,
+) -> str:
+    if allowed is not None and tool_name not in allowed:
+        return f"Tool '{tool_name}' ist für diesen Agenten nicht freigegeben."
 
-    Args:
-        tool_name: Der eindeutige Name des Tools (z.B. "backup-database", "check-disk-space")
-        input_data: Optionale Eingabedaten als Dictionary, passend zum Tool-Schema
-
-    Returns:
-        Die Ausgabe des Scripts (stdout) oder eine Fehlermeldung
-    """
     from core.auth import get_current_tenant_id
 
     tenant_id = get_current_tenant_id() or "default"
@@ -255,18 +253,14 @@ async def run_script_tool(tool_name: str, input_data: dict | None = None) -> str
         return f"Error executing tool '{tool_name}': {error_msg}"
 
 
-@tool
-async def list_script_tools() -> str:
-    """Listet alle verfügbaren Script-Tools auf.
-
-    Returns:
-        Eine Liste der verfügbaren Tools mit Name und Beschreibung
-    """
+async def _list_script_tools_impl(*, allowed: frozenset[str] | None = None) -> str:
     from core.auth import get_current_tenant_id
 
     tenant_id = get_current_tenant_id() or "default"
 
     tools = await get_available_script_tools(tenant_id)
+    if allowed is not None:
+        tools = [t for t in tools if t["name"] in allowed]
 
     if not tools:
         return "Keine Script-Tools verfügbar."
@@ -277,6 +271,59 @@ async def list_script_tools() -> str:
         lines.append(f"- {script_tool['name']}: {desc}")
 
     return "\n".join(lines)
+
+
+@tool
+async def run_script_tool(tool_name: str, input_data: dict | None = None) -> str:
+    """Führt ein als Tool registriertes Script aus.
+
+    Args:
+        tool_name: Der eindeutige Name des Tools (z.B. "backup-database", "check-disk-space")
+        input_data: Optionale Eingabedaten als Dictionary, passend zum Tool-Schema
+
+    Returns:
+        Die Ausgabe des Scripts (stdout) oder eine Fehlermeldung
+    """
+    return await _run_script_tool_impl(tool_name, input_data)
+
+
+@tool
+async def list_script_tools() -> str:
+    """Listet alle verfügbaren Script-Tools auf.
+
+    Returns:
+        Eine Liste der verfügbaren Tools mit Name und Beschreibung
+    """
+    return await _list_script_tools_impl()
+
+
+def make_scoped_script_tools(allowed_tool_names: frozenset[str]) -> tuple:
+    """Baut run_script_tool/list_script_tools-Varianten, die für einen dynamischen
+    Agenten nur auf die vom Nutzer freigegebenen Tool-Namen beschränkt sind."""
+
+    @tool
+    async def run_script_tool(tool_name: str, input_data: dict | None = None) -> str:
+        """Führt ein für diesen Agenten freigegebenes Script-Tool aus.
+
+        Args:
+            tool_name: Der eindeutige Name des Tools (z.B. "backup-database")
+            input_data: Optionale Eingabedaten als Dictionary, passend zum Tool-Schema
+
+        Returns:
+            Die Ausgabe des Scripts (stdout) oder eine Fehlermeldung
+        """
+        return await _run_script_tool_impl(tool_name, input_data, allowed=allowed_tool_names)
+
+    @tool
+    async def list_script_tools() -> str:
+        """Listet die für diesen Agenten freigegebenen Script-Tools auf.
+
+        Returns:
+            Eine Liste der verfügbaren Tools mit Name und Beschreibung
+        """
+        return await _list_script_tools_impl(allowed=allowed_tool_names)
+
+    return run_script_tool, list_script_tools
 
 
 class ScriptToolRegistry:
