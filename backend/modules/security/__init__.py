@@ -14,10 +14,11 @@ from __future__ import annotations
 
 from modules.security.adapters import register_all_adapters
 from modules.security.manifest import module_manifest
+from modules.security.routes import router
 
 register_all_adapters()
 
-__all__ = ["module_manifest", "agent"]
+__all__ = ["module_manifest", "agent", "router"]
 
 _agent_instance = None
 
