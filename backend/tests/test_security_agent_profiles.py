@@ -1,4 +1,4 @@
-"""Unit-Tests fuer die 7 Security-Agent-Profile (Task 6)."""
+"""Unit-Tests fuer die 9 Security-Agent-Profile (Task 6 + Task 12: Remediation/Report)."""
 
 from __future__ import annotations
 
@@ -15,8 +15,21 @@ pytestmark = pytest.mark.unit
 # ── Statische Profil-Eigenschaften ────────────────────────────────────────
 
 
-def test_seven_profiles_defined():
-    assert len(SECURITY_AGENT_PROFILES) == 7
+def test_nine_profiles_defined():
+    assert len(SECURITY_AGENT_PROFILES) == 9
+
+
+def test_remediation_agent_denies_scan_creation_and_infra_apply():
+    remediation = next(p for p in SECURITY_AGENT_PROFILES if p.name == "Remediation Agent")
+    assert "security.scan.create" in remediation.denied_capabilities
+    assert "infrastructure.change.apply" in remediation.denied_capabilities
+    assert "proposal only" in remediation.system_prompt.lower() or "propose" in remediation.system_prompt.lower()
+
+
+def test_report_agent_has_no_remediation_capability():
+    report_agent = next(p for p in SECURITY_AGENT_PROFILES if p.name == "Security Report Agent")
+    assert "security.remediation.propose" not in report_agent.capabilities
+    assert "security.scan.create" in report_agent.denied_capabilities
 
 
 def test_profile_names_are_unique():
@@ -70,8 +83,8 @@ async def test_register_builtin_security_agents_registers_all_when_none_exist(mo
     ):
         registered = await register_builtin_security_agents()
 
-    assert len(registered) == 7
-    assert pool.register.await_count == 7
+    assert len(registered) == 9
+    assert pool.register.await_count == 9
 
 
 @pytest.mark.asyncio
@@ -115,8 +128,8 @@ async def test_register_builtin_security_agents_continues_after_value_error(mock
     ):
         registered = await register_builtin_security_agents()
 
-    assert len(registered) == 6  # 1 fehlgeschlagen, 6 erfolgreich
-    assert pool.register.await_count == 7
+    assert len(registered) == 8  # 1 fehlgeschlagen, 8 erfolgreich
+    assert pool.register.await_count == 9
 
 
 @pytest.mark.asyncio
@@ -159,7 +172,7 @@ async def test_register_builtin_security_agents_persists_capabilities_metadata(m
         await register_builtin_security_agents()
 
     final_agents = json.loads(stored["agents"])
-    assert len(final_agents) == 7
+    assert len(final_agents) == 9
     for entry in final_agents:
         assert entry["module_names"] == ["security"]
         assert "security.scan.execute.intrusive" in entry["security_denied_capabilities"]

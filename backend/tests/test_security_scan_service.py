@@ -103,8 +103,22 @@ def security_db(tmp_path, monkeypatch):
 
 @pytest.fixture
 def redis_patch(mock_redis):
-    with patch("core.redis_client.get_redis", return_value=mock_redis):
+    # core.alert_state.AlertStateManager ist ein Modul-Singleton, der self._redis =
+    # get_redis() EINMAL bei Konstruktion bindet. Wurde er bereits (mit echtem Redis)
+    # in einem frueheren Test der Session instanziiert, wuerde notify_scan_completed()
+    # in _execute_scan() diese veraltete, ungemockte Instanz treffen. Zuruecksetzen
+    # erzwingt Neukonstruktion unter dem hier aktiven Patch.
+    import core.alert_state as alert_state_module
+
+    alert_state_module._alert_manager = None
+    with (
+        patch("core.redis_client.get_redis", return_value=mock_redis),
+        # alert_state.py bindet get_redis via `from core.redis_client import get_redis` —
+        # eine eigene Modul-lokale Referenz, die vom obigen Patch NICHT erfasst wird.
+        patch("core.alert_state.get_redis", return_value=mock_redis),
+    ):
         yield mock_redis
+    alert_state_module._alert_manager = None
 
 
 # ── start_scan: Fehlerfaelle ──────────────────────────────────────────────

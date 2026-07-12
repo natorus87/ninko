@@ -13,8 +13,11 @@ import pytest
 from modules.security.models import FindingStatus
 from modules.security.policy import PolicyViolation
 from modules.security.tools import (
+    security_finding_enrich,
     security_finding_update,
     security_findings_list,
+    security_remediation_propose,
+    security_report_generate,
     security_scan_start,
     security_scan_status,
     security_target_resolve,
@@ -154,3 +157,83 @@ async def test_security_workflow_run_success_summarizes_steps():
     data = _ok(raw)
     assert data["total_findings"] == 2
     assert data["steps"][0]["scan_run_id"] == "run-1"
+
+
+@pytest.mark.asyncio
+async def test_security_finding_enrich_unknown_finding_returns_failure():
+    with patch(
+        "modules.security.tools.enrich_finding", AsyncMock(side_effect=ValueError("Unbekanntes Finding: nope"))
+    ):
+        raw = await security_finding_enrich.ainvoke({"finding_id": "nope"})
+    _fail(raw)
+
+
+@pytest.mark.asyncio
+async def test_security_finding_enrich_success_returns_enrichment():
+    from modules.security.models import FindingEnrichment, Severity
+
+    enrichment = FindingEnrichment(
+        finding_id="f1", model="test-model", effective_severity=Severity.HIGH,
+        confidence=0.8, false_positive_probability=0.1,
+    )
+    with patch("modules.security.tools.enrich_finding", AsyncMock(return_value=enrichment)):
+        raw = await security_finding_enrich.ainvoke({"finding_id": "f1"})
+    data = _ok(raw)
+    assert data["effective_severity"] == "high"
+
+
+@pytest.mark.asyncio
+async def test_security_remediation_propose_returns_only_remediation_fields():
+    from modules.security.models import FindingEnrichment, Severity
+
+    enrichment = FindingEnrichment(
+        finding_id="f1", model="test-model", effective_severity=Severity.HIGH,
+        confidence=0.8, false_positive_probability=0.1,
+        remediation_proposal="- do X", patch_proposal="diff --git a b", requires_human_review=True,
+    )
+    with patch("modules.security.tools.enrich_finding", AsyncMock(return_value=enrichment)):
+        raw = await security_remediation_propose.ainvoke({"finding_id": "f1"})
+    data = _ok(raw)
+    assert data["remediation_proposal"] == "- do X"
+    assert data["patch_proposal"] == "diff --git a b"
+    assert data["requires_human_review"] is True
+    assert "effective_severity" not in data  # nur Remediation-relevante Felder
+
+
+@pytest.mark.asyncio
+async def test_security_remediation_propose_unknown_finding_returns_failure():
+    with patch(
+        "modules.security.tools.enrich_finding", AsyncMock(side_effect=ValueError("Unbekanntes Finding: nope"))
+    ):
+        raw = await security_remediation_propose.ainvoke({"finding_id": "nope"})
+    _fail(raw)
+
+
+@pytest.mark.asyncio
+async def test_security_report_generate_requires_scope():
+    raw = await security_report_generate.ainvoke({})
+    _fail(raw)
+
+
+@pytest.mark.asyncio
+async def test_security_report_generate_groups_by_severity():
+    from modules.security.models import Finding, Severity
+
+    findings = [
+        Finding(
+            scan_run_id="r1", target_id="t1", fingerprint="fp1", scanner_id="trivy",
+            title="Critical bug", severity=Severity.CRITICAL, original_severity=Severity.CRITICAL,
+            cve="CVE-2024-1",
+        ),
+        Finding(
+            scan_run_id="r1", target_id="t1", fingerprint="fp2", scanner_id="trivy",
+            title="Low bug", severity=Severity.LOW, original_severity=Severity.LOW,
+        ),
+    ]
+    with patch("modules.security.tools.db.list_findings", AsyncMock(return_value=findings)):
+        raw = await security_report_generate.ainvoke({"target_id": "t1"})
+    assert not raw.startswith("Error:")
+    assert "CRITICAL" in raw
+    assert "Critical bug" in raw
+    assert "CVE-2024-1" in raw
+    assert "LOW" in raw

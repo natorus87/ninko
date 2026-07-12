@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 
 from modules.security.models import (
@@ -51,6 +53,25 @@ def fake_registry(monkeypatch):
     monkeypatch.setattr("modules.security.policy.get_scanner_registry", lambda: registry)
     monkeypatch.setattr("modules.security.scan_service.get_scanner_registry", lambda: registry)
     yield registry
+
+
+@pytest.fixture(autouse=True)
+def _redis_and_alert_manager(mock_redis):
+    # _execute_scan() ruft notify_scan_completed() -> core.alert_state.get_alert_manager()
+    # auf, ein Modul-Singleton, der self._redis EINMAL bei Konstruktion bindet. Ohne
+    # Reset+Patch hier wuerde ein bereits woanders in der Session (mit echtem Redis)
+    # konstruierter Singleton getroffen, sobald ein Test ein HIGH/CRITICAL-Finding erzeugt.
+    import core.alert_state as alert_state_module
+
+    alert_state_module._alert_manager = None
+    with (
+        patch("core.redis_client.get_redis", return_value=mock_redis),
+        # alert_state.py bindet get_redis via `from core.redis_client import get_redis` —
+        # eine eigene Modul-lokale Referenz, die vom obigen Patch NICHT erfasst wird.
+        patch("core.alert_state.get_redis", return_value=mock_redis),
+    ):
+        yield mock_redis
+    alert_state_module._alert_manager = None
 
 
 @pytest.fixture
