@@ -224,10 +224,10 @@
 
         /** Kuratierte Liste aller themebaren CSS-Custom-Properties (frontend/style.css :root). */
         _THEMEABLE_TOKENS: [
-            '--bg-main', '--bg-tint', '--bg-tint-mid', '--bg-tint-deep', '--bg-accent-1', '--bg-accent-2',
+            '--bg-main', '--bg-tint', '--bg-tint-rgb', '--bg-tint-mid', '--bg-tint-deep', '--bg-accent-1', '--bg-accent-2',
             '--bg-primary', '--bg-secondary', '--bg-tertiary',
-            '--bg-panel', '--bg-panel-rgb', '--bg-panel-strong', '--bg-panel-soft', '--bg-panel-soft-rgb',
-            '--bg-card', '--bg-card-solid', '--bg-card-solid-rgb', '--bg-sidenav',
+            '--bg-panel', '--bg-panel-rgb', '--bg-panel-strong', '--bg-panel-strong-rgb', '--bg-panel-soft', '--bg-panel-soft-rgb',
+            '--bg-card', '--bg-card-start-rgb', '--bg-card-end-rgb', '--bg-card-solid', '--bg-card-solid-rgb', '--bg-sidenav',
             '--bg-chat-user', '--bg-hover', '--bg-active', '--bg-body',
             '--bg-surface', '--bg-surface-rgb',
             '--text-primary', '--text-secondary', '--text-muted',
