@@ -481,6 +481,15 @@ async def lifespan(app: FastAPI) -> object:
     await agent_pool.load_from_redis()
     app.state.agent_pool = agent_pool
 
+    # ── Security Core: eingebaute Security-Agent-Profile registrieren ─
+    if registry.get_agent("security") is not None:
+        try:
+            from modules.security.agent_profiles import register_builtin_security_agents
+
+            await register_builtin_security_agents()
+        except (RuntimeError, ValueError, TypeError, OSError) as _sec_exc:
+            logger.warning("Security-Agent-Profile konnten nicht registriert werden: %s", _sec_exc)
+
     # ── Orchestrator ──────────────────────────────────
     orchestrator = OrchestratorAgent(registry)
     app.state.orchestrator = orchestrator
