@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Any
 
@@ -273,6 +274,51 @@ async def list_targets(*, tenant_id: str = "", enabled_only: bool = False) -> li
         cur = await db.execute(sql, params)
         rows = await cur.fetchall()
         return [_row_to_target(r) for r in rows]
+
+
+_TARGET_JSON_FIELDS = frozenset({"tags", "allowed_scanners", "allowed_profiles", "scope_constraints"})
+_TARGET_UPDATABLE_FIELDS = frozenset({
+    "name", "environment", "owner", "tags", "enabled", "allowed_scanners", "allowed_profiles",
+    "scope_constraints", "credentials_reference", "network_zone",
+})
+
+
+async def update_target(target_id: str, *, tenant_id: str = "", **fields: Any) -> SecurityTarget | None:
+    """Aktualisiert benannte Felder eines Targets. Nur Whitelist-Felder erlaubt."""
+    await _ensure_db()
+    invalid = set(fields) - _TARGET_UPDATABLE_FIELDS
+    if invalid:
+        raise ValueError(f"Unbekannte Target-Felder: {sorted(invalid)}")
+    if not fields:
+        return await get_target(target_id, tenant_id=tenant_id)
+
+    set_clauses = []
+    values: list[Any] = []
+    for key, value in fields.items():
+        set_clauses.append(f"{key} = ?")
+        if key == "allowed_profiles" and value and not isinstance(value, str):
+            value = [v.value if hasattr(v, "value") else v for v in value]
+        if key in _TARGET_JSON_FIELDS and not isinstance(value, str):
+            value = _dumps(value)
+        elif key == "enabled":
+            value = int(value)
+        values.append(value)
+    set_clauses.append("updated_at = ?")
+    values.append(time.time())
+    values.extend([target_id, tenant_id])
+
+    async with _db_lock, aiosqlite.connect(str(_resolve_db_path())) as db:
+        db.row_factory = aiosqlite.Row
+        await db.execute(
+            f"UPDATE security_targets SET {', '.join(set_clauses)} WHERE id = ? AND tenant_id = ?",
+            values,
+        )
+        await db.commit()
+        cur = await db.execute(
+            "SELECT * FROM security_targets WHERE id = ? AND tenant_id = ?", (target_id, tenant_id)
+        )
+        row = await cur.fetchone()
+        return _row_to_target(row) if row else None
 
 
 async def delete_target(target_id: str, *, tenant_id: str = "") -> bool:
