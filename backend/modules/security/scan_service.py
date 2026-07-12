@@ -198,6 +198,7 @@ async def _execute_scan(run: ScanRun, target: SecurityTarget) -> ScanRun:
         return await db.get_scan_run(run.id, tenant_id=run.tenant_id)
 
     seen_ids: set[str] = set()
+    stored_findings: list[Finding] = []
     now = time.time()
     for nf in normalized:
         fingerprint = compute_fingerprint(
@@ -214,17 +215,31 @@ async def _execute_scan(run: ScanRun, target: SecurityTarget) -> ScanRun:
         )
         stored, _created = await db.upsert_finding(finding)
         seen_ids.add(stored.id)
+        stored_findings.append(stored)
 
     await db.mark_absent_findings_resolved(
         run.id, seen_ids, target_id=target.id, scanner_id=run.scanner_id, tenant_id=run.tenant_id,
     )
 
     final_status = ScanRunStatus.COMPLETED if result.exit_code == 0 else ScanRunStatus.PARTIALLY_COMPLETED
+
+    from .notify import notify_scan_completed
+
+    notification = await notify_scan_completed(run, stored_findings)
+    audit_context = dict(run.audit_context)
+    if notification.should_notify:
+        audit_context["notification"] = {
+            "summary": notification.summary,
+            "critical_count": notification.critical_count,
+            "high_count": notification.high_count,
+        }
+
     await db.update_scan_run(
         run.id, status=final_status.value, completed_at=time.time(),
-        finding_count=len(normalized), tenant_id=run.tenant_id,
+        finding_count=len(normalized), audit_context=audit_context, tenant_id=run.tenant_id,
     )
     logger.info(
-        "Scan-Run %s abgeschlossen: status=%s findings=%d", run.id, final_status.value, len(normalized)
+        "Scan-Run %s abgeschlossen: status=%s findings=%d notify=%s",
+        run.id, final_status.value, len(normalized), notification.should_notify,
     )
     return await db.get_scan_run(run.id, tenant_id=run.tenant_id)
