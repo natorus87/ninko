@@ -84,7 +84,10 @@ class KubescapeAdapter:
             secret_refs=[target.credentials_reference],
             resource_limits={"cpu": "1", "memory": "1Gi"},
             timeout_s=KUBESCAPE_DEFINITION.default_timeout,
-            network_policy=NetworkPolicy(mode="egress_allowlist", allowlist=[]),
+            # Ziel-Cluster-API-IP ist aus der kubeconfig-Secret-Referenz nicht statisch
+            # bekannt -> explizit offenes Egress (mode="open"), kein leeres
+            # egress_allowlist (das waere jetzt Deny-all, siehe executor.py).
+            network_policy=NetworkPolicy(mode="open", allowlist=[]),
             max_output_bytes=10_000_000,
         )
 
