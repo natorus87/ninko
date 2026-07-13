@@ -398,9 +398,19 @@
 
     _setupEventListeners() {
       document.getElementById('kg-btn-reload')?.addEventListener('click', () => {
-        this._loadStats();
-        this.loadGraph();
+        this.refresh();
       });
+
+      document.getElementById('kg-btn-refresh')?.addEventListener('click', () => {
+        this.refresh();
+      });
+
+      const seedBtn = document.getElementById('kg-btn-seed');
+      if (seedBtn) {
+        this._seedButton = seedBtn;
+        this._seedOriginalHtml = seedBtn.innerHTML;
+        seedBtn.addEventListener('click', () => this._handleSeed());
+      }
 
       document.getElementById('kg-btn-fit')?.addEventListener('click', () => {
         this.cy?.fit(undefined, 30);
@@ -418,6 +428,70 @@
       document.getElementById('kg-filter-type')?.addEventListener('change', () => {
         this.loadGraph();
       });
+    },
+
+    refresh() {
+      this._loadStats();
+      this.loadGraph();
+    },
+
+    _seedingInProgress: false,
+
+    async _handleSeed() {
+      if (this._seedingInProgress) return;
+      this._seedingInProgress = true;
+      const btn = this._seedButton;
+      const originalHtml = this._seedOriginalHtml;
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '⏳ Seede…';
+      }
+      try {
+        const resp = await fetch('/api/knowledge-graph/seed', {
+          method: 'POST',
+          credentials: 'include',
+        });
+        if (!resp.ok) {
+          if (resp.status === 403) {
+            if (btn) btn.innerHTML = '🔒 Nur Admins';
+            if (btn) btn.disabled = true;
+            this._seedingInProgress = false;
+            return;
+          }
+          if (btn) btn.innerHTML = `❌ HTTP ${resp.status}`;
+          setTimeout(() => {
+            this._seedingInProgress = false;
+            if (btn) {
+              btn.disabled = false;
+              btn.innerHTML = originalHtml;
+            }
+          }, 3000);
+          return;
+        }
+        const data = await resp.json();
+        const d = data.data || {};
+        if (btn) {
+          btn.innerHTML = `✅ +${d.modules_seeded || 0}M / +${d.relationships_seeded || 0}R / +${d.incidents_seeded || 0}I`;
+        }
+        setTimeout(() => this.refresh(), 1200);
+        setTimeout(() => {
+          this._seedingInProgress = false;
+          if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+          }
+        }, 3000);
+      } catch (err) {
+        if (btn) btn.innerHTML = '❌ Fehler';
+        console.warn('KG seed failed', err);
+        setTimeout(() => {
+          this._seedingInProgress = false;
+          if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+          }
+        }, 3000);
+      }
     },
 
     _setLoading(visible) {

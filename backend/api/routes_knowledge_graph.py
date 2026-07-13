@@ -12,7 +12,12 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from core.auth import auth_tenant_id, resolve_request_auth
+from core.auth import (
+    ROLE_ADMIN,
+    auth_tenant_id,
+    resolve_request_auth,
+    resolve_request_role,
+)
 from core.knowledge_graph import (
     get_knowledge_graph,
     EntityType,
@@ -462,5 +467,124 @@ async def get_visualization_data(
                 "nodes": len(nodes),
                 "edges": len(edges),
             },
+        },
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Demo Seed
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@router.post("/seed", response_model=ApiResponse)
+async def seed_demo_data(request: Request) -> ApiResponse:
+    """Seedet Demo-Daten in den Knowledge Graph: Modul-Inventar + Beispiel-Incidents.
+    Idempotent: bereits vorhandene Entities werden nicht überschrieben.
+    Nur für Admins — verhindert versehentliches Seeden durch User.
+    """
+    role = resolve_request_role(request)
+    if role != ROLE_ADMIN:
+        raise HTTPException(
+            status_code=403, detail="Nur Admins dürfen Demo-Daten seeden."
+        )
+
+    auth_ctx = resolve_request_auth(request)
+    tenant_id = auth_tenant_id(auth_ctx)
+    kg = await get_knowledge_graph()
+
+    modules = [
+        ("module:proxmox", "module", "Proxmox VE", "hypervisor"),
+        ("module:kubernetes", "module", "Kubernetes Cluster", "orchestrator"),
+        ("module:pihole", "module", "Pi-hole DNS", "dns"),
+        ("module:homeassistant", "module", "Home Assistant", "automation"),
+        ("module:docker", "module", "Docker Host", "container"),
+        ("module:fritzbox", "module", "FRITZ!Box Router", "network"),
+        ("module:web_search", "module", "Web Search", "tool"),
+        ("module:knowledge_graph", "module", "Knowledge Graph", "tool"),
+    ]
+    entities_created = 0
+    for entity_id, etype, name, category in modules:
+        if not await kg.entity_exists(tenant_id, entity_id):
+            await kg.add_entity(
+                tenant_id=tenant_id,
+                entity_id=entity_id,
+                entity_type=etype,
+                name=name,
+                properties={"category": category, "seeded": True},
+            )
+            entities_created += 1
+
+    relationships = [
+        ("module:proxmox", "module:kubernetes", "runs"),
+        ("module:proxmox", "module:pihole", "runs"),
+        ("module:kubernetes", "module:homeassistant", "manages"),
+        ("module:docker", "module:kubernetes", "supports"),
+        ("module:fritzbox", "module:proxmox", "connects_to"),
+    ]
+    rels_created = 0
+    for source, target, rel_type in relationships:
+        if await kg.entity_exists(tenant_id, source) and await kg.entity_exists(
+            tenant_id, target
+        ):
+            try:
+                await kg.add_relationship(
+                    tenant_id=tenant_id,
+                    source=source,
+                    target=target,
+                    relation_type=rel_type,
+                )
+                rels_created += 1
+            except ValueError:
+                pass
+
+    incidents = [
+        {
+            "summary": "Pi-hole DNS-Lookup fehlgeschlagen",
+            "details": "DNS-Resolver antwortet nicht. Container im CrashLoopBackOff.",
+            "module": "pihole",
+        },
+        {
+            "summary": "Proxmox API Timeout",
+            "details": "Cluster-Health-Check schlägt fehl. Mehrere VMs nicht erreichbar.",
+            "module": "proxmox",
+        },
+    ]
+    incidents_created = 0
+    tenant_key = (tenant_id or "default")[:8]
+    for idx, inc in enumerate(incidents, start=1):
+        incident_id = f"incident:seed-{tenant_key}-{idx}"
+        if not await kg.entity_exists(tenant_id, incident_id):
+            await kg.add_entity(
+                tenant_id=tenant_id,
+                entity_id=incident_id,
+                entity_type="incident",
+                name=inc["summary"][:50],
+                properties={
+                    "module": inc["module"],
+                    "summary": inc["summary"],
+                    "details": inc["details"],
+                    "status": "open",
+                    "source": "seed",
+                },
+            )
+            await kg.add_relationship(
+                tenant_id=tenant_id,
+                source=incident_id,
+                target=f"module:{inc['module']}",
+                relation_type="caused_by",
+            )
+            incidents_created += 1
+
+    return ApiResponse(
+        success=True,
+        data={
+            "tenant_id": tenant_id,
+            "modules_seeded": entities_created,
+            "relationships_seeded": rels_created,
+            "incidents_seeded": incidents_created,
+            "message": (
+                f"Seed complete: +{entities_created} modules, "
+                f"+{rels_created} relationships, +{incidents_created} incidents"
+            ),
         },
     )
