@@ -2,6 +2,19 @@
 
 All notable changes to this module will be documented in this file.
 
+## [0.1.1] - 2026-07-13
+
+### Fixed
+
+- **Chat/agent tools never propagated tenant_id** (`tools.py`): all 11 `@tool`
+  functions called `db.*`/service functions without a `tenant_id`, so every
+  chat-driven scan/target/finding operation ran against `tenant_id=""` while
+  UI-created targets are stored under `tenant_id="default"`. The chat agent
+  could therefore never find a target that visibly existed in the UI. Fixed
+  by resolving the tenant via `core.auth.get_current_tenant_id()`, the same
+  contextvar-based mechanism already used elsewhere in Ninko for tools that
+  have no direct HTTP request object.
+
 ## [0.1.0] - 2026-07-13
 
 ### Added
