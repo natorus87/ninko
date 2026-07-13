@@ -78,6 +78,9 @@ COPY backend/ .
 # Copy frontend
 COPY frontend/ /app/frontend/
 
+# Copy release version (read by /health at startup, see main.py:_read_app_version)
+COPY VERSION .
+
 # Create non-root user
 RUN groupadd -r ninko && useradd -r -g ninko -d /app -s /bin/bash ninko && \
     chown -R ninko:ninko /app
