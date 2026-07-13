@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from langchain_core.tools import tool
 
+from core.auth import get_current_tenant_id
 from core.tool_schema import ToolResponse
 
 from . import db
@@ -18,6 +19,18 @@ from .models import FindingStatus, Severity, TriggerType
 from .policy import PolicyViolation
 from .scan_service import resume_after_approval, start_scan
 from .workflows import SECURITY_WORKFLOWS, run_security_workflow
+
+
+def _tenant_id() -> str:
+    """Liest den Tenant der aktuellen Anfrage aus demselben Contextvar, den auch
+    main.py pro Request setzt (siehe core.auth.set_current_tenant_id) — das
+    generische Ninko-Muster, um innerhalb eines @tool ohne HTTP-Request-Objekt
+    an den Tenant zu kommen (siehe core_tools.py/script_tools.py/connections.py).
+    Ohne das wuerden alle Security-Tools mit tenant_id="" gegen die DB laufen und
+    damit jedes ueber die UI (tenant_id="default") angelegte Target/Finding/Run
+    unsichtbar bleiben."""
+    return get_current_tenant_id() or "default"
+
 
 TOOL_REGISTRY_DEFAULTS = {"required_bins": (), "required_envs": ()}
 TOOL_REGISTRY_OVERRIDES = {
@@ -39,7 +52,7 @@ TOOL_REGISTRY_OVERRIDES = {
 async def security_target_resolve(name_or_id: str = "") -> str:
     """List all configured security scan targets, or resolve one exact target by
     name or ID. Use this before starting a scan to find the correct target_id."""
-    targets = await db.list_targets()
+    targets = await db.list_targets(tenant_id=_tenant_id())
     if name_or_id:
         matches = [t for t in targets if t.id == name_or_id or t.name.lower() == name_or_id.lower()]
         if not matches:
@@ -63,6 +76,7 @@ async def security_scan_start(
         run = await start_scan(
             target_id=target_id, scanner_id=scanner_id, profile_id=profile_id,
             parameters=parameters, requested_by=requested_by, trigger_type=TriggerType.MANUAL,
+            tenant_id=_tenant_id(),
         )
     except PolicyViolation as exc:
         return str(ToolResponse.fail(str(exc)))
@@ -76,7 +90,7 @@ async def security_scan_approve(scan_run_id: str, approved_by: str = "") -> str:
     scan plan via decide_approval — this tool does NOT grant the approval itself,
     it only resumes execution once approval already exists."""
     try:
-        run = await resume_after_approval(scan_run_id)
+        run = await resume_after_approval(scan_run_id, tenant_id=_tenant_id())
     except PolicyViolation as exc:
         return str(ToolResponse.fail(str(exc)))
     return str(ToolResponse.ok(run.model_dump(mode="json")))
@@ -86,7 +100,7 @@ async def security_scan_approve(scan_run_id: str, approved_by: str = "") -> str:
 async def security_scan_status(scan_run_id: str) -> str:
     """Get the current status of a security scan run (queued, running, completed,
     waiting_for_approval, failed, etc.)."""
-    run = await db.get_scan_run(scan_run_id)
+    run = await db.get_scan_run(scan_run_id, tenant_id=_tenant_id())
     if run is None:
         return str(ToolResponse.fail(f"Unbekannter Scan-Run: {scan_run_id}"))
     return str(ToolResponse.ok(run.model_dump(mode="json")))
@@ -105,6 +119,7 @@ async def security_findings_list(
         return str(ToolResponse.fail(f"Ungueltiger Filter-Wert: {exc}"))
     findings = await db.list_findings(
         target_id=target_id or None, scan_run_id=scan_run_id or None, severity=sev, status=st,
+        tenant_id=_tenant_id(),
     )
     return str(ToolResponse.ok([f.model_dump(mode="json") for f in findings]))
 
@@ -133,12 +148,14 @@ async def security_workflow_run(workflow_id: str, target_id: str, requested_by: 
     workflows and security_target_resolve to find a valid target_id.
     Individual scan steps may pause for approval (intrusive scanners like
     Garak) — check security_scan_status on the returned run IDs."""
-    target = await db.get_target(target_id)
+    tenant_id = _tenant_id()
+    target = await db.get_target(target_id, tenant_id=tenant_id)
     if target is None:
         return str(ToolResponse.fail(f"Unbekanntes Security-Target: {target_id}"))
     try:
         result = await run_security_workflow(
             workflow_id, target=target, requested_by=requested_by, trigger_type=TriggerType.MANUAL,
+            tenant_id=tenant_id,
         )
     except (PolicyViolation, ValueError) as exc:
         return str(ToolResponse.fail(str(exc)))
@@ -170,7 +187,9 @@ async def security_finding_update(finding_id: str, status: str, remediation: str
         new_status = FindingStatus(status)
     except ValueError:
         return str(ToolResponse.fail(f"Ungueltiger Status: {status}"))
-    updated = await db.set_finding_status(finding_id, new_status, remediation=remediation or None)
+    updated = await db.set_finding_status(
+        finding_id, new_status, tenant_id=_tenant_id(), remediation=remediation or None
+    )
     if updated is None:
         return str(ToolResponse.fail(f"Unbekanntes Finding: {finding_id}"))
     return str(ToolResponse.ok(updated.model_dump(mode="json")))
@@ -183,7 +202,7 @@ async def security_finding_enrich(finding_id: str) -> str:
     separately from the original finding — never overwrites scanner-reported
     data. Use this before proposing remediation for a specific finding."""
     try:
-        enrichment = await enrich_finding(finding_id)
+        enrichment = await enrich_finding(finding_id, tenant_id=_tenant_id())
     except ValueError as exc:
         return str(ToolResponse.fail(str(exc)))
     return str(ToolResponse.ok(enrichment.model_dump(mode="json")))
@@ -196,7 +215,7 @@ async def security_remediation_propose(finding_id: str) -> str:
     Internally runs the same LLM enrichment as security_finding_enrich and
     returns just the remediation-relevant fields."""
     try:
-        enrichment = await enrich_finding(finding_id)
+        enrichment = await enrich_finding(finding_id, tenant_id=_tenant_id())
     except ValueError as exc:
         return str(ToolResponse.fail(str(exc)))
     return str(ToolResponse.ok({
@@ -215,7 +234,9 @@ async def security_report_generate(target_id: str = "", scan_run_id: str = "") -
     the caller (chat/workflow) is responsible for delivering the report text."""
     if not target_id and not scan_run_id:
         return str(ToolResponse.fail("target_id oder scan_run_id ist erforderlich."))
-    findings = await db.list_findings(target_id=target_id or None, scan_run_id=scan_run_id or None, limit=500)
+    findings = await db.list_findings(
+        target_id=target_id or None, scan_run_id=scan_run_id or None, limit=500, tenant_id=_tenant_id(),
+    )
     active = [f for f in findings if f.status not in (
         FindingStatus.RESOLVED, FindingStatus.FALSE_POSITIVE, FindingStatus.RISK_ACCEPTED,
     )]
