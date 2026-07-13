@@ -17,6 +17,7 @@ from ..scanner_adapter import (
     NormalizedFinding,
     ScannerExecutionResult,
     ValidationResult,
+    resolve_locator_egress_allowlist,
 )
 
 NUCLEI_DEFINITION = ScannerDefinition(
@@ -65,13 +66,20 @@ class NucleiAdapter:
         else:
             command.extend(["-exclude-tags", _SAFE_EXCLUDE_TAGS])
 
+        # Ziel zur Laufzeit aufloesen -> echte Egress-Allowlist statt offenem Netz.
+        # Nicht aufloesbar: mode="open" (offen, explizit), niemals ein leeres
+        # allowlist unter target_only (das ist jetzt Deny-all, siehe executor.py).
+        allowlist = resolve_locator_egress_allowlist(target.locator)
+
         return ExecutionSpec(
             scanner_id=self.scanner_id,
             container_image=NUCLEI_DEFINITION.container_image,
             command=command,
             resource_limits={"cpu": "500m", "memory": "512Mi"},
             timeout_s=NUCLEI_DEFINITION.default_timeout,
-            network_policy=NetworkPolicy(mode="target_only", allowlist=[]),
+            network_policy=NetworkPolicy(
+                mode="target_only" if allowlist else "open", allowlist=allowlist
+            ),
             max_output_bytes=5_000_000,
         )
 
