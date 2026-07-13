@@ -9,6 +9,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.5.1] – 2026-07-13
+
+### Fixed
+
+- **`/health` reported a frozen, long-stale version string** (`backend/main.py`, `backend/Dockerfile`): the endpoint hardcoded `"version": "1.3.4"`, unchanged since well before v1.3.5 — every release since then bumped `VERSION`/`README.md`/`charts/ninko/Chart.yaml` but never the running service's own self-reported version, so `/health` was silently lying about what was actually deployed. Now reads the `VERSION` file at startup (`_read_app_version()`, checked next to `main.py` first for the Docker image, falling back to the repo-root path for local/non-container runs); `Dockerfile` now copies `VERSION` into the image so it's actually present at runtime.
+
 ## [1.5.0] – 2026-07-13
 
 ### Added
