@@ -101,9 +101,16 @@ def enforce_network_scope(target: SecurityTarget) -> list[str]:
     bei Verstoss (fail-closed), gibt sonst eine Liste von Warnungen zurueck.
 
     Zwei Ebenen:
-    1. net_guard.assert_safe_outbound_url — harter Block fuer Link-Local/Cloud-Metadata.
+    1. Harter Link-Local/Cloud-Metadata-Block, fuer JEDEN Netzwerk-Target-Typ —
+       nicht nur fuer http(s)-URLs. net_guard.assert_safe_outbound_url prueft das
+       nur fuer URL-foermige Locators; Scanner wie Nmap/testssl.sh adressieren
+       Ziele aber meist als blossen Hostnamen/IP (TargetType.HOSTNAME/IP_ADDRESS/
+       SSH_HOST/TLS_ENDPOINT), die diesen Praefix nie haben. Ohne diesen
+       zusaetzlichen Check waere z.B. ein Target (IP_ADDRESS, "169.254.169.254")
+       vollstaendig ungeschuetzt, obwohl fuer URL-Targets derselbe Fall blockiert
+       wird — beide Locator-Formen muessen dieselbe Sperre durchlaufen.
     2. target.scope_constraints["cidr_allowlist"] — falls gesetzt, MUSS jede aufgeloeste
-       IP darin liegen (explizite Allowlist, staerker als net_guard). Re-Resolve zum
+       IP darin liegen (explizite Allowlist, staerker als Punkt 1). Re-Resolve zum
        Pruefzeitpunkt (nicht nur beim Anlegen des Targets) als Teilschutz gegen DNS-
        Rebinding — vollstaendiger Schutz erfordert zusaetzlich IP-Pinning direkt am
        Scanner-Aufruf, was hier bewusst nicht implementiert ist (siehe Doku, bekannte
@@ -123,6 +130,14 @@ def enforce_network_scope(target: SecurityTarget) -> list[str]:
     if host is None:
         return warnings
 
+    resolved = _resolve_all_ips(host)
+    for ip in resolved:
+        if ip.is_link_local or (ip.version == 6 and ip.is_site_local):
+            raise PolicyViolation(
+                f"Host {host} (Target {target.id}) loest zu Link-Local/Metadata-Adresse "
+                f"{ip} auf — fuer Security-Scan-Targets gesperrt."
+            )
+
     cidr_allowlist = target.scope_constraints.get("cidr_allowlist")
     if not cidr_allowlist:
         return warnings
@@ -132,7 +147,6 @@ def enforce_network_scope(target: SecurityTarget) -> list[str]:
     except ValueError as exc:
         raise PolicyViolation(f"Ungueltiger cidr_allowlist-Eintrag in Target {target.id}: {exc}") from exc
 
-    resolved = _resolve_all_ips(host)
     if not resolved:
         raise PolicyViolation(
             f"Host {host} (Target {target.id}) konnte nicht aufgeloest werden — "
