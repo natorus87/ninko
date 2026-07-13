@@ -200,10 +200,23 @@ class K8sJobExecutor:
         )
 
     def _build_network_policy(self, spec: ExecutionSpec, job_name: str) -> k8s_client.V1NetworkPolicy:
-        """Egress-Policy pro Job. mode='none' -> nur DNS. Sonst: DNS + Allowlist,
-        oder DNS + alles (mit WARNUNG geloggt), falls keine Allowlist vorliegt —
-        die eigentliche Scope-Durchsetzung passiert in policy.py (Task #3);
-        dies ist eine zusaetzliche Netzwerk-Verteidigungslinie, kein Ersatz dafuer.
+        """Egress-Policy pro Job — DNS ist immer erlaubt, alles Weitere ist per
+        Default verboten (deny-by-default):
+
+        - `allowlist` gesetzt (unabhaengig vom `mode`-Wert) -> DNS + genau diese CIDRs.
+        - `mode='open'` -> explizit unbeschraenktes Egress (bewusste Adapter-
+          Entscheidung, mit Warnung geloggt), fuer Scanner die Container-Registries/
+          Git-Remotes/eine Cluster-API ohne vorab bekannte Ziel-IP erreichen muessen
+          (z.B. Trivy, Kubescape, Gitleaks — siehe deren Adapter-Kommentare).
+        - `mode='none'`/`'target_only'`/`'egress_allowlist'` ohne Allowlist -> NUR
+          DNS, kein zusaetzlicher Egress (deny-by-default). Eine leere Allowlist
+          darf niemals stillschweigend zu offenem Egress fuehren — sonst wuerde
+          z.B. der Name 'egress_allowlist' genau das Gegenteil dessen bedeuten,
+          was er verspricht. Adapter, die wirklich offenen Zugriff brauchen,
+          MUESSEN das ueber mode='open' explizit anfordern.
+
+        Diese NetworkPolicy ist eine zusaetzliche Netzwerk-Verteidigungslinie; die
+        eigentliche Scope-Durchsetzung passiert serverseitig in policy.py.
         """
         dns_rule = k8s_client.V1NetworkPolicyEgressRule(
             to=None,
@@ -214,23 +227,22 @@ class K8sJobExecutor:
         )
         egress_rules = [dns_rule]
 
-        if spec.network_policy.mode == "none":
-            pass
-        elif spec.network_policy.allowlist:
+        if spec.network_policy.allowlist:
             peers = [
                 k8s_client.V1NetworkPolicyPeer(ip_block=k8s_client.V1IPBlock(cidr=cidr))
                 for cidr in spec.network_policy.allowlist
             ]
             egress_rules.append(k8s_client.V1NetworkPolicyEgressRule(to=peers))
-        else:
+        elif spec.network_policy.mode == "open":
             logger.warning(
-                "Scanner %s: kein Egress-Allowlist gesetzt (mode=%s) — Egress bleibt "
-                "ausserhalb der DNS-Regel unbeschraenkt auf Netzwerkebene. Scope-Durchsetzung "
-                "muss ueber policy.py erfolgen.",
+                "Scanner %s: network_policy.mode='open' — Egress bleibt ausserhalb der "
+                "DNS-Regel unbeschraenkt auf Netzwerkebene (bewusste Adapter-Entscheidung). "
+                "Scope-Durchsetzung muss ueber policy.py erfolgen.",
                 spec.scanner_id,
-                spec.network_policy.mode,
             )
             egress_rules.append(k8s_client.V1NetworkPolicyEgressRule(to=None))
+        # sonst (mode='none'/'target_only'/'egress_allowlist' ohne Allowlist):
+        # nur DNS, kein zusaetzlicher Egress (deny-by-default).
 
         return k8s_client.V1NetworkPolicy(
             metadata=k8s_client.V1ObjectMeta(name=f"{job_name}-egress", namespace=self.namespace),
