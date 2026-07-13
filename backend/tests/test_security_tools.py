@@ -28,6 +28,71 @@ from modules.security.tools import (
 pytestmark = pytest.mark.unit
 
 
+@pytest.fixture
+def security_db(tmp_path, monkeypatch):
+    """Isolierte SQLite-DB fuer echte (nicht gemockte) DB-Roundtrips — Muster
+    aus test_security_permissions.py, hier gebraucht fuer den Tenant-Regressionstest."""
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    import core.config as core_config
+
+    core_config._settings = None
+    from modules.security import db as security_db_module
+
+    security_db_module._db_path = None
+    security_db_module._init_event = None
+    yield security_db_module
+    security_db_module._db_path = None
+    security_db_module._init_event = None
+    core_config._settings = None
+
+
+@pytest.mark.asyncio
+async def test_security_target_resolve_finds_target_created_via_default_tenant(security_db):
+    """Regressionstest fuer den Bug, bei dem alle Security-Tools implizit mit
+    tenant_id="" liefen (kein einziger db-/service-Aufruf in tools.py gab
+    tenant_id weiter), waehrend jedes ueber die UI angelegte Target unter
+    tenant_id="default" gespeichert wird (core.auth.auth_tenant_id()-Default).
+    Ohne Fix: security_target_resolve findet ein UI-angelegtes Target NIE,
+    selbst wenn es (wie im gemeldeten Fall) sichtbar in der Targets-Tabelle
+    der UI steht — 'Kein Security-Target gefunden' trotz vorhandenem Target."""
+    from modules.security.models import SecurityTarget, TargetType
+
+    target = await security_db.create_target(
+        SecurityTarget(
+            name="conbro", target_type=TargetType.KUBERNETES_CLUSTER, locator="conbro",
+            tenant_id="default",
+        )
+    )
+    # Kein core.auth.set_current_tenant_id() gesetzt -> _tenant_id() faellt auf
+    # "default" zurueck, exakt wie auth_tenant_id() das fuer eine Anfrage ohne
+    # explizites tenant_id im Auth-Kontext tut.
+    raw = await security_target_resolve.ainvoke({"name_or_id": "conbro"})
+    data = _ok(raw)
+    assert data["id"] == target.id
+
+
+@pytest.mark.asyncio
+async def test_security_target_resolve_respects_current_tenant_contextvar(security_db):
+    """Ein Target unter tenant 'customer-a' darf nicht sichtbar sein, wenn der
+    aktuelle Request-Kontext (via core.auth.set_current_tenant_id) einen
+    ANDEREN Tenant gesetzt hat — echte Isolation, nicht nur ein Default-Fallback."""
+    from core.auth import reset_current_tenant_id, set_current_tenant_id
+    from modules.security.models import SecurityTarget, TargetType
+
+    await security_db.create_target(
+        SecurityTarget(
+            name="other-tenant-cluster", target_type=TargetType.KUBERNETES_CLUSTER,
+            locator="x", tenant_id="customer-a",
+        )
+    )
+    token = set_current_tenant_id("customer-b")
+    try:
+        raw = await security_target_resolve.ainvoke({"name_or_id": "other-tenant-cluster"})
+    finally:
+        reset_current_tenant_id(token)
+    _fail(raw)
+
+
 def _ok(raw: str) -> dict:
     """ToolResponse.ok(dict).__str__() ist direkt json.dumps(data) — kein Envelope."""
     assert not raw.startswith("Error:"), raw
