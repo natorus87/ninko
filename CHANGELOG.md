@@ -9,6 +9,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.5.2] – 2026-07-13
+
+### Fixed
+
+- **Security-Core chat/agent tools never propagated `tenant_id`** (`backend/modules/security/tools.py`): none of the 11 `@tool` functions passed `tenant_id` to the underlying `db`/service calls, so every chat-driven scan/target/finding operation silently ran against `tenant_id=""` while targets created via the Security dashboard are stored under `tenant_id="default"`. In practice the chat agent could never find a target that was visibly listed in the UI ("Kein Security-Target gefunden" plus "keine Security-Targets im System konfiguriert" despite one existing). Fixed by resolving the tenant through `core.auth.get_current_tenant_id()`, the same contextvar-based pattern already used by `core_tools.py`/`script_tools.py`/`connections.py` for tools that have no direct HTTP request object. 2 new regression tests reproduce the exact reported symptom and verify real tenant isolation still holds.
+
 ## [1.5.1] – 2026-07-13
 
 ### Fixed
