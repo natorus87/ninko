@@ -169,6 +169,23 @@ def test_network_scope_blocks_link_local_metadata_url():
         enforce_network_scope(target)
 
 
+def test_network_scope_blocks_link_local_ip_address_target_without_url_prefix():
+    """Regressionstest: der harte Link-Local/Metadata-Block darf nicht nur fuer
+    http(s)-URLs greifen — Nmap/testssl.sh adressieren Ziele als blossen
+    IP_ADDRESS/HOSTNAME-Locator ohne http(s)-Praefix. Frueher wurde dieser Fall
+    komplett uebersprungen (kein PolicyViolation), solange kein cidr_allowlist
+    gesetzt war."""
+    target = SecurityTarget(name="metadata-ip", target_type=TargetType.IP_ADDRESS, locator="169.254.169.254")
+    with pytest.raises(PolicyViolation, match="Link-Local/Metadata"):
+        enforce_network_scope(target)
+
+
+def test_network_scope_blocks_link_local_hostname_target_without_cidr_allowlist():
+    target = SecurityTarget(name="metadata-host", target_type=TargetType.HOSTNAME, locator="169.254.169.254")
+    with pytest.raises(PolicyViolation, match="Link-Local/Metadata"):
+        enforce_network_scope(target)
+
+
 def test_network_scope_blocks_outside_cidr_allowlist():
     target = SecurityTarget(
         name="loopback-check",
