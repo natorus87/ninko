@@ -70,7 +70,10 @@ class CheckovAdapter:
             init_containers=[init],
             resource_limits={"cpu": "1", "memory": "1Gi"},
             timeout_s=CHECKOV_DEFINITION.default_timeout,
-            network_policy=NetworkPolicy(mode="egress_allowlist", allowlist=[]),
+            # Init-Container klont von einer beliebigen Git-Host-URL -> explizit offenes
+            # Egress (mode="open"), kein leeres egress_allowlist (das waere jetzt
+            # Deny-all, siehe executor.py, und wuerde den Clone-Schritt brechen).
+            network_policy=NetworkPolicy(mode="open", allowlist=[]),
             max_output_bytes=5_000_000,
         )
 
