@@ -7,7 +7,6 @@ im Gegensatz zu xml.dom.minidom/lxml in manchen Konfigurationen).
 
 from __future__ import annotations
 
-import ipaddress
 import xml.etree.ElementTree as ET
 
 from ..models import ScannerCategory, ScannerDefinition, ScanProfileKind, Severity, TargetType
@@ -17,6 +16,7 @@ from ..scanner_adapter import (
     NormalizedFinding,
     ScannerExecutionResult,
     ValidationResult,
+    resolve_locator_egress_allowlist,
 )
 
 NMAP_DEFINITION = ScannerDefinition(
@@ -69,12 +69,12 @@ class NmapAdapter:
             command.insert(1, "-sT")
         command.append(target.locator)
 
-        allowlist = []
-        try:
-            ipaddress.ip_network(target.locator, strict=False)
-            allowlist = [target.locator if "/" in target.locator else f"{target.locator}/32"]
-        except ValueError:
-            pass  # Hostname: kein statisches CIDR-Allowlist moeglich, DNS-Aufloesung zur Laufzeit
+        # CIDR-Literal direkt uebernehmen, Hostname zur Laufzeit aufloesen (gleiche
+        # Re-Resolve-Semantik wie policy.py) -> echte Egress-Allowlist statt offenem
+        # Netz. Kann nicht aufgeloest werden: mode="open" (offen, explizit), NIEMALS
+        # ein leeres egress_allowlist (das ist jetzt Deny-all, siehe executor.py, und
+        # wuerde den Scan seines eigenen Ziels berauben).
+        allowlist = resolve_locator_egress_allowlist(target.locator)
 
         return ExecutionSpec(
             scanner_id=self.scanner_id,
@@ -84,7 +84,7 @@ class NmapAdapter:
             resource_limits={"cpu": "500m", "memory": "256Mi"},
             timeout_s=NMAP_DEFINITION.default_timeout,
             network_policy=NetworkPolicy(
-                mode="target_only" if allowlist else "egress_allowlist", allowlist=allowlist
+                mode="target_only" if allowlist else "open", allowlist=allowlist
             ),
             max_output_bytes=5_000_000,
         )
