@@ -5,8 +5,8 @@ description: >
   Deploys backend (FastAPI), Redis, ChromaDB, and SearXNG
   with full RBAC, persistent storage, and Traefik/Ingress support.
 type: application
-version: 0.7.8
-appVersion: "1.5.0"
+version: 0.7.9
+appVersion: "1.5.1"
 keywords:
   - ninko
   - ai
