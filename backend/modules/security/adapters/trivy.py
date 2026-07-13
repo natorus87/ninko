@@ -90,9 +90,11 @@ class TrivyAdapter:
             resource_limits={"cpu": "1", "memory": "1Gi"},
             timeout_s=TRIVY_DEFINITION.default_timeout,
             # Trivy braucht Zugriff auf beliebige Registries + die Aqua Vulnerability-DB —
-            # kein statisches CIDR-Allowlist moeglich. Scope-Durchsetzung fuer das TARGET
-            # (welches Image ueberhaupt gescannt werden darf) laeuft ueber policy.py.
-            network_policy=NetworkPolicy(mode="egress_allowlist", allowlist=[]),
+            # kein statisches CIDR-Allowlist moeglich, daher explizit offenes Egress
+            # (mode="open", NICHT egress_allowlist mit leerer Liste — das waere jetzt
+            # Deny-all, siehe executor.py). Scope-Durchsetzung fuer das TARGET (welches
+            # Image ueberhaupt gescannt werden darf) laeuft ueber policy.py.
+            network_policy=NetworkPolicy(mode="open", allowlist=[]),
             max_output_bytes=5_000_000,
         )
 
