@@ -902,6 +902,22 @@ app.include_router(subagent_router, prefix="/api/subagent")
 app.include_router(routing_router)
 
 
+def _read_app_version() -> str:
+    """Liest die Release-Version aus der VERSION-Datei — im Docker-Image liegt
+    sie neben main.py (siehe Dockerfile: COPY VERSION .), lokal (ohne Docker)
+    eine Ebene hoeher im Repo-Root. Ein hartkodierter Literal-String wuerde bei
+    jedem Release veralten (siehe Historie: stand zuletzt fest auf "1.3.4")."""
+    for candidate in (Path(__file__).parent / "VERSION", Path(__file__).parent.parent / "VERSION"):
+        try:
+            return candidate.read_text().strip()
+        except OSError:
+            continue
+    return "unknown"
+
+
+_APP_VERSION = _read_app_version()
+
+
 # ── Health Endpoint ──────────────────────────────────
 # NOTE: Must be registered BEFORE the catch-all static mount
 @app.get("/health")
@@ -910,5 +926,5 @@ async def health() -> object:
     return {
         "status": "ok",
         "service": "ninko",
-        "version": "1.3.4",
+        "version": _APP_VERSION,
     }
