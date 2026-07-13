@@ -11,6 +11,7 @@ from ..scanner_adapter import (
     NormalizedFinding,
     ScannerExecutionResult,
     ValidationResult,
+    resolve_locator_egress_allowlist,
 )
 
 TESTSSL_DEFINITION = ScannerDefinition(
@@ -46,13 +47,19 @@ class TestSSLAdapter:
         return ValidationResult(valid=not errors, errors=errors)
 
     def build_execution_spec(self, target, profile, parameters) -> ExecutionSpec:
+        # Ziel zur Laufzeit aufloesen -> echte Egress-Allowlist statt offenem Netz.
+        # Nicht aufloesbar: mode="open" (offen, explizit), niemals ein leeres
+        # allowlist unter target_only (das ist jetzt Deny-all, siehe executor.py).
+        allowlist = resolve_locator_egress_allowlist(target.locator)
         return ExecutionSpec(
             scanner_id=self.scanner_id,
             container_image=TESTSSL_DEFINITION.container_image,
             command=["--quiet", "--jsonfile", "/dev/stdout", "--warnings", "batch", target.locator],
             resource_limits={"cpu": "500m", "memory": "512Mi"},
             timeout_s=TESTSSL_DEFINITION.default_timeout,
-            network_policy=NetworkPolicy(mode="target_only", allowlist=[]),
+            network_policy=NetworkPolicy(
+                mode="target_only" if allowlist else "open", allowlist=allowlist
+            ),
             max_output_bytes=5_000_000,
         )
 
