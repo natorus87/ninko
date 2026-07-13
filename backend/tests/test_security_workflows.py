@@ -18,9 +18,10 @@ pytestmark = pytest.mark.unit
 
 
 class _FakeAdapter:
-    def __init__(self, scanner_id, findings=None):
+    def __init__(self, scanner_id, findings=None, raise_on_execute=None):
         self.scanner_id = scanner_id
         self._findings = findings or []
+        self._raise_on_execute = raise_on_execute
         self.execute_called = False
 
     def validate_target(self, target, profile, parameters):
@@ -33,6 +34,8 @@ class _FakeAdapter:
 
     async def execute(self, execution_spec, context):
         self.execute_called = True
+        if self._raise_on_execute:
+            raise self._raise_on_execute
         return ScannerExecutionResult(scanner_id=self.scanner_id, exit_code=0, stdout="{}")
 
     def parse_results(self, result):
@@ -219,3 +222,46 @@ async def test_workflow_intrusive_scanner_pauses_for_approval(fake_registry, sec
     assert result.executed_scanner_ids == ["garak"]
     run = result.steps[0].run
     assert run.status == ScanRunStatus.WAITING_FOR_APPROVAL
+
+
+@pytest.mark.asyncio
+async def test_workflow_partial_scanner_failure_is_represented_correctly(fake_registry, security_db):
+    """Auftrags-Testmatrix: 'partieller Scanner-Ausfall wird korrekt dargestellt'.
+    Ein Scanner im selben Workflow schlaegt technisch fehl (Infra-Fehler, nicht
+    Policy) — die anderen muessen trotzdem normal durchlaufen, und der Fehlschlag
+    muss als FAILED-Run sichtbar sein, nicht als 'skipped' oder stiller Erfolg."""
+    from modules.security.executor import ScanExecutionError
+
+    fake_registry.register(
+        _definition("nmap", [TargetType.HOSTNAME], ScannerCategory.NETWORK),
+        _FakeAdapter("nmap", findings=[NormalizedFinding(rule_id="open-port-80", title="Open port", severity=Severity.INFO)]),
+    )
+    fake_registry.register(
+        _definition("testssl", [TargetType.HOSTNAME], ScannerCategory.NETWORK),
+        _FakeAdapter("testssl", raise_on_execute=ScanExecutionError("K8s-Job fehlgeschlagen (Infra-Fehler)")),
+    )
+    fake_registry.register(
+        _definition("nuclei", [TargetType.HOSTNAME], ScannerCategory.WEB),
+        _FakeAdapter("nuclei", findings=[]),
+    )
+    target = await security_db.create_target(
+        SecurityTarget(name="host", target_type=TargetType.HOSTNAME, locator="example.com")
+    )
+
+    result = await run_security_workflow("external_service_audit", target=target)
+
+    # Alle drei Scanner wurden tatsaechlich ausgefuehrt (keiner uebersprungen) —
+    # der Fehlschlag ist ein Ausfuehrungs-, kein Policy-Ergebnis.
+    assert set(result.executed_scanner_ids) == {"nmap", "testssl", "nuclei"}
+    assert result.skipped_scanner_ids == []
+
+    by_scanner = {s.scanner_id: s.run for s in result.steps}
+    assert by_scanner["nmap"].status == ScanRunStatus.COMPLETED
+    assert by_scanner["nmap"].finding_count == 1
+    assert by_scanner["testssl"].status == ScanRunStatus.FAILED
+    assert "Infra-Fehler" in by_scanner["testssl"].error
+    assert by_scanner["nuclei"].status == ScanRunStatus.COMPLETED
+
+    # total_findings zaehlt nur die tatsaechlich gefundenen — der fehlgeschlagene
+    # Scanner traegt 0 bei, verschluckt aber nicht die Ergebnisse der anderen.
+    assert result.total_findings == 1
