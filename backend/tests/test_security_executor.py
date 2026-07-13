@@ -160,14 +160,27 @@ def test_network_policy_with_allowlist_adds_ip_block_rule():
     assert netpol.spec.egress[1].to[0].ip_block.cidr == "10.0.0.0/24"
 
 
-def test_network_policy_no_allowlist_falls_back_to_open_egress_with_warning(caplog):
+def test_network_policy_target_only_without_allowlist_denies_non_dns_egress():
+    """Regressionstest: eine leere Allowlist unter mode='target_only'/'egress_allowlist'
+    darf NIEMALS stillschweigend zu offenem Egress fuehren (frueherer Bug) — nur DNS
+    ist erlaubt, exakt wie mode='none'. Offener Zugriff muss explizit ueber
+    mode='open' angefordert werden (siehe naechster Test)."""
     executor = _executor()
     spec = _spec(network_policy=NetworkPolicy(mode="target_only", allowlist=[]))
+    netpol = executor._build_network_policy(spec, "job-name")
+    assert len(netpol.spec.egress) == 1
+    ports = {p.port for p in netpol.spec.egress[0].ports}
+    assert ports == {53}
+
+
+def test_network_policy_mode_open_falls_back_to_open_egress_with_warning(caplog):
+    executor = _executor()
+    spec = _spec(network_policy=NetworkPolicy(mode="open", allowlist=[]))
     with caplog.at_level("WARNING"):
         netpol = executor._build_network_policy(spec, "job-name")
     assert len(netpol.spec.egress) == 2
     assert netpol.spec.egress[1].to is None
-    assert any("kein Egress-Allowlist" in r.message for r in caplog.records)
+    assert any("mode='open'" in r.message for r in caplog.records)
 
 
 def test_network_policy_pod_selector_matches_job_name():
