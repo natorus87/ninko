@@ -38,6 +38,29 @@ All notable changes to this module will be documented in this file.
 - 351 unit tests covering registry/validation, agents, workflows, findings, and
   permission/tenant-isolation boundaries.
 
+### Fixed
+
+- **Link-local/cloud-metadata block only applied to http(s)-shaped locators**
+  (`policy.py`): `enforce_network_scope()` now runs the same hard block for
+  every network target type (IP_ADDRESS/HOSTNAME/CIDR/SSH_HOST/TLS_ENDPOINT),
+  not just URLs — previously an IP/hostname target without an explicit
+  `cidr_allowlist` had no automated protection at all.
+- **Empty NetworkPolicy allowlist silently fell back to open egress**
+  (`executor.py`): a job's NetworkPolicy now denies non-DNS egress by default
+  when no allowlist is present, regardless of the declared `mode` — the
+  previous behavior allowed everything whenever an adapter forgot to populate
+  `allowlist`, defeating the `egress_allowlist`/`target_only` mode names. A new
+  explicit `mode="open"` covers adapters that genuinely need an unpredictable
+  destination (Trivy/Kubescape/Checkov/KubeLinter/Gitleaks); Nmap/testssl.sh/
+  Nuclei/Garak now resolve their scan target to a real CIDR allowlist at build
+  time (`resolve_locator_egress_allowlist()`, new in `scanner_adapter.py`)
+  instead of leaving it empty.
+- **Command-injection guard missed disguised `sh -c`/`bash -c` invocations**
+  (`scanner_adapter.py`): `assert_no_shell_string()` only rejected a single-
+  element shell string; it now also rejects a multi-element shell-interpreter
+  invocation with `-c`/`-lc`/`--command`.
+- 12 new regression tests for the three fixes above (363 unit tests total).
+
 ### Known limitations
 
 See "Bekannte Grenzen & Folgearbeiten" in
