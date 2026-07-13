@@ -87,9 +87,13 @@ def test_build_execution_spec_rejects_invalid_severity_filter():
 
 
 def test_build_execution_spec_network_policy_documents_open_egress():
+    """Trivy braucht Zugriff auf beliebige Registries + die Vulnerability-DB —
+    kein statisches Allowlist moeglich, daher explizit mode='open' (NICHT
+    'egress_allowlist' mit leerer Liste, das ist inzwischen Deny-all, siehe
+    executor.py)."""
     adapter = TrivyAdapter()
     spec = adapter.build_execution_spec(_target(), _profile(), {})
-    assert spec.network_policy.mode == "egress_allowlist"
+    assert spec.network_policy.mode == "open"
     assert spec.network_policy.allowlist == []
 
 
