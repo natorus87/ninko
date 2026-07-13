@@ -40,8 +40,8 @@ secrets:
 backend:
   image:
     repository: natorus87/ninko-backend
-    # Pin to a specific release tag in production, e.g. "v1.5.1"
-    tag: "v1.5.1"
+    # Pin to a specific release tag in production, e.g. "v1.5.2"
+    tag: "v1.5.2"
     pullPolicy: Always
 
   replicaCount: 1
