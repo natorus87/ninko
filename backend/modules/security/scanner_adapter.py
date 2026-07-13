@@ -3,8 +3,12 @@
 Jeder Scanner wird ueber einen typisierten Adapter angebunden. Kein Scanner
 wird je ueber einen vom LLM erzeugten freien Shell-String aufgerufen: Adapter
 bauen einen `ExecutionSpec` mit einem Argument-Array (`command`), niemals
-einen konkatenierten Shell-String — das macht Command Injection strukturell
-unmoeglich, nicht nur durch Escaping.
+einen konkatenierten Shell-String. Der K8s-`command`-Feld-Aufruf laeuft ueber
+execve-Semantik ohne Shell-Interpretation — solange kein Adapter selbst einen
+Shell-Interpreter (`sh -c ...`) aufruft, ist Command Injection dadurch
+strukturell verhindert, nicht nur durch Escaping. `assert_no_shell_string()`
+erkennt sowohl den Ein-Element-Shell-String-Fall als auch den `sh`/`bash -c`-
+Fall als zusaetzliche Verteidigungslinie.
 
 Ausfuehrung erfolgt ausschliesslich ueber einen Executor (siehe executor.py,
 K8sJobExecutor), der den ExecutionSpec entgegennimmt. Adapter selbst starten
@@ -13,11 +17,74 @@ niemals direkt einen Subprocess.
 
 from __future__ import annotations
 
+import ipaddress
+import socket
 from typing import Any, Protocol, runtime_checkable
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from .models import ScanProfile, SecurityTarget, Severity
+
+
+def resolve_locator_egress_allowlist(locator: str) -> list[str]:
+    """Leitet aus einem Scan-Target-Locator (IP, CIDR, 'host:port' oder URL) eine
+    CIDR-Allowlist fuer die Job-NetworkPolicy ab (/32 bzw. /128 pro aufgeloester
+    Adresse). Gibt [] zurueck, wenn der Locator nicht aufgeloest werden kann —
+    der Aufrufer MUSS das dann als 'keine Restriktion moeglich' behandeln und
+    explizit auf mode='none' ausweichen, niemals eine leere Liste stillschweigend
+    als Restriktion interpretieren (siehe executor.py: mode != 'none' + leere
+    allowlist bedeutet Deny-all-except-DNS).
+    """
+    candidate = locator
+    if locator.startswith(("http://", "https://")):
+        candidate = urlparse(locator).hostname or ""
+    else:
+        candidate = locator.split(":")[0].strip()  # "host:port" -> "host"
+    if not candidate:
+        return []
+
+    try:
+        network = ipaddress.ip_network(candidate, strict=False)
+        return [str(network)]
+    except ValueError:
+        pass
+
+    try:
+        infos = socket.getaddrinfo(candidate, None)
+    except (socket.gaierror, UnicodeError, OSError):
+        return []
+
+    cidrs: set[str] = set()
+    for info in infos:
+        addr = info[4][0].split("%")[0]
+        try:
+            ip = ipaddress.ip_address(addr)
+        except ValueError:
+            continue
+        cidrs.add(f"{ip}/32" if ip.version == 4 else f"{ip}/128")
+    return sorted(cidrs)
+
+
+_SHELL_INTERPRETERS = frozenset({"sh", "bash", "dash", "zsh", "ash", "ksh"})
+_SHELL_COMMAND_FLAGS = frozenset({"-c", "-lc", "--command"})
+
+
+def _shell_invocation_reason(command: list[str]) -> str | None:
+    """Erkennt zwei Formen eines getarnten Shell-Aufrufs in einem Argument-Array:
+    (1) ein einzelnes Element mit Shell-Metazeichen (der urspruengliche Check),
+    (2) `["sh", "-c", "..."]`/`["bash", "-c", "..."]` u.ae. — ein Adapter, der
+    absichtlich oder versehentlich einen Shell-Interpreter mit -c aufruft,
+    haette sonst trotz mehrelementigem Array vollen Shell-Zugriff, den der
+    Ein-Element-Check nicht erkennt. Gibt None zurueck, wenn nichts auffaellig ist.
+    """
+    if len(command) == 1 and any(ch in command[0] for ch in (";", "|", "&&", "$(", "`")):
+        return "sieht wie ein Shell-String aus — Argument-Array erforderlich"
+    if len(command) >= 2:
+        interpreter = command[0].rsplit("/", 1)[-1]
+        if interpreter in _SHELL_INTERPRETERS and any(a in _SHELL_COMMAND_FLAGS for a in command[1:]):
+            return f"ruft den Shell-Interpreter {interpreter!r} mit -c auf — das ist ein getarnter Shell-String"
+    return None
 
 
 class ValidationResult(BaseModel):
@@ -31,11 +98,19 @@ class ValidationResult(BaseModel):
 
 
 class NetworkPolicy(BaseModel):
-    """Erlaubte ausgehende Netzwerkziele fuer den Scan-Job (Default: nichts erlaubt)."""
+    """Erlaubte ausgehende Netzwerkziele fuer den Scan-Job (Default: nichts erlaubt).
+
+    `allowlist` gesetzt -> DNS + genau diese CIDRs, unabhaengig von `mode`.
+    Ist `allowlist` leer, entscheidet `mode`:
+    - "none" | "target_only" | "egress_allowlist": nur DNS (deny-by-default).
+    - "open": bewusst unbeschraenktes Egress (fuer Adapter, die ein Ziel mit
+      unvorhersehbarer IP erreichen muessen, z.B. Registry-/Vulnerability-DB-
+      Zugriff, Git-Clone von beliebigem Host, Cluster-API via Kubeconfig).
+    """
 
     model_config = ConfigDict(extra="forbid")
 
-    mode: str = "target_only"  # "none" | "target_only" | "egress_allowlist"
+    mode: str = "target_only"  # "none" | "target_only" | "egress_allowlist" | "open"
     allowlist: list[str] = Field(default_factory=list)
 
 
@@ -62,11 +137,9 @@ class InitContainerSpec(BaseModel):
     env: dict[str, str] = Field(default_factory=dict)
 
     def assert_no_shell_string(self) -> None:
-        if len(self.command) == 1 and any(ch in self.command[0] for ch in (";", "|", "&&", "$(", "`")):
-            raise ValueError(
-                f"InitContainerSpec({self.name}).command sieht wie ein Shell-String aus — "
-                "Argument-Array erforderlich."
-            )
+        reason = _shell_invocation_reason(self.command)
+        if reason is not None:
+            raise ValueError(f"InitContainerSpec({self.name}).command {reason}.")
 
 
 class ExecutionSpec(BaseModel):
@@ -99,12 +172,11 @@ class ExecutionSpec(BaseModel):
     workspace_mount_path: str = "/workspace"
 
     def assert_no_shell_string(self) -> None:
-        """Verteidigungslinie: command darf niemals ein einzelnes Shell-String-Element sein."""
-        if len(self.command) == 1 and any(ch in self.command[0] for ch in (";", "|", "&&", "$(", "`")):
-            raise ValueError(
-                "ExecutionSpec.command sieht wie ein Shell-String aus — "
-                "Argument-Array erforderlich, kein konkateniertes Kommando."
-            )
+        """Verteidigungslinie: command darf weder ein einzelnes Shell-String-Element
+        noch ein getarnter `sh -c`/`bash -c`-Aufruf sein."""
+        reason = _shell_invocation_reason(self.command)
+        if reason is not None:
+            raise ValueError(f"ExecutionSpec.command {reason}.")
         for init in self.init_containers:
             init.assert_no_shell_string()
 
