@@ -7,6 +7,7 @@ aufzuzeichnen und zu resolven. Sie bauen auf dem AlertStateManager auf.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 
@@ -15,6 +16,36 @@ from langchain_core.tools import tool
 from core.alert_state import get_alert_manager
 
 logger = logging.getLogger("ninko.tools.alerts")
+
+
+async def _ingest_alert_to_kg(alert: dict) -> None:
+    """Schreibt einen Alert als Incident in den Knowledge Graph (best-effort, non-blocking)."""
+    try:
+        from core.auth import get_current_tenant_id
+        from core.knowledge_graph import get_knowledge_graph
+
+        kg = await get_knowledge_graph()
+        tenant_id = get_current_tenant_id() or "default"
+        module = alert.get("module", "unknown")
+        summary = alert.get("summary", alert.get("alert_id", "alert"))
+        details = (
+            f"Reason: {alert.get('reason', 'unknown')}\n"
+            f"Severity: {alert.get('severity', 'unknown')}\n"
+            f"Resource: {alert.get('resource', module)}\n"
+            f"First seen: {alert.get('first_seen', '?')}\n"
+            f"Notifications: {alert.get('notify_count', 0)}\n"
+            f"Ticket: {alert.get('ticket_id', 'none')}"
+        )
+        resolution = alert.get("resolution", "")
+        await kg.extract_from_incident(
+            tenant_id=tenant_id,
+            module=module,
+            summary=summary[:200],
+            details=details[:2000],
+            resolution=resolution or None,
+        )
+    except Exception as exc:
+        logger.debug("KG-Ingestion für Alert %s fehlgeschlagen: %s", alert.get("alert_id"), exc)
 
 
 @tool
@@ -137,6 +168,19 @@ async def record_alert(
 
         is_new = state.get("is_new", False)
 
+        if is_new and severity in ("critical", "warning"):
+            asyncio.create_task(_ingest_alert_to_kg({
+                "alert_id": alert_id,
+                "module": module,
+                "severity": severity,
+                "summary": summary,
+                "ticket_id": ticket_id,
+                "reason": "alert_recorded",
+                "resource": module,
+                "first_seen": state.get("first_seen"),
+                "notify_count": state.get("notify_count", 1),
+            }))
+
         if is_new:
             message = f"Neuer Alert aufgezeichnet: {alert_id}"
         else:
@@ -186,7 +230,12 @@ async def resolve_alert(alert_id: str, resolution: str = "") -> str:
     """
     try:
         mgr = get_alert_manager()
+        alert_data = await mgr.get_state(alert_id)
         resolved = await mgr.resolve(alert_id, resolution=resolution)
+
+        if resolved and alert_data:
+            alert_with_resolution = {**alert_data, "resolution": resolution or "Manually resolved"}
+            asyncio.create_task(_ingest_alert_to_kg(alert_with_resolution))
 
         if resolved:
             return json.dumps(

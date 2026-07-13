@@ -75,6 +75,33 @@ class MonitorAgent:
             self._task.cancel()
         logger.info("Monitor-Agent gestoppt.")
 
+    async def _ingest_kg(
+        self,
+        module: str,
+        summary: str,
+        details: str,
+        resolution: str | None = None,
+    ) -> None:
+        """Schreibt einen Detected-Incident in den Knowledge Graph (best-effort)."""
+        try:
+            from core.auth import get_current_tenant_id
+            from core.knowledge_graph import get_knowledge_graph
+
+            kg = await get_knowledge_graph()
+            tenant_id = get_current_tenant_id() or "default"
+            await kg.extract_from_incident(
+                tenant_id=tenant_id,
+                module=module,
+                summary=summary[:200],
+                details=details[:2000],
+                resolution=resolution,
+            )
+        except Exception as exc:
+            logger.debug(
+                "KG-Ingestion für Monitor-Incident (%s) fehlgeschlagen: %s",
+                module, exc,
+            )
+
     async def run_cycle(self) -> dict:
         """
         Ein Monitoring-Zyklus:
@@ -138,6 +165,19 @@ class MonitorAgent:
                         details=json.dumps(status, default=str),
                         severity="critical",
                     )
+
+                    # KG-Ingestion (best-effort, non-blocking)
+                    asyncio.create_task(self._ingest_kg(
+                        module=module_name,
+                        summary=f"Health-Check fehlgeschlagen: {module_name}",
+                        details=(
+                            f"Modul: {module_name}\n"
+                            f"Detail: {status.get('detail', 'Unbekannt')}\n"
+                            f"Status: {status.get('status', '?')}\n"
+                            f"Detected by: monitor-agent"
+                        ),
+                        resolution=None,
+                    ))
 
                     logger.warning(
                         "ALERT: Modul '%s' – %s",
