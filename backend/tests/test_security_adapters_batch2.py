@@ -279,6 +279,19 @@ class TestNmapAdapter:
         spec = NmapAdapter().build_execution_spec(self._target(), _profile(), {})
         assert spec.network_policy.allowlist == ["10.0.0.5/32"]
 
+    def test_build_spec_resolves_hostname_target_to_egress_allowlist(self):
+        """Regressionstest: vor dem Fix bekam ein HOSTNAME-Target (im Gegensatz
+        zu IP/CIDR) IMMER ein leeres allowlist -> mode='egress_allowlist', was
+        durch den executor.py-Fix zu Deny-all geworden waere und den Scan seines
+        eigenen Ziels beraubt haette. Jetzt wird der Hostname zur Laufzeit
+        aufgeloest und bekommt eine echte Allowlist."""
+        from modules.security.adapters.nmap import NmapAdapter
+
+        target = self._target(target_type=TargetType.HOSTNAME, locator="localhost")
+        spec = NmapAdapter().build_execution_spec(target, _profile(), {})
+        assert spec.network_policy.mode == "target_only"
+        assert spec.network_policy.allowlist
+
     def test_parse_xml_extracts_open_ports_only(self):
         from modules.security.adapters.nmap import NmapAdapter
 
@@ -358,6 +371,24 @@ class TestNucleiAdapter:
         with pytest.raises(ValueError):
             NucleiAdapter().parse_results(_result("not-json-at-all\n"))
 
+    def test_build_spec_resolvable_target_gets_egress_allowlist(self):
+        from modules.security.adapters.nuclei import NucleiAdapter
+
+        spec = NucleiAdapter().build_execution_spec(
+            self._target(locator="http://localhost/"), _profile(), {}
+        )
+        assert spec.network_policy.mode == "target_only"
+        assert spec.network_policy.allowlist
+
+    def test_build_spec_unresolvable_target_falls_back_to_open(self):
+        from modules.security.adapters.nuclei import NucleiAdapter
+
+        spec = NucleiAdapter().build_execution_spec(
+            self._target(locator="http://this-host-does-not-exist.invalid/"), _profile(), {}
+        )
+        assert spec.network_policy.mode == "open"
+        assert spec.network_policy.allowlist == []
+
 
 # ══════════════════════════════ testssl.sh ═════════════════════════════
 
@@ -373,6 +404,15 @@ class TestTestSSLAdapter:
 
         spec = TestSSLAdapter().build_execution_spec(self._target(), _profile(), {})
         spec.assert_no_shell_string()
+
+    def test_build_spec_resolvable_target_gets_egress_allowlist(self):
+        from modules.security.adapters.testssl import TestSSLAdapter
+
+        spec = TestSSLAdapter().build_execution_spec(
+            self._target(locator="localhost:443"), _profile(), {}
+        )
+        assert spec.network_policy.mode == "target_only"
+        assert spec.network_policy.allowlist
 
     def test_parse_skips_ok_and_info_severities(self):
         from modules.security.adapters.testssl import TestSSLAdapter
@@ -415,6 +455,25 @@ class TestGarakAdapter:
 
         spec = GarakAdapter().build_execution_spec(self._target(), _profile(ScanProfileKind.INTRUSIVE), {})
         spec.assert_no_shell_string()
+
+    def test_build_spec_unresolvable_endpoint_falls_back_to_open(self):
+        """Default-Fixture-Locator 'http://litellm:4000' ist in der Test-Umgebung
+        nicht aufloesbar -> explizit offenes Egress (mode='open'), niemals ein
+        leeres allowlist unter target_only (das waere jetzt Deny-all)."""
+        from modules.security.adapters.garak import GarakAdapter
+
+        spec = GarakAdapter().build_execution_spec(self._target(), _profile(ScanProfileKind.INTRUSIVE), {})
+        assert spec.network_policy.mode == "open"
+        assert spec.network_policy.allowlist == []
+
+    def test_build_spec_resolvable_endpoint_gets_egress_allowlist(self):
+        from modules.security.adapters.garak import GarakAdapter
+
+        spec = GarakAdapter().build_execution_spec(
+            self._target(locator="http://localhost:4000"), _profile(ScanProfileKind.INTRUSIVE), {}
+        )
+        assert spec.network_policy.mode == "target_only"
+        assert spec.network_policy.allowlist
 
     def test_parse_only_reports_failed_probes(self):
         from modules.security.adapters.garak import GarakAdapter
