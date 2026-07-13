@@ -25,6 +25,7 @@ from ..scanner_adapter import (
     NormalizedFinding,
     ScannerExecutionResult,
     ValidationResult,
+    resolve_locator_egress_allowlist,
 )
 
 GARAK_DEFINITION = ScannerDefinition(
@@ -83,6 +84,11 @@ class GarakAdapter:
             secret_refs = [target.credentials_reference]
             command.extend(["--generator_option_file", f"/secrets/{target.credentials_reference}/config.json"])
 
+        # Ziel-LLM-Endpoint zur Laufzeit aufloesen -> echte Egress-Allowlist statt
+        # offenem Netz. Nicht aufloesbar: mode="open" (offen, explizit), niemals ein
+        # leeres allowlist unter target_only (das ist jetzt Deny-all, siehe executor.py).
+        allowlist = resolve_locator_egress_allowlist(target.locator)
+
         return ExecutionSpec(
             scanner_id=self.scanner_id,
             container_image=GARAK_DEFINITION.container_image,
@@ -90,7 +96,9 @@ class GarakAdapter:
             secret_refs=secret_refs,
             resource_limits={"cpu": "1", "memory": "1Gi"},
             timeout_s=GARAK_DEFINITION.default_timeout,
-            network_policy=NetworkPolicy(mode="target_only", allowlist=[]),
+            network_policy=NetworkPolicy(
+                mode="target_only" if allowlist else "open", allowlist=allowlist
+            ),
             max_output_bytes=5_000_000,
         )
 
