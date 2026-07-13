@@ -9,6 +9,47 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.5.3] – 2026-07-13
+
+### Added
+
+- **Knowledge Graph end-to-end wiring** (was implemented but not connected):
+  - **4 KG tools exposed to the LLM**: `kg_find_related`, `kg_find_path`,
+    `kg_analyze_dependencies`, `kg_record_incident` are now part of the
+    orchestrator's tool list (was `@tool`-defined but orphan since
+    creation). Plus 7 other orphan core tools: `create_task`,
+    `get_task`, `list_tasks`, `stop_task`, `task_output`, `speak`,
+    `generate_pdf_report`.
+  - **Auto-Ingestion on alert lifecycle**: `record_alert` and
+    `resolve_alert` now spawn background tasks that call
+    `_ingest_alert_to_kg`, populating the KG with incident metadata
+    (module, severity, reason, resource, ticket_id, resolution).
+  - **Auto-Ingestion on monitor failures**: `MonitorAgent.run_cycle`
+    also calls `_ingest_kg` for each module that returns
+    `status='error'` from its health check, so the KG stays in sync
+    with the monitor's view of the infrastructure.
+  - **`POST /api/knowledge-graph/seed` endpoint** (admin-only):
+    idempotent seeding of 8 module entities, 5 demo relationships,
+    and 2 example incidents for the current tenant. Enables
+    first-time users to see a non-empty graph without having to
+    wait for real incidents.
+  - **Frontend "Demo-Daten seeden" + "Aktualisieren" buttons** in
+    the Knowledge Graph dashboard tab. Non-admin users see a
+    "Nur Admins" lock indicator when they hit the seed endpoint
+    with insufficient role.
+  - **10 new unit tests** in `test_kg_ingestion.py` covering
+    ingestion helpers, monitor hook, admin-only seed guard, and
+    idempotency.
+
+### Fixed
+
+- **Knowledge Graph was effectively dead**: the middleware could
+  read it (and always found nothing), the LLM had no kg_* tools
+  to write or query it, no UI action triggered ingestion, and
+  the only public ingestion path (the `extract/incident` HTTP
+  endpoint) had no callers. After this release the graph
+  actually populates and is queryable.
+
 ## [1.3.9] – 2026-07-04
 
 ### Changed
