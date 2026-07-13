@@ -44,6 +44,17 @@ from agents.core_tools import (
     delete_scheduled_task,
     run_agent_job,
     get_agent_job_result,
+    kg_find_related,
+    kg_find_path,
+    kg_analyze_dependencies,
+    kg_record_incident,
+    create_task,
+    get_task,
+    list_tasks,
+    stop_task,
+    task_output,
+    speak,
+    generate_pdf_report,
 )
 from agents.alert_tools import (
     check_alert_state,
@@ -320,6 +331,17 @@ class OrchestratorAgent(BaseAgent):
             record_alert,
             resolve_alert,
             wait,
+            create_task,
+            get_task,
+            list_tasks,
+            stop_task,
+            task_output,
+            speak,
+            generate_pdf_report,
+            kg_find_related,
+            kg_find_path,
+            kg_analyze_dependencies,
+            kg_record_incident,
         ]
 
         if get_settings().SCRIPT_TOOLS_ENABLED:
