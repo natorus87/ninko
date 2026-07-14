@@ -22,6 +22,15 @@ TEST_USERNAME = os.getenv("NINKO_TEST_USERNAME", "").strip()
 TEST_PASSWORD = os.getenv("NINKO_TEST_PASSWORD", "")
 API_KEY = os.getenv("NINKO_API_KEY", "").strip()
 
+# Live-Smoke-Test gegen eine laufende Instanz: Die Auth-geschützten Endpoints
+# liefern ohne Credentials 401 — dann skippen statt rot fehlschlagen, damit
+# das Test-Gate aussagekräftig bleibt (echte 401-Regressionen deckt die
+# Unit-Suite über die Security-Policy-Tests ab).
+pytestmark = pytest.mark.skipif(
+    not (API_KEY or (TEST_USERNAME and TEST_PASSWORD)),
+    reason="Live-Smoke-Test — braucht NINKO_API_KEY oder NINKO_TEST_USERNAME/NINKO_TEST_PASSWORD gegen eine laufende Instanz",
+)
+
 
 async def _create_client() -> AsyncClient:
     headers: dict[str, str] = {}
