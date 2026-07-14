@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -916,6 +917,9 @@ def _read_app_version() -> str:
 
 
 _APP_VERSION = _read_app_version()
+# Beim Image-Build injiziert (Dockerfile ARG/ENV GIT_SHA) — macht sichtbar,
+# aus welchem Commit das laufende Image tatsaechlich gebaut wurde.
+_APP_COMMIT = os.getenv("GIT_SHA", "unknown")
 
 
 # ── Health Endpoint ──────────────────────────────────
@@ -927,4 +931,5 @@ async def health() -> object:
         "status": "ok",
         "service": "ninko",
         "version": _APP_VERSION,
+        "commit": _APP_COMMIT,
     }
