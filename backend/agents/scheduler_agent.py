@@ -205,6 +205,8 @@ class SchedulerAgent:
         task_id = task["id"]
         start_time = time.monotonic()
         workflow_id = task.get("workflow_id")
+        security_workflow_id = task.get("security_workflow_id")
+        security_target_id = task.get("security_target_id")
 
         agent_id = task.get("agent_id")
         tenant_id = _task_tenant(task)
@@ -220,7 +222,46 @@ class SchedulerAgent:
             module_used = None
             exec_status = "ok"
 
-            if workflow_id:
+            if security_workflow_id and security_target_id:
+                # Deterministischer Security-Pfad — bewusst OHNE Orchestrator/LLM-
+                # Umweg (Auftragsprinzip: "Kein Fallback auf freien ReAct-Modus bei
+                # Security-Aufgaben"). Policy-Durchsetzung (intrusive-Profile duerfen
+                # nicht cron-getriggert werden) laeuft unveraendert ueber
+                # modules.security.policy — ein Scanner, der ausschliesslich im
+                # intrusive-Profil registriert ist (z.B. Garak), wird hier pro Lauf
+                # uebersprungen (skipped_reason), nie automatisch ausgefuehrt.
+                from modules.security import db as security_db
+                from modules.security.models import TriggerType as SecurityTriggerType
+                from modules.security.policy import PolicyViolation as SecurityPolicyViolation
+                from modules.security.workflows import run_security_workflow
+
+                target = await security_db.get_target(security_target_id, tenant_id=tenant_id)
+                if target is None:
+                    raise ValueError(f"Security-Target '{security_target_id}' nicht gefunden.")
+
+                logger.info(
+                    "Starte Security-Workflow '%s' fuer Task '%s' (Target: %s)",
+                    security_workflow_id, task["name"], security_target_id,
+                )
+                try:
+                    result = await run_security_workflow(
+                        security_workflow_id, target=target, requested_by=f"scheduler:{task_id}",
+                        trigger_type=SecurityTriggerType.CRON, tenant_id=tenant_id,
+                    )
+                except (SecurityPolicyViolation, ValueError) as exc:
+                    raise ValueError(str(exc)) from exc
+
+                response_text = (
+                    f"Security-Workflow '{security_workflow_id}' abgeschlossen: "
+                    f"{result.total_findings} Findings ueber {len(result.executed_scanner_ids)} "
+                    f"Scanner ({', '.join(result.executed_scanner_ids) or 'keiner'})."
+                )
+                if result.skipped_scanner_ids:
+                    response_text += f" Uebersprungen: {', '.join(result.skipped_scanner_ids)}."
+                module_used = "security"
+                exec_status = "ok"
+
+            elif workflow_id:
                 # Workflow ausführen — Storage ist tenant-scoped
                 # (ninko:workflows:<tenant>, IDs "tenant::public").
                 from core.workflow_engine import WorkflowEngine, _tenant_key
@@ -299,6 +340,8 @@ class SchedulerAgent:
                 "prompt": task.get("prompt", ""),
                 "workflow_id": workflow_id,
                 "agent_id": agent_id,
+                "security_workflow_id": security_workflow_id,
+                "security_target_id": security_target_id,
                 "response": response_text[:2000],  # Limit für Redis
                 "duration_ms": duration_ms,
             }
@@ -392,6 +435,8 @@ class SchedulerAgent:
                 "prompt": data.get("prompt", ""),
                 "workflow_id": data.get("workflow_id"),
                 "agent_id": data.get("agent_id"),
+                "security_workflow_id": data.get("security_workflow_id"),
+                "security_target_id": data.get("security_target_id"),
                 "target_module": data.get("target_module"),
                 "enabled": data.get("enabled", True),
                 "tenant_id": (data.get("tenant_id") or "default").strip().lower() or "default",
@@ -427,7 +472,10 @@ class SchedulerAgent:
                 cron = croniter(task["cron"], datetime.now(timezone.utc))
                 task["next_run"] = cron.get_next(datetime).isoformat()
 
-            for key in ("name", "prompt", "target_module", "enabled", "agent_id", "workflow_id"):
+            for key in (
+                "name", "prompt", "target_module", "enabled", "agent_id", "workflow_id",
+                "security_workflow_id", "security_target_id",
+            ):
                 if key in data and data[key] is not None:
                     task[key] = data[key]
 

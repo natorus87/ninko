@@ -198,7 +198,8 @@ const Ninko = {
             });
             this.sessionId = this.getSessionId();
             this.restoreTheme();
-            this.loadBackgroundSettings();
+            this.restoreDebugMode();
+            await this.loadBackgroundSettings();
             await this.loadActiveTheme();
             this.applyActiveThemeTokens();
             await this.loadHistory();
@@ -869,10 +870,12 @@ const Ninko = {
             dropdown.style.display = 'none';
             picker.classList.remove('open');
         } else {
-            dropdown.style.display = 'block';
+            this._positionFloatingPopover(dropdown, picker, { align: 'left', matchWidth: true });
             picker.classList.add('open');
             const close = (e) => {
-                if (!picker.contains(e.target)) {
+                // dropdown ist zum Öffnen aus picker gelöst (siehe _positionFloatingPopover) —
+                // beide Container prüfen, sonst schließt jeder Klick im Dropdown sich selbst sofort.
+                if (!picker.contains(e.target) && !dropdown.contains(e.target)) {
                     dropdown.style.display = 'none';
                     picker.classList.remove('open');
                     document.removeEventListener('click', close);
@@ -1003,6 +1006,7 @@ const Ninko = {
 
     _doSwitchTab(tabId) {
         const automationTabs = ['automatisierung', 'scripting', 'modules'];
+        const previousTab = this.activeTab;
 
         // Deactivate all nav tabs and tab panels
         document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
@@ -1024,6 +1028,13 @@ const Ninko = {
         if (panel) panel.classList.add('active');
 
         this.activeTab = tabId;
+
+        // Returning to chat from Automatisierung (incl. its tasks/agents/skills/
+        // workflows sub-tabs, which all route through 'automatisierung') resets
+        // to "Neuer Chat" instead of resuming whatever history entry was open.
+        if (tabId === 'chat' && previousTab === 'automatisierung') {
+            this.newChat();
+        }
 
         // Show/hide sidebar history section (only in chat tab)
         const historySection = document.getElementById('sidebar-history-section');
@@ -1299,6 +1310,7 @@ const Ninko = {
             'checkmk': typeof CheckmkTab !== 'undefined' ? CheckmkTab : null,
             'dataviz': typeof DataVizTab !== 'undefined' ? DataVizTab : null,
             'message_hub': typeof MessageHubTab !== 'undefined' ? MessageHubTab : null,
+            'security': typeof SecurityTab !== 'undefined' ? SecurityTab : null,
         };
         // Fallback: dynamisch registrierte Plugin-Tabs (via Ninko._pluginTabs)
         return map[tabId] || this._pluginTabs[tabId] || null;
@@ -1345,12 +1357,52 @@ const Ninko = {
         if (this._chatPlusMenuInitialized) return;
         this._chatPlusMenuInitialized = true;
         document.addEventListener('click', (e) => {
+            // Popover-Fenster (SafeGuard, Modellwahl) werden zum Öffnen aus dem
+            // Dropdown gelöst (siehe _positionFloatingPopover) — Klicks darin
+            // dürfen das "+"-Menü nicht als "außerhalb" schließen.
+            if (e.target.closest('.chat-floating-popover')) return;
             const wrap = document.getElementById('chat-plus-menu');
             if (!wrap || !wrap.contains(e.target)) this.closeChatPlusMenu();
         });
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') this.closeChatPlusMenu();
         });
+        // position:fixed-Popover folgen ihrem Anker nicht bei Resize —
+        // Menü samt Popover schließen statt falsch positioniert stehenzulassen.
+        window.addEventListener('resize', () => this.closeChatPlusMenu());
+    },
+
+    /**
+     * Positioniert ein Popover (SafeGuard-Picker, Modellwahl) als position:fixed
+     * direkt unter/über seinem Anker-Element und löst es dafür aus seinem
+     * bisherigen DOM-Elternteil (document.body als neues Elternteil) — verhindert,
+     * dass ein Overflow/Scroll-Container des Elternteils (z.B. .chat-plus-dropdown)
+     * das Popover abschneidet oder den ganzen Container scrollbar macht.
+     */
+    _positionFloatingPopover(popoverEl, anchorEl, { align = 'right', matchWidth = false, gap = 6 } = {}) {
+        if (!popoverEl || !anchorEl) return;
+        if (popoverEl.parentElement !== document.body) document.body.appendChild(popoverEl);
+        popoverEl.classList.add('chat-floating-popover');
+        popoverEl.style.position = 'fixed';
+        popoverEl.style.visibility = 'hidden';
+        popoverEl.style.display = 'block';
+        if (matchWidth) popoverEl.style.width = `${anchorEl.offsetWidth}px`;
+
+        const anchorRect = anchorEl.getBoundingClientRect();
+        const popW = popoverEl.offsetWidth;
+        const popH = popoverEl.offsetHeight;
+
+        let top = anchorRect.bottom + gap;
+        if (top + popH > window.innerHeight - 8 && anchorRect.top - popH - gap > 8) {
+            top = anchorRect.top - popH - gap;
+        }
+        let left = align === 'right' ? anchorRect.right - popW : anchorRect.left;
+        left = Math.max(8, Math.min(left, window.innerWidth - popW - 8));
+
+        popoverEl.style.top = `${Math.round(top)}px`;
+        popoverEl.style.left = `${Math.round(left)}px`;
+        popoverEl.style.right = 'auto';
+        popoverEl.style.visibility = 'visible';
     },
 
     toggleChatPlusMenu(event) {
@@ -1379,6 +1431,14 @@ const Ninko = {
         const menu = document.getElementById('chat-plus-dropdown');
         if (menu) menu.style.display = 'none';
         if (wrap) wrap.classList.remove('open', 'drop-up');
+        // Aus dem Dropdown gelöste Popover (siehe _positionFloatingPopover) beim
+        // Schließen des "+"-Menüs mitschließen, sonst blieben sie als eigenständige
+        // body-Kinder sichtbar.
+        this._closeSafeguardPicker?.();
+        const moduleDropdown = document.getElementById('module-picker-dropdown');
+        const modulePicker = document.getElementById('module-picker');
+        if (moduleDropdown) moduleDropdown.style.display = 'none';
+        if (modulePicker) modulePicker.classList.remove('open');
     },
 
     // --- Spracheingabe ---
@@ -1670,6 +1730,7 @@ const Ninko = {
             messages: [],
             createdAt: Date.now(),
             updatedAt: Date.now(),
+            pinned: false,
         };
         this.chatHistory.unshift(conversation);
         if (this.chatHistory.length > 50) this.chatHistory.pop();
@@ -1689,7 +1750,9 @@ const Ninko = {
             : this.currentHistoryId;
         const existing = this.chatHistory.find(h => h.id === targetId);
         if (existing) {
-            existing.messages.push({ role: 'user', text: userMsg }, { role: 'ai', text: aiMsg });
+            const steps = this._savedStepsData || null;
+            this._savedStepsData = null;
+            existing.messages.push({ role: 'user', text: userMsg }, { role: 'ai', text: aiMsg, steps });
             existing.updatedAt = Date.now();
             this.saveHistory(existing);
         }
@@ -1718,11 +1781,15 @@ const Ninko = {
     async saveHistory(conversation) {
         // Auf Server speichern
         try {
-            await fetch('/api/chat/ui-history', {
+            const res = await fetch('/api/chat/ui-history', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(conversation),
             });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                console.warn('saveHistory rejected', res.status, data.detail || data);
+            }
         } catch (err) { console.warn('syncHistoryToBackend failed', err); }
     },
 
@@ -1734,31 +1801,78 @@ const Ninko = {
         this.renderHistory();
     },
 
-    renderHistory() {
-        const list = document.getElementById('history-list');
-        if (!list) return;
+    async togglePinHistoryEntry(id) {
+        const entry = this.chatHistory.find(h => h.id === id);
+        if (!entry) return;
+        entry.pinned = !entry.pinned;
+        await this.saveHistory(entry);
+        this.renderHistory();
+    },
 
-        if (this.chatHistory.length === 0) {
-            list.innerHTML = `<div class="history-empty">${t('chat.noHistory')}</div>`;
-            return;
+    async clearAllHistory() {
+        // Pinned entries are intentionally kept — "clear all" means "clear
+        // everything except what I pinned", both here and server-side.
+        if (!this.chatHistory.some(h => !h.pinned)) return;
+        if (!await this.confirm(t('history.deleteAllConfirm'))) return;
+        try {
+            await fetch('/api/chat/ui-history', { method: 'DELETE' });
+        } catch (err) { console.warn('clearAllHistory failed', err); }
+        const currentIsPinned = this.chatHistory.some(h => h.id === this.currentHistoryId && h.pinned);
+        this.chatHistory = this.chatHistory.filter(h => h.pinned);
+        if (currentIsPinned) {
+            this.renderHistory();
+        } else {
+            this.newChat();
         }
+    },
 
-        list.innerHTML = this.chatHistory.map(h => {
-            const historyId = this._escapeHtml(h.id);
-            const plainTitle = this._stripHistoryDecorations(h.title || '');
-            const historyTitle = this._escapeHtml(plainTitle);
-            const historyTitleAttr = this._escapeAttr(h.title);
-            return `
+    _renderHistoryItem(h) {
+        const historyId = this._escapeHtml(h.id);
+        const plainTitle = this._stripHistoryDecorations(h.title || '');
+        const historyTitle = this._escapeHtml(plainTitle);
+        const historyTitleAttr = this._escapeAttr(h.title);
+        const isPinned = !!h.pinned;
+        const pinTitle = this._escapeAttr(isPinned ? t('history.unpinTitle') : t('history.pinTitle'));
+        return `
             <div class="history-item ${h.id === this.currentHistoryId ? 'active' : ''}"
                 data-action="loadHistoryEntry" data-args="${JSON.stringify([historyId]).replace(/\"/g, '&quot;')}"
                 title="${historyTitleAttr}">
                 <span class="history-item-text">${historyTitle}</span>
+                <button class="history-item-pin${isPinned ? ' is-pinned' : ''}" data-action="togglePinHistoryEntry" data-args="${JSON.stringify([historyId]).replace(/\"/g, '&quot;')}" data-stop-propagation="true" title="${pinTitle}">★</button>
                 <button class="history-item-delete" data-action="deleteHistoryEntry" data-args="${JSON.stringify([historyId]).replace(/\"/g, '&quot;')}" data-stop-propagation="true" title="Chat löschen">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m5 0V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
                 </button>
             </div>
         `;
-        }).join('');
+    },
+
+    renderHistory() {
+        const pinnedContainer = document.getElementById('sidebar-history-pinned');
+        const pinnedList = document.getElementById('history-list-pinned');
+        const list = document.getElementById('history-list');
+        if (!list) return;
+
+        const pinned = this.chatHistory.filter(h => h.pinned);
+        const unpinned = this.chatHistory.filter(h => !h.pinned);
+
+        if (pinnedContainer && pinnedList) {
+            if (pinned.length) {
+                pinnedContainer.style.display = '';
+                pinnedList.innerHTML = pinned.map(h => this._renderHistoryItem(h)).join('');
+            } else {
+                pinnedContainer.style.display = 'none';
+                pinnedList.innerHTML = '';
+            }
+        }
+
+        if (unpinned.length === 0) {
+            list.innerHTML = pinned.length === 0
+                ? `<div class="history-empty">${t('chat.noHistory')}</div>`
+                : '';
+            return;
+        }
+
+        list.innerHTML = unpinned.map(h => this._renderHistoryItem(h)).join('');
     },
 
     _stripHistoryDecorations(title) {
@@ -1780,8 +1894,12 @@ const Ninko = {
         this._setChatState('active');
 
         // Replay messages
+        // Backend normalisiert role beim Speichern zu 'assistant' (kanonisch) —
+        // hier zurück auf 'ai' mappen, sonst brechen role==='ai'-Checks
+        // (Denkschritte-Embed, Retry-/TTS-Button) für aus der History geladene Nachrichten.
         for (const msg of entry.messages) {
-            this.addChatMessage(msg.role, msg.text);
+            const role = msg.role === 'assistant' ? 'ai' : msg.role;
+            this.addChatMessage(role, msg.text, true, msg.steps);
         }
         this._updateChatInputState('reply');
 
@@ -2117,6 +2235,30 @@ ${messagesHtml}
         document.body.classList.remove('light-mode');
     },
 
+    _debugMode: false,
+
+    restoreDebugMode() {
+        this._debugMode = localStorage.getItem('ninko_debug_mode') === '1';
+        document.body.classList.toggle('debug-mode', this._debugMode);
+        const btn = document.getElementById('btn-debug-mode');
+        if (btn) {
+            btn.classList.toggle('debug-on', this._debugMode);
+            btn.classList.toggle('debug-off', !this._debugMode);
+        }
+    },
+
+    toggleDebugMode() {
+        this._debugMode = !this._debugMode;
+        localStorage.setItem('ninko_debug_mode', this._debugMode ? '1' : '0');
+        document.body.classList.toggle('debug-mode', this._debugMode);
+        const btn = document.getElementById('btn-debug-mode');
+        if (btn) {
+            btn.classList.toggle('debug-on', this._debugMode);
+            btn.classList.toggle('debug-off', !this._debugMode);
+        }
+        showNotification(this._debugMode ? 'Debug-Modus aktiviert' : 'Debug-Modus deaktiviert', 'success');
+    },
+
     _clearThemeVars() {
         if (!this._appliedThemeVars?.length) return;
         for (const key of this._appliedThemeVars) {
@@ -2176,7 +2318,7 @@ ${messagesHtml}
         this.sendMessage();
     },
 
-    addChatMessage(role, text, trackInMemory = true) {
+    addChatMessage(role, text, trackInMemory = true, steps = null) {
         const container = document.getElementById('chat-messages');
 
         // Remove welcome message & switch to active state
@@ -2227,8 +2369,15 @@ ${messagesHtml}
             </div>
         `;
 
-        // Denkschritte-Wrapper aus dem letzten Typing-Cycle vor dem Text einbetten
-        if (role === 'ai' && this._savedSteps) {
+        // Denkschritte-Wrapper einbetten: aus persistierten Steps (History-Replay)
+        // oder aus dem letzten Typing-Cycle (gerade fertige Live-Antwort)
+        if (role === 'ai' && Array.isArray(steps) && steps.length) {
+            const rebuilt = this._buildStaticStepsWrapper(steps);
+            if (rebuilt) {
+                const bubble = div.querySelector('.chat-bubble');
+                bubble.insertBefore(rebuilt, bubble.querySelector('.chat-bubble-text'));
+            }
+        } else if (role === 'ai' && this._savedSteps) {
             const hasSteps = this._savedSteps.querySelector('.typing-step');
             if (hasSteps) {
                 const bubble = div.querySelector('.chat-bubble');
@@ -2557,6 +2706,7 @@ ${messagesHtml}
     _thinkingStepStart: null,
     _pendingTraceSteps: {},
     _savedSteps: null,
+    _savedStepsData: null,
 
     showTyping() {
         this._typingSteps = [];
@@ -2565,6 +2715,7 @@ ${messagesHtml}
         this._thinkingStepStart = null;
         this._pendingTraceSteps = {};
         this._savedSteps = null;
+        this._savedStepsData = null;
         const container = document.getElementById('chat-messages');
         const div = document.createElement('div');
         div.className = 'chat-message ai';
@@ -2609,8 +2760,10 @@ ${messagesHtml}
                 el.classList.add('typing-step-done');
             });
             this._savedSteps = saved;
+            this._savedStepsData = this._serializeStepsFromWrapper(saved);
         } else {
             this._savedSteps = null;
+            this._savedStepsData = null;
         }
 
         indicator?.remove();
@@ -2619,6 +2772,96 @@ ${messagesHtml}
         this._thinkingStep = null;
         this._thinkingStepStart = null;
         this._pendingTraceSteps = {};
+    },
+
+    /** Liest fertig gerenderte .typing-step-Elemente in ein reines JSON-Array (für Persistenz).
+     *  Feldlängen werden auf die max_length-Caps des Backend-Schemas (StepTraceEntry)
+     *  gekürzt — sonst würde ein überlanger Preview den gesamten ui-history-POST
+     *  mit 422 scheitern lassen und der Verlaufseintrag ginge still verloren. */
+    _serializeStepsFromWrapper(wrapperEl) {
+        if (!wrapperEl) return null;
+        const cap = (value, max) => {
+            const s = String(value || '');
+            return s.length > max ? s.slice(0, max - 1) + '…' : s;
+        };
+        const steps = [];
+        wrapperEl.querySelectorAll('.typing-step').forEach((el) => {
+            const labelEl = el.querySelector('.typing-step-label');
+            let label = '', hint = '';
+            if (labelEl) {
+                const hintEl = labelEl.querySelector('.step-hint');
+                hint = hintEl ? hintEl.textContent.trim() : '';
+                const clone = labelEl.cloneNode(true);
+                clone.querySelectorAll('.step-hint').forEach((h) => h.remove());
+                label = clone.textContent.trim();
+            }
+            const phaseEl = el.querySelector('.trace-phase');
+            const thinkingNoteEl = el.querySelector('.typing-step-thinking-note');
+            const isThinking = !!thinkingNoteEl;
+            let thinking = '';
+            if (thinkingNoteEl && !thinkingNoteEl.querySelector('.typing-step-thinking-placeholder')) {
+                thinking = thinkingNoteEl.textContent.trim();
+            }
+            steps.push({
+                phase: el.dataset.phase ? cap(el.dataset.phase, 64) : null,
+                phaseLabel: cap(phaseEl ? phaseEl.textContent.trim() : '', 64),
+                label: cap(label, 300),
+                hint: cap(hint, 300),
+                state: el.classList.contains('typing-step-error') ? 'error' : 'done',
+                duration: cap(el.querySelector('.step-duration')?.textContent?.trim() || '', 32),
+                args: cap(el.querySelector('.typing-step-args')?.textContent || '', 2000),
+                preview: cap(el.querySelector('.typing-step-preview')?.textContent || '', 2000),
+                isThinking,
+                thinking: cap(thinking, 2000),
+            });
+        });
+        return steps.length ? steps.slice(0, 40) : null;
+    },
+
+    /** Baut aus einem persistierten Steps-Array denselben Denkschritte-Wrapper wie live (für History-Replay). */
+    _buildStaticStepsWrapper(steps) {
+        if (!Array.isArray(steps) || !steps.length) return null;
+        const wrapper = document.createElement('details');
+        wrapper.className = 'denkschritte-wrapper typing-steps-preserved';
+        wrapper.innerHTML = `
+            <summary class="denkschritte-summary"><span class="denkschritte-label">Denkschritte</span></summary>
+            <div class="typing-steps"></div>
+        `;
+        const stepsEl = wrapper.querySelector('.typing-steps');
+        steps.forEach((s) => {
+            const hintHtml = s.hint ? ` <span class="step-hint">${this._escapeHtml(s.hint)}</span>` : '';
+            const phaseClass = s.phase ? String(s.phase).toLowerCase().replace(/[^a-z0-9_-]/g, '-') : '';
+            const phaseHtml = s.phase
+                ? `<span class="trace-phase trace-phase-${phaseClass}">${this._escapeHtml(s.phaseLabel || s.phase)}</span>`
+                : '';
+            const durationHtml = s.duration ? `<span class="step-duration">${this._escapeHtml(s.duration)}</span>` : '';
+            const argsBlock = s.args ? `<pre class="typing-step-args">${this._escapeHtml(s.args)}</pre>` : '';
+            const previewBlock = s.preview ? `<pre class="typing-step-preview">${this._escapeHtml(s.preview)}</pre>` : '';
+            const thinkingBlock = s.isThinking
+                ? `<div class="typing-step-thinking-note">${this._escapeHtml(s.thinking || '')}</div>`
+                : '';
+            const hasBody = !!(argsBlock || previewBlock || s.isThinking);
+
+            const step = document.createElement('details');
+            step.className = `typing-step typing-step-${s.state === 'error' ? 'error' : 'done'}`;
+            if (s.phase) step.dataset.phase = s.phase;
+            if (!hasBody) step.classList.add('typing-step-noexpand');
+            step.innerHTML = `
+                <summary>
+                    ${phaseHtml}
+                    <span class="typing-step-label">${this._escapeHtml(s.label)}${hintHtml}</span>
+                    ${durationHtml}
+                    ${hasBody ? '<span class="step-chevron">›</span>' : ''}
+                </summary>
+                <div class="typing-step-body">
+                    ${thinkingBlock}
+                    ${argsBlock}
+                    ${previewBlock}
+                </div>
+            `;
+            stepsEl.appendChild(step);
+        });
+        return wrapper;
     },
 
     _settleThinkingHeader() {

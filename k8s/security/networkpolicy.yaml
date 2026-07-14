@@ -1,0 +1,16 @@
+# Namespace-weite Baseline: kein Pod in ninko-security nimmt jemals
+# eingehende Verbindungen an (Scanner sind reine Egress-Clients). Egress
+# wird zusaetzlich PRO JOB durch executor.py verschaerft (siehe
+# ExecutionSpec.network_policy) — diese Policy ist nur die Grundlinie.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ninko-security-deny-ingress
+  namespace: ninko-security
+  labels:
+    app.kubernetes.io/part-of: ninko
+    app.kubernetes.io/component: security-scans
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress

@@ -1,0 +1,270 @@
+"""Security Core — Scanner-Adapter-Interface.
+
+Jeder Scanner wird ueber einen typisierten Adapter angebunden. Kein Scanner
+wird je ueber einen vom LLM erzeugten freien Shell-String aufgerufen: Adapter
+bauen einen `ExecutionSpec` mit einem Argument-Array (`command`), niemals
+einen konkatenierten Shell-String. Der K8s-`command`-Feld-Aufruf laeuft ueber
+execve-Semantik ohne Shell-Interpretation — solange kein Adapter selbst einen
+Shell-Interpreter (`sh -c ...`) aufruft, ist Command Injection dadurch
+strukturell verhindert, nicht nur durch Escaping. `assert_no_shell_string()`
+erkennt sowohl den Ein-Element-Shell-String-Fall als auch den `sh`/`bash -c`-
+Fall als zusaetzliche Verteidigungslinie.
+
+Ausfuehrung erfolgt ausschliesslich ueber einen Executor (siehe executor.py,
+K8sJobExecutor), der den ExecutionSpec entgegennimmt. Adapter selbst starten
+niemals direkt einen Subprocess.
+"""
+
+from __future__ import annotations
+
+import ipaddress
+import socket
+from typing import Any, Protocol, runtime_checkable
+from urllib.parse import urlparse
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from .models import ScanProfile, SecurityTarget, Severity
+
+
+def resolve_locator_egress_allowlist(locator: str) -> list[str]:
+    """Leitet aus einem Scan-Target-Locator (IP, CIDR, 'host:port' oder URL) eine
+    CIDR-Allowlist fuer die Job-NetworkPolicy ab (/32 bzw. /128 pro aufgeloester
+    Adresse). Gibt [] zurueck, wenn der Locator nicht aufgeloest werden kann —
+    der Aufrufer MUSS das dann als 'keine Restriktion moeglich' behandeln und
+    explizit auf mode='none' ausweichen, niemals eine leere Liste stillschweigend
+    als Restriktion interpretieren (siehe executor.py: mode != 'none' + leere
+    allowlist bedeutet Deny-all-except-DNS).
+    """
+    candidate = locator
+    if locator.startswith(("http://", "https://")):
+        candidate = urlparse(locator).hostname or ""
+    else:
+        candidate = locator.split(":")[0].strip()  # "host:port" -> "host"
+    if not candidate:
+        return []
+
+    try:
+        network = ipaddress.ip_network(candidate, strict=False)
+        return [str(network)]
+    except ValueError:
+        pass
+
+    try:
+        infos = socket.getaddrinfo(candidate, None)
+    except (socket.gaierror, UnicodeError, OSError):
+        return []
+
+    cidrs: set[str] = set()
+    for info in infos:
+        addr = info[4][0].split("%")[0]
+        try:
+            ip = ipaddress.ip_address(addr)
+        except ValueError:
+            continue
+        cidrs.add(f"{ip}/32" if ip.version == 4 else f"{ip}/128")
+    return sorted(cidrs)
+
+
+_SHELL_INTERPRETERS = frozenset({"sh", "bash", "dash", "zsh", "ash", "ksh"})
+_SHELL_COMMAND_FLAGS = frozenset({"-c", "-lc", "--command"})
+
+
+def _shell_invocation_reason(command: list[str]) -> str | None:
+    """Erkennt zwei Formen eines getarnten Shell-Aufrufs in einem Argument-Array:
+    (1) ein einzelnes Element mit Shell-Metazeichen (der urspruengliche Check),
+    (2) `["sh", "-c", "..."]`/`["bash", "-c", "..."]` u.ae. — ein Adapter, der
+    absichtlich oder versehentlich einen Shell-Interpreter mit -c aufruft,
+    haette sonst trotz mehrelementigem Array vollen Shell-Zugriff, den der
+    Ein-Element-Check nicht erkennt. Gibt None zurueck, wenn nichts auffaellig ist.
+    """
+    if len(command) == 1 and any(ch in command[0] for ch in (";", "|", "&&", "$(", "`")):
+        return "sieht wie ein Shell-String aus — Argument-Array erforderlich"
+    if len(command) >= 2:
+        interpreter = command[0].rsplit("/", 1)[-1]
+        if interpreter in _SHELL_INTERPRETERS and any(a in _SHELL_COMMAND_FLAGS for a in command[1:]):
+            return f"ruft den Shell-Interpreter {interpreter!r} mit -c auf — das ist ein getarnter Shell-String"
+    return None
+
+
+class ValidationResult(BaseModel):
+    """Ergebnis der Vorab-Validierung eines Scan-Vorhabens."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    valid: bool
+    errors: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class NetworkPolicy(BaseModel):
+    """Erlaubte ausgehende Netzwerkziele fuer den Scan-Job (Default: nichts erlaubt).
+
+    `allowlist` gesetzt -> DNS + genau diese CIDRs, unabhaengig von `mode`.
+    Ist `allowlist` leer, entscheidet `mode`:
+    - "none" | "target_only" | "egress_allowlist": nur DNS (deny-by-default).
+    - "open": bewusst unbeschraenktes Egress (fuer Adapter, die ein Ziel mit
+      unvorhersehbarer IP erreichen muessen, z.B. Registry-/Vulnerability-DB-
+      Zugriff, Git-Clone von beliebigem Host, Cluster-API via Kubeconfig).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: str = "target_only"  # "none" | "target_only" | "egress_allowlist" | "open"
+    allowlist: list[str] = Field(default_factory=list)
+
+
+class VolumeMount(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    mount_path: str
+    read_only: bool = True
+
+
+class InitContainerSpec(BaseModel):
+    """Vorbereitungsschritt vor dem eigentlichen Scanner-Container (z.B. Git-Checkout).
+
+    Laeuft im selben Pod, teilt sich das `workspace`-Volume mit dem Hauptcontainer.
+    Gleiche Regel wie ExecutionSpec.command: Argument-Array, kein Shell-String.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    image: str
+    command: list[str]
+    env: dict[str, str] = Field(default_factory=dict)
+
+    def assert_no_shell_string(self) -> None:
+        reason = _shell_invocation_reason(self.command)
+        if reason is not None:
+            raise ValueError(f"InitContainerSpec({self.name}).command {reason}.")
+
+
+class ExecutionSpec(BaseModel):
+    """Vollstaendig validierte, deterministisch aus Adapter-Logik gebaute Job-Spezifikation.
+
+    `command` ist immer ein Argument-Array (execve-Semantik), niemals ein
+    Shell-String. `env` enthaelt nur explizit erlaubte Variablen — keine
+    Secrets im Klartext (nur `secret_refs`, die der Executor zur Laufzeit aus
+    dem Vault aufloest und als Env/Datei injiziert).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    scanner_id: str
+    container_image: str  # inkl. Tag oder Digest, z.B. aquasec/trivy:0.55.0
+    command: list[str]
+    env: dict[str, str] = Field(default_factory=dict)
+    secret_refs: list[str] = Field(default_factory=list)
+    resource_limits: dict[str, str] = Field(
+        default_factory=lambda: {"cpu": "500m", "memory": "512Mi"}
+    )
+    timeout_s: float = 300.0
+    network_policy: NetworkPolicy = Field(default_factory=NetworkPolicy)
+    volumes: list[VolumeMount] = Field(default_factory=list)
+    capabilities: list[str] = Field(default_factory=list)
+    service_account: str = "ninko-security-scanner"
+    output_paths: list[str] = Field(default_factory=list)
+    max_output_bytes: int = 5_000_000
+    init_containers: list[InitContainerSpec] = Field(default_factory=list)
+    workspace_mount_path: str = "/workspace"
+
+    def assert_no_shell_string(self) -> None:
+        """Verteidigungslinie: command darf weder ein einzelnes Shell-String-Element
+        noch ein getarnter `sh -c`/`bash -c`-Aufruf sein."""
+        reason = _shell_invocation_reason(self.command)
+        if reason is not None:
+            raise ValueError(f"ExecutionSpec.command {reason}.")
+        for init in self.init_containers:
+            init.assert_no_shell_string()
+
+
+class ScannerExecutionResult(BaseModel):
+    """Rohes, unveraendertes Ergebnis eines Scanner-Laufs (vor dem Parsing)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    scanner_id: str
+    exit_code: int
+    stdout: str = ""
+    stderr: str = ""
+    truncated: bool = False
+    duration_s: float = 0.0
+    job_name: str = ""
+    scanner_version: str = ""
+
+
+class NormalizedFinding(BaseModel):
+    """Scanner-neutrales Zwischenformat — wird von db.upsert_finding in ein
+    persistiertes Finding inkl. Fingerprint/ID/Timestamps ueberfuehrt.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    rule_id: str
+    title: str
+    description: str = ""
+    severity: Severity
+    confidence: float = 1.0
+    category: str = ""
+    cve: str | None = None
+    cwe: str | None = None
+    cvss: float | None = None
+    resource_type: str = ""
+    resource_identifier: str = ""
+    location: str = ""
+    remediation: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+@runtime_checkable
+class SecurityScannerAdapter(Protocol):
+    """Vertrag, den jeder Scanner-Adapter erfuellen muss."""
+
+    scanner_id: str
+
+    def validate_target(
+        self, target: SecurityTarget, profile: ScanProfile, parameters: dict[str, Any]
+    ) -> ValidationResult:
+        """Prueft, ob dieser Scanner fuer Target-Typ, Profil und Parameter zulaessig ist.
+
+        Muss rein und ohne Seiteneffekt sein (kein Netzwerk-/Dateisystemzugriff).
+        """
+        ...
+
+    def build_execution_spec(
+        self, target: SecurityTarget, profile: ScanProfile, parameters: dict[str, Any]
+    ) -> ExecutionSpec:
+        """Baut die vollstaendige, validierte ExecutionSpec. Muss nur aus
+        registrierten Konstanten, validierten Parametern und dem Target-Locator
+        zusammensetzen — keine vom LLM diktierten Freitext-Flags uebernehmen,
+        ohne sie gegen eine Allowlist zu pruefen.
+        """
+        ...
+
+    async def execute(
+        self, execution_spec: ExecutionSpec, context: "SecurityExecutionContext"
+    ) -> ScannerExecutionResult:
+        """Delegiert an context.executor — Adapter starten nie selbst einen Prozess."""
+        ...
+
+    def parse_results(self, result: ScannerExecutionResult) -> list[NormalizedFinding]:
+        """Parst die rohe Scanner-Ausgabe in normalisierte Findings.
+
+        Darf bei Parse-Fehlern nicht stillschweigend leere Liste zurueckgeben —
+        wirft ValueError, damit der Run als FAILED/PARTIALLY_COMPLETED markiert wird.
+        """
+        ...
+
+
+class SecurityExecutionContext(BaseModel):
+    """Laufzeitkontext, den ein Adapter beim Ausfuehren erhaelt."""
+
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
+
+    scan_run_id: str
+    tenant_id: str = ""
+    requested_by: str = ""
+    executor: Any = None  # ScanExecutor-Instanz, siehe executor.py (Any wg. Protocol+Pydantic)

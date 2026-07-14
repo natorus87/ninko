@@ -1581,3 +1581,12 @@ async def delete_ui_history(conv_id: str, request: Request) -> SessionMessagesRe
     tenant_id = auth_tenant_id(resolve_request_auth(request))
     await redis.ui_history_delete(conv_id, tenant_id=tenant_id)
     return SessionMessagesResponse(status="ok", session_id=conv_id)
+
+
+@router.delete("/ui-history", response_model=SessionMessagesResponse)
+async def delete_all_ui_history(request: Request) -> SessionMessagesResponse:
+    """Löscht den gesamten Chatverlauf."""
+    redis = get_redis()
+    tenant_id = auth_tenant_id(resolve_request_auth(request))
+    await redis.ui_history_clear_all(tenant_id=tenant_id)
+    return SessionMessagesResponse(status="ok")

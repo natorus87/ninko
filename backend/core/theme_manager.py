@@ -19,7 +19,7 @@ logger = logging.getLogger("ninko.core.theme_manager")
 REDIS_KEY_THEME_ACTIVE = "ninko:settings:theme_active"
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-BUILTIN_THEMES_DIR = _REPO_ROOT / "backend" / "themes"
+BUILTIN_THEMES_DIR = Path("/app/themes") if Path("/app/themes").exists() else (_REPO_ROOT / "backend" / "themes")
 CUSTOM_THEMES_DIR = Path("/app/data/themes") if Path("/app/data").exists() else (_REPO_ROOT / "data" / "themes")
 CUSTOM_THEMES_DIR.mkdir(parents=True, exist_ok=True)
 

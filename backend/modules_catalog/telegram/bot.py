@@ -22,6 +22,7 @@ from fastapi import FastAPI
 
 from core.redis_client import get_redis
 from agents.base_agent import _t
+from agents.middleware.postprocess import _strip_agent_meta_chatter
 from .formatter import format_for_telegram
 
 
@@ -77,6 +78,11 @@ logger = logging.getLogger("ninko.modules.telegram.bot")
 # Maximum message length (Telegram limit: 4096)
 _MAX_MSG_LEN = 4000
 
+# Trace-event phases considered internal wiring (safeguard/routing/context/pipeline
+# bookkeeping) — mirrors the web frontend's debug-mode phase filter so the live
+# preview only surfaces phases a user would find meaningful (agent/tool/llm).
+_INTERNAL_TRACE_PHASES = frozenset({"safeguard", "routing", "context", "pipeline", "request"})
+
 # Recoverable errors around Telegram API calls. httpx errors inherit from
 # neither OSError nor asyncio.TimeoutError — without httpx.HTTPError here a
 # plain network blip would escape the handlers (and kill the poll loop).
@@ -123,60 +129,13 @@ def _strip_pipeline_headers(text: str) -> str:
     return text.strip()
 
 
-def _strip_agent_meta_chatter(text: str) -> str:
-    """Remove planning/retry meta text that should not be sent over Telegram."""
-    if not text:
-        return ""
-
-    lines = text.splitlines()
-    cleaned: list[str] = []
-    skip_numbered_plan = False
-
-    for line in lines:
-        stripped = line.strip()
-        folded = stripped.casefold()
-
-        if not stripped:
-            if cleaned and cleaned[-1] != "":
-                cleaned.append("")
-            skip_numbered_plan = False
-            continue
-
-        if re.search(r"\bconsecutive\s+tool\s+errors\b", folded):
-            skip_numbered_plan = True
-            continue
-
-        if folded.startswith(
-            (
-                "let's try once more",
-                "lets try once more",
-                "i will call ",
-                "i will not repeat",
-                "i will now call",
-                "i will report ",
-                "my previous approach is wrong",
-            )
-        ):
-            skip_numbered_plan = True
-            continue
-
-        if re.match(r"^\d+\.\s+i\s+will\b", folded):
-            skip_numbered_plan = True
-            continue
-
-        if skip_numbered_plan and re.match(r"^\d+\.\s+", stripped):
-            continue
-
-        cleaned.append(line)
-        skip_numbered_plan = False
-
-    text = "\n".join(cleaned)
-    text = re.sub(r"\n{3,}", "\n\n", text)
-    return text.strip()
-
-
 def _clean_final_response(text: str) -> str:
-    """Apply all Telegram-specific response cleanup before final delivery."""
+    """Apply all Telegram-specific response cleanup before final delivery.
+
+    ``_strip_agent_meta_chatter`` (tool-plan/retry narration removal) lives in
+    agents.middleware.postprocess, shared with the core chat response
+    pipeline — see ResponseExtractionMiddleware.post_process.
+    """
     return _strip_agent_meta_chatter(_strip_pipeline_headers(text))
 
 
@@ -600,6 +559,31 @@ class TelegramBot:
             logger.error("_send_with_keyboard error: %s", exc)
             return False
 
+    async def _remove_inline_keyboard(
+        self, token: str, chat_id: int, message_id: int | None
+    ) -> None:
+        """Strip the inline keyboard from a confirmation message (best-effort).
+
+        Telegram's answerCallbackQuery only dismisses the button's loading
+        spinner — it does NOT remove the keyboard itself. Without this, a
+        confirm/cancel message stays clickable after the user already acted
+        on it, so a second tap re-fires the same callback.
+        """
+        if not message_id:
+            return
+        try:
+            async with self._client() as client:
+                await client.post(
+                    f"https://api.telegram.org/bot{token}/editMessageReplyMarkup",
+                    json={
+                        "chat_id": chat_id,
+                        "message_id": message_id,
+                        "reply_markup": {"inline_keyboard": []},
+                    },
+                )
+        except _RECOVERABLE_ERRORS as exc:
+            logger.debug("_remove_inline_keyboard fehlgeschlagen (best-effort): %s", exc)
+
     async def _pop_pending_safeguard_text(self, session_id: str) -> str | None:
         """Atomically consume a pending bot-level safeguard action if one exists."""
         from core.safeguard import SAFEGUARD_PENDING_KEY
@@ -980,6 +964,14 @@ class TelegramBot:
                         continue
                     if event.get("type") == "status":
                         latest_status = str(event.get("text") or "").strip()
+                    elif event.get("type") == "trace_event":
+                        # Most of the actual run only emits trace_event (tool/agent/llm
+                        # phases), not the older plain "status" events — without this
+                        # branch the live preview never updates during a real run.
+                        phase = str(event.get("phase") or "")
+                        label = str(event.get("label") or "").strip()
+                        if label and phase not in _INTERNAL_TRACE_PHASES:
+                            latest_status = label
 
                 now = asyncio.get_running_loop().time()
                 enough_text = len(buffer) - last_sent_len >= 24
@@ -1042,6 +1034,12 @@ class TelegramBot:
                 )
         except Exception as _cb_exc:
             logger.debug("answerCallbackQuery fehlgeschlagen (best-effort): %s", _cb_exc)
+
+        # Remove the Ja/Nein keyboard right away so the message can't be tapped
+        # again while the (possibly slow) confirmed action is still running.
+        await self._remove_inline_keyboard(
+            token, chat_id, callback_msg.get("message_id")
+        )
 
         redis = get_redis()
         session_id = f"telegram_{chat_id}"

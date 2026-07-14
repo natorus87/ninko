@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import sys
 import types
@@ -503,3 +504,125 @@ async def test_poll_loop_survives_httpx_connect_error(
     await bot._poll_loop()
 
     assert calls["n"] == 2  # zweiter Durchlauf → Loop hat den Fehler überlebt
+
+
+class _RecordingAsyncClient:
+    """Like _FakeAsyncClient but records every POST call for assertions."""
+
+    is_closed = False
+    calls: list[tuple[str, dict]] = []
+
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args) -> None:
+        pass
+
+    async def post(self, url, json=None, **kwargs):
+        type(self).calls.append((url, json or {}))
+
+        class _Response:
+            status_code = 200
+
+            def json(self):
+                return {"ok": True}
+
+        return _Response()
+
+
+@pytest.mark.asyncio
+async def test_callback_query_removes_inline_keyboard(telegram_bot, monkeypatch) -> None:
+    """Regression: after tapping Ja/Nein the button stayed clickable because
+    only answerCallbackQuery (spinner) was called, never editMessageReplyMarkup
+    (the actual keyboard)."""
+    fake_redis = _FakeRedis(
+        {"ninko:safeguard_pending:telegram_123": "find tasmota devices"}
+    )
+    monkeypatch.setattr(telegram_bot, "get_redis", lambda: fake_redis)
+    _RecordingAsyncClient.calls = []
+    monkeypatch.setattr(telegram_bot.httpx, "AsyncClient", _RecordingAsyncClient)
+
+    app = types.SimpleNamespace(
+        state=types.SimpleNamespace(
+            orchestrator=types.SimpleNamespace(
+                route=AsyncMock(return_value=("done", "fritzbox", False, {}))
+            )
+        )
+    )
+    bot = telegram_bot.TelegramBot(app)
+    bot._keep_typing = AsyncMock()
+    bot._send = AsyncMock(return_value=True)
+
+    await bot._handle_callback_query(
+        {
+            "id": "cb-1",
+            "data": "confirm_yes",
+            "message": {"chat": {"id": 123}, "message_id": 987},
+        },
+        "token",
+    )
+
+    edit_calls = [
+        (url, payload)
+        for url, payload in _RecordingAsyncClient.calls
+        if url.endswith("editMessageReplyMarkup")
+    ]
+    assert len(edit_calls) == 1
+    _, payload = edit_calls[0]
+    assert payload["chat_id"] == 123
+    assert payload["message_id"] == 987
+    assert payload["reply_markup"] == {"inline_keyboard": []}
+
+
+@pytest.mark.asyncio
+async def test_streaming_preview_surfaces_trace_events_not_internal_phases(
+    telegram_bot, monkeypatch
+) -> None:
+    """Regression: the live preview only reacted to the legacy type=="status"
+    event, but a real run almost exclusively emits type=="trace_event" (tool/
+    agent/llm phases) — so the preview never updated between the initial
+    placeholder and the final answer. Internal-wiring phases (routing/
+    safeguard/...) must stay hidden, matching the web frontend's debug filter."""
+    from core import status_bus
+
+    session_id = "telegram_777"
+
+    class _FakeOrchestrator:
+        async def route(self, **kwargs):
+            await status_bus.emit_trace(
+                session_id, phase="tool", label="🔧 Rufe get_cluster_status auf"
+            )
+            await asyncio.sleep(0.4)
+            await status_bus.emit_trace(
+                session_id, phase="routing", label="Routing: kubernetes gewählt"
+            )
+            await asyncio.sleep(0.4)
+            return (
+                "Der Kubernetes-Cluster ist gesund.",
+                "kubernetes",
+                False,
+                {"routing_confidence": 1.0},
+            )
+
+    app = types.SimpleNamespace(state=types.SimpleNamespace())
+    bot = telegram_bot.TelegramBot(app)
+    bot._send_preview_message = AsyncMock(return_value=42)
+    bot._edit_message = AsyncMock(return_value=True)
+
+    await bot._route_with_live_preview(
+        orchestrator=_FakeOrchestrator(),
+        token="token",
+        chat_id=123,
+        message_id=7,
+        contextualized_text="Wie ist der Status von Kubernetes?",
+        history=[],
+        session_id=session_id,
+    )
+
+    edited_texts = [call.args[3] for call in bot._edit_message.await_args_list]
+    assert edited_texts
+    assert any("get_cluster_status" in text for text in edited_texts)
+    assert all("Routing" not in text for text in edited_texts)

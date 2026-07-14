@@ -222,6 +222,51 @@
             }
         },
 
+        /** Kuratierte Liste aller themebaren CSS-Custom-Properties (frontend/style.css :root). */
+        _THEMEABLE_TOKENS: [
+            '--bg-main', '--bg-tint', '--bg-tint-rgb', '--bg-tint-mid', '--bg-tint-deep', '--bg-accent-1', '--bg-accent-2',
+            '--bg-primary', '--bg-secondary', '--bg-tertiary',
+            '--bg-panel', '--bg-panel-rgb', '--bg-panel-strong', '--bg-panel-strong-rgb', '--bg-panel-soft', '--bg-panel-soft-rgb',
+            '--bg-card', '--bg-card-start-rgb', '--bg-card-end-rgb', '--bg-card-solid', '--bg-card-solid-rgb', '--bg-sidenav',
+            '--bg-chat-user', '--bg-hover', '--bg-active', '--bg-body',
+            '--bg-surface', '--bg-surface-rgb',
+            '--text-primary', '--text-secondary', '--text-muted',
+            '--border-color', '--border-soft', '--border-strong', '--border-active',
+            '--shadow-sm', '--shadow-md', '--shadow-lg', '--shadow-glow', '--shadow-card', '--shadow-surface',
+            '--primary-color', '--primary-color-rgb', '--primary-gradient', '--primary-gradient-hover',
+            '--accent-gradient-soft',
+            '--accent-blue', '--accent-blue-rgb', '--accent-blue-soft', '--accent-blue-soft-rgb',
+            '--accent-cyan', '--accent-cyan-rgb',
+            '--accent-purple', '--accent-green', '--accent-green-rgb',
+            '--accent-yellow', '--accent-yellow-rgb', '--accent-orange', '--accent-orange-rgb',
+            '--accent-red', '--error-color', '--error-color-rgb',
+            '--fg-rgb', '--shadow-rgb',
+            '--status-ok', '--status-ok-rgb', '--status-warning', '--status-warning-rgb',
+            '--status-danger', '--status-danger-rgb', '--status-pending', '--status-pending-rgb',
+            '--status-neutral-rgb',
+            '--sg-destructive', '--sg-destructive-rgb', '--sg-state-changing', '--sg-state-changing-rgb',
+            '--sg-injection', '--sg-injection-rgb', '--sg-auto', '--sg-auto-rgb',
+            '--accent-favorite',
+            '--wf-node-trigger', '--wf-node-trigger-rgb', '--wf-node-agent', '--wf-node-agent-rgb',
+            '--wf-node-condition', '--wf-node-condition-rgb', '--wf-node-loop', '--wf-node-loop-rgb',
+            '--wf-node-variable', '--wf-node-variable-rgb', '--wf-node-end', '--wf-node-end-rgb',
+        ],
+
+        /** Schreibt die aktuell wirksamen Werte aller themebaren Tokens als JSON in den Dark-Editor. */
+        prefillThemeEditorTokens() {
+            const st = document.getElementById('theme-editor-status');
+            const textarea = document.getElementById('theme-editor-tokens-dark');
+            if (!textarea) return;
+            const computed = getComputedStyle(document.documentElement);
+            const snapshot = {};
+            for (const token of this._THEMEABLE_TOKENS) {
+                const value = computed.getPropertyValue(token).trim();
+                if (value) snapshot[token] = value;
+            }
+            textarea.value = JSON.stringify(snapshot, null, 2);
+            if (st) { st.textContent = `${Object.keys(snapshot).length} Tokens übernommen`; st.className = 'save-status save-ok'; }
+        },
+
         async loadThemeRepos() {
             const container = document.getElementById('theme-repos-list');
             if (!container) return;

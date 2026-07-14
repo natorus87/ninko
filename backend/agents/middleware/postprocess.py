@@ -6,6 +6,7 @@ import ast
 import asyncio
 import json
 import logging
+import re
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.messages import AIMessage, ToolMessage
@@ -78,6 +79,7 @@ class ResponseExtractionMiddleware(BaseMiddleware):
         if ai_msgs:
             raw = _extract_text(ai_msgs[-1].content)
             response = _strip_thinking(raw)
+            response = _strip_agent_meta_chatter(response)
             if response:
                 if ctx.agent_name == "web_search" and tool_msgs:
                     web_details = _format_web_search_tool_fallback(
@@ -226,6 +228,85 @@ def _strip_thinking(text: str) -> str:
 
     cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
     return cleaned
+
+
+_META_TRIGGER_RE = re.compile(r"\bconsecutive\s+tool\s+errors\b", re.IGNORECASE)
+_META_PREFIX_RE = re.compile(
+    r"^(?:"
+    r"let'?s try once more|"
+    r"my previous approach is wrong|"
+    r"i will call |"
+    r"i will not repeat|"
+    r"i will now call|"
+    r"i will report |"
+    r"i will use |"
+    r"i will now use |"
+    r"i will invoke |"
+    r"i will check |"
+    r"let'?s start with"
+    r")",
+    re.IGNORECASE,
+)
+_NUMBERED_PLAN_RE = re.compile(r"^\d+\.\s+i\s+will\b", re.IGNORECASE)
+_NUMBERED_LINE_RE = re.compile(r"^\d+\.\s+")
+# Some completions glue the real answer directly onto meta chatter with no
+# separator at all (e.g. "...overview.✅ Status ..."). Insert a newline before
+# the content-start marker so the per-line stripping below can still see it
+# as its own line instead of it being trapped inside an unrecognized sentence.
+_GLUED_CONTENT_START_RE = re.compile(r"(?<=[.!?])(?=[✅⚠️❌]|#{1,6}\s|\|.+\|)")
+
+
+def _strip_agent_meta_chatter(text: str) -> str:
+    """Removes tool-call planning/retry meta text leaked into a final response.
+
+    Some completions leak the model's tool-calling plan or self-correction
+    narration ("I will call X…", "⚠️ N consecutive tool errors. My previous
+    approach is wrong…") as prose into the final message instead of only the
+    user-facing answer — occasionally with no separating whitespace before
+    the real content, and occasionally repeated many times when the agent
+    retries the same failing tool call. Works line-by-line so it catches
+    every occurrence, not just a leading prefix. Originally Telegram-only
+    (modules_catalog/telegram/bot.py); shared here so the same protection
+    applies to every chat surface.
+    """
+    if not text:
+        return ""
+
+    text = _GLUED_CONTENT_START_RE.sub("\n", text)
+    lines = text.splitlines()
+    cleaned: list[str] = []
+    skip_numbered_plan = False
+
+    for line in lines:
+        stripped = line.strip()
+
+        if not stripped:
+            if cleaned and cleaned[-1] != "":
+                cleaned.append("")
+            skip_numbered_plan = False
+            continue
+
+        if _META_TRIGGER_RE.search(stripped):
+            skip_numbered_plan = True
+            continue
+
+        if _META_PREFIX_RE.match(stripped):
+            skip_numbered_plan = True
+            continue
+
+        if _NUMBERED_PLAN_RE.match(stripped):
+            skip_numbered_plan = True
+            continue
+
+        if skip_numbered_plan and _NUMBERED_LINE_RE.match(stripped):
+            continue
+
+        cleaned.append(line)
+        skip_numbered_plan = False
+
+    result = "\n".join(cleaned)
+    result = re.sub(r"\n{3,}", "\n\n", result)
+    return result.strip()
 
 
 def _is_unhelpful_web_search_response(response: str) -> bool:

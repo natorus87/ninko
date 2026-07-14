@@ -1,0 +1,108 @@
+<div id="security-tab-content" class="module-tab-content">
+
+    <!-- Sub-Nav -->
+    <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; margin-bottom:1rem; border-bottom:1px solid var(--border-color); padding-bottom:0.75rem;">
+        <button class="btn btn-sm btn-action" id="sec-subtab-overview" data-sec-action="switchSubTab" data-sec-arg="overview">Übersicht</button>
+        <button class="btn btn-sm" id="sec-subtab-targets" data-sec-action="switchSubTab" data-sec-arg="targets" style="border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-color);">Targets</button>
+        <button class="btn btn-sm" id="sec-subtab-runs" data-sec-action="switchSubTab" data-sec-arg="runs" style="border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-color);">Scan-Runs</button>
+        <button class="btn btn-sm" id="sec-subtab-findings" data-sec-action="switchSubTab" data-sec-arg="findings" style="border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-color);">Findings</button>
+        <button class="btn btn-sm" data-sec-action="refreshAll" style="margin-left:auto; border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-color);">↻ Aktualisieren</button>
+    </div>
+
+    <!-- ── Overview ─────────────────────────────────────────── -->
+    <div id="sec-panel-overview" class="k8s-section" style="margin:0;">
+        <h3 class="section-title">Findings nach Schweregrad</h3>
+        <div id="sec-severity-cards" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:0.75rem; margin-bottom:1.5rem;"></div>
+
+        <h3 class="section-title">Letzte Scan-Runs</h3>
+        <div id="sec-recent-runs" style="overflow-x:auto;"></div>
+    </div>
+
+    <!-- ── Targets ──────────────────────────────────────────── -->
+    <div id="sec-panel-targets" class="k8s-section" style="margin:0; display:none;">
+        <h3 class="section-title" style="display:flex; align-items:center; gap:0.5rem;">
+            Security Targets
+            <button class="btn btn-sm btn-action" style="margin-left:auto;" data-sec-action="toggleTargetForm">+ Neues Target</button>
+        </h3>
+
+        <div id="sec-target-form" style="display:none; background:var(--bg-card); border:1px solid var(--border-color); border-radius:6px; padding:1rem; margin-bottom:1rem;">
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:0.75rem; margin-bottom:0.75rem;">
+                <div>
+                    <label style="font-size:0.75rem; color:var(--text-muted); display:block; margin-bottom:0.25rem;">Name</label>
+                    <input type="text" id="sec-target-name" placeholder="z.B. prod-api-image" style="width:100%; padding:0.4rem 0.6rem; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-body); color:var(--text-color);">
+                </div>
+                <div>
+                    <label style="font-size:0.75rem; color:var(--text-muted); display:block; margin-bottom:0.25rem;">Typ</label>
+                    <select id="sec-target-type" style="width:100%; padding:0.4rem 0.6rem; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-body); color:var(--text-color);">
+                        <option value="container_image">Container Image</option>
+                        <option value="kubernetes_namespace">Kubernetes Namespace</option>
+                        <option value="kubernetes_cluster">Kubernetes Cluster</option>
+                        <option value="git_repository">Git Repository</option>
+                        <option value="hostname">Hostname</option>
+                        <option value="ip_address">IP-Adresse</option>
+                        <option value="cidr">CIDR</option>
+                        <option value="url">URL</option>
+                        <option value="tls_endpoint">TLS-Endpoint</option>
+                        <option value="llm_endpoint">LLM-Endpoint</option>
+                        <option value="openai_compatible_api">OpenAI-kompatible API</option>
+                        <option value="litellm_gateway">LiteLLM Gateway</option>
+                        <option value="vllm_endpoint">vLLM Endpoint</option>
+                        <option value="open_webui_instance">Open WebUI</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size:0.75rem; color:var(--text-muted); display:block; margin-bottom:0.25rem;">Locator</label>
+                    <input type="text" id="sec-target-locator" placeholder="z.B. registry.local/app:1.0" style="width:100%; padding:0.4rem 0.6rem; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-body); color:var(--text-color);">
+                </div>
+                <div>
+                    <label style="font-size:0.75rem; color:var(--text-muted); display:block; margin-bottom:0.25rem;">Environment</label>
+                    <input type="text" id="sec-target-environment" value="production" style="width:100%; padding:0.4rem 0.6rem; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-body); color:var(--text-color);">
+                </div>
+            </div>
+            <div style="display:flex; gap:0.5rem;">
+                <button class="btn btn-sm btn-action" data-sec-action="createTarget">Anlegen</button>
+                <button class="btn btn-sm" data-sec-action="toggleTargetForm" style="border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-color);">Abbrechen</button>
+            </div>
+            <div id="sec-target-form-error" style="color:#e05252; font-size:0.8rem; margin-top:0.5rem; display:none;"></div>
+        </div>
+
+        <div id="sec-targets-table" style="overflow-x:auto;"></div>
+    </div>
+
+    <!-- ── Scan Runs ────────────────────────────────────────── -->
+    <div id="sec-panel-runs" class="k8s-section" style="margin:0; display:none;">
+        <h3 class="section-title">Scan-Runs</h3>
+        <div id="sec-runs-table" style="overflow-x:auto;"></div>
+        <div id="sec-run-detail" style="display:none; margin-top:1rem; background:var(--bg-card); border:1px solid var(--border-color); border-radius:6px; padding:1rem;"></div>
+    </div>
+
+    <!-- ── Findings ─────────────────────────────────────────── -->
+    <div id="sec-panel-findings" class="k8s-section" style="margin:0; display:none;">
+        <h3 class="section-title" style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+            Findings
+            <select id="sec-findings-severity-filter" data-sec-change="loadFindings" style="padding:0.3rem 0.5rem; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-body); color:var(--text-color); font-size:0.8rem;">
+                <option value="">Alle Schweregrade</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+                <option value="info">Info</option>
+            </select>
+            <select id="sec-findings-status-filter" data-sec-change="loadFindings" style="padding:0.3rem 0.5rem; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-body); color:var(--text-color); font-size:0.8rem;">
+                <option value="">Alle Status</option>
+                <option value="new">New</option>
+                <option value="active">Active</option>
+                <option value="acknowledged">Acknowledged</option>
+                <option value="in_progress">In Progress</option>
+                <option value="mitigated">Mitigated</option>
+                <option value="resolved">Resolved</option>
+                <option value="false_positive">False Positive</option>
+                <option value="risk_accepted">Risk Accepted</option>
+                <option value="reopened">Reopened</option>
+            </select>
+        </h3>
+        <div id="sec-findings-table" style="overflow-x:auto;"></div>
+        <div id="sec-finding-detail" style="display:none; margin-top:1rem; background:var(--bg-card); border:1px solid var(--border-color); border-radius:6px; padding:1rem;"></div>
+    </div>
+
+</div>

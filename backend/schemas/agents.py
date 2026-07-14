@@ -37,6 +37,7 @@ class AgentDefinition(BaseModel):
     system_prompt: str = ""
     llm_provider_id: Optional[str] = None   # None = globaler Standard
     module_names: list[str] = Field(default_factory=list)
+    script_tool_names: list[str] = Field(default_factory=list)
     steps: list[AgentStep] = Field(default_factory=list)
     enabled: bool = True
     created_at: Optional[str] = None
@@ -50,6 +51,7 @@ class AgentCreate(BaseModel):
     system_prompt: str = ""
     llm_provider_id: Optional[str] = None
     module_names: list[str] = Field(default_factory=list)
+    script_tool_names: list[str] = Field(default_factory=list)
     steps: list[AgentStep] = Field(default_factory=list)
     enabled: bool = True
 

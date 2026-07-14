@@ -1,0 +1,44 @@
+# Least-Privilege-RBAC fuer den Security-Core Job-Executor.
+#
+# Bindet den BESTEHENDEN Backend-ServiceAccount "ninko" (Namespace "ninko"),
+# aber nur mit einer namespace-scoped Role in "ninko-security" — die breite
+# ClusterRole "ninko-k8s-manager" (siehe k8s/backend/rbac.yaml) wird dafuer
+# NICHT erweitert. Der Executor authentifiziert sich in-cluster als "ninko"
+# (Pod-Identitaet), bekommt aber ausserhalb von "ninko-security" keine
+# zusaetzlichen Rechte.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ninko-security-job-runner
+  namespace: ninko-security
+  labels:
+    app.kubernetes.io/part-of: ninko
+    app.kubernetes.io/component: security-scans
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ninko-security-job-runner-binding
+  namespace: ninko-security
+  labels:
+    app.kubernetes.io/part-of: ninko
+    app.kubernetes.io/component: security-scans
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ninko-security-job-runner
+subjects:
+  - kind: ServiceAccount
+    name: ninko
+    namespace: ninko
