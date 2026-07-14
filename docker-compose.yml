@@ -43,6 +43,7 @@ services:
       dockerfile: backend/Dockerfile
       args:
         INSTALL_PIPER: "true"
+        GIT_SHA: "${GIT_SHA:-unknown}"
     container_name: ninko-backend
     ports:
       - "8000:8000"
