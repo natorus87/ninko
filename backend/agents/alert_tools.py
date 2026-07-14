@@ -18,6 +18,18 @@ from core.alert_state import get_alert_manager
 logger = logging.getLogger("ninko.tools.alerts")
 
 
+# Referenzen auf laufende Ingestion-Tasks — asyncio.create_task ohne gehaltene
+# Referenz kann vom GC eingesammelt werden, bevor der Task gelaufen ist
+# (gleiches Muster wie core/gateway.py:_bg_tasks).
+_INGEST_TASKS: set[asyncio.Task] = set()
+
+
+def _spawn_kg_ingestion(alert: dict) -> None:
+    task = asyncio.create_task(_ingest_alert_to_kg(alert))
+    _INGEST_TASKS.add(task)
+    task.add_done_callback(_INGEST_TASKS.discard)
+
+
 async def _ingest_alert_to_kg(alert: dict) -> None:
     """Schreibt einen Alert als Incident in den Knowledge Graph (best-effort, non-blocking)."""
     try:
@@ -169,7 +181,7 @@ async def record_alert(
         is_new = state.get("is_new", False)
 
         if is_new and severity in ("critical", "warning"):
-            asyncio.create_task(_ingest_alert_to_kg({
+            _spawn_kg_ingestion({
                 "alert_id": alert_id,
                 "module": module,
                 "severity": severity,
@@ -179,7 +191,7 @@ async def record_alert(
                 "resource": module,
                 "first_seen": state.get("first_seen"),
                 "notify_count": state.get("notify_count", 1),
-            }))
+            })
 
         if is_new:
             message = f"Neuer Alert aufgezeichnet: {alert_id}"
@@ -235,7 +247,7 @@ async def resolve_alert(alert_id: str, resolution: str = "") -> str:
 
         if resolved and alert_data:
             alert_with_resolution = {**alert_data, "resolution": resolution or "Manually resolved"}
-            asyncio.create_task(_ingest_alert_to_kg(alert_with_resolution))
+            _spawn_kg_ingestion(alert_with_resolution)
 
         if resolved:
             return json.dumps(
