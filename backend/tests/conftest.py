@@ -7,6 +7,7 @@ Provides shared fixtures for testing.
 from __future__ import annotations
 
 import os
+import socket
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -29,6 +30,17 @@ os.environ.setdefault("DEPLOYMENT_ENV", "development")
 os.environ.setdefault("API_AUTH_ENABLED", "false")
 os.environ.setdefault("CHROMADB_HOST", "localhost")
 os.environ.setdefault("CHROMADB_PORT", "8000")
+
+# Integrationstests brauchen ein erreichbares Redis. Der Config-Default
+# `redis://redis:6379/0` gilt nur im Compose-Netz; auf dem Dev-Host ist der
+# Hostname "redis" nicht auflösbar und 29 Integrationstests scheiterten mit
+# ConnectionError statt gegen das per Port-Mapping exponierte localhost:6379
+# zu laufen. Explizit gesetztes REDIS_URL gewinnt immer.
+if "REDIS_URL" not in os.environ:
+    try:
+        socket.getaddrinfo("redis", 6379)
+    except OSError:
+        os.environ["REDIS_URL"] = "redis://localhost:6379/0"
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
