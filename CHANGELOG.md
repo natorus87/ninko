@@ -9,6 +9,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.5.5] – 2026-07-14
+
 ### Added
 
 - **Release guard** (`scripts/release_guard.sh`): mandatory pre-build check for
