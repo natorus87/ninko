@@ -366,6 +366,10 @@ class TestWorkflowVersions:
         assert len(versions_data["versions"]) >= 3
 
 
+@pytest.mark.skipif(
+    os.getenv("NINKO_FULL_APP_TESTS") != "1",
+    reason="Braucht App-Lifespan (app.state.orchestrator für /run) — mit NINKO_FULL_APP_TESTS=1 aktivieren",
+)
 class TestWorkflowRuns:
     def test_run_workflow_and_get_status(self) -> None:
         workflow_id = f"test-wf-{uuid.uuid4().hex[:8]}"
@@ -413,6 +417,10 @@ class TestWorkflowStepRetry:
         response = client.post(f"/api/workflows/runs/{fake_run_id}/steps/0/retry")
         assert response.status_code == 404
 
+    @pytest.mark.skipif(
+        os.getenv("NINKO_FULL_APP_TESTS") != "1",
+        reason="Braucht App-Lifespan (app.state.orchestrator für /run) — mit NINKO_FULL_APP_TESTS=1 aktivieren",
+    )
     def test_retry_requires_failed_step(self) -> None:
         """Test that retry only works on failed steps."""
         # Create and run a workflow to get a real run_id
