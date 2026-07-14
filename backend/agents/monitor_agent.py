@@ -46,6 +46,10 @@ class MonitorAgent:
         self._alert_mgr = AlertStateManager()
         self._running = False
         self._task: asyncio.Task | None = None
+        # Referenzen auf laufende KG-Ingestion-Tasks — ohne gehaltene Referenz
+        # kann der GC einen create_task-Task vorzeitig einsammeln (Muster wie
+        # core/gateway.py:_bg_tasks).
+        self._kg_tasks: set[asyncio.Task] = set()
 
     async def start_loop(self) -> None:
         """Startet die Monitoring-Schleife als Background-Task."""
@@ -167,7 +171,7 @@ class MonitorAgent:
                     )
 
                     # KG-Ingestion (best-effort, non-blocking)
-                    asyncio.create_task(self._ingest_kg(
+                    kg_task = asyncio.create_task(self._ingest_kg(
                         module=module_name,
                         summary=f"Health-Check fehlgeschlagen: {module_name}",
                         details=(
@@ -178,6 +182,8 @@ class MonitorAgent:
                         ),
                         resolution=None,
                     ))
+                    self._kg_tasks.add(kg_task)
+                    kg_task.add_done_callback(self._kg_tasks.discard)
 
                     logger.warning(
                         "ALERT: Modul '%s' – %s",
