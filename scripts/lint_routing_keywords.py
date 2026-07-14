@@ -66,6 +66,8 @@ ALLOWED_SHORT_KEYWORDS = {
     ("proxmox", "vm"),
     ("redmine", "bug"),
     ("redmine", "hrm"),
+    ("security", "cve"),
+    ("security", "cwe"),
     ("synology", "dsm"),
     ("synology", "nas"),
     ("web_search", "web"),
