@@ -81,6 +81,12 @@ COPY frontend/ /app/frontend/
 # Copy release version (read by /health at startup, see main.py:_read_app_version)
 COPY VERSION .
 
+# Git commit the image was built from (read by /health). Passed by the deploy
+# workflow: GIT_SHA=$(git rev-parse --short HEAD) docker compose build backend.
+# Deliberately placed after the COPY layers so a SHA change doesn't bust them.
+ARG GIT_SHA=unknown
+ENV GIT_SHA=${GIT_SHA}
+
 # Create non-root user
 RUN groupadd -r ninko && useradd -r -g ninko -d /app -s /bin/bash ninko && \
     chown -R ninko:ninko /app
