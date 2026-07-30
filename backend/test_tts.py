@@ -322,10 +322,12 @@ class TestTelegramVoiceReply(unittest.IsolatedAsyncioTestCase):
         """Erstellt TelegramBot mit gemockter FastAPI-App."""
         app = MagicMock()
         app.state.orchestrator = AsyncMock()
+        app.state.safeguard = None
         app.state.orchestrator.route = AsyncMock(
-            return_value=("Hallo, das ist die Antwort!", "test_module", False)
+            return_value=("Hallo, das ist die Antwort!", "test_module", False, {})
         )
-        from modules.telegram.bot import TelegramBot
+        with patch("agents.base_agent.get_memory", return_value=MagicMock()):
+            from modules_catalog.telegram.bot import TelegramBot
 
         return TelegramBot(app)
 
@@ -337,19 +339,22 @@ class TestTelegramVoiceReply(unittest.IsolatedAsyncioTestCase):
             "update_id": 1,
             "message": {
                 "chat": {"id": 123},
+                "from": {"id": 123},
                 "voice": {"file_id": "ABC123", "duration": 5},
             },
         }
 
         with (
             patch.object(
-                bot, "_transcribe_voice", return_value="Hallo Bot"
+                bot,
+                "_transcribe_voice",
+                return_value=("Hallo Bot", 1.0, "de"),
             ) as mock_trans,
             patch.object(bot, "_send", return_value=True),
-            patch.object(bot, "_keep_typing", return_value=asyncio.sleep(0)),
+            patch.object(bot, "_keep_typing", new_callable=AsyncMock),
             patch.object(bot, "get_token", return_value="test_token"),
-            patch("modules.telegram.bot.get_redis") as mock_redis,
-            patch("modules.telegram.bot.ConnectionManager") as mock_conn_mgr,
+            patch("modules_catalog.telegram.bot.get_redis") as mock_redis,
+            patch("core.connections.ConnectionManager") as mock_conn_mgr,
         ):
             mock_conn = MagicMock()
             mock_conn.config = {
@@ -381,15 +386,16 @@ class TestTelegramVoiceReply(unittest.IsolatedAsyncioTestCase):
             "update_id": 2,
             "message": {
                 "chat": {"id": 456},
+                "from": {"id": 456},
                 "text": "Hallo Bot",
             },
         }
 
         with (
             patch.object(bot, "_send", return_value=True),
-            patch.object(bot, "_keep_typing", return_value=asyncio.sleep(0)),
-            patch("modules.telegram.bot.get_redis") as mock_redis,
-            patch("modules.telegram.bot.ConnectionManager") as mock_conn_mgr,
+            patch.object(bot, "_keep_typing", new_callable=AsyncMock),
+            patch("modules_catalog.telegram.bot.get_redis") as mock_redis,
+            patch("core.connections.ConnectionManager") as mock_conn_mgr,
         ):
             mock_conn = MagicMock()
             mock_conn.config = {"allowed_chat_ids": "", "voice_reply": "true"}
@@ -411,9 +417,12 @@ class TestTelegramVoiceReply(unittest.IsolatedAsyncioTestCase):
         """TTS-Fehler beim Voice-Reply propagiert nicht nach oben."""
         bot = await self._make_bot()
 
-        with patch(
-            "modules.telegram.bot.synthesize_reply",
-            side_effect=RuntimeError("TTS nicht verfügbar"),
+        with (
+            patch("core.tts.is_tts_available", return_value=True),
+            patch(
+                "core.tts.synthesize_reply",
+                side_effect=RuntimeError("TTS nicht verfügbar"),
+            ),
         ):
             # Darf keine Exception werfen
             await bot._send_voice_reply("token", 123, "Test")
@@ -427,10 +436,10 @@ class TestTeamsVoiceReply(unittest.IsolatedAsyncioTestCase):
         """Audio-Anhang in Teams-Activity setzt is_voice=True."""
         from fastapi import FastAPI
 
-        app = MagicMock(spec=FastAPI)
+        app = FastAPI()
         app.state.orchestrator = AsyncMock()
         app.state.orchestrator.route = AsyncMock(
-            return_value=("Antwort vom Agenten.", None, False)
+            return_value=("Antwort vom Agenten.", None, False, {})
         )
 
         activity = {
@@ -449,16 +458,26 @@ class TestTeamsVoiceReply(unittest.IsolatedAsyncioTestCase):
             ],
         }
 
+        with patch("agents.base_agent.get_memory", return_value=MagicMock()):
+            from modules_catalog.teams import bot as teams_bot
+
         with (
-            patch("modules.teams.bot.ConnectionManager") as mock_conn_mgr,
-            patch("modules.teams.bot.get_redis") as mock_redis,
-            patch(
-                "modules.teams.bot._transcribe_teams_attachment",
-                return_value="Transkribierter Text",
+            patch("core.connections.ConnectionManager") as mock_conn_mgr,
+            patch("core.redis_client.get_redis") as mock_redis,
+            patch.object(
+                teams_bot,
+                "_transcribe_teams_attachment",
+                return_value=("Transkribierter Text", 1.0, "de"),
             ),
-            patch("modules.teams.bot.send_teams_message", new_callable=AsyncMock),
-            patch(
-                "modules.teams.bot._send_teams_voice_reply", new_callable=AsyncMock
+            patch.object(
+                teams_bot,
+                "send_teams_message",
+                new_callable=AsyncMock,
+            ),
+            patch.object(
+                teams_bot,
+                "_send_teams_voice_reply",
+                new_callable=AsyncMock,
             ) as mock_voice,
         ):
             mock_conn = MagicMock()
@@ -476,21 +495,23 @@ class TestTeamsVoiceReply(unittest.IsolatedAsyncioTestCase):
             mock_redis_inst.connection.set = AsyncMock()
             mock_redis.return_value = mock_redis_inst
 
-            from modules.teams.bot import handle_teams_turn
-
-            await handle_teams_turn(app, activity)
+            await teams_bot.handle_teams_turn(app, activity)
 
             mock_voice.assert_called_once()
 
     async def test_send_teams_voice_reply_tts_error(self) -> object:
         """TTS-Fehler beim Teams Voice-Reply propagiert nicht nach oben."""
-        with patch(
-            "modules.teams.bot.synthesize_reply", side_effect=Exception("Piper fehlt")
-        ):
-            from modules.teams.bot import _send_teams_voice_reply
+        with patch("agents.base_agent.get_memory", return_value=MagicMock()):
+            from modules_catalog.teams import bot as teams_bot
 
+        with patch(
+            "core.tts.synthesize_reply",
+            side_effect=RuntimeError("Piper fehlt"),
+        ):
             # Darf keine Exception werfen
-            await _send_teams_voice_reply("https://example.com", "conv", "act", "Text")
+            await teams_bot._send_teams_voice_reply(
+                "https://example.com", "conv", "act", "Text"
+            )
 
 
 # ── is_tts_available Tests ────────────────────────────────────────────────────
@@ -499,7 +520,7 @@ class TestTeamsVoiceReply(unittest.IsolatedAsyncioTestCase):
 class TestTtsAvailability(unittest.TestCase):
     def test_tts_disabled_returns_false(self) -> object:
         """is_tts_available() gibt False zurück wenn TTS_ENABLED=false."""
-        with patch("core.tts.get_settings") as mock_settings:
+        with patch("core.config.get_settings") as mock_settings:
             mock_cfg = MagicMock()
             mock_cfg.TTS_ENABLED = False
             mock_settings.return_value = mock_cfg
@@ -521,7 +542,7 @@ class TestTtsAvailability(unittest.TestCase):
         tts_module._service = None
 
         with (
-            patch("core.tts.get_settings") as mock_settings,
+            patch("core.config.get_settings") as mock_settings,
             patch("core.tts.piper_service.shutil.which", return_value=None),
         ):
             mock_cfg = MagicMock()
