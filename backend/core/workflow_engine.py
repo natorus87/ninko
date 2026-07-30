@@ -14,6 +14,16 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from core.agent_approval import discard_pending_approval
+from core.agent_events import (
+    emit_agent_event,
+    reset_agent_run_id,
+    set_agent_run_id,
+    tenant_id_from_session,
+)
+from core.agent_protocol import APPROVAL_REQUIRED_MESSAGE, AgentProtocol, as_orchestrator_protocol
+from schemas.execution import AgentEvent, AgentEventType, AgentFinishReason, AgentRequest
+
 # Per-workflow asyncio locks prevent concurrent R-M-W races on run state
 _run_update_locks: dict[str, asyncio.Lock] = {}
 
@@ -46,6 +56,14 @@ MAX_RUNS_PER_WORKFLOW = 50
 MAX_NODE_RETRIES = 5
 MAX_PARALLEL_TASKS = 12
 ORPHAN_RUN_CUTOFF_MINUTES = 10
+
+
+class WorkflowTerminalError(RuntimeError):
+    """A workflow node failure that must not be retried."""
+
+
+class WorkflowCancelledError(WorkflowTerminalError):
+    """A structured agent cancellation propagated to the workflow boundary."""
 
 
 def _compare(a, op: str, b) -> bool:
@@ -171,9 +189,41 @@ class WorkflowEngine:
     def __init__(self, redis, orchestrator, *, subflow_stack: tuple[str, ...] = ()) -> None:
         self.redis = redis
         self.orchestrator = orchestrator
+        self._orchestrator_agent: AgentProtocol | None = (
+            as_orchestrator_protocol(orchestrator) if orchestrator else None
+        )
         # Kette der Vorfahren-Workflow-IDs (scoped) für Subflow-Zyklus/Tiefen-Guard
         self.subflow_stack = subflow_stack
         self._current_workflow_id: str = ""
+
+    async def _run_orchestrator(
+        self,
+        *,
+        message: str,
+        session_id: str,
+        confirmed: bool = False,
+        target: str | None = None,
+    ) -> str:
+        """Run one workflow prompt through the common agent contract."""
+        if self._orchestrator_agent is None:
+            return message
+
+        response = await self._orchestrator_agent.run(
+            AgentRequest(
+                message=message,
+                session_id=session_id,
+                confirmed=confirmed,
+                target=target,
+            )
+        )
+        if response.finish_reason == AgentFinishReason.APPROVAL_REQUIRED:
+            await discard_pending_approval(session_id, redis=self.redis)
+            raise WorkflowTerminalError(APPROVAL_REQUIRED_MESSAGE)
+        if response.finish_reason == AgentFinishReason.CANCELLED:
+            raise WorkflowCancelledError(response.text or "Agent-Lauf wurde abgebrochen.")
+        if response.finish_reason == AgentFinishReason.FAILED:
+            raise RuntimeError(response.text or "Agent-Lauf fehlgeschlagen.")
+        return response.text
 
     async def execute(
         self,
@@ -249,6 +299,23 @@ class WorkflowEngine:
 
         final_status = "succeeded"
         t_run_start = datetime.now(timezone.utc)
+        event_tenant_id = tenant_id_from_session(workflow_session_id)
+        await emit_agent_event(
+            AgentEvent(
+                type=AgentEventType.STARTED,
+                tenant_id=event_tenant_id,
+                session_id=workflow_session_id,
+                run_id=run_id,
+                parent_run_id=parent_run_id,
+                agent_id="workflow",
+                data={
+                    "workflow_id": workflow_id,
+                    "workflow_name": workflow_name,
+                    "triggered_by": triggered_by,
+                },
+            )
+        )
+        run_context_token = set_agent_run_id(run_id)
 
         try:
             def _dependencies_complete(target_id: str) -> bool:
@@ -308,6 +375,12 @@ class WorkflowEngine:
                         step["attempts"] = attempts
                         return node_id, next_label
 
+                    except WorkflowCancelledError as exc:
+                        t_end = datetime.now(timezone.utc)
+                        step["status"] = "cancelled"
+                        step["finished_at"] = t_end.isoformat()
+                        step["error"] = str(exc)[:300]
+                        raise
                     except Exception as exc:
                         t_end = datetime.now(timezone.utc)
                         step["status"] = "failed"
@@ -333,6 +406,21 @@ class WorkflowEngine:
 
                 # Fehler prüfen
                 for item in results:
+                    if isinstance(
+                        item,
+                        (WorkflowCancelledError, asyncio.CancelledError),
+                    ):
+                        final_status = "cancelled"
+                        await self._update_run(
+                            tenant_id,
+                            workflow_id,
+                            run_id,
+                            "cancelled",
+                            list(step_map.values()),
+                            variables,
+                            error=str(item)[:300] or "Abgebrochen",
+                        )
+                        return
                     if isinstance(item, Exception):
                         final_status = "failed"
                         await self._update_run(
@@ -365,6 +453,10 @@ class WorkflowEngine:
                         ):
                             queue.append(target_id)
 
+        except asyncio.CancelledError:
+            final_status = "cancelled"
+            logger.info("Workflow-Ausführung abgebrochen: run=%s", run_id)
+            raise
         except _WORKFLOW_EXCEPTIONS as exc:
             logger.error("Workflow-Ausführung fehlgeschlagen: %s", exc)
             final_status = "failed"
@@ -377,17 +469,42 @@ class WorkflowEngine:
             for step in step_map.values():
                 if step["status"] == "pending":
                     step["status"] = "skipped"
+                elif final_status == "cancelled" and step["status"] == "running":
+                    step["status"] = "cancelled"
+                    step["finished_at"] = datetime.now(timezone.utc).isoformat()
 
             run_duration_ms = int((datetime.now(timezone.utc) - t_run_start).total_seconds() * 1000)
-            await self._update_run(
-                tenant_id,
-                workflow_id,
-                run_id,
-                final_status,
-                list(step_map.values()),
-                variables,
-                duration_ms=run_duration_ms,
-            )
+            try:
+                await self._update_run(
+                    tenant_id,
+                    workflow_id,
+                    run_id,
+                    final_status,
+                    list(step_map.values()),
+                    variables,
+                    duration_ms=run_duration_ms,
+                )
+                terminal_event_type = {
+                    "succeeded": AgentEventType.COMPLETED,
+                    "cancelled": AgentEventType.CANCELLED,
+                }.get(final_status, AgentEventType.FAILED)
+                await emit_agent_event(
+                    AgentEvent(
+                        type=terminal_event_type,
+                        tenant_id=event_tenant_id,
+                        session_id=workflow_session_id,
+                        run_id=run_id,
+                        parent_run_id=parent_run_id,
+                        agent_id="workflow",
+                        data={
+                            "workflow_id": workflow_id,
+                            "status": final_status,
+                            "duration_ms": run_duration_ms,
+                        },
+                    )
+                )
+            finally:
+                reset_agent_run_id(run_context_token)
             logger.info(
                 "Workflow %s abgeschlossen: %s (run=%s, %.1fs)",
                 workflow_name,
@@ -423,6 +540,8 @@ class WorkflowEngine:
                     workflow_session_id=workflow_session_id,
                 )
                 return output, next_label, attempts
+            except WorkflowTerminalError:
+                raise
             except _WORKFLOW_EXCEPTIONS as exc:
                 last_exc = exc
                 if attempt > retries:
@@ -465,7 +584,7 @@ class WorkflowEngine:
                 config.get("prompt", f"Führe Aufgabe aus (Agent: {agent_id})"),
                 variables,
             )
-            if self.orchestrator:
+            if self._orchestrator_agent:
                 # "orchestrator" ist der Default-Agent und kein Modulname.
                 # force_module darf hier NICHT gesetzt werden, sonst schlägt
                 # das Routing mit "Modul ... nicht verfügbar" fehl.
@@ -478,12 +597,11 @@ class WorkflowEngine:
                 # execute_workflow-Tool (WRITE_SYSTEM) oder per UI-Trigger
                 # bestätigt — STATE_CHANGING-Aufrufe innerhalb des Workflows
                 # sollen NICHT erneut pausieren, sonst hängt der Step.
-                response_text, _, _, _ = await self.orchestrator.route(
+                response_text = await self._run_orchestrator(
                     message=prompt,
-                    chat_history=[],
                     session_id=workflow_session_id,
-                    force_module=force_target,
                     confirmed=True,
+                    target=force_target,
                 )
                 variables["previous_output"] = response_text
                 return response_text, None
@@ -498,10 +616,9 @@ class WorkflowEngine:
 
             async def _run_prompt(p: Any) -> str:
                 prompt = self._interpolate(str(p), variables)
-                if self.orchestrator:
-                    resp, _, _, _ = await self.orchestrator.route(
+                if self._orchestrator_agent:
+                    resp = await self._run_orchestrator(
                         message=prompt,
-                        chat_history=[],
                         session_id=workflow_session_id,
                     )
                     return resp
@@ -595,10 +712,9 @@ class WorkflowEngine:
                     variables["loop_item"] = str(item)
                     variables["loop_index"] = str(i)
                     prompt = self._interpolate(prompt_template, variables)
-                    if self.orchestrator:
-                        resp, _, _, _ = await self.orchestrator.route(
+                    if self._orchestrator_agent:
+                        resp = await self._run_orchestrator(
                             message=prompt,
-                            chat_history=[],
                             session_id=workflow_session_id,
                         )
                         iter_results.append(f"[{i}] {resp}")
@@ -616,10 +732,9 @@ class WorkflowEngine:
                     ):
                         break
                     prompt = self._interpolate(prompt_template, variables)
-                    if self.orchestrator:
-                        resp, _, _, _ = await self.orchestrator.route(
+                    if self._orchestrator_agent:
+                        resp = await self._run_orchestrator(
                             message=prompt,
-                            chat_history=[],
                             session_id=workflow_session_id,
                         )
                         iter_results.append(f"[{i}] {resp}")
