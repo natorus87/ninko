@@ -1758,7 +1758,12 @@ JSON-SCHEMA:
     def _has_confident_top_module(top_score: int, second_score: int) -> bool:
         return KeywordRouter.has_confident_top_module(top_score, second_score)
 
-    async def resume_tool_execution(self, session_id: str) -> tuple[str, bool]:
+    async def resume_tool_execution(
+        self,
+        session_id: str,
+        *,
+        expected_approval_id: str | None = None,
+    ) -> tuple[str, bool]:
         """
         Setzt einen pausierten Tool-Call nach Safeguard-Bestätigung fort.
 
@@ -1821,7 +1826,10 @@ JSON-SCHEMA:
                 zh=f"错误：找不到代理 '{agent_name}'。",
             ), False
 
-        return await agent.resume_safeguard_tool(session_id)
+        return await agent.resume_safeguard_tool(
+            session_id,
+            expected_approval_id=expected_approval_id,
+        )
 
     def _module_display_name(self, module_name: str) -> str:
         """Liefert den sichtbaren Namen eines Moduls für Status-/Fehlermeldungen."""
