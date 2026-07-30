@@ -151,7 +151,12 @@ if not any(isinstance(h, _RedisLogHandler) for h in root_logger.handlers):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> object:
-    """Application Lifespan – Startup und Shutdown."""
+    """Start Ninko services and shut them down in dependency order.
+
+    AgentEvent persistence is registered before background producers start.
+    Shutdown awaits those producers and local jobs, then disables persistence,
+    closes the journal read pool, and finally closes shared Redis.
+    """
     logger.info("═" * 60)
     logger.info("  Ninko – IT-Operations AI-Agent wird gestartet…")
     logger.info("═" * 60)
@@ -502,6 +507,11 @@ async def lifespan(app: FastAPI) -> object:
     init_routing_telemetry(_get_redis_telemetry())
 
     # ── Monitor Agent (Background) ────────────────────
+    from core.agent_event_journal import get_agent_event_journal
+    from core.agent_events import configure_agent_event_persistence
+
+    configure_agent_event_persistence(get_agent_event_journal().append)
+
     monitor = MonitorAgent(registry)
     monitor_task = asyncio.create_task(monitor.start_loop())
     monitor_task.add_done_callback(
@@ -645,6 +655,17 @@ async def lifespan(app: FastAPI) -> object:
     sg_cleanup_task = getattr(app.state, "sg_cleanup_task", None)
     if sg_cleanup_task:
         sg_cleanup_task.cancel()
+
+    from core.agent_jobs import get_agent_job_manager
+
+    await get_agent_job_manager().shutdown()
+    background_tasks = [monitor_task, scheduler_task]
+    if sg_cleanup_task:
+        background_tasks.append(sg_cleanup_task)
+    await asyncio.gather(*background_tasks, return_exceptions=True)
+
+    configure_agent_event_persistence(None)
+    await get_agent_event_journal().close()
 
     from core.redis_client import get_redis
 
