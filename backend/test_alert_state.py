@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -74,11 +74,25 @@ def fake_redis():
         async def mget(self, keys):
             return [await self.get(k) for k in keys]
 
-        async def pipeline(self):
+        def pipeline(self):
+            operations = []
             pipe = MagicMock()
-            pipe.delete = lambda k: None
-            pipe.setex = lambda k, s, v: None
-            pipe.execute = AsyncMock(return_value=[1, 1])
+            pipe.delete = lambda key: operations.append(("delete", key))
+            pipe.setex = lambda key, seconds, value: operations.append(
+                ("setex", key, seconds, value)
+            )
+
+            async def execute():
+                results = []
+                for operation in operations:
+                    if operation[0] == "delete":
+                        results.append(await self.delete(operation[1]))
+                    else:
+                        await self.setex(operation[1], operation[2], operation[3])
+                        results.append(True)
+                return results
+
+            pipe.execute = execute
             return pipe
 
         async def scan_iter(self, match, count=100):
@@ -98,8 +112,12 @@ def alert_mgr(fake_redis):
     mgr = AlertStateManager()
     # `connection` ist eine read-only property (→ self._redis); daher das
     # zugrundeliegende Attribut patchen statt der Property.
+    original_connection = mgr._redis._redis
     mgr._redis._redis = fake_redis
-    return mgr
+    try:
+        yield mgr
+    finally:
+        mgr._redis._redis = original_connection
 
 
 class TestAlertIdGeneration:
@@ -288,9 +306,24 @@ class TestListActive:
     @pytest.mark.asyncio
     async def test_list_active_multiple(self, alert_mgr):
         """Mehrere Alerts werden aufgelistet."""
-        await alert_mgr.record("test:pod1:error", "test", "critical", "Error 1")
-        await alert_mgr.record("test:pod2:error", "test", "warning", "Error 2")
-        await alert_mgr.record("other:pod:error", "other", "info", "Error 3")
+        await alert_mgr.record(
+            alert_id="test:pod1:error",
+            module="test",
+            severity="critical",
+            summary="Error 1",
+        )
+        await alert_mgr.record(
+            alert_id="test:pod2:error",
+            module="test",
+            severity="warning",
+            summary="Error 2",
+        )
+        await alert_mgr.record(
+            alert_id="other:pod:error",
+            module="other",
+            severity="info",
+            summary="Error 3",
+        )
 
         # Alle
         alerts = await alert_mgr.list_active()
