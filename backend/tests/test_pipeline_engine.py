@@ -49,6 +49,18 @@ from core.pipeline_events import (
     on_pipeline_event,
     remove_pipeline_listener,
 )
+from core.agent_events import (
+    get_agent_run_id,
+    on_agent_event,
+    remove_agent_event_listener,
+)
+from schemas.execution import (
+    AgentEvent,
+    AgentEventType,
+    AgentFinishReason,
+    AgentRequest,
+    AgentResponse,
+)
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -158,6 +170,280 @@ async def test_single_step_success():
     assert len(result.steps) == 1
     assert result.steps[0].status == StepStatus.COMPLETED
     assert "2 Pods running" in result.steps[0].result
+
+
+@pytest.mark.asyncio
+async def test_native_protocol_agent_executes_without_legacy_invoke():
+    class NativeAgent:
+        id = "kubernetes"
+        name = "Kubernetes"
+        description = "Native pipeline test"
+
+        def __init__(self) -> None:
+            self.requests: list[AgentRequest] = []
+            self.run_contexts: list[str] = []
+
+        async def run(self, request: AgentRequest) -> AgentResponse:
+            self.requests.append(request)
+            self.run_contexts.append(get_agent_run_id())
+            return AgentResponse(
+                text="Native response",
+                agent_id=self.id,
+                agent_name=self.name,
+            )
+
+    step = make_step("kubernetes", "Prüfe Pods")
+    engine = PipelineEngine()
+    native_agent = NativeAgent()
+
+    with (
+        patch.object(engine, "_get_module_agent", return_value=native_agent),
+        patch("core.pipeline_events.emit_pipeline_event", new=AsyncMock()),
+        patch("core.status_bus.emit", new=AsyncMock()),
+    ):
+        result = await engine.execute([step], session_id="native-session")
+
+    assert result.status == PipelineStatus.COMPLETED
+    assert result.steps[0].result == "Native response"
+    assert native_agent.requests[0].session_id == "native-session"
+    assert native_agent.run_contexts == [
+        f"{result.pipeline_id}:{step.step_id}"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_agent_event_stream_links_pipeline_and_step_runs():
+    step = make_step("kubernetes", "Prüfe Pods")
+    engine = PipelineEngine()
+    events: list[AgentEvent] = []
+
+    async def listener(event: AgentEvent) -> None:
+        events.append(event)
+
+    on_agent_event(listener, session_id="event-session")
+    try:
+        with (
+            patch.object(
+                engine,
+                "_get_module_agent",
+                return_value=make_mock_agent("Pods laufen"),
+            ),
+            patch("core.pipeline_events.emit_pipeline_event", new=AsyncMock()),
+            patch("core.status_bus.emit", new=AsyncMock()),
+        ):
+            result = await engine.execute(
+                [step],
+                session_id="event-session",
+                pipeline_id="pipe-events",
+            )
+    finally:
+        remove_agent_event_listener(listener)
+
+    assert result.status == PipelineStatus.COMPLETED
+    assert [event.type for event in events] == [
+        AgentEventType.STARTED,
+        AgentEventType.STARTED,
+        AgentEventType.COMPLETED,
+        AgentEventType.COMPLETED,
+    ]
+    pipeline_events = [event for event in events if event.run_id == "pipe-events"]
+    step_events = [event for event in events if event.parent_run_id == "pipe-events"]
+    assert [event.agent_id for event in pipeline_events] == ["pipeline", "pipeline"]
+    assert {event.run_id for event in step_events} == {
+        f"pipe-events:{step.step_id}"
+    }
+    assert {event.agent_id for event in step_events} == {"kubernetes"}
+
+
+@pytest.mark.asyncio
+async def test_structured_agent_failure_marks_pipeline_step_failed():
+    class FailingAgent:
+        id = "kubernetes"
+        name = "Kubernetes"
+        description = "Structured failure test"
+
+        async def run(self, request: AgentRequest) -> AgentResponse:
+            return AgentResponse(
+                text="Provider nicht erreichbar",
+                agent_id=self.id,
+                agent_name=self.name,
+                finish_reason=AgentFinishReason.FAILED,
+            )
+
+    step = make_step(
+        "kubernetes",
+        "Prüfe Pods",
+        retry_policy=RetryPolicy(max_retries=0),
+    )
+    engine = PipelineEngine()
+
+    with (
+        patch.object(engine, "_get_module_agent", return_value=FailingAgent()),
+        patch("core.pipeline_events.emit_pipeline_event", new=AsyncMock()),
+        patch("core.status_bus.emit", new=AsyncMock()),
+    ):
+        result = await engine.execute([step], session_id="failed-session")
+
+    assert result.status == PipelineStatus.PARTIAL
+    assert result.steps[0].status == StepStatus.FAILED
+    assert result.steps[0].error == "Provider nicht erreichbar"
+
+
+@pytest.mark.asyncio
+async def test_agent_events_redact_pipeline_errors() -> None:
+    github_token = "ghp_" + ("A" * 36)
+
+    class FailingAgent:
+        id = "kubernetes"
+        name = "Kubernetes"
+        description = "Sensitive failure test"
+
+        async def run(self, request: AgentRequest) -> AgentResponse:
+            return AgentResponse(
+                text=f"provider rejected {github_token}",
+                agent_id=self.id,
+                agent_name=self.name,
+                finish_reason=AgentFinishReason.FAILED,
+            )
+
+    engine = PipelineEngine()
+    events: list[AgentEvent] = []
+
+    async def listener(event: AgentEvent) -> None:
+        events.append(event)
+
+    on_agent_event(listener, session_id="default:redaction")
+    try:
+        with (
+            patch.object(engine, "_get_module_agent", return_value=FailingAgent()),
+            patch("core.pipeline_events.emit_pipeline_event", new=AsyncMock()),
+            patch("core.status_bus.emit", new=AsyncMock()),
+        ):
+            await engine.execute(
+                [
+                    make_step(
+                        "kubernetes",
+                        "Prüfe Pods",
+                        retry_policy=RetryPolicy(max_retries=0),
+                    )
+                ],
+                session_id="default:redaction",
+            )
+    finally:
+        remove_agent_event_listener(listener)
+
+    terminal_payloads = [
+        event.data
+        for event in events
+        if event.type == AgentEventType.FAILED
+    ]
+    assert terminal_payloads
+    assert all(github_token not in str(payload) for payload in terminal_payloads)
+    assert any("[REDACTED]" in str(payload) for payload in terminal_payloads)
+
+
+@pytest.mark.asyncio
+async def test_step_run_context_resets_when_status_delivery_fails() -> None:
+    engine = PipelineEngine()
+
+    with (
+        patch.object(engine, "_get_module_agent", return_value=make_mock_agent()),
+        patch("core.pipeline_events.emit_pipeline_event", new=AsyncMock()),
+        patch(
+            "core.status_bus.emit",
+            new=AsyncMock(side_effect=RuntimeError("status unavailable")),
+        ),
+    ):
+        result = await engine.execute(
+            [make_step("kubernetes", "Prüfe Pods")],
+            session_id="default:status-failure",
+        )
+
+    assert result.status == PipelineStatus.FAILED
+    assert get_agent_run_id() == ""
+
+
+@pytest.mark.asyncio
+async def test_step_run_context_resets_when_legacy_failure_event_fails() -> None:
+    class CancelledAgent:
+        id = "kubernetes"
+        name = "Kubernetes"
+        description = "Cancelled pipeline test"
+
+        async def run(self, request: AgentRequest) -> AgentResponse:
+            return AgentResponse(
+                text="cancelled",
+                agent_id=self.id,
+                agent_name=self.name,
+                finish_reason=AgentFinishReason.CANCELLED,
+            )
+
+    async def fail_on_step_failure(event: PipelineEvent) -> None:
+        if event.type == PipelineEventType.STEP_FAILED:
+            raise RuntimeError("legacy event unavailable")
+
+    engine = PipelineEngine()
+    with (
+        patch.object(engine, "_get_module_agent", return_value=CancelledAgent()),
+        patch(
+            "core.pipeline_events.emit_pipeline_event",
+            new=AsyncMock(side_effect=fail_on_step_failure),
+        ),
+        patch("core.status_bus.emit", new=AsyncMock()),
+    ):
+        result = await engine.execute(
+            [
+                make_step(
+                    "kubernetes",
+                    "Prüfe Pods",
+                    retry_policy=RetryPolicy(max_retries=0),
+                )
+            ],
+            session_id="default:legacy-event-failure",
+        )
+
+    assert result.status == PipelineStatus.FAILED
+    assert get_agent_run_id() == ""
+
+
+@pytest.mark.asyncio
+async def test_cancelled_agent_is_not_retried():
+    class CancelledAgent:
+        id = "kubernetes"
+        name = "Kubernetes"
+        description = "Cancellation test"
+
+        def __init__(self) -> None:
+            self.call_count = 0
+
+        async def run(self, request: AgentRequest) -> AgentResponse:
+            self.call_count += 1
+            return AgentResponse(
+                text="Vom Benutzer abgebrochen",
+                agent_id=self.id,
+                agent_name=self.name,
+                finish_reason=AgentFinishReason.CANCELLED,
+            )
+
+    step = make_step(
+        "kubernetes",
+        "Prüfe Pods",
+        retry_policy=RetryPolicy(max_retries=2, base_delay_s=0),
+    )
+    engine = PipelineEngine()
+    cancelled_agent = CancelledAgent()
+
+    with (
+        patch.object(engine, "_get_module_agent", return_value=cancelled_agent),
+        patch("core.pipeline_events.emit_pipeline_event", new=AsyncMock()),
+        patch("core.status_bus.emit", new=AsyncMock()),
+    ):
+        result = await engine.execute([step], session_id="cancelled-session")
+
+    assert result.status == PipelineStatus.CANCELLED
+    assert result.steps[0].status == StepStatus.CANCELLED
+    assert result.steps[0].error == "Vom Benutzer abgebrochen"
+    assert cancelled_agent.call_count == 1
 
 
 # ── Test 2: Multi-Step sequenzielle Pipeline ──────────────────────────────────
@@ -332,6 +618,65 @@ async def test_confirmation_required_pauses_pipeline_without_auto_confirm():
     get_agent.assert_not_called()
     event_types = [e.type for e in events_captured]
     assert PipelineEventType.PIPELINE_AWAITING_CONFIRMATION in event_types
+
+
+@pytest.mark.asyncio
+async def test_agent_event_lifecycle_starts_once_across_pause_and_resume():
+    step = make_step(
+        "kubernetes",
+        "Lösche alle Pods",
+        requires_confirmation=True,
+    )
+    engine = PipelineEngine()
+    checkpoint_store: dict[str, dict] = {}
+    fake_journal = FakeOperationJournal()
+    events: list[AgentEvent] = []
+
+    async def listener(event: AgentEvent) -> None:
+        events.append(event)
+
+    on_agent_event(listener, session_id="default:event-pause")
+    try:
+        with (
+            patch_engine_checkpoint(engine, checkpoint_store),
+            patch(
+                "core.operation_journal.get_operation_journal",
+                return_value=fake_journal,
+            ),
+            patch.object(
+                engine,
+                "_get_module_agent",
+                return_value=make_mock_agent("Erledigt"),
+            ),
+            patch("core.pipeline_events.emit_pipeline_event", new=AsyncMock()),
+            patch("core.status_bus.emit", new=AsyncMock()),
+        ):
+            paused = await engine.execute(
+                [step],
+                session_id="default:event-pause",
+                pipeline_id="pipe-paused",
+            )
+            resumed = await engine.resume(
+                "pipe-paused",
+                "default:event-pause",
+                auto_confirm=True,
+            )
+    finally:
+        remove_agent_event_listener(listener)
+
+    assert paused.status == PipelineStatus.AWAITING_CONFIRMATION
+    assert resumed.status == PipelineStatus.COMPLETED
+    pipeline_event_types = [
+        event.type
+        for event in events
+        if event.run_id == "pipe-paused"
+    ]
+    assert pipeline_event_types == [
+        AgentEventType.STARTED,
+        AgentEventType.APPROVAL_REQUIRED,
+        AgentEventType.STATUS,
+        AgentEventType.COMPLETED,
+    ]
 
 
 # ── Test 7b: requires_confirmation nur an späterem Step → Pipeline pausiert ───
