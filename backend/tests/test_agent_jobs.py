@@ -19,6 +19,14 @@ from core.agent_jobs import (
     AgentJobManager,
     _job_key,
 )
+from core.agent_events import (
+    get_agent_run_id,
+    on_agent_event,
+    remove_agent_event_listener,
+)
+from core.agent_protocol import TOOL_APPROVAL_SENTINEL
+from core.agent_protocol import APPROVAL_REQUIRED_MESSAGE
+from schemas.execution import AgentEvent, AgentEventType, AgentRequest, AgentResponse
 
 
 def _store_backed_redis() -> MagicMock:
@@ -59,7 +67,12 @@ def _store_backed_redis() -> MagicMock:
 def _agent(response: str = "Alles erledigt.", delay: float = 0.0):
     agent = MagicMock()
 
-    async def _invoke(message: str, chat_history=None):
+    async def _invoke(
+        message: str,
+        chat_history=None,
+        session_id: str = "",
+        confirmed: bool = False,
+    ):
         if delay:
             await asyncio.sleep(delay)
         return response, False
@@ -71,14 +84,7 @@ def _agent(response: str = "Alles erledigt.", delay: float = 0.0):
 def _manager_with(redis_mock, agent) -> AgentJobManager:
     pool = MagicMock()
     pool.get_agent_by_id = MagicMock(return_value=(agent, "Test-Agent"))
-    with (
-        patch("core.redis_client.get_redis", return_value=redis_mock),
-        patch("core.agent_pool.get_agent_pool", return_value=pool),
-    ):
-        manager = AgentJobManager()
-        manager._pool_patch = pool  # Referenz fürs Testleben halten
-    manager._test_pool = pool
-    return manager
+    return AgentJobManager(redis=redis_mock, agent_pool=pool)
 
 
 async def _wait_terminal(
@@ -96,15 +102,47 @@ async def _wait_terminal(
 
 class TestStartJob:
     @pytest.mark.asyncio
+    async def test_job_emits_typed_lifecycle_events(self):
+        redis_mock = _store_backed_redis()
+        manager = _manager_with(redis_mock, _agent("Fertig."))
+        events: list[AgentEvent] = []
+        completed = asyncio.Event()
+
+        async def listener(event: AgentEvent) -> None:
+            events.append(event)
+            if event.type == AgentEventType.COMPLETED:
+                completed.set()
+
+        on_agent_event(listener, tenant_id="default")
+        try:
+            job = await manager.start_job(
+                tenant_id="default",
+                agent_id="agent-1",
+                prompt="Mach was",
+            )
+            await _wait_terminal(manager, "default", job["id"])
+            await asyncio.wait_for(completed.wait(), timeout=1)
+        finally:
+            remove_agent_event_listener(listener)
+
+        assert [event.type for event in events] == [
+            AgentEventType.STARTED,
+            AgentEventType.COMPLETED,
+        ]
+        assert {event.run_id for event in events} == {job["id"]}
+        assert {event.session_id for event in events} == {
+            f"default:job-{job['id']}"
+        }
+
+    @pytest.mark.asyncio
     async def test_job_lifecycle_succeeded(self):
         redis_mock = _store_backed_redis()
         agent = _agent("Fertig: alles grün.")
         manager = _manager_with(redis_mock, agent)
 
-        with patch("core.agent_pool.get_agent_pool", return_value=manager._test_pool):
-            job = await manager.start_job(
-                tenant_id="default", agent_id="agent-1", prompt="Mach was", triggered_by="api"
-            )
+        job = await manager.start_job(
+            tenant_id="default", agent_id="agent-1", prompt="Mach was", triggered_by="api"
+        )
         assert job["status"] == "pending"
 
         final = await _wait_terminal(manager, "default", job["id"])
@@ -125,24 +163,80 @@ class TestStartJob:
         redis_mock = _store_backed_redis()
         manager = _manager_with(redis_mock, _agent("Fehler: Modul nicht erreichbar"))
 
-        with patch("core.agent_pool.get_agent_pool", return_value=manager._test_pool):
-            job = await manager.start_job(
-                tenant_id="default", agent_id="agent-1", prompt="Mach was"
-            )
+        job = await manager.start_job(
+            tenant_id="default", agent_id="agent-1", prompt="Mach was"
+        )
         final = await _wait_terminal(manager, "default", job["id"])
         assert final["status"] == "failed"
+
+    @pytest.mark.asyncio
+    async def test_approval_required_response_is_not_marked_succeeded(self):
+        redis_mock = _store_backed_redis()
+        sentinel = f'{TOOL_APPROVAL_SENTINEL}{{"tool_name":"restart_server"}}'
+        manager = _manager_with(redis_mock, _agent(sentinel))
+
+        with patch(
+            "core.agent_jobs.discard_pending_approval",
+            new=AsyncMock(),
+        ) as discard_pending:
+            job = await manager.start_job(
+                tenant_id="default",
+                agent_id="agent-1",
+                prompt="Starte den Server neu",
+            )
+            final = await _wait_terminal(manager, "default", job["id"])
+
+        assert final["status"] == "failed"
+        assert final["error"] == APPROVAL_REQUIRED_MESSAGE
+        assert final["result"] == APPROVAL_REQUIRED_MESSAGE
+        discard_pending.assert_awaited_once_with(
+            f"default:job-{job['id']}",
+            redis=redis_mock,
+        )
+
+    @pytest.mark.asyncio
+    async def test_native_protocol_agent_runs_without_legacy_invoke(self):
+        class NativeAgent:
+            id = "agent-1"
+            name = "Native Agent"
+            description = "Native contract test"
+
+            def __init__(self) -> None:
+                self.requests: list[AgentRequest] = []
+                self.run_contexts: list[str] = []
+
+            async def run(self, request: AgentRequest) -> AgentResponse:
+                self.requests.append(request)
+                self.run_contexts.append(get_agent_run_id())
+                return AgentResponse(
+                    text="Nativ fertig.",
+                    agent_id=self.id,
+                    agent_name=self.name,
+                )
+
+        redis_mock = _store_backed_redis()
+        native_agent = NativeAgent()
+        manager = _manager_with(redis_mock, native_agent)
+
+        job = await manager.start_job(
+            tenant_id="default",
+            agent_id="agent-1",
+            prompt="Prüfe nativ",
+        )
+        final = await _wait_terminal(manager, "default", job["id"])
+
+        assert final["status"] == "succeeded"
+        assert final["result"] == "Nativ fertig."
+        assert native_agent.requests[0].message == "Prüfe nativ"
+        assert native_agent.run_contexts == [job["id"]]
 
     @pytest.mark.asyncio
     async def test_unknown_agent_raises(self):
         redis_mock = _store_backed_redis()
         pool = MagicMock()
         pool.get_agent_by_id = MagicMock(return_value=(None, ""))
-        with patch("core.redis_client.get_redis", return_value=redis_mock):
-            manager = AgentJobManager()
-        with (
-            patch("core.agent_pool.get_agent_pool", return_value=pool),
-            pytest.raises(ValueError, match="nicht im Pool"),
-        ):
+        manager = AgentJobManager(redis=redis_mock, agent_pool=pool)
+        with pytest.raises(ValueError, match="nicht im Pool"):
             await manager.start_job(tenant_id="default", agent_id="ghost", prompt="x")
 
     @pytest.mark.asyncio
@@ -150,10 +244,7 @@ class TestStartJob:
         redis_mock = _store_backed_redis()
         manager = _manager_with(redis_mock, _agent(delay=5.0))
 
-        with (
-            patch("core.agent_pool.get_agent_pool", return_value=manager._test_pool),
-            patch("core.agent_jobs.JOB_TIMEOUT_SECONDS", 0.05),
-        ):
+        with patch("core.agent_jobs.JOB_TIMEOUT_SECONDS", 0.05):
             job = await manager.start_job(
                 tenant_id="default", agent_id="agent-1", prompt="Langsam"
             )
@@ -164,14 +255,88 @@ class TestStartJob:
 
 class TestCancel:
     @pytest.mark.asyncio
+    async def test_cancel_during_started_listener_still_finalizes_job(self):
+        redis_mock = _store_backed_redis()
+        manager = _manager_with(redis_mock, _agent(delay=5.0))
+        started = asyncio.Event()
+        cancelled = asyncio.Event()
+
+        async def listener(event: AgentEvent) -> None:
+            if event.type == AgentEventType.STARTED:
+                started.set()
+                await asyncio.Event().wait()
+            if event.type == AgentEventType.CANCELLED:
+                cancelled.set()
+
+        on_agent_event(listener, tenant_id="default")
+        try:
+            job = await manager.start_job(
+                tenant_id="default",
+                agent_id="agent-1",
+                prompt="Langsam",
+            )
+            await asyncio.wait_for(started.wait(), timeout=1)
+            await manager.cancel_job("default", job["id"])
+            await asyncio.wait_for(cancelled.wait(), timeout=1)
+            final = await _wait_terminal(manager, "default", job["id"])
+        finally:
+            remove_agent_event_listener(listener)
+
+        assert final["status"] == "cancelled"
+        assert final["finish_reason"] == "cancelled"
+        assert final["finished_at"] is not None
+
+    @pytest.mark.asyncio
+    async def test_cancel_recovered_job_uses_normal_terminal_lifecycle(self):
+        redis_mock = _store_backed_redis()
+        manager = _manager_with(redis_mock, _agent())
+        job = {
+            "id": "recovered-job",
+            "tenant_id": "default",
+            "agent_id": "agent-1",
+            "agent_name": "Test-Agent",
+            "prompt": "Alt",
+            "status": "running",
+            "finish_reason": None,
+            "result": None,
+            "error": None,
+            "triggered_by": "api",
+            "created_at": "2026-07-29T00:00:00+00:00",
+            "started_at": "2026-07-29T00:00:01+00:00",
+            "finished_at": None,
+            "duration_ms": None,
+        }
+        await manager._persist(job)
+        events: list[AgentEvent] = []
+
+        async def listener(event: AgentEvent) -> None:
+            events.append(event)
+
+        on_agent_event(listener, tenant_id="default")
+        try:
+            final = await manager.cancel_job("default", job["id"])
+        finally:
+            remove_agent_event_listener(listener)
+
+        assert final["status"] == "cancelled"
+        assert final["finish_reason"] == "cancelled"
+        assert final["duration_ms"] is not None
+        assert [event.type for event in events] == [AgentEventType.CANCELLED]
+        redis_events = [
+            call.args[0]
+            for call in redis_mock.publish_event.await_args_list
+        ]
+        assert redis_events[-1]["type"] == "agent_job_finished"
+        assert redis_events[-1]["status"] == "cancelled"
+
+    @pytest.mark.asyncio
     async def test_cancel_running_job(self):
         redis_mock = _store_backed_redis()
         manager = _manager_with(redis_mock, _agent(delay=5.0))
 
-        with patch("core.agent_pool.get_agent_pool", return_value=manager._test_pool):
-            job = await manager.start_job(
-                tenant_id="default", agent_id="agent-1", prompt="Langsam"
-            )
+        job = await manager.start_job(
+            tenant_id="default", agent_id="agent-1", prompt="Langsam"
+        )
         await asyncio.sleep(0.05)  # Job in running bringen
 
         result = await manager.cancel_job("default", job["id"])
@@ -184,10 +349,9 @@ class TestCancel:
     async def test_cancel_terminal_job_raises(self):
         redis_mock = _store_backed_redis()
         manager = _manager_with(redis_mock, _agent())
-        with patch("core.agent_pool.get_agent_pool", return_value=manager._test_pool):
-            job = await manager.start_job(
-                tenant_id="default", agent_id="agent-1", prompt="Schnell"
-            )
+        job = await manager.start_job(
+            tenant_id="default", agent_id="agent-1", prompt="Schnell"
+        )
         await _wait_terminal(manager, "default", job["id"])
         with pytest.raises(ValueError, match="bereits beendet"):
             await manager.cancel_job("default", job["id"])
@@ -206,10 +370,9 @@ class TestListJobs:
         redis_mock = _store_backed_redis()
         manager = _manager_with(redis_mock, _agent())
 
-        with patch("core.agent_pool.get_agent_pool", return_value=manager._test_pool):
-            job = await manager.start_job(
-                tenant_id="default", agent_id="agent-1", prompt="A"
-            )
+        job = await manager.start_job(
+            tenant_id="default", agent_id="agent-1", prompt="A"
+        )
         await _wait_terminal(manager, "default", job["id"])
 
         # Toten Index-Eintrag simulieren (Job-Key per TTL verschwunden)
@@ -225,10 +388,9 @@ class TestListJobs:
         index_key = "ninko:agent:jobs:index:default:agent-1"
         redis_mock._lists[index_key] = [f"alt-{i}" for i in range(MAX_JOBS_PER_AGENT)]
 
-        with patch("core.agent_pool.get_agent_pool", return_value=manager._test_pool):
-            job = await manager.start_job(
-                tenant_id="default", agent_id="agent-1", prompt="A"
-            )
+        job = await manager.start_job(
+            tenant_id="default", agent_id="agent-1", prompt="A"
+        )
         await _wait_terminal(manager, "default", job["id"])
         assert len(redis_mock._lists[index_key]) == MAX_JOBS_PER_AGENT
         assert redis_mock._lists[index_key][0] == job["id"]
@@ -243,9 +405,30 @@ class TestTenantScoping:
     async def test_get_job_other_tenant_not_found(self):
         redis_mock = _store_backed_redis()
         manager = _manager_with(redis_mock, _agent())
-        with patch("core.agent_pool.get_agent_pool", return_value=manager._test_pool):
-            job = await manager.start_job(
-                tenant_id="default", agent_id="agent-1", prompt="A"
-            )
+        job = await manager.start_job(
+            tenant_id="default", agent_id="agent-1", prompt="A"
+        )
         await _wait_terminal(manager, "default", job["id"])
         assert await manager.get_job("kunde-b", job["id"]) is None
+
+
+class TestShutdown:
+    @pytest.mark.asyncio
+    async def test_shutdown_cancels_and_awaits_running_tasks(self):
+        manager = _manager_with(_store_backed_redis(), _agent())
+        finalized = asyncio.Event()
+
+        async def running_job() -> None:
+            try:
+                await asyncio.Future()
+            finally:
+                finalized.set()
+
+        task = asyncio.create_task(running_job())
+        manager._running["job-1"] = task
+        await asyncio.sleep(0)
+
+        await manager.shutdown()
+
+        assert task.cancelled()
+        assert finalized.is_set()
