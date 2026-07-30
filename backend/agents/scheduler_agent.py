@@ -20,7 +20,19 @@ from typing import TYPE_CHECKING
 
 from croniter import croniter
 
+from core.agent_approval import discard_pending_approval
+from core.agent_events import (
+    emit_agent_event,
+    reset_agent_run_id,
+    set_agent_run_id,
+)
+from core.agent_protocol import (
+    APPROVAL_REQUIRED_MESSAGE,
+    as_agent_protocol,
+    as_orchestrator_protocol,
+)
 from core.redis_client import get_redis
+from schemas.execution import AgentEvent, AgentEventType, AgentFinishReason, AgentRequest
 
 # Lock to prevent concurrent R-M-W races on the shared tasks list
 _tasks_lock = asyncio.Lock()
@@ -55,16 +67,9 @@ _SCHEDULER_EXCEPTIONS = (
     asyncio.TimeoutError,
 )
 
-_ERROR_RESPONSE_PREFIXES = ("fehler:", "error:", "erreur", "❌")
-
-
-def _response_indicates_error(response_text: str) -> bool:
-    """Heuristik: erkennt Fehler-Antwortstrings von Agent/Orchestrator.
-
-    Verhindert, dass inhaltliche Fehlermeldungen als Task-Status 'ok' geloggt werden.
-    """
-    stripped = (response_text or "").strip().lower()
-    return stripped.startswith(_ERROR_RESPONSE_PREFIXES)
+def _scheduler_status(finish_reason: AgentFinishReason) -> str:
+    """Map the common agent result to the scheduler's persisted status."""
+    return "ok" if finish_reason == AgentFinishReason.COMPLETED else "error"
 
 
 def _task_tenant(task: dict) -> str:
@@ -210,12 +215,26 @@ class SchedulerAgent:
 
         agent_id = task.get("agent_id")
         tenant_id = _task_tenant(task)
+        session_id = f"{tenant_id}:scheduler-{task_id}"
+        scheduler_run_id = f"scheduler:{task_id}:{uuid.uuid4().hex}"
+        terminal_event_type = AgentEventType.FAILED
 
         # Session-Kontext für Tools/Pool setzen: _current_tenant_id() und der
         # Agent-Pool leiten den Tenant aus der status_bus-Session-ID ab.
         from core import status_bus
 
-        status_bus.set_session_id(f"{tenant_id}:scheduler-{task_id}")
+        status_bus.set_session_id(session_id)
+        await emit_agent_event(
+            AgentEvent(
+                type=AgentEventType.STARTED,
+                tenant_id=tenant_id,
+                session_id=session_id,
+                run_id=scheduler_run_id,
+                agent_id="scheduler",
+                data={"task_id": task_id, "task_name": task["name"]},
+            )
+        )
+        run_context_token = set_agent_run_id(scheduler_run_id)
 
         try:
             response_text = ""
@@ -285,7 +304,12 @@ class SchedulerAgent:
                 logger.info("Starte Workflow '%s' für Task '%s' (Run: %s)", workflow_id, task["name"], run_id)
 
                 engine = WorkflowEngine(self._redis, self.orchestrator)
-                await engine.execute(wf, run_id, triggered_by="schedule")
+                await engine.execute(
+                    wf,
+                    run_id,
+                    triggered_by="schedule",
+                    parent_run_id=scheduler_run_id,
+                )
 
                 # Ergebnis aus Redis lesen (tenant-scoped Runs-Key)
                 runs_key = f"{_tenant_key('ninko:workflow:runs:', tenant_id)}{wf['id']}"
@@ -314,20 +338,45 @@ class SchedulerAgent:
                     raise ValueError(f"Agent '{agent_id}' nicht im Pool gefunden.")
 
                 logger.info("Starte Agent '%s' (%s) für Task '%s'", agent_name, agent_id, task["name"])
-                response_text, _ = await agent.invoke(
-                    message=task.get("prompt", "Führe deine Aufgabe aus."),
-                    chat_history=None,
+                scheduled_agent = as_agent_protocol(
+                    agent,
+                    agent_id=agent_id,
+                    name=agent_name,
                 )
+                response = await scheduled_agent.run(
+                    AgentRequest(
+                        message=task.get("prompt", "Führe deine Aufgabe aus."),
+                        session_id=session_id,
+                    )
+                )
+                response_text = response.text
+                if response.finish_reason == AgentFinishReason.APPROVAL_REQUIRED:
+                    await discard_pending_approval(
+                        session_id,
+                        redis=self._redis,
+                    )
+                    response_text = APPROVAL_REQUIRED_MESSAGE
                 module_used = f"agent:{agent_name}"
-                exec_status = "error" if _response_indicates_error(response_text) else "ok"
+                exec_status = _scheduler_status(response.finish_reason)
 
             else:
                 # Orchestrator ausführen (Prompt)
-                response_text, module_used, _, _ = await self.orchestrator.route(
-                    message=task["prompt"],
-                    chat_history=None,
+                scheduled_orchestrator = as_orchestrator_protocol(self.orchestrator)
+                response = await scheduled_orchestrator.run(
+                    AgentRequest(
+                        message=task["prompt"],
+                        session_id=session_id,
+                    )
                 )
-                exec_status = "error" if _response_indicates_error(response_text) else "ok"
+                response_text = response.text
+                if response.finish_reason == AgentFinishReason.APPROVAL_REQUIRED:
+                    await discard_pending_approval(
+                        session_id,
+                        redis=self._redis,
+                    )
+                    response_text = APPROVAL_REQUIRED_MESSAGE
+                module_used = response.module
+                exec_status = _scheduler_status(response.finish_reason)
 
             duration_ms = int((time.monotonic() - start_time) * 1000)
 
@@ -370,8 +419,16 @@ class SchedulerAgent:
                 duration_ms,
                 "Workflow" if workflow_id else (module_used or "direkt"),
             )
+            terminal_event_type = (
+                AgentEventType.COMPLETED
+                if exec_status == "ok"
+                else AgentEventType.FAILED
+            )
             return log_entry
 
+        except asyncio.CancelledError:
+            terminal_event_type = AgentEventType.CANCELLED
+            raise
         except _SCHEDULER_EXCEPTIONS as exc:
             duration_ms = int((time.monotonic() - start_time) * 1000)
 
@@ -404,6 +461,31 @@ class SchedulerAgent:
                 "Task '%s' fehlgeschlagen: %s", task["name"], exc
             )
             return log_entry
+        finally:
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+            try:
+                await emit_agent_event(
+                    AgentEvent(
+                        type=terminal_event_type,
+                        tenant_id=tenant_id,
+                        session_id=session_id,
+                        run_id=scheduler_run_id,
+                        agent_id="scheduler",
+                        data={
+                            "task_id": task_id,
+                            "status": (
+                                "cancelled"
+                                if terminal_event_type == AgentEventType.CANCELLED
+                                else "succeeded"
+                                if terminal_event_type == AgentEventType.COMPLETED
+                                else "failed"
+                            ),
+                            "duration_ms": duration_ms,
+                        },
+                    )
+                )
+            finally:
+                reset_agent_run_id(run_context_token)
 
     # ── Task CRUD ──────────────────────────────────────
 
