@@ -20,6 +20,16 @@ import logging
 import time
 import uuid
 from datetime import datetime, timezone
+from typing import Any
+
+from core.agent_approval import discard_pending_approval
+from core.agent_events import (
+    emit_agent_event,
+    reset_agent_run_id,
+    set_agent_run_id,
+)
+from core.agent_protocol import APPROVAL_REQUIRED_MESSAGE
+from schemas.execution import AgentEvent, AgentEventType, AgentFinishReason
 
 logger = logging.getLogger("ninko.agent_jobs")
 
@@ -31,10 +41,6 @@ JOB_TIMEOUT_SECONDS = 600  # analog Scheduler-Task-Timeout
 MAX_RESULT_CHARS = 12000
 
 _TERMINAL_STATUSES = ("succeeded", "failed", "cancelled")
-
-# Fehlerheuristik analog agents/scheduler_agent.py
-_ERROR_RESPONSE_PREFIXES = ("fehler:", "error:", "erreur", "❌")
-
 
 def _normalize_tenant(tenant_id: str) -> str:
     return (tenant_id or "default").strip().lower().replace(" ", "_") or "default"
@@ -48,18 +54,16 @@ def _index_key(tenant_id: str, agent_id: str) -> str:
     return f"{REDIS_KEY_JOB_INDEX_PREFIX}:{_normalize_tenant(tenant_id)}:{agent_id}"
 
 
-def _response_indicates_error(response_text: str) -> bool:
-    stripped = (response_text or "").strip().lower()
-    return stripped.startswith(_ERROR_RESPONSE_PREFIXES)
-
-
 class AgentJobManager:
     """Verwaltet einmalige Agent-Ausführungen als Hintergrund-Jobs."""
 
-    def __init__(self) -> None:
-        from core.redis_client import get_redis
+    def __init__(self, *, redis: Any = None, agent_pool: Any = None) -> None:
+        if redis is None:
+            from core.redis_client import get_redis
 
-        self._redis = get_redis()
+            redis = get_redis()
+        self._redis = redis
+        self._agent_pool = agent_pool
         # Laufende asyncio-Tasks pro job_id (für Cancel); nur in diesem Prozess
         self._running: dict[str, asyncio.Task] = {}
 
@@ -85,9 +89,11 @@ class AgentJobManager:
 
         status_bus.set_session_id(f"{tenant}:job-{job_id}")
 
-        from core.agent_pool import get_agent_pool
+        pool = self._agent_pool
+        if pool is None:
+            from core.agent_pool import get_agent_pool
 
-        pool = get_agent_pool()
+            pool = get_agent_pool()
         agent, agent_name = pool.get_agent_by_id(agent_id)
         if agent is None:
             raise ValueError(f"Agent '{agent_id}' nicht im Pool gefunden.")
@@ -100,6 +106,7 @@ class AgentJobManager:
             "agent_name": agent_name,
             "prompt": prompt,
             "status": "pending",
+            "finish_reason": None,
             "result": None,
             "error": None,
             "triggered_by": triggered_by,
@@ -138,8 +145,10 @@ class AgentJobManager:
 
     # ── Ausführung ─────────────────────────────────────
 
-    async def _run_job(self, job: dict, agent) -> None:
+    async def _run_job(self, job: dict, agent: Any) -> None:
         from core import status_bus
+        from core.agent_protocol import as_agent_protocol
+        from schemas.execution import AgentRequest
 
         job_id = job["id"]
         tenant = job["tenant_id"]
@@ -150,42 +159,99 @@ class AgentJobManager:
         start = time.monotonic()
         job["status"] = "running"
         job["started_at"] = datetime.now(timezone.utc).isoformat()
-        await self._persist(job)
-
+        run_context_token = set_agent_run_id(job_id)
         try:
-            response_text, _ = await asyncio.wait_for(
-                agent.invoke(message=job["prompt"], chat_history=None),
+            await self._persist(job)
+            await emit_agent_event(
+                AgentEvent(
+                    type=AgentEventType.STARTED,
+                    tenant_id=tenant,
+                    session_id=f"{tenant}:job-{job_id}",
+                    run_id=job_id,
+                    agent_id=job["agent_id"],
+                    data={"triggered_by": job["triggered_by"]},
+                )
+            )
+            adapted_agent = as_agent_protocol(
+                agent,
+                agent_id=job["agent_id"],
+                name=job["agent_name"],
+            )
+            response = await asyncio.wait_for(
+                adapted_agent.run(
+                    AgentRequest(
+                        message=job["prompt"],
+                        session_id=f"{tenant}:job-{job_id}",
+                    )
+                ),
                 timeout=JOB_TIMEOUT_SECONDS,
             )
-            if _response_indicates_error(response_text):
+            response_text = response.text
+            job["finish_reason"] = response.finish_reason.value
+            if response.finish_reason == AgentFinishReason.COMPLETED:
+                job["status"] = "succeeded"
+            elif response.finish_reason == AgentFinishReason.APPROVAL_REQUIRED:
+                await discard_pending_approval(
+                    f"{tenant}:job-{job_id}",
+                    redis=self._redis,
+                )
+                job["status"] = "failed"
+                job["error"] = APPROVAL_REQUIRED_MESSAGE
+                response_text = APPROVAL_REQUIRED_MESSAGE
+            elif response.finish_reason == AgentFinishReason.CANCELLED:
+                job["status"] = "cancelled"
+                job["error"] = (response_text or "Job wurde abgebrochen.")[:MAX_RESULT_CHARS]
+            else:
                 job["status"] = "failed"
                 job["error"] = (response_text or "")[:MAX_RESULT_CHARS]
-            else:
-                job["status"] = "succeeded"
             job["result"] = (response_text or "")[:MAX_RESULT_CHARS]
 
         except asyncio.TimeoutError:
             job["status"] = "failed"
+            job["finish_reason"] = AgentFinishReason.FAILED.value
             job["error"] = f"Timeout nach {JOB_TIMEOUT_SECONDS}s."
             logger.error("Agent-Job %s Timeout nach %ds.", job_id, JOB_TIMEOUT_SECONDS)
 
         except asyncio.CancelledError:
             job["status"] = "cancelled"
+            job["finish_reason"] = AgentFinishReason.CANCELLED.value
             job["error"] = "Job wurde abgebrochen."
-            await self._finalize(job, start)
             raise
 
         except Exception as exc:
             job["status"] = "failed"
+            job["finish_reason"] = AgentFinishReason.FAILED.value
             job["error"] = str(exc)[:1000]
             logger.error("Agent-Job %s fehlgeschlagen: %s", job_id, exc)
-
-        await self._finalize(job, start)
+        finally:
+            try:
+                await self._finalize(job, start)
+            finally:
+                reset_agent_run_id(run_context_token)
 
     async def _finalize(self, job: dict, start_monotonic: float) -> None:
         job["finished_at"] = datetime.now(timezone.utc).isoformat()
         job["duration_ms"] = int((time.monotonic() - start_monotonic) * 1000)
         await self._persist(job)
+
+        event_type = {
+            AgentFinishReason.APPROVAL_REQUIRED.value: AgentEventType.APPROVAL_REQUIRED,
+            AgentFinishReason.CANCELLED.value: AgentEventType.CANCELLED,
+            AgentFinishReason.COMPLETED.value: AgentEventType.COMPLETED,
+        }.get(job.get("finish_reason"), AgentEventType.FAILED)
+        await emit_agent_event(
+            AgentEvent(
+                type=event_type,
+                tenant_id=job["tenant_id"],
+                session_id=f"{job['tenant_id']}:job-{job['id']}",
+                run_id=job["id"],
+                agent_id=job["agent_id"],
+                data={
+                    "status": job["status"],
+                    "duration_ms": job["duration_ms"],
+                },
+            )
+        )
 
         try:
             await self._redis.publish_event(
@@ -257,10 +323,18 @@ class AgentJobManager:
 
         # pending ohne laufenden Task (z.B. nach Prozess-Neustart) → direkt markieren
         job["status"] = "cancelled"
+        job["finish_reason"] = AgentFinishReason.CANCELLED.value
         job["error"] = "Job wurde abgebrochen."
-        job["finished_at"] = datetime.now(timezone.utc).isoformat()
-        await self._persist(job)
+        await self._finalize(job, time.monotonic())
         return job
+
+    async def shutdown(self) -> None:
+        """Cancel and await all local jobs so terminal state can be persisted."""
+        running = tuple(self._running.values())
+        for task in running:
+            task.cancel()
+        if running:
+            await asyncio.gather(*running, return_exceptions=True)
 
     # ── Helpers ────────────────────────────────────────
 
