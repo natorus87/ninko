@@ -16,6 +16,8 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from api.routes_agents import router
+from core.agent_event_journal import JournaledAgentEvent
+from schemas.execution import AgentEvent, AgentEventType
 
 
 @pytest.fixture
@@ -97,6 +99,111 @@ class TestJobQueries:
         body = res.json()
         assert body["total"] == 1
         assert body["jobs"][0]["id"] == "job-123"
+
+    def test_terminal_job_without_retained_events_returns_410(self, client):
+        manager = _mock_manager()
+        journal = MagicMock()
+        journal.read_after = AsyncMock(return_value=[])
+        with (
+            patch(
+                "core.agent_jobs.get_agent_job_manager",
+                return_value=manager,
+            ),
+            patch(
+                "api.routes_agents.get_agent_event_journal",
+                return_value=journal,
+            ),
+        ):
+            res = client.get("/api/agents/jobs/job-123/events")
+
+        assert res.status_code == 410
+
+    def test_job_event_stream_uses_normalized_tenant_from_job(self, client):
+        manager = _mock_manager()
+        manager.get_job = AsyncMock(
+            return_value={**_job("succeeded"), "tenant_id": "acme_team"}
+        )
+        journal = MagicMock()
+        journal.read_after = AsyncMock(return_value=[])
+        with (
+            patch("core.agent_jobs.get_agent_job_manager", return_value=manager),
+            patch(
+                "api.routes_agents.get_agent_event_journal",
+                return_value=journal,
+            ),
+        ):
+            res = client.get("/api/agents/jobs/job-123/events")
+
+        assert res.status_code == 410
+        journal.read_after.assert_awaited_once_with(
+            tenant_id="acme_team",
+            session_id="acme_team:job-job-123",
+            after="0-0",
+            limit=500,
+        )
+
+    def test_caught_up_terminal_job_returns_204(self, client):
+        manager = _mock_manager()
+        journal = MagicMock()
+        journal.read_after = AsyncMock(return_value=[])
+        with (
+            patch(
+                "core.agent_jobs.get_agent_job_manager",
+                return_value=manager,
+            ),
+            patch(
+                "api.routes_agents.get_agent_event_journal",
+                return_value=journal,
+            ),
+        ):
+            res = client.get(
+                "/api/agents/jobs/job-123/events",
+                headers={"Last-Event-ID": "9-0"},
+            )
+
+        assert res.status_code == 204
+
+    def test_terminal_job_repairs_missing_terminal_event(self, client):
+        manager = _mock_manager()
+        started = AgentEvent(
+            type=AgentEventType.STARTED,
+            tenant_id="default",
+            session_id="default:job-job-123",
+            run_id="job-123",
+            agent_id="agent-1",
+        )
+        completed = started.model_copy(
+            update={"type": AgentEventType.COMPLETED}
+        )
+        journal = MagicMock()
+        journal.read_after = AsyncMock(
+            side_effect=[
+                [JournaledAgentEvent("1-0", started)],
+                [
+                    JournaledAgentEvent("1-0", started),
+                    JournaledAgentEvent("2-0", completed),
+                ],
+            ]
+        )
+        journal.append = AsyncMock(return_value="2-0")
+        journal.wait_after = AsyncMock()
+
+        with (
+            patch(
+                "core.agent_jobs.get_agent_job_manager",
+                return_value=manager,
+            ),
+            patch(
+                "api.routes_agents.get_agent_event_journal",
+                return_value=journal,
+            ),
+        ):
+            res = client.get("/api/agents/jobs/job-123/events")
+
+        assert res.status_code == 200
+        persisted = journal.append.await_args.args[0]
+        assert persisted.type == AgentEventType.COMPLETED
+        assert persisted.data["recovered_from_job"] is True
 
 
 class TestCancel:
