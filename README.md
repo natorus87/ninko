@@ -11,14 +11,16 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.5.2-blue.svg" alt="Version"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.6.0-blue.svg" alt="Version"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-stable-brightgreen.svg" alt="Status"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.12-blue.svg" alt="Python"></a>
   <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.115-green.svg" alt="FastAPI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
 </p>
 
-> **v1.3.9 — Current Release:** Pipeline confirmations resume step-by-step, agent API validation is enforced at the boundary, Proxmox LXC power operations use the right endpoint, and workflow/TTS state handling is harder to race or overload.
+> **v1.6.0 — Current Release:** A shared typed agent protocol, durable and
+> resumable AgentEvent streams, a live execution timeline, and request-bound
+> atomic tool approvals make nested agent work observable and safer.
 
 ---
 
@@ -36,6 +38,9 @@ Ninko connects a local LLM to your infrastructure. Ask questions in chat, trigge
 - **GitHub / GitLab modules** – Full CI/CD control: trigger pipelines, manage PRs/MRs, issues, releases, repositories
 - **Theme system** – Built-in presets, custom token-based themes, and GitHub theme repository import
 - **Dynamic agents** – AI creates specialized agents at runtime on demand
+- **Observable agent execution** – Typed, tenant-scoped lifecycle events for
+  agents, tools, jobs, pipelines, workflows, and schedulers with Redis replay,
+  resumable SSE, and a live parent/child timeline in chat
 - **Skills system** – Reusable procedural knowledge as SKILL.md files
 - **TTS/STT** – Piper (local) + Whisper for voice input and output
 - **Telegram bot** – Full remote access via messenger including voice messages
@@ -158,6 +163,10 @@ On first start, configure your LLM backend under **Settings → LLM Provider** (
 ### Core principle
 
 The core code contains **no module names**. Every module registers itself at startup via its `module_manifest`. Adding a new module only requires creating a new folder under `backend/modules/` — nothing else changes.
+
+The execution runtime, event schema, SSE API, approval lifecycle and extension
+rules are documented in
+[Agent Execution Runtime](docs/agent-execution-runtime.md).
 
 ---
 
