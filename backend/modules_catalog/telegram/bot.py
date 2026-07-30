@@ -10,11 +10,15 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
 import logging
 import os
 import re
+import secrets
+import tempfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -23,7 +27,7 @@ from fastapi import FastAPI
 from core.redis_client import get_redis
 from agents.base_agent import _t
 from agents.middleware.postprocess import _strip_agent_meta_chatter
-from .formatter import format_for_telegram
+from .formatter import format_chunks_for_telegram, format_for_telegram
 
 
 def _clean_for_tts(text: str) -> str:
@@ -77,6 +81,30 @@ logger = logging.getLogger("ninko.modules.telegram.bot")
 
 # Maximum message length (Telegram limit: 4096)
 _MAX_MSG_LEN = 4000
+_CALLBACK_TTL = 300
+_CALLBACK_KEY = "ninko:telegram:callback:{session_id}:{request_id}"
+
+
+def _telegram_image_roots() -> list[Path]:
+    """Return image-provider roots in the same precedence order as generation."""
+    candidates: list[Path] = []
+    configured = (os.getenv("NINKO_IMAGES_DIR") or "").strip()
+    if configured:
+        candidates.append(Path(configured))
+    candidates.extend(
+        [
+            Path("/app/data/images"),
+            Path("data/images"),
+            Path(tempfile.gettempdir()) / "ninko-images",
+        ]
+    )
+    roots: list[Path] = []
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if resolved not in roots:
+            roots.append(resolved)
+    return roots
+
 
 # Trace-event phases considered internal wiring (safeguard/routing/context/pipeline
 # bookkeeping) — mirrors the web frontend's debug-mode phase filter so the live
@@ -198,10 +226,8 @@ class TelegramBot:
         self.running = False
         self.task: asyncio.Task | None = None
         self.offset = 0
-        # Tracks sessions that were cleared while a request was in flight
-        self._cleared_sessions: set[str] = set()
-        # In-flight request counter per session (guards _cleared_sessions)
-        self._inflight_sessions: dict[str, int] = {}
+        # Incremented by /clear so requests can detect stale history snapshots.
+        self._session_generations: dict[str, int] = {}
         # Track background tasks to prevent memory leaks
         self._background_tasks: set[asyncio.Task] = set()
         self._pairing_ttl = 3600  # 1 hour
@@ -324,6 +350,89 @@ class TelegramBot:
         task.add_done_callback(self._background_tasks.discard)
         return task
 
+    @staticmethod
+    def _callback_key(session_id: str, request_id: str) -> str:
+        return _CALLBACK_KEY.format(session_id=session_id, request_id=request_id)
+
+    async def _create_confirmation(
+        self,
+        session_id: str,
+        user_id: int,
+        kind: str,
+        payload: str = "",
+    ) -> str:
+        """Persist a confirmation bound to one request and Telegram user."""
+        request_id = secrets.token_urlsafe(8)
+        value = json.dumps(
+            {"user_id": user_id, "kind": kind, "payload": payload},
+            ensure_ascii=False,
+        )
+        redis = get_redis()
+        await redis.connection.setex(
+            self._callback_key(session_id, request_id),
+            _CALLBACK_TTL,
+            value,
+        )
+        return request_id
+
+    async def _consume_confirmation(
+        self,
+        session_id: str,
+        request_id: str,
+        user_id: int,
+        expected_kind: str,
+    ) -> dict[str, Any] | None:
+        """Consume a matching confirmation without cross-user invalidation."""
+        if not request_id or not user_id:
+            return None
+
+        redis = get_redis()
+        key = self._callback_key(session_id, request_id)
+        current = await redis.connection.get(key)
+        if not current:
+            return None
+        current_text = current.decode() if isinstance(current, bytes) else current
+        try:
+            info = json.loads(current_text)
+        except (TypeError, ValueError):
+            return None
+        if info.get("user_id") != user_id or info.get("kind") != expected_kind:
+            return None
+
+        try:
+            consumed = await redis.connection.execute_command("GETDEL", key)
+        except Exception:
+            consumed = await redis.connection.get(key)
+            if consumed:
+                await redis.connection.delete(key)
+        if not consumed:
+            return None
+        consumed_text = consumed.decode() if isinstance(consumed, bytes) else consumed
+        if consumed_text != current_text:
+            return None
+        return info
+
+    async def _clear_pending_message_confirmation(
+        self,
+        session_id: str,
+        request_id: str,
+    ) -> None:
+        """Delete the text-confirmation alias only when it targets this request."""
+        from core.safeguard import SAFEGUARD_PENDING_KEY
+
+        redis = get_redis()
+        pending_key = SAFEGUARD_PENDING_KEY.format(session_id=session_id)
+        pending = await redis.connection.get(pending_key)
+        if not pending:
+            return
+        pending_text = pending.decode() if isinstance(pending, bytes) else pending
+        try:
+            info = json.loads(pending_text)
+        except (TypeError, ValueError):
+            return
+        if info.get("request_id") == request_id:
+            await redis.connection.delete(pending_key)
+
     @asynccontextmanager
     async def _client(self) -> AsyncIterator[httpx.AsyncClient]:
         """Yield the shared HTTP client (created lazily, closed in stop()).
@@ -422,7 +531,7 @@ class TelegramBot:
                     params: dict[str, Any] = {
                         "offset": self.offset,
                         "timeout": timeout_s,
-                        "allowed_updates": ["message", "callback_query"],
+                        "allowed_updates": json.dumps(["message", "callback_query"]),
                     }
 
                     resp = await poll_client.get(
@@ -521,6 +630,52 @@ class TelegramBot:
             logger.error("_send error: %s", exc)
             return False
 
+    async def _send_formatted_chunks(
+        self,
+        token: str,
+        chat_id: int,
+        text: str,
+        reply_to_message_id: int | None = None,
+        preview_message_id: int | None = None,
+    ) -> bool:
+        """Send raw text as independently formatted Telegram-safe chunks."""
+        chunks = format_chunks_for_telegram(text, _MAX_MSG_LEN)
+        all_sent = True
+        for index, chunk in enumerate(chunks):
+            if index == 0 and preview_message_id:
+                sent = await self._edit_message(
+                    token,
+                    chat_id,
+                    preview_message_id,
+                    chunk,
+                    parse_mode="HTML",
+                )
+                if not sent:
+                    await self._delete_message(
+                        token,
+                        chat_id,
+                        preview_message_id,
+                    )
+                    sent = await self._send(
+                        token,
+                        chat_id,
+                        chunk,
+                        parse_mode="HTML",
+                        reply_to_message_id=reply_to_message_id,
+                    )
+            else:
+                sent = await self._send(
+                    token,
+                    chat_id,
+                    chunk,
+                    parse_mode="HTML",
+                    reply_to_message_id=(
+                        reply_to_message_id if index == 0 else None
+                    ),
+                )
+            all_sent = sent and all_sent
+        return all_sent
+
     async def _send_with_keyboard(
         self,
         token: str,
@@ -559,56 +714,106 @@ class TelegramBot:
             logger.error("_send_with_keyboard error: %s", exc)
             return False
 
-    async def _remove_inline_keyboard(
-        self, token: str, chat_id: int, message_id: int | None
+    async def _dismiss_confirmation_message(
+        self,
+        token: str,
+        chat_id: int,
+        message_id: int | None,
+        *,
+        accepted: bool,
     ) -> None:
-        """Strip the inline keyboard from a confirmation message (best-effort).
-
-        Telegram's answerCallbackQuery only dismisses the button's loading
-        spinner — it does NOT remove the keyboard itself. Without this, a
-        confirm/cancel message stays clickable after the user already acted
-        on it, so a second tap re-fires the same callback.
-        """
+        """Delete a consumed confirmation, falling back to a terminal edit."""
         if not message_id:
             return
+
+        terminal_text = (
+            _t("✅ Bestätigt – wird ausgeführt …", "✅ Confirmed – executing …")
+            if accepted
+            else _t("❌ Aktion abgebrochen.", "❌ Action cancelled.")
+        )
         try:
             async with self._client() as client:
-                await client.post(
-                    f"https://api.telegram.org/bot{token}/editMessageReplyMarkup",
+                if await self._delete_message(
+                    token,
+                    chat_id,
+                    message_id,
+                    client=client,
+                ):
+                    return
+
+                response = await client.post(
+                    f"https://api.telegram.org/bot{token}/editMessageText",
                     json={
                         "chat_id": chat_id,
                         "message_id": message_id,
+                        "text": terminal_text,
                         "reply_markup": {"inline_keyboard": []},
                     },
                 )
+                if response.status_code != 200 or not response.json().get("ok"):
+                    logger.warning(
+                        "Terminal confirmation edit failed: %s %s",
+                        response.status_code,
+                        response.text[:160],
+                    )
         except _RECOVERABLE_ERRORS as exc:
-            logger.debug("_remove_inline_keyboard fehlgeschlagen (best-effort): %s", exc)
+            logger.warning(
+                "Telegram confirmation could not be dismissed: %s",
+                exc,
+            )
 
-    async def _pop_pending_safeguard_text(self, session_id: str) -> str | None:
-        """Atomically consume a pending bot-level safeguard action if one exists."""
-        from core.safeguard import SAFEGUARD_PENDING_KEY
-
-        redis = get_redis()
-        pending_key = SAFEGUARD_PENDING_KEY.format(session_id=session_id)
+    async def _delete_message(
+        self,
+        token: str,
+        chat_id: int,
+        message_id: int | None,
+        *,
+        client: httpx.AsyncClient | None = None,
+    ) -> bool:
+        """Delete one bot message and report Telegram API failures."""
+        if not message_id:
+            return False
         try:
-            pending_raw = await redis.connection.execute_command("GETDEL", pending_key)
-        except Exception:
-            pending_raw = await redis.connection.get(pending_key)
-            if pending_raw:
-                await redis.connection.delete(pending_key)
-        if not pending_raw:
-            return None
-        return pending_raw.decode() if isinstance(pending_raw, bytes) else pending_raw
+            if client is None:
+                async with self._client() as shared_client:
+                    return await self._delete_message(
+                        token,
+                        chat_id,
+                        message_id,
+                        client=shared_client,
+                    )
+            response = await client.post(
+                f"https://api.telegram.org/bot{token}/deleteMessage",
+                json={"chat_id": chat_id, "message_id": message_id},
+            )
+            if response.status_code == 200 and response.json().get("ok"):
+                return True
+            logger.warning(
+                "deleteMessage failed: %s %s",
+                response.status_code,
+                response.text[:160],
+            )
+        except _RECOVERABLE_ERRORS as exc:
+            logger.warning("deleteMessage failed: %s", exc)
+        return False
 
     async def _send_tool_confirmation(
         self,
         token: str,
         chat_id: int,
+        session_id: str,
+        user_id: int,
         info: dict[str, Any],
     ) -> None:
         """Render a tool-level safeguard sentinel as a Telegram confirmation."""
         import html
 
+        request_id = await self._create_confirmation(
+            session_id,
+            user_id,
+            "tool",
+            str(info.get("approval_id") or ""),
+        )
         category = html.escape(str(info.get("category", "UNKNOWN")))
         rationale = html.escape(str(info.get("rationale", "")))
         tool_name = html.escape(str(info.get("tool_name", "unbekannt")))
@@ -629,8 +834,14 @@ class TelegramBot:
             ),
             [
                 [
-                    {"text": _t("✅ Ja", "✅ Yes"), "callback_data": "confirm_tool_yes"},
-                    {"text": _t("❌ Nein", "❌ No"), "callback_data": "confirm_tool_no"},
+                    {
+                        "text": _t("✅ Ja", "✅ Yes"),
+                        "callback_data": f"tool_yes:{request_id}",
+                    },
+                    {
+                        "text": _t("❌ Nein", "❌ No"),
+                        "callback_data": f"tool_no:{request_id}",
+                    },
                 ]
             ],
         )
@@ -739,25 +950,27 @@ class TelegramBot:
         Loads the image locally and sends it as multipart/form-data.
         """
         try:
-            from pathlib import Path
+            match = re.fullmatch(
+                r"/api/images/([A-Za-z0-9][A-Za-z0-9_.-]*\.(?:png|jpe?g|webp|gif))",
+                image_path,
+                flags=re.IGNORECASE,
+            )
+            if not match:
+                logger.warning("Rejected unsafe Telegram image path: %s", image_path)
+                return False
 
-            # URL path → filesystem path: /api/images/xxx.png → /app/data/images/xxx.png
-            filename = image_path.rsplit("/", 1)[-1]
-            candidates = [
-                Path("/app/data/images") / filename,
-                Path("data/images") / filename,
-                Path(image_path.lstrip("/")),  # Fallback
-            ]
-            img_file = None
-            for c in candidates:
-                if c.exists():
-                    img_file = c
+            filename = match.group(1)
+            img_file: Path | None = None
+            for image_root in _telegram_image_roots():
+                candidate = (image_root / filename).resolve()
+                if candidate.is_relative_to(image_root) and candidate.is_file():
+                    img_file = candidate
                     break
-            if not img_file:
+            if img_file is None:
                 logger.warning(
-                    "Image file not found: %s (tried: %s)",
+                    "Image file not found below configured roots %s: %s",
+                    _telegram_image_roots(),
                     filename,
-                    [str(c) for c in candidates],
                 )
                 return False
 
@@ -878,9 +1091,30 @@ class TelegramBot:
                 if resp.status_code == 200 and resp.json().get("ok"):
                     return True
 
-                # If edit fails (e.g., message too long), send as new message
                 if resp.status_code == 400:
-                    return await self._send(token, chat_id, text, parse_mode)
+                    try:
+                        description = str(resp.json().get("description") or "")
+                    except (TypeError, ValueError):
+                        description = resp.text
+                    if "message is not modified" in description.lower():
+                        return True
+                    if parse_mode:
+                        plain_payload = dict(payload)
+                        plain_payload.pop("parse_mode", None)
+                        plain_response = await client.post(
+                            f"https://api.telegram.org/bot{token}/editMessageText",
+                            json=plain_payload,
+                        )
+                        if (
+                            plain_response.status_code == 200
+                            and plain_response.json().get("ok")
+                        ):
+                            return True
+                logger.warning(
+                    "editMessageText failed: %s %s",
+                    resp.status_code,
+                    resp.text[:160],
+                )
         except Exception as exc:
             logger.debug("Edit message failed: %s", exc)
         return False
@@ -1003,27 +1237,54 @@ class TelegramBot:
                     last_sent_preview = preview
 
             response_text, module_used, did_compact, route_meta = await route_task
-            status_bus.cleanup(session_id)
             return response_text, module_used, did_compact, route_meta, preview_msg_id
+        except asyncio.CancelledError:
+            route_task.cancel()
+            await asyncio.gather(route_task, return_exceptions=True)
+            raise
         except Exception:
             route_task.cancel()
-            status_bus.cleanup(session_id)
+            await asyncio.gather(route_task, return_exceptions=True)
             raise
+        finally:
+            status_bus.cleanup(session_id)
 
     async def _handle_callback_query(
         self, callback_query: dict[str, Any], token: str
     ) -> None:
         """Handle safeguard confirmation button clicks (confirm_yes / confirm_no)."""
-        import json
-
         from agents.base_agent import _TOOL_SAFEGUARD_SENTINEL
 
-        callback_data = callback_query.get("data", "")
+        callback_data = str(callback_query.get("data", ""))
         callback_msg = callback_query.get("message", {})
         chat_id = callback_msg.get("chat", {}).get("id")
+        callback_user_id = callback_query.get("from", {}).get("id")
 
-        if not chat_id:
+        if not chat_id or not callback_user_id:
             return
+
+        action, separator, request_id = callback_data.partition(":")
+        if not separator:
+            logger.info("Ignoring legacy Telegram callback without request binding.")
+            return
+
+        expected_kind = {
+            "confirm_yes": "message",
+            "confirm_no": "message",
+            "tool_yes": "tool",
+            "tool_no": "tool",
+        }.get(action)
+        if not expected_kind:
+            return
+
+        redis = get_redis()
+        session_id = f"telegram_{chat_id}"
+        confirmation = await self._consume_confirmation(
+            session_id,
+            request_id,
+            callback_user_id,
+            expected_kind,
+        )
 
         # Acknowledge immediately (removes spinner on the button)
         try:
@@ -1035,25 +1296,30 @@ class TelegramBot:
         except Exception as _cb_exc:
             logger.debug("answerCallbackQuery fehlgeschlagen (best-effort): %s", _cb_exc)
 
-        # Remove the Ja/Nein keyboard right away so the message can't be tapped
-        # again while the (possibly slow) confirmed action is still running.
-        await self._remove_inline_keyboard(
-            token, chat_id, callback_msg.get("message_id")
+        if not confirmation:
+            logger.info(
+                "Safeguard: stale or unauthorized Telegram confirm button for %s.",
+                session_id,
+            )
+            return
+
+        # Remove the consumed confirmation completely. If Telegram refuses
+        # deletion, replace it with a terminal, button-free status message.
+        await self._dismiss_confirmation_message(
+            token,
+            chat_id,
+            callback_msg.get("message_id"),
+            accepted=action in {"confirm_yes", "tool_yes"},
         )
 
-        redis = get_redis()
-        session_id = f"telegram_{chat_id}"
-
-        if callback_data == "confirm_yes":
-            original_text = await self._pop_pending_safeguard_text(session_id)
-            if not original_text:
-                logger.info(
-                    "Safeguard: stale Telegram confirm button for %s.", session_id
-                )
-                return
+        if action == "confirm_yes":
+            original_text = str(confirmation.get("payload") or "")
+            await self._clear_pending_message_confirmation(session_id, request_id)
 
             logger.info(
-                "Safeguard: Telegram user confirmed via button for %s.", session_id
+                "Safeguard: Telegram user %s confirmed via button for %s.",
+                callback_user_id,
+                session_id,
             )
 
             typing_task = self._track_task(
@@ -1063,15 +1329,51 @@ class TelegramBot:
                 orchestrator = self.app.state.orchestrator
                 history = await redis.get_chat_history(session_id)
                 contextualized_text = f"[Telegram Chat-ID: {chat_id}]\n{original_text}"
-                response_text, _, did_compact, route_meta = await orchestrator.route(
-                    message=contextualized_text,
-                    chat_history=history,
-                    session_id=session_id,
-                    confirmed=True,
-                )
+                config = await self._get_connection_config()
+                streaming_enabled = str(
+                    config.get("streaming", "false")
+                ).lower() in ("true", "1", "yes")
+                preview_message_id: int | None = None
+                if streaming_enabled:
+                    (
+                        response_text,
+                        _,
+                        did_compact,
+                        route_meta,
+                        preview_message_id,
+                    ) = await self._route_with_live_preview(
+                        orchestrator=orchestrator,
+                        token=token,
+                        chat_id=chat_id,
+                        message_id=None,
+                        contextualized_text=contextualized_text,
+                        history=history,
+                        session_id=session_id,
+                        confirmed=True,
+                    )
+                else:
+                    response_text, _, did_compact, route_meta = (
+                        await orchestrator.route(
+                            message=contextualized_text,
+                            chat_history=history,
+                            session_id=session_id,
+                            confirmed=True,
+                        )
+                    )
                 if response_text.startswith(_TOOL_SAFEGUARD_SENTINEL):
+                    await self._delete_message(
+                        token,
+                        chat_id,
+                        preview_message_id,
+                    )
                     info = json.loads(response_text[len(_TOOL_SAFEGUARD_SENTINEL) :])
-                    await self._send_tool_confirmation(token, chat_id, info)
+                    await self._send_tool_confirmation(
+                        token,
+                        chat_id,
+                        session_id,
+                        callback_user_id,
+                        info,
+                    )
                     return
                 await redis.store_chat_message(
                     session_id=session_id, role="user", content=original_text
@@ -1086,11 +1388,11 @@ class TelegramBot:
                         role="system_compaction",
                         content=summary or "Conversation history has been compressed.",
                     )
-                await self._send(
+                await self._send_formatted_chunks(
                     token,
                     chat_id,
-                    format_for_telegram(_strip_pipeline_headers(response_text)),
-                    parse_mode="HTML",
+                    _clean_final_response(response_text),
+                    preview_message_id=preview_message_id,
                 )
             except Exception as exc:
                 logger.error(
@@ -1104,11 +1406,8 @@ class TelegramBot:
             finally:
                 typing_task.cancel()
 
-        elif callback_data == "confirm_no":
-            from core.safeguard import SAFEGUARD_PENDING_KEY
-
-            pending_key = SAFEGUARD_PENDING_KEY.format(session_id=session_id)
-            await redis.connection.delete(pending_key)
+        elif action == "confirm_no":
+            await self._clear_pending_message_confirmation(session_id, request_id)
             await self._send(
                 token,
                 chat_id,
@@ -1125,18 +1424,39 @@ class TelegramBot:
                     zh="❌ 操作已取消。",
                 ),
             )
-        elif callback_data == "confirm_tool_yes":
+        elif action == "tool_yes":
             typing_task = self._track_task(
                 asyncio.create_task(self._keep_typing(token, chat_id))
             )
             try:
                 orchestrator = self.app.state.orchestrator
+                config = await self._get_connection_config()
+                streaming_enabled = str(
+                    config.get("streaming", "false")
+                ).lower() in ("true", "1", "yes")
+                preview_message_id = (
+                    await self._send_preview_message(token, chat_id)
+                    if streaming_enabled
+                    else None
+                )
                 response_text, did_compact = await orchestrator.resume_tool_execution(
-                    session_id
+                    session_id,
+                    expected_approval_id=str(confirmation.get("payload") or ""),
                 )
                 if response_text.startswith(_TOOL_SAFEGUARD_SENTINEL):
+                    await self._delete_message(
+                        token,
+                        chat_id,
+                        preview_message_id,
+                    )
                     info = json.loads(response_text[len(_TOOL_SAFEGUARD_SENTINEL) :])
-                    await self._send_tool_confirmation(token, chat_id, info)
+                    await self._send_tool_confirmation(
+                        token,
+                        chat_id,
+                        session_id,
+                        callback_user_id,
+                        info,
+                    )
                     return
                 await redis.store_chat_message(
                     session_id=session_id, role="assistant", content=response_text
@@ -1149,11 +1469,11 @@ class TelegramBot:
                         role="system_compaction",
                         content="Conversation history has been compressed.",
                     )
-                await self._send(
+                await self._send_formatted_chunks(
                     token,
                     chat_id,
-                    format_for_telegram(_strip_pipeline_headers(response_text)),
-                    parse_mode="HTML",
+                    _clean_final_response(response_text),
+                    preview_message_id=preview_message_id,
                 )
             except Exception as exc:
                 logger.error(
@@ -1170,12 +1490,23 @@ class TelegramBot:
             finally:
                 typing_task.cancel()
 
-        elif callback_data == "confirm_tool_no":
-            await redis.connection.delete(f"ninko:safeguard_tool_pending:{session_id}")
+        elif action == "tool_no":
+            from agents.base_agent import discard_pending_safeguard
+
+            discarded = await discard_pending_safeguard(
+                session_id,
+                redis=redis,
+                expected_approval_id=str(confirmation.get("payload") or ""),
+            )
             await self._send(
                 token,
                 chat_id,
-                _t("❌ Aktion abgebrochen.", "❌ Action cancelled."),
+                _t("❌ Aktion abgebrochen.", "❌ Action cancelled.")
+                if discarded
+                else _t(
+                    "Diese Tool-Bestätigung ist nicht mehr gültig.",
+                    "This tool confirmation is no longer valid.",
+                ),
             )
         # Unknown callback_data: ignore silently
 
@@ -1233,6 +1564,9 @@ class TelegramBot:
 
         user = msg.get("from", {})
         user_id = user.get("id")
+        if not isinstance(user_id, int):
+            logger.warning("Telegram message without a valid sender user ID ignored.")
+            return
         is_group = msg.get("chat", {}).get("type") in ["group", "supergroup"]
 
         # Fetch the connection once per update; auth check, /status and the
@@ -1406,6 +1740,14 @@ class TelegramBot:
                 return
 
         # Read voice-reply configuration from connection
+        voice_reply = str(config.get("voice_reply", "false")).lower() in (
+            "true",
+            "1",
+            "yes",
+        )
+        voice_reply_text_too = str(
+            config.get("voice_reply_text_too", "false")
+        ).lower() in ("true", "1", "yes")
         voice_lang = config.get("voice_lang") or None
         voice_name = config.get("voice_name") or None
 
@@ -1416,11 +1758,9 @@ class TelegramBot:
             try:
                 redis = get_redis()
                 await redis.clear_chat_history(session_id_local)
-                # Race-condition protection: in-flight requests should not
-                # write back history. Only flag when a request is actually in
-                # flight — otherwise the NEXT message would skip its history.
-                if self._inflight_sessions.get(session_id_local):
-                    self._cleared_sessions.add(session_id_local)
+                self._session_generations[session_id_local] = (
+                    self._session_generations.get(session_id_local, 0) + 1
+                )
                 await self._send(
                     token, chat_id, "♻️ Chat history cleared. How can I help?"
                 )
@@ -1450,13 +1790,10 @@ class TelegramBot:
         )
 
         session_id = f"telegram_{chat_id}"
-        self._inflight_sessions[session_id] = (
-            self._inflight_sessions.get(session_id, 0) + 1
-        )
+        request_generation = self._session_generations.get(session_id, 0)
         try:
             from core.safeguard import is_bot_confirmation, SAFEGUARD_PENDING_KEY
             from agents.base_agent import _TOOL_SAFEGUARD_SENTINEL
-            import json
 
             orchestrator = self.app.state.orchestrator
             redis = get_redis()
@@ -1472,11 +1809,28 @@ class TelegramBot:
 
             if pending_raw and is_bot_confirmation(text):
                 # User confirmed via text (legacy support)
-                text = (
+                pending_text = (
                     pending_raw.decode()
                     if isinstance(pending_raw, bytes)
                     else pending_raw
                 )
+                try:
+                    pending_info = json.loads(pending_text)
+                except (TypeError, ValueError):
+                    pending_info = None
+                if isinstance(pending_info, dict) and pending_info.get("text"):
+                    if pending_info.get("user_id") != user_id:
+                        return
+                    text = str(pending_info["text"])
+                    callback_request_id = str(
+                        pending_info.get("request_id") or ""
+                    )
+                    if callback_request_id:
+                        await redis.connection.delete(
+                            self._callback_key(session_id, callback_request_id)
+                        )
+                else:
+                    text = pending_text
                 await redis.connection.delete(pending_key)
                 logger.info(
                     "Safeguard: Telegram user confirmed pending action for %s.",
@@ -1490,27 +1844,48 @@ class TelegramBot:
                     session_id=session_id,
                 )
                 if sg_result.requires_confirmation:
-                    await redis.connection.set(pending_key, text, ex=300)
+                    request_id = await self._create_confirmation(
+                        session_id,
+                        user_id,
+                        "message",
+                        text,
+                    )
+                    await redis.connection.set(
+                        pending_key,
+                        json.dumps(
+                            {
+                                "text": text,
+                                "request_id": request_id,
+                                "user_id": user_id,
+                            },
+                            ensure_ascii=False,
+                        ),
+                        ex=_CALLBACK_TTL,
+                    )
+                    import html
+
+                    category = html.escape(str(sg_result.category.value))
+                    rationale = html.escape(str(sg_result.rationale))
                     await self._send_with_keyboard(
                         token,
                         chat_id,
                         _t(
                             f"⚠️ <b>Bestätigung erforderlich</b>\n\n"
-                            f"<b>Kategorie:</b> {sg_result.category.value}\n"
-                            f"<b>Begründung:</b> {sg_result.rationale}\n\n"
+                            f"<b>Kategorie:</b> {category}\n"
+                            f"<b>Begründung:</b> {rationale}\n\n"
                             f"Möchtest du fortfahren?",
                             f"⚠️ <b>Confirmation required</b>\n\n"
-                            f"<b>Category:</b> {sg_result.category.value}\n"
-                            f"<b>Reason:</b> {sg_result.rationale}\n\n"
+                            f"<b>Category:</b> {category}\n"
+                            f"<b>Reason:</b> {rationale}\n\n"
                             f"Do you want to continue?",
-                            fr=f"⚠️ <b>Confirmation requise</b>\n\n<b>Catégorie:</b> {sg_result.category.value}\n<b>Raison:</b> {sg_result.rationale}\n\nVoulez-vous continuer?",
-                            es=f"⚠️ <b>Confirmación requerida</b>\n\n<b>Categoría:</b> {sg_result.category.value}\n<b>Razón:</b> {sg_result.rationale}\n\n¿Quieres continuar?",
-                            it=f"⚠️ <b>Conferma richiesta</b>\n\n<b>Categoria:</b> {sg_result.category.value}\n<b>Motivo:</b> {sg_result.rationale}\n\nVuoi continuare?",
-                            nl=f"⚠️ <b>Bevestiging vereist</b>\n\n<b>Categorie:</b> {sg_result.category.value}\n<b>Reden:</b> {sg_result.rationale}\n\nWil je doorgaan?",
-                            pl=f"⚠️ <b>Wymagane potwierdzenie</b>\n\n<b>Kategoria:</b> {sg_result.category.value}\n<b>Powód:</b> {sg_result.rationale}\n\nCzy chcesz kontynuować?",
-                            pt=f"⚠️ <b>Confirmação necessária</b>\n\n<b>Categoria:</b> {sg_result.category.value}\n<b>Motivo:</b> {sg_result.rationale}\n\nQuer continuar?",
-                            ja=f"⚠️ <b>確認が必要</b>\n\n<b>カテゴリ:</b> {sg_result.category.value}\n<b>理由:</b> {sg_result.rationale}\n\n続行しますか？",
-                            zh=f"⚠️ <b>需要确认</b>\n\n<b>类别:</b> {sg_result.category.value}\n<b>原因:</b> {sg_result.rationale}\n\n是否继续？",
+                            fr=f"⚠️ <b>Confirmation requise</b>\n\n<b>Catégorie:</b> {category}\n<b>Raison:</b> {rationale}\n\nVoulez-vous continuer?",
+                            es=f"⚠️ <b>Confirmación requerida</b>\n\n<b>Categoría:</b> {category}\n<b>Razón:</b> {rationale}\n\n¿Quieres continuar?",
+                            it=f"⚠️ <b>Conferma richiesta</b>\n\n<b>Categoria:</b> {category}\n<b>Motivo:</b> {rationale}\n\nVuoi continuare?",
+                            nl=f"⚠️ <b>Bevestiging vereist</b>\n\n<b>Categorie:</b> {category}\n<b>Reden:</b> {rationale}\n\nWil je doorgaan?",
+                            pl=f"⚠️ <b>Wymagane potwierdzenie</b>\n\n<b>Kategoria:</b> {category}\n<b>Powód:</b> {rationale}\n\nCzy chcesz kontynuować?",
+                            pt=f"⚠️ <b>Confirmação necessária</b>\n\n<b>Categoria:</b> {category}\n<b>Motivo:</b> {rationale}\n\nQuer continuar?",
+                            ja=f"⚠️ <b>確認が必要</b>\n\n<b>カテゴリ:</b> {category}\n<b>理由:</b> {rationale}\n\n続行しますか？",
+                            zh=f"⚠️ <b>需要确认</b>\n\n<b>类别:</b> {category}\n<b>原因:</b> {rationale}\n\n是否继续？",
                         ),
                         [
                             [
@@ -1527,7 +1902,7 @@ class TelegramBot:
                                         "✅ はい",
                                         "✅ 是",
                                     ),
-                                    "callback_data": "confirm_yes",
+                                    "callback_data": f"confirm_yes:{request_id}",
                                 },
                                 {
                                     "text": _t(
@@ -1542,7 +1917,7 @@ class TelegramBot:
                                         "❌ いいえ",
                                         "❌ 否",
                                     ),
-                                    "callback_data": "confirm_no",
+                                    "callback_data": f"confirm_no:{request_id}",
                                 },
                             ]
                         ],
@@ -1595,13 +1970,19 @@ class TelegramBot:
                 )
 
             if response_text.startswith(_TOOL_SAFEGUARD_SENTINEL):
+                await self._delete_message(token, chat_id, preview_msg_id)
                 info = json.loads(response_text[len(_TOOL_SAFEGUARD_SENTINEL) :])
-                await self._send_tool_confirmation(token, chat_id, info)
+                await self._send_tool_confirmation(
+                    token,
+                    chat_id,
+                    session_id,
+                    user_id,
+                    info,
+                )
                 return
 
-            # Save history — skip if session was cleared in the meantime
-            if session_id in self._cleared_sessions:
-                self._cleared_sessions.discard(session_id)
+            # Save history only if no /clear happened after this request started.
+            if self._session_generations.get(session_id, 0) != request_generation:
                 logger.info(
                     "History save for %s skipped (session was cleared).", session_id
                 )
@@ -1630,11 +2011,23 @@ class TelegramBot:
                     reply_to_message_id=message_id,
                 )
 
-            # ── Voice-Reply: always voice for voice inputs, no text ────────────
+            # ── Voice-Reply according to connection settings ─────────────────
             if is_voice:
-                await self._send_voice_reply(
-                    token, chat_id, response_text, lang=voice_lang, voice=voice_name
-                )
+                if voice_reply:
+                    await self._send_voice_reply(
+                        token,
+                        chat_id,
+                        response_text,
+                        lang=voice_lang,
+                        voice=voice_name,
+                    )
+                if voice_reply_text_too or not voice_reply:
+                    await self._send_formatted_chunks(
+                        token,
+                        chat_id,
+                        _clean_final_response(response_text),
+                        reply_to_message_id=message_id,
+                    )
                 return
 
             # ── Telegram module already sent directly → don't send again ───────
@@ -1700,26 +2093,27 @@ class TelegramBot:
                 # 3. Tool was called but LLM omitted URL → use most recent image
                 #    IMPORTANT: use response_text (raw) not final_text (filtered)
                 try:
-                    from pathlib import Path
-
-                    img_dir = Path("/app/data/images")
-                    if img_dir.exists():
-                        imgs = sorted(
-                            img_dir.glob("*.png"),
-                            key=lambda p: p.stat().st_mtime,
-                            reverse=True,
+                    imgs = sorted(
+                        (
+                            image
+                            for img_dir in _telegram_image_roots()
+                            if img_dir.exists()
+                            for image in img_dir.glob("*.png")
+                        ),
+                        key=lambda path: path.stat().st_mtime,
+                        reverse=True,
+                    )
+                    if imgs:
+                        age_seconds = (
+                            __import__("time").time() - imgs[0].stat().st_mtime
                         )
-                        if imgs:
-                            age_seconds = (
-                                __import__("time").time() - imgs[0].stat().st_mtime
+                        if age_seconds < 300:  # Only images less than 5 minutes old
+                            image_path = f"/api/images/{imgs[0].name}"
+                            logger.info(
+                                "Image URL missing in response, using newest image (%ds old): %s",
+                                age_seconds,
+                                image_path,
                             )
-                            if age_seconds < 300:  # Only images less than 5 minutes old
-                                image_path = f"/api/images/{imgs[0].name}"
-                                logger.info(
-                                    "Image URL missing in response, using newest image (%ds old): %s",
-                                    age_seconds,
-                                    image_path,
-                                )
                 except _RECOVERABLE_ERRORS as e:
                     logger.debug("Error searching for newest image: %s", e)
 
@@ -1730,18 +2124,13 @@ class TelegramBot:
                 ).strip()
                 caption = re.sub(r"/api/images/[\w\-]+\.\w+\s*\n?", "", caption).strip()
                 caption = format_for_telegram(caption)[:1024]  # Telegram caption limit
-                try:
-                    await self._send_photo(token, chat_id, image_path, caption)
-                except _RECOVERABLE_ERRORS as exc:
-                    logger.warning(
-                        "Image send failed, falling back to text: %s", exc
-                    )
-                    fallback = format_for_telegram(final_text)
-                    await self._send(
+                sent = await self._send_photo(token, chat_id, image_path, caption)
+                if not sent:
+                    logger.warning("Image send failed, falling back to text.")
+                    await self._send_formatted_chunks(
                         token,
                         chat_id,
-                        fallback,
-                        parse_mode="HTML",
+                        final_text,
                         reply_to_message_id=message_id,
                     )
                 return
@@ -1759,55 +2148,29 @@ class TelegramBot:
                         token, chat_id, img_bytes, mime, caption
                     )
                     if not sent:
-                        fallback = format_for_telegram(final_text)
-                        await self._send(
+                        await self._send_formatted_chunks(
                             token,
                             chat_id,
-                            fallback,
-                            parse_mode="HTML",
+                            final_text,
                             reply_to_message_id=message_id,
                         )
                 except Exception as exc:
                     logger.warning("Data URL image send failed: %s", exc)
-                    fallback = format_for_telegram(final_text)
-                    await self._send(
+                    await self._send_formatted_chunks(
                         token,
                         chat_id,
-                        fallback,
-                        parse_mode="HTML",
+                        final_text,
                         reply_to_message_id=message_id,
                     )
                 return
 
-            final_text = format_for_telegram(final_text)
-
-            if preview_msg_id and len(final_text) <= 4000:
-                await self._edit_message(
-                    token, chat_id, preview_msg_id, final_text, parse_mode="HTML"
-                )
-            else:
-                # Send response in chunks (Telegram limit: 4096 characters)
-                chunks = [
-                    final_text[i : i + _MAX_MSG_LEN]
-                    for i in range(0, len(final_text), _MAX_MSG_LEN)
-                ]
-                for idx, chunk in enumerate(chunks):
-                    if idx == 0 and preview_msg_id:
-                        await self._edit_message(
-                            token,
-                            chat_id,
-                            preview_msg_id,
-                            chunk,
-                            parse_mode="HTML",
-                        )
-                    else:
-                        await self._send(
-                            token,
-                            chat_id,
-                            chunk,
-                            parse_mode="HTML",
-                            reply_to_message_id=message_id if idx == 0 else None,
-                        )
+            await self._send_formatted_chunks(
+                token,
+                chat_id,
+                final_text,
+                reply_to_message_id=message_id,
+                preview_message_id=preview_msg_id,
+            )
 
         except Exception as exc:
             logger.exception("Error in Telegram orchestrator processing: %s", exc)
@@ -1818,11 +2181,6 @@ class TelegramBot:
                 reply_to_message_id=message_id,
             )
         finally:
-            remaining = self._inflight_sessions.get(session_id, 1) - 1
-            if remaining > 0:
-                self._inflight_sessions[session_id] = remaining
-            else:
-                self._inflight_sessions.pop(session_id, None)
             typing_task.cancel()
             try:
                 await typing_task
@@ -1851,14 +2209,12 @@ class TelegramBot:
                 logger.warning(
                     "Voice-Reply: cleaned text empty, sending text fallback."
                 )
-                await self._send(token, chat_id, text)
+                await self._send_formatted_chunks(token, chat_id, text)
                 return
 
             if not is_tts_available():
                 logger.warning("Voice-Reply: TTS not available, sending text fallback.")
-                await self._send(
-                    token, chat_id, format_for_telegram(text), parse_mode="HTML"
-                )
+                await self._send_formatted_chunks(token, chat_id, text)
                 return
 
             wav_bytes = await synthesize_reply(clean_text, lang=lang, voice=voice)
