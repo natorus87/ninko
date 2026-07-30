@@ -5,17 +5,28 @@ Persistenz via Redis (ninko:agents).
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import time
 import uuid
+from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Query, Request
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from core.auth import auth_tenant_id, resolve_request_auth
+from core.agent_event_journal import (
+    AgentEventJournal,
+    JournaledAgentEvent,
+    get_agent_event_journal,
+    normalize_event_cursor,
+)
 from core.redis_client import get_redis
 from core.module_registry import get_registry
+from schemas.execution import AgentEvent, AgentEventType
 from schemas.agents import (
     AgentDefinition,
     AgentCreate,
@@ -52,6 +63,19 @@ class AgentCardsResponse(BaseModel):
 
 
 REDIS_KEY = "ninko:agents"
+_TERMINAL_AGENT_EVENTS = {
+    AgentEventType.COMPLETED,
+    AgentEventType.FAILED,
+    AgentEventType.CANCELLED,
+    AgentEventType.APPROVAL_REQUIRED,
+}
+_TERMINAL_JOB_STATUSES = {"succeeded", "failed", "cancelled"}
+_MAX_EVENT_STREAMS_PER_PRINCIPAL = 5
+_MAX_EVENT_STREAMS_GLOBAL = 16
+_MAX_EVENT_STREAM_SECONDS = 300.0
+_active_event_streams: dict[str, int] = {}
+_active_event_stream_total = 0
+_active_event_streams_lock = asyncio.Lock()
 
 
 def _tenant_key(tenant_id: str) -> str:
@@ -675,6 +699,347 @@ async def cancel_agent_job(job_id: str, request: Request) -> AgentJobInfo:
         status_code = 404 if "nicht gefunden" in detail else 409
         raise HTTPException(status_code=status_code, detail=detail) from exc
     return _public_job(job)
+
+
+def _agent_event_sse_frame(item: JournaledAgentEvent) -> str:
+    """Serialize one journal item as a resumable SSE frame."""
+    return (
+        f"id: {item.cursor}\n"
+        f"event: {item.event.type.value}\n"
+        f"data: {item.event.model_dump_json()}\n\n"
+    )
+
+
+async def _stream_agent_events(
+    request: Request,
+    journal: AgentEventJournal,
+    *,
+    tenant_id: str,
+    session_id: str,
+    after: str,
+    run_id: str | None = None,
+) -> AsyncGenerator[str, None]:
+    """Replay persisted events and then wait for live Redis Stream entries."""
+    cursor = normalize_event_cursor(after)
+    deadline = time.monotonic() + _MAX_EVENT_STREAM_SECONDS
+    matched_run_ids = {run_id} if run_id is not None else set()
+    while (
+        time.monotonic() < deadline
+        and not await request.is_disconnected()
+    ):
+        items = await journal.read_after(
+            tenant_id=tenant_id,
+            session_id=session_id,
+            after=cursor,
+        )
+        scanned_cursor = getattr(
+            items,
+            "scanned_cursor",
+            items[-1].cursor if items else cursor,
+        )
+        cursor_advanced = scanned_cursor != cursor
+        if cursor_advanced:
+            cursor = scanned_cursor
+        if not items:
+            if cursor_advanced:
+                continue
+            items = await journal.wait_after(
+                tenant_id=tenant_id,
+                session_id=session_id,
+                after=cursor,
+            )
+            scanned_cursor = getattr(
+                items,
+                "scanned_cursor",
+                items[-1].cursor if items else cursor,
+            )
+            if scanned_cursor != cursor:
+                cursor = scanned_cursor
+        if not items:
+            yield ": keepalive\n\n"
+            continue
+
+        for item in items:
+            event = item.event
+            matches_run = (
+                run_id is None
+                or event.run_id in matched_run_ids
+                or event.parent_run_id in matched_run_ids
+                or (
+                    event.parent_run_id is not None
+                    and event.parent_run_id.startswith(f"{run_id}:")
+                )
+            )
+            if matches_run:
+                matched_run_ids.add(event.run_id)
+                yield _agent_event_sse_frame(item)
+            if (
+                run_id is not None
+                and event.run_id == run_id
+                and event.type in _TERMINAL_AGENT_EVENTS
+            ):
+                return
+        await asyncio.sleep(0)
+
+
+async def _reserve_event_stream(principal: str) -> None:
+    global _active_event_stream_total
+    async with _active_event_streams_lock:
+        active = _active_event_streams.get(principal, 0)
+        if active >= _MAX_EVENT_STREAMS_PER_PRINCIPAL:
+            raise HTTPException(
+                status_code=429,
+                detail="Zu viele gleichzeitige AgentEvent-Streams",
+            )
+        if _active_event_stream_total >= _MAX_EVENT_STREAMS_GLOBAL:
+            raise HTTPException(
+                status_code=503,
+                detail="AgentEvent-Stream-Kapazität ist ausgelastet",
+            )
+        _active_event_streams[principal] = active + 1
+        _active_event_stream_total += 1
+
+
+async def _release_event_stream(principal: str) -> None:
+    global _active_event_stream_total
+    async with _active_event_streams_lock:
+        remaining = _active_event_streams.get(principal, 0) - 1
+        if remaining > 0:
+            _active_event_streams[principal] = remaining
+        else:
+            _active_event_streams.pop(principal, None)
+        _active_event_stream_total = max(0, _active_event_stream_total - 1)
+
+
+async def _limited_event_stream(
+    principal: str,
+    generator: AsyncGenerator[str, None],
+) -> AsyncGenerator[str, None]:
+    try:
+        async for frame in generator:
+            yield frame
+    finally:
+        await _release_event_stream(principal)
+
+
+def _event_stream_response(
+    generator: AsyncGenerator[str, None],
+    *,
+    initial_cursor: str | None = None,
+) -> StreamingResponse:
+    headers = {
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+        "Connection": "keep-alive",
+    }
+    if initial_cursor is not None:
+        headers["X-Agent-Event-Cursor"] = initial_cursor
+    return StreamingResponse(
+        generator,
+        media_type="text/event-stream",
+        headers=headers,
+    )
+
+
+def _event_cursor(
+    request: Request,
+    after: str | None,
+    last_event_id: str | None = None,
+) -> str:
+    try:
+        return normalize_event_cursor(
+            after
+            if after is not None
+            else last_event_id
+            if last_event_id is not None
+            else request.headers.get("last-event-id")
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _event_stream_principal(request: Request, tenant_id: str) -> str:
+    auth_ctx = resolve_request_auth(request)
+    username = str((auth_ctx or {}).get("username") or "anonymous")
+    return f"{tenant_id}:{username}"
+
+
+async def _assert_existing_session_access(
+    request: Request,
+    scoped_session_id: str,
+) -> None:
+    auth_ctx = resolve_request_auth(request)
+    username = str((auth_ctx or {}).get("username") or "")
+    if not username:
+        raise HTTPException(status_code=401, detail="Authentifizierung erforderlich")
+    owner = await get_redis().get_session_owner(scoped_session_id)
+    if owner is None:
+        raise HTTPException(status_code=404, detail="Session nicht gefunden")
+    if owner != username:
+        raise HTTPException(status_code=403, detail="Kein Zugriff auf diese Session")
+
+
+@router.get(
+    "/events/stream",
+    responses={
+        401: {"description": "Authentication required"},
+        403: {"description": "Session belongs to another user"},
+        404: {"description": "Session has no existing owner"},
+        429: {"description": "Per-user stream limit reached"},
+        503: {"description": "Process stream capacity reached"},
+    },
+)
+async def stream_session_agent_events(
+    request: Request,
+    session_id: str = Query(min_length=1, max_length=256),
+    after: str | None = Query(default=None, max_length=41),
+    tail: bool = Query(default=False),
+    run_id: str | None = Query(default=None, min_length=1, max_length=128),
+    last_event_id: str | None = Header(
+        default=None,
+        alias="Last-Event-ID",
+        max_length=41,
+    ),
+) -> StreamingResponse:
+    """Replay and follow events for an existing, user-owned chat session.
+
+    Frames use SSE ``id: <milliseconds>-<sequence>``, ``event: <type>`` and a
+    JSON ``data`` payload. Replay starts strictly after ``after`` or
+    ``Last-Event-ID``; the query parameter wins and the default is ``0-0``.
+    ``tail=true`` starts at the server-side stream tail and cannot be combined
+    with an explicit cursor. The selected tail is returned in
+    ``X-Agent-Event-Cursor``. Comment frames are keepalives. Reconnect after
+    the five-minute limit.
+    A user may hold five streams; the process accepts sixteen in total.
+    This read endpoint never claims an ownerless session.
+    """
+    from api.routes_chat import _tenant_session_id
+
+    tenant_id = auth_tenant_id(resolve_request_auth(request))
+    scoped_session_id = _tenant_session_id(request, session_id)
+    header_cursor = last_event_id or request.headers.get("last-event-id")
+    if tail and (after is not None or header_cursor is not None):
+        raise HTTPException(
+            status_code=400,
+            detail="tail kann nicht mit einem AgentEvent-Cursor kombiniert werden",
+        )
+    cursor = "0-0" if tail else _event_cursor(request, after, last_event_id)
+    await _assert_existing_session_access(request, scoped_session_id)
+    journal = get_agent_event_journal()
+    if tail:
+        cursor = await journal.latest_cursor(
+            tenant_id=tenant_id,
+            session_id=scoped_session_id,
+        )
+    principal = _event_stream_principal(request, tenant_id)
+    await _reserve_event_stream(principal)
+    return _event_stream_response(
+        _limited_event_stream(
+            principal,
+            _stream_agent_events(
+                request,
+                journal,
+                tenant_id=tenant_id,
+                session_id=scoped_session_id,
+                after=cursor,
+                run_id=run_id,
+            ),
+        ),
+        initial_cursor=cursor,
+    )
+
+
+@router.get(
+    "/jobs/{job_id}/events",
+    responses={
+        204: {"description": "Terminal cursor is already fully caught up"},
+        404: {"description": "Job not found in the current tenant"},
+        410: {"description": "Retained event history is no longer available"},
+        429: {"description": "Per-user stream limit reached"},
+        503: {"description": "Process stream capacity reached"},
+    },
+)
+async def stream_agent_job_events(
+    job_id: str,
+    request: Request,
+    after: str | None = Query(default=None, max_length=41),
+    last_event_id: str | None = Header(
+        default=None,
+        alias="Last-Event-ID",
+        max_length=41,
+    ),
+) -> Response:
+    """Replay and follow lifecycle events for one tenant-owned Agent Job.
+
+    The cursor and frame contract matches the session stream. Terminal jobs
+    return 410 when no retained history exists from ``0-0`` and 204 when a
+    nonzero cursor is already caught up. A partial journal missing its terminal
+    row is repaired from the authoritative job snapshot before streaming.
+    Streams last at most five minutes and share the documented admission limits.
+    """
+    from core.agent_jobs import get_agent_job_manager
+
+    tenant_id = auth_tenant_id(resolve_request_auth(request))
+    job = await get_agent_job_manager().get_job(tenant_id, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' nicht gefunden")
+    cursor = _event_cursor(request, after, last_event_id)
+    journal = get_agent_event_journal()
+    job_tenant_id = str(job["tenant_id"])
+    job_session_id = f"{job_tenant_id}:job-{job_id}"
+    if job.get("status") in _TERMINAL_JOB_STATUSES:
+        replay = await journal.read_after(
+            tenant_id=job_tenant_id,
+            session_id=job_session_id,
+            after=cursor,
+            limit=500,
+        )
+        if not replay:
+            if cursor != "0-0":
+                return Response(status_code=204)
+            raise HTTPException(
+                status_code=410,
+                detail="AgentEvent-Historie für diesen Job ist nicht mehr verfügbar",
+            )
+        has_terminal = any(
+            item.event.run_id == job_id
+            and item.event.type in _TERMINAL_AGENT_EVENTS
+            for item in replay
+        )
+        if not has_terminal:
+            terminal_type = {
+                "succeeded": AgentEventType.COMPLETED,
+                "cancelled": AgentEventType.CANCELLED,
+            }.get(str(job.get("status")), AgentEventType.FAILED)
+            await journal.append(
+                AgentEvent(
+                    type=terminal_type,
+                    tenant_id=job_tenant_id,
+                    session_id=job_session_id,
+                    run_id=job_id,
+                    agent_id=str(job.get("agent_id") or "unknown"),
+                    data={
+                        "status": str(job.get("status")),
+                        "duration_ms": job.get("duration_ms"),
+                        "recovered_from_job": True,
+                    },
+                )
+            )
+    principal = _event_stream_principal(request, tenant_id)
+    await _reserve_event_stream(principal)
+    return _event_stream_response(
+        _limited_event_stream(
+            principal,
+            _stream_agent_events(
+                request,
+                journal,
+                tenant_id=job_tenant_id,
+                session_id=job_session_id,
+                after=cursor,
+                run_id=job_id,
+            ),
+        )
+    )
 
 
 async def _sync_agent_pool(agent: dict) -> None:
