@@ -28,6 +28,10 @@ The frontend is a modular, SPA-like interface built with vanilla JavaScript (no 
   - WebSocket, Command-Palette-Hooks, Resizing/Textarea-Utilities
   - Geteilte Helfer (`_escapeHtml`, `_escapeAttr`, `_esc`, `_ic`) und der State, den die Features nutzen
   - Kleine init-nahe Reste: Legacy-LLM-Settings, Language, Memory/Secrets
+- **core/agent_event_timeline.js** — Frameworkfreier AgentEvent-Baustein, der vor
+  `app.js` geladen wird. Enthält den chunk-sicheren SSE-Parser, einen
+  cursor-basiert wiederverbindenden Stream-Client und den deduplizierenden
+  Hierarchie-Reducer. Exportiert Browser-Globals und CommonJS für Node-Tests.
 
 ### Feature-Module (`features/*.js`)
 
@@ -106,6 +110,10 @@ wurden in **Feature-Module** ausgelagert (Stand: 18 Module). Muster:
 
 ### Chat Interface
 - Real-time messaging via WebSocket streaming
+- Hierarchische Live-Ausführung (Pipeline → Schritt → Tool/Agent) im bestehenden
+  Denkschritte-Block; Reconnects innerhalb eines laufenden Requests werden über
+  den letzten SSE-Cursor fortgesetzt. Die Timeline ist bewusst kein
+  Chat-History-Replay und wird nach einem Seiten-Reload nicht rekonstruiert.
 - Voice input (microphone recording → transcription)
 - Text-to-Speech response playback
 - Chat history with localStorage fallback
@@ -140,7 +148,11 @@ Modules are loaded dynamically from `/api/modules/{name}/frontend/tab.js` and ap
 
 ### API Communication
 - REST: `fetch()` for CRUD operations
-- Streaming: Server-Sent Events (`EventSource`) for live chat status
+- Streaming: Legacy-Chatstatus über `EventSource`; typisierte AgentEvents über
+  `fetch()`/`ReadableStream` gegen `GET /api/agents/events/stream`. Der Client
+  bestätigt den serverseitigen Stream-Tail vor dem Chat-POST, setzt beim
+  Reconnect `after`, wiederholt das kurze 404-Owner-Race begrenzt und übernimmt
+  das Abort-Signal des Chat-Requests.
 - WebSocket: Real-time connection status indicator
 
 ### Storage
@@ -179,6 +191,10 @@ frontend/
 ├── index.html          # Main HTML entry
 ├── app.js             # Core application logic
 ├── style.css          # Design system & themes
+├── core/
+│   └── agent_event_timeline.js  # SSE client + execution hierarchy reducer
+├── tests/
+│   └── agent_event_timeline.test.js  # Node unit tests
 ├── favicon.ico
 ├── welcome_illustration.png
 ├── images/            # Static assets
