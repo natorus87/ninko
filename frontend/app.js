@@ -1571,6 +1571,7 @@ const Ninko = {
 
         // AbortController für Stop-Funktion
         this._abortController = new AbortController();
+        const requestController = this._abortController;
 
         // History-Eintrag sofort anlegen (vor API-Call)
         if (!this.currentHistoryId) {
@@ -1605,6 +1606,12 @@ const Ninko = {
             };
             evtSource.onerror = () => { evtSource?.close(); evtSource = null; };
         } catch (_) { /* SSE nicht verfügbar – trotzdem fortfahren */ }
+        // Tail-Cursor muss vor dem Chat-POST feststehen, sonst könnte ein
+        // 404-Owner-Retry bereits emittierte Anfangsevents überspringen.
+        await this._startAgentEventTimeline(
+            _reqSessionId,
+            requestController.signal,
+        );
 
         try {
             const confirmedNow = this._confirmedPending;
@@ -1614,7 +1621,7 @@ const Ninko = {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Accept: useStreaming ? 'text/event-stream' : 'application/json' },
                 body: JSON.stringify({ message: text, session_id: this.sessionId, confirmed: confirmedNow, ...(this._forcedModule ? { force_module: this._forcedModule } : {}) }),
-                signal: this._abortController.signal,
+                signal: requestController.signal,
             });
 
             if (useStreaming && res.ok && res.headers.get('content-type')?.includes('text/event-stream')) {
@@ -1683,6 +1690,7 @@ const Ninko = {
                 this.addChatMessage('ai', t('chat.errorConnection'));
             }
         } finally {
+            this._stopAgentEventTimeline();
             this._abortController = null;
             this._setChatBusy(false);
         }
@@ -2378,7 +2386,7 @@ ${messagesHtml}
                 bubble.insertBefore(rebuilt, bubble.querySelector('.chat-bubble-text'));
             }
         } else if (role === 'ai' && this._savedSteps) {
-            const hasSteps = this._savedSteps.querySelector('.typing-step');
+            const hasSteps = this._savedSteps.querySelector('.typing-step, .execution-node');
             if (hasSteps) {
                 const bubble = div.querySelector('.chat-bubble');
                 this._savedSteps.classList.add('typing-steps-preserved');
@@ -2707,6 +2715,8 @@ ${messagesHtml}
     _pendingTraceSteps: {},
     _savedSteps: null,
     _savedStepsData: null,
+    _agentEventClient: null,
+    _executionTimeline: null,
 
     showTyping() {
         this._typingSteps = [];
@@ -2716,6 +2726,9 @@ ${messagesHtml}
         this._pendingTraceSteps = {};
         this._savedSteps = null;
         this._savedStepsData = null;
+        this._executionTimeline = typeof AgentExecutionTimelineModel !== 'undefined'
+            ? new AgentExecutionTimelineModel()
+            : null;
         const container = document.getElementById('chat-messages');
         const div = document.createElement('div');
         div.className = 'chat-message ai';
@@ -2727,6 +2740,14 @@ ${messagesHtml}
                 </div>
                 <details class="denkschritte-wrapper denkschritte-running">
                     <summary class="denkschritte-summary"><span class="denkschritte-label">Denke nach…</span></summary>
+                    <section class="execution-timeline" id="execution-timeline" aria-label="Agent-Ausführung" hidden>
+                        <div class="execution-timeline-head">
+                            <span class="execution-timeline-title">Ausführung</span>
+                            <span class="execution-timeline-status" id="execution-timeline-status" role="status" aria-live="polite" aria-atomic="true">Live</span>
+                        </div>
+                        <div class="execution-timeline-nodes" id="execution-timeline-nodes" role="list"></div>
+                        <div class="sr-only" id="execution-timeline-announcer" role="status" aria-live="polite" aria-atomic="true"></div>
+                    </section>
                     <div class="typing-steps" id="typing-steps"></div>
                 </details>
             </div>
@@ -2739,9 +2760,10 @@ ${messagesHtml}
         const indicator = document.getElementById('typing-indicator');
         const wrapper = indicator ? indicator.querySelector('.denkschritte-wrapper') : null;
         const stepsEl = wrapper ? wrapper.querySelector('.typing-steps') : null;
+        const hasExecutionNodes = Boolean(wrapper?.querySelector('.execution-node'));
 
         // Ganzen Wrapper (inkl. "Denkschritte"-Header) retten bevor Indicator entfernt wird
-        if (stepsEl && stepsEl.children.length > 0) {
+        if ((stepsEl && stepsEl.children.length > 0) || hasExecutionNodes) {
             const saved = wrapper.cloneNode(true);
 
             // ⚠️ KRITISCH: ID-Attribute aus dem Klon entfernen,
@@ -2759,6 +2781,14 @@ ${messagesHtml}
                 el.classList.remove('typing-step-running');
                 el.classList.add('typing-step-done');
             });
+            const executionStatus = saved.querySelector('.execution-timeline-status');
+            if (
+                executionStatus
+                && !['done', 'error', 'cancelled', 'waiting'].includes(executionStatus.dataset.state)
+            ) {
+                executionStatus.dataset.state = 'done';
+                executionStatus.textContent = 'Abgeschlossen';
+            }
             this._savedSteps = saved;
             this._savedStepsData = this._serializeStepsFromWrapper(saved);
         } else {
@@ -2772,6 +2802,160 @@ ${messagesHtml}
         this._thinkingStep = null;
         this._thinkingStepStart = null;
         this._pendingTraceSteps = {};
+    },
+
+    async _startAgentEventTimeline(sessionId, signal) {
+        this._stopAgentEventTimeline();
+        if (
+            typeof AgentEventStreamClient === 'undefined'
+            || typeof AgentExecutionTimelineModel === 'undefined'
+        ) return false;
+        this._executionTimeline = new AgentExecutionTimelineModel();
+        return new Promise((resolve) => {
+            let handshakeComplete = false;
+            const finishHandshake = (connected) => {
+                if (handshakeComplete) return;
+                handshakeComplete = true;
+                clearTimeout(timeout);
+                resolve(connected);
+            };
+            const timeout = setTimeout(() => {
+                this._stopAgentEventTimeline();
+                this._setExecutionTimelineConnectionState('unavailable');
+                finishHandshake(false);
+            }, 2500);
+
+            this._agentEventClient = new AgentEventStreamClient({
+                sessionId,
+                onEvent: (event) => this._handleAgentExecutionEvent(event),
+                onState: (state) => {
+                    this._setExecutionTimelineConnectionState(state);
+                    if (state === 'connected') finishHandshake(true);
+                    if (state === 'unavailable' || state === 'closed') {
+                        finishHandshake(false);
+                    }
+                },
+            });
+            this._agentEventClient.start(signal)
+                .then(() => finishHandshake(false))
+                .catch((error) => {
+                    if (error?.name !== 'AbortError') {
+                        console.warn('AgentEvent stream failed', error);
+                    }
+                    finishHandshake(false);
+                });
+        });
+    },
+
+    _stopAgentEventTimeline() {
+        this._agentEventClient?.stop();
+        this._agentEventClient = null;
+    },
+
+    _setExecutionTimelineConnectionState(state) {
+        const status = document.getElementById('execution-timeline-status');
+        if (!status) return;
+        if (state === 'closed') return;
+        if (
+            ['done', 'error', 'cancelled', 'waiting'].includes(status.dataset.state)
+        ) return;
+        status.dataset.state = state;
+        if (state === 'reconnecting') status.textContent = 'Verbinde neu…';
+        if (state === 'connected') status.textContent = 'Live';
+        if (state === 'unavailable') status.textContent = 'Live-Daten nicht verfügbar';
+    },
+
+    _handleAgentExecutionEvent(event) {
+        if (!this._executionTimeline || !event) return;
+        if (!this._executionTimeline.apply(event)) return;
+        this._renderExecutionTimeline();
+        const node = this._executionTimeline.snapshot()
+            .find((item) => item.runId === event.run_id);
+        const announcer = document.getElementById('execution-timeline-announcer');
+        if (node && announcer) {
+            const stateLabels = {
+                running: 'läuft',
+                done: 'fertig',
+                error: 'Fehler',
+                cancelled: 'abgebrochen',
+                waiting: 'wartet',
+            };
+            announcer.textContent = `${node.label}: ${stateLabels[node.state] || node.state}`;
+        }
+    },
+
+    _renderExecutionTimeline() {
+        const shell = document.getElementById('execution-timeline');
+        const nodesEl = document.getElementById('execution-timeline-nodes');
+        const wrapper = document.querySelector('#typing-indicator .denkschritte-wrapper');
+        if (!shell || !nodesEl || !wrapper || !this._executionTimeline) return;
+        const nodes = this._executionTimeline.snapshot();
+        if (!nodes.length) return;
+        const chat = document.getElementById('chat-messages');
+        const shouldStickToBottom = chat
+            ? chat.scrollHeight - chat.scrollTop - chat.clientHeight < 80
+            : false;
+
+        const firstReveal = shell.hidden;
+        shell.hidden = false;
+        if (firstReveal) wrapper.open = true;
+        nodesEl.replaceChildren();
+        const stateLabels = {
+            running: 'läuft',
+            done: 'fertig',
+            error: 'Fehler',
+            cancelled: 'abgebrochen',
+            waiting: 'wartet',
+        };
+        const kindLabels = {
+            pipeline: 'Pipeline',
+            step: 'Schritt',
+            tool: 'Tool',
+            agent: 'Agent',
+        };
+
+        for (const node of nodes) {
+            const row = document.createElement('div');
+            row.className = `execution-node execution-node-${node.kind} execution-node-${node.state}`;
+            row.style.setProperty('--execution-depth', String(node.depth));
+            row.dataset.runId = node.runId;
+            row.setAttribute('role', 'listitem');
+            row.setAttribute(
+                'aria-label',
+                `${kindLabels[node.kind] || 'Agent'} ${node.label}: ${stateLabels[node.state] || node.state}`,
+            );
+
+            const rail = document.createElement('span');
+            rail.className = 'execution-node-rail';
+            rail.setAttribute('aria-hidden', 'true');
+
+            const kind = document.createElement('span');
+            kind.className = 'execution-node-kind';
+            kind.textContent = kindLabels[node.kind] || 'Agent';
+
+            const label = document.createElement('span');
+            label.className = 'execution-node-label';
+            label.textContent = node.label;
+
+            const meta = document.createElement('span');
+            meta.className = 'execution-node-meta';
+            const duration = node.durationMs != null
+                ? this._formatDuration(node.durationMs)
+                : '';
+            const stateLabel = stateLabels[node.state] || node.state;
+            meta.textContent = duration ? `${stateLabel} · ${duration}` : stateLabel;
+
+            row.append(rail, kind, label, meta);
+            nodesEl.appendChild(row);
+        }
+
+        const rootTerminal = this._executionTimeline.latestTerminalRoot();
+        const status = document.getElementById('execution-timeline-status');
+        if (status && rootTerminal) {
+            status.dataset.state = rootTerminal.state;
+            status.textContent = stateLabels[rootTerminal.state] || 'Abgeschlossen';
+        }
+        if (chat && shouldStickToBottom) chat.scrollTop = chat.scrollHeight;
     },
 
     /** Liest fertig gerenderte .typing-step-Elemente in ein reines JSON-Array (für Persistenz).
@@ -3312,7 +3496,7 @@ ${messagesHtml}
             });
             this.hideTyping();
             if (!aiBubble || !this._savedSteps) return;
-            const hasSteps = this._savedSteps.querySelector('.typing-step');
+            const hasSteps = this._savedSteps.querySelector('.typing-step, .execution-node');
             if (!hasSteps) { this._savedSteps = null; return; }
             const bubble = aiBubble.querySelector('.chat-bubble');
             const textEl = bubble?.querySelector('.chat-bubble-text');
