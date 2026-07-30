@@ -215,13 +215,13 @@ def main():
 Beispiele:
   # Standard-DB migrieren
   python3 migrate-vault-secrets.py --key "mein-schluessel"
-  
+
   # Mit benutzerdefiniertem DB-Pfad
   python3 migrate-vault-secrets.py --db /pfad/zu/secrets.db --key "schluessel"
-  
+
   # Nur analysieren (dry-run)
   python3 migrate-vault-secrets.py --key "schluessel" --dry-run --verbose
-  
+
   # In Kubernetes
   kubectl exec -n ninko deployment/ninko-backend -- \
     python3 /app/scripts/migrate-vault-secrets.py --key "$SQLITE_SECRETS_KEY"
