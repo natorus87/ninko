@@ -38,7 +38,7 @@ spec:
             mountPath: /app/data
       containers:
         - name: backend
-          image: natorus87/ninko-backend:v1.5.5
+          image: natorus87/ninko-backend:v1.6.0
           imagePullPolicy: IfNotPresent
           securityContext:
             privileged: true
