@@ -161,3 +161,55 @@ def format_for_telegram(text: str) -> str:
     text = re.sub(r"\x00P(\d+)\x00", _restore, text)
 
     return text
+
+
+def format_chunks_for_telegram(text: str, max_len: int = 4000) -> list[str]:
+    """Format text as independently valid Telegram HTML chunks.
+
+    Markdown is formatted before splitting so constructs spanning a chunk
+    boundary retain their meaning. Open HTML tags are closed at the end of a
+    chunk and reopened in the next one; tags and entities are never split.
+    """
+    if not text:
+        return [""]
+    if max_len < 16:
+        raise ValueError("max_len must leave room for Telegram HTML markup")
+
+    formatted = format_for_telegram(text)
+    token_matches = re.finditer(
+        r"</?[a-z]+(?:\s[^>]*)?>|&(?:#\d+|#x[0-9a-fA-F]+|[a-zA-Z]+);|.",
+        formatted,
+        flags=re.DOTALL,
+    )
+    chunks: list[str] = []
+    current = ""
+    open_tags: list[tuple[str, str]] = []
+
+    def closing_markup(tags: list[tuple[str, str]]) -> str:
+        return "".join(f"</{name}>" for name, _ in reversed(tags))
+
+    for match in token_matches:
+        token = match.group(0)
+        next_tags = list(open_tags)
+        opening = re.fullmatch(r"<([a-z]+)(?:\s[^>]*)?>", token)
+        closing = re.fullmatch(r"</([a-z]+)>", token)
+        if opening:
+            next_tags.append((opening.group(1), token))
+        elif closing and next_tags and next_tags[-1][0] == closing.group(1):
+            next_tags.pop()
+
+        if len(current) + len(token) + len(closing_markup(next_tags)) > max_len:
+            if not current:
+                raise ValueError("A single HTML token exceeds the Telegram message limit")
+            chunks.append(current + closing_markup(open_tags))
+            current = "".join(opening_tag for _, opening_tag in open_tags)
+            if len(current) + len(token) + len(closing_markup(next_tags)) > max_len:
+                raise ValueError("Telegram HTML nesting exceeds the message limit")
+
+        current += token
+        open_tags = next_tags
+
+    if current:
+        chunks.append(current + closing_markup(open_tags))
+
+    return chunks
