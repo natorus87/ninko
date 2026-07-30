@@ -1526,6 +1526,12 @@ async def clear_history(session_id: str, request: Request) -> SessionMessagesRes
     # IDOR-Mitigation: nur der Owner darf History löschen
     await _check_session_access(request, scoped_session_id)
     await redis.clear_chat_history(scoped_session_id)
+    from core.agent_event_journal import get_agent_event_journal
+
+    await get_agent_event_journal().delete_session(
+        tenant_id=auth_tenant_id(resolve_request_auth(request)),
+        session_id=scoped_session_id,
+    )
     await redis.clear_session_owner(scoped_session_id)
     return SessionMessagesResponse(
         status="ok", session_id=session_id, message="History gelöscht."
