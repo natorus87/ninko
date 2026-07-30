@@ -19,6 +19,9 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agents.scheduler_agent import SchedulerAgent, _task_tenant
+from core.agent_protocol import APPROVAL_REQUIRED_MESSAGE, TOOL_APPROVAL_SENTINEL
+from schemas.execution import AgentFinishReason, AgentRequest, AgentResponse
+from schemas.execution import AgentEventType
 
 
 def _store_backed_redis() -> MagicMock:
@@ -53,9 +56,12 @@ def _store_backed_redis() -> MagicMock:
     return redis_mock
 
 
-def _make_scheduler(redis_mock) -> SchedulerAgent:
+def _make_scheduler(redis_mock, orchestrator=None) -> SchedulerAgent:
     with patch("agents.scheduler_agent.get_redis", return_value=redis_mock):
-        return SchedulerAgent(registry=MagicMock(), orchestrator=MagicMock())
+        return SchedulerAgent(
+            registry=MagicMock(),
+            orchestrator=orchestrator or MagicMock(),
+        )
 
 
 def _trivial_workflow(scoped_id: str) -> dict:
@@ -155,6 +161,141 @@ class TestCreateTaskStoresTenant:
         scheduler = _make_scheduler(redis_mock)
         task = await scheduler.create_task({"name": "Ohne", "cron": "0 8 * * *"})
         assert task["tenant_id"] == "default"
+
+
+class TestAgentProtocolExecution:
+    @pytest.mark.asyncio
+    async def test_native_agent_finish_reason_controls_task_status(self):
+        class NativeAgent:
+            id = "agent-1"
+            name = "Native Agent"
+            description = "Native scheduler test"
+
+            def __init__(self) -> None:
+                self.requests: list[AgentRequest] = []
+
+            async def run(self, request: AgentRequest) -> AgentResponse:
+                self.requests.append(request)
+                return AgentResponse(
+                    text="Provider nicht erreichbar",
+                    agent_id=self.id,
+                    agent_name=self.name,
+                    finish_reason=AgentFinishReason.FAILED,
+                )
+
+        redis_mock = _store_backed_redis()
+        native_agent = NativeAgent()
+        pool = MagicMock()
+        pool.get_agent_by_id.return_value = (native_agent, native_agent.name)
+        scheduler = _make_scheduler(redis_mock)
+        task = {
+            "id": "task-agent",
+            "name": "Native Agent Task",
+            "cron": "* * * * *",
+            "prompt": "Prüfe den Status",
+            "agent_id": native_agent.id,
+            "tenant_id": "default",
+        }
+        redis_mock._store["ninko:scheduler:tasks"] = json.dumps([task])
+
+        with patch("core.agent_pool.get_agent_pool", return_value=pool):
+            log_entry = await scheduler._execute_task(task)
+
+        assert log_entry["status"] == "error"
+        assert native_agent.requests[0].session_id == "default:scheduler-task-agent"
+
+    @pytest.mark.asyncio
+    async def test_orchestrator_legacy_error_maps_to_structured_status(self):
+        redis_mock = _store_backed_redis()
+        orchestrator = MagicMock()
+        orchestrator.route = AsyncMock(
+            return_value=(
+                "Error: Provider nicht erreichbar",
+                None,
+                False,
+                {
+                    "compaction_summary": None,
+                    "routing_confidence": None,
+                    "tier_used": 2,
+                },
+            )
+        )
+        scheduler = _make_scheduler(redis_mock, orchestrator)
+        task = {
+            "id": "task-orchestrator",
+            "name": "Orchestrator Task",
+            "cron": "* * * * *",
+            "prompt": "Prüfe den Status",
+            "tenant_id": "default",
+        }
+        redis_mock._store["ninko:scheduler:tasks"] = json.dumps([task])
+
+        log_entry = await scheduler._execute_task(task)
+
+        assert log_entry["status"] == "error"
+        orchestrator.route.assert_awaited_once_with(
+            message="Prüfe den Status",
+            chat_history=[],
+            session_id="default:scheduler-task-orchestrator",
+            confirmed=False,
+            force_module=None,
+        )
+
+    @pytest.mark.asyncio
+    async def test_scheduler_emits_started_and_terminal_events(self):
+        redis_mock = _store_backed_redis()
+        orchestrator = MagicMock()
+        orchestrator.route = AsyncMock(
+            return_value=("done", None, False, {})
+        )
+        scheduler = _make_scheduler(redis_mock, orchestrator)
+        task = {
+            "id": "task-events",
+            "name": "Event Task",
+            "cron": "* * * * *",
+            "prompt": "Prüfe den Status",
+            "tenant_id": "default",
+        }
+        emitted = AsyncMock()
+
+        with patch("agents.scheduler_agent.emit_agent_event", emitted):
+            await scheduler._execute_task(task)
+
+        events = [call.args[0] for call in emitted.await_args_list]
+        assert [event.type for event in events] == [
+            AgentEventType.STARTED,
+            AgentEventType.COMPLETED,
+        ]
+        assert events[0].run_id == events[1].run_id
+        assert events[0].session_id == "default:scheduler-task-events"
+
+    @pytest.mark.asyncio
+    async def test_approval_required_is_cleaned_up_and_not_logged_as_sentinel(self):
+        redis_mock = _store_backed_redis()
+        sentinel = f'{TOOL_APPROVAL_SENTINEL}{{"tool_name":"restart_server"}}'
+        legacy_agent = MagicMock()
+        legacy_agent.invoke = AsyncMock(return_value=(sentinel, False))
+        pool = MagicMock()
+        pool.get_agent_by_id.return_value = (legacy_agent, "Legacy Agent")
+        scheduler = _make_scheduler(redis_mock)
+        task = {
+            "id": "task-approval",
+            "name": "Approval Task",
+            "cron": "* * * * *",
+            "prompt": "Starte den Server neu",
+            "agent_id": "agent-1",
+            "tenant_id": "default",
+        }
+        redis_mock._store["ninko:scheduler:tasks"] = json.dumps([task])
+
+        with patch("core.agent_pool.get_agent_pool", return_value=pool):
+            log_entry = await scheduler._execute_task(task)
+
+        assert log_entry["status"] == "error"
+        assert log_entry["response"] == APPROVAL_REQUIRED_MESSAGE
+        redis_mock.connection.delete.assert_awaited_with(
+            "ninko:safeguard_tool_pending:default:scheduler-task-approval"
+        )
 
 
 class TestRunTaskNowAsync:
