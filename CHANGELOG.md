@@ -9,6 +9,87 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.6.0] – 2026-07-30
+
+### Added
+
+- **Provider-neutrales Agent-Ausführungsprotokoll**
+  (`backend/core/agent_protocol.py`, `backend/schemas/execution.py`): ein
+  gemeinsamer `AgentProtocol.run(AgentRequest) -> AgentResponse`-Vertrag mit
+  strukturierten Finish-Gründen für erfolgreiche, fehlgeschlagene,
+  abgebrochene und bestätigungspflichtige Ausführungen. Adapter halten
+  bestehende `BaseAgent.invoke()`- und `Orchestrator.route()`-Implementierungen
+  kompatibel.
+- **Typisierte AgentEvent-Infrastruktur**
+  (`backend/core/agent_events.py`, `backend/core/agent_event_journal.py`):
+  Agenten, Tools, Jobs, Pipelines, Workflows und Scheduler emittieren ein
+  gemeinsames Lifecycle-Schema. Events werden vor lokaler Zustellung
+  tenant-/sessiongebunden in Redis Streams persistiert, zentral von Secrets
+  bereinigt, größenbegrenzt und ungefähr 24 Stunden beziehungsweise 500
+  Einträge aufbewahrt.
+- **Resumierbares AgentEvent-SSE**
+  (`GET /api/agents/events/stream`,
+  `GET /api/agents/jobs/{job_id}/events`): Replay über Redis-Stream-Cursor,
+  `Last-Event-ID`, serverseitiger Tail-Cursor, Parent-/Child-Run-Verfolgung,
+  Keepalives sowie globale und benutzerbezogene Stream-Limits. Session-Streams
+  dürfen ausschließlich auf bereits existierende, dem Benutzer gehörende
+  Sessions zugreifen.
+- **Live-Ausführungs-Timeline im Chat**
+  (`frontend/core/agent_event_timeline.js`): reconnect-fähiger SSE-Client,
+  Deduplizierung und hierarchische Darstellung von Pipeline-, Schritt-,
+  Agent- und Tool-Ausführungen. Der bestehende Request-Abbruch bleibt über die
+  Timeline-Aushandlung hinweg wirksam; Statusänderungen werden barrierearm
+  angekündigt.
+- **Sichere, request-gebundene Tool-Freigaben**
+  (`backend/core/agent_approval.py`): jede interaktive Bestätigung erhält eine
+  zufällige `approval_id`. Telegram-Callbacks und Resume-Pfade akzeptieren nur
+  die aktuelle ID und konsumieren den Redis-Zustand atomar per
+  Compare-and-Delete-Lua-Skript.
+
+### Changed
+
+- Agent-Jobs, Pipeline-Schritte, Workflow-Agenten und Scheduler verwenden den
+  gemeinsamen strukturierten Ausführungsvertrag und verknüpfen verschachtelte
+  Läufe über `parent_run_id`.
+- Pipeline-Fortsetzungen bewahren Checkpoints, bestätigen exakt den
+  freigegebenen destruktiven Schritt und pausieren vor jeder weiteren
+  bestätigungspflichtigen Aktion erneut.
+- Telegram unterstützt Live-Previews mit bereinigten Trace-Events,
+  abbruchfähige Routing-Tasks, atomar konsumierte Inline-Bestätigungen und
+  robuste Fallbacks für abgelaufene Buttons, unveränderte Message-Edits,
+  Bildversand und Verlaufslöschung.
+- Helm- und Kubernetes-Standardmanifeste verwenden den gepinnten
+  Produktions-Tag `v1.6.0`.
+
+### Security
+
+- Journal-Keynamen enthalten keine rohen Session-IDs; Cross-Tenant-Events,
+  ungültige/überlange Cursor und fremde beziehungsweise eigentümerlose
+  Sessions werden abgewiesen.
+- Nested Secrets und große Tool-/Fehler-Payloads werden vor Persistenz und
+  Listener-Fan-out redigiert beziehungsweise begrenzt.
+- Langsame oder fehlerhafte Event-Listener blockieren andere Listener nicht;
+  Persistenz-Timeouts öffnen einen kurzlebigen Circuit Breaker.
+- Veraltete Telegram-Freigabe- und Abbruch-Buttons können keinen neueren,
+  inhaltlich identischen Tool-Aufruf bestätigen oder verwerfen.
+
+### Fixed
+
+- AlertState- und TTS-Test-Doubles entsprechen wieder den aktuellen
+  Redis-, Modulpfad-, FastAPI- und Orchestrator-Verträgen. Der Fake-Redis wird
+  nach jedem Test wiederhergestellt und verschmutzt nachfolgende
+  Integrationstests nicht mehr.
+- Drei bestehende Whitespace-Befunde im Vault-Migrationsskript wurden entfernt.
+
+### Tests
+
+- Neue Regressionstests decken Event-Persistenz und Replay, Tenant-Isolation,
+  Cursorvalidierung, Listener-Fehler, Tool-Lifecycle, Agent-Adapter,
+  request-gebundene Freigaben, Job-/Pipeline-/Workflow-Lifecycle sowie den
+  Frontend-SSE-Parser und die Timeline ab.
+- Vollständige Suite vor Release: **1016 passed, 27 skipped, 0 failed**;
+  Frontend: **12 passed**; Ruff und `git diff --check`: sauber.
+
 ## [1.5.5] – 2026-07-14
 
 ### Added
