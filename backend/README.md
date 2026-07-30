@@ -36,6 +36,8 @@ Ninko is a modular, AI-powered IT-Operations platform with an immutable core and
 | `connections.py` | Multi-connection CRUD manager (Redis + Vault) |
 | `vault.py` | HashiCorp Vault client with SQLite fallback |
 | `redis_client.py` | Shared async Redis client |
+| `agent_events.py` | Process-local typed AgentEvent bus and persistence hook |
+| `agent_event_journal.py` | Tenant-scoped Redis Streams journal with replay cursors and retention |
 | `workflow_engine.py` | Async DAG execution engine (Trigger, Agent, Condition, Loop, Variable, End nodes) |
 | `log_handler.py` | Custom RedisLogHandler — intercepts Python logs to Redis list |
 | `theme_manager.py` | Theme loader/store for built-in + custom themes, active theme persistence |
@@ -52,7 +54,7 @@ Ninko is a modular, AI-powered IT-Operations platform with an immutable core and
 ### API Routes (`api/`)
 - `routes_chat.py` — Chat endpoint with SSE streaming
 - `routes_modules.py` — Module discovery and frontend asset serving
-- `routes_agents.py` — Dynamic agent CRUD
+- `routes_agents.py` — Dynamic agent CRUD, background jobs, resumable AgentEvent SSE
 - `routes_skills.py` — Skill management
 - `routes_workflows.py` — Workflow CRUD and execution
 - `routes_scheduler.py` — Scheduled task management
@@ -100,6 +102,21 @@ Primary mechanism: **LLM-native Function Calling** on tool definitions auto-gene
 Besides Function Calling, `route()` runs a few deterministic fast-paths first (forced module/agent, agent/workflow creation, FRITZ!Box-Tasmota discovery, infra-status for proxmox/kubernetes); everything else goes through Function Calling, with a ReAct loop as the final fallback.
 
 The legacy keyword `core/router.py` was removed in 2026-05. A small `KeywordRouter` shim remains in `orchestrator.py` but is **no longer wired into `route()`** — it is retained only for its unit tests. The former tier-routing entry points `_plan_and_execute_pipeline` (Tier-4 LLM planner) and `_route_tier2_module` (Tier-2 keyword fast-path) were removed in 2026-07 as dead code; routing is now Function-Calling-only. The earlier tier-routing system (`RoutingConfig`, `ROUTING_PRESETS`, `configure_routing`/`get_routing_info` tools, `classify_tier`) had already been removed in 2026-06 as part of PLAN.md item 1.2.
+
+### AgentEvent Journal
+
+Agent, Pipeline, Workflow, Scheduler und Tool-Ausführungen emittieren ein
+gemeinsames typisiertes Event-Schema mit `run_id` und optionaler
+`parent_run_id`. Das Journal persistiert die Events tenant- und
+session-gebunden in Redis Streams (ungefähr 500 Events, 24 Stunden) und entfernt
+sensible Nutzdaten zentral.
+
+- `GET /api/agents/events/stream` streamt Session-Events und setzt einen
+  gültigen Session-Owner voraus. `tail=true` startet ohne Client-Uhr am
+  aktuellen serverseitigen Stream-Ende.
+- `GET /api/agents/jobs/{job_id}/events` liefert den Replay eines Jobs.
+- `after` beziehungsweise `Last-Event-ID` setzt den Redis-Stream-Cursor für
+  unterbrechungsfreie Reconnects.
 
 ### Skills System
 - SKILL.md format with YAML frontmatter (name, description, modules)
