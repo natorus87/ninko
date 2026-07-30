@@ -38,37 +38,29 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
+from core.agent_approval import discard_pending_approval
+from core.agent_events import (
+    emit_agent_event,
+    reset_agent_run_id,
+    set_agent_run_id,
+    tenant_id_from_session,
+)
+from core.agent_protocol import APPROVAL_REQUIRED_MESSAGE, as_agent_protocol
+from core.redaction import redact_text
+from core.tool_error_handling import sanitize_tool_output
+from schemas.execution import (
+    AgentEvent,
+    AgentEventType,
+    AgentFinishReason,
+    AgentRequest,
+)
+
 logger = logging.getLogger("ninko.pipeline_engine")
 
 
-def _is_safeguard_sentinel(response: Any) -> bool:
-    """True, wenn ein Sub-Agent-Return das Tool-Safeguard-Pause-Sentinel ist."""
-    try:
-        from agents.base_agent import _TOOL_SAFEGUARD_SENTINEL
-    except ImportError:
-        return False
-    return isinstance(response, str) and response.startswith(_TOOL_SAFEGUARD_SENTINEL)
-
-
-async def _release_paused_subagent(session_id: str) -> None:
-    """Räumt einen innerhalb eines Pipeline-Steps pausierten Sub-Agenten auf.
-
-    Ohne diesen Cleanup blockiert der `_paused_sg_agents`-Eintrag alle weiteren
-    Invokes der Session bis zum TTL (~300s), obwohl es keinen Resume-Pfad gibt.
-    """
-    try:
-        from agents.base_agent import _paused_sg_agents, _paused_sg_agents_ts
-        _paused_sg_agents.pop(session_id, None)
-        _paused_sg_agents_ts.pop(session_id, None)
-    except ImportError:
-        pass
-    try:
-        from core.redis_client import get_redis
-        await get_redis().connection.delete(
-            f"ninko:safeguard_tool_pending:{session_id}"
-        )
-    except _PIPELINE_RECOVERABLE_EXCEPTIONS as exc:
-        logger.debug("Pending-Key Cleanup nach Pipeline-Sentinel fehlgeschlagen: %s", exc)
+def _safe_event_error(error: str | None) -> str | None:
+    """Redact and bound errors before publishing them to shared listeners."""
+    return redact_text(sanitize_tool_output(error), limit=600) if error else None
 
 
 # ── Enumerations ───────────────────────────────────────────────────────────────
@@ -92,6 +84,7 @@ class StepStatus(str, Enum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
     SKIPPED = "skipped"
     AWAITING_CONFIRMATION = "awaiting_confirmation"
 
@@ -102,6 +95,7 @@ class PipelineStatus(str, Enum):
     AWAITING_CONFIRMATION = "awaiting_confirmation"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
     PARTIAL = "partial"  # mindestens ein Step fehlgeschlagen, Rest OK
 
 
@@ -220,6 +214,8 @@ class PipelineResult(BaseModel):
                 lines.append(f"**{step.module}:**\n{step.result}")
             elif step.status == StepStatus.FAILED:
                 lines.append(f"**{step.module} – Fehler:**\n{step.error or 'Unbekannter Fehler'}")
+            elif step.status == StepStatus.CANCELLED:
+                lines.append(f"**{step.module}:** Abgebrochen.")
             elif step.status == StepStatus.SKIPPED:
                 lines.append(f"**{step.module}:** Übersprungen.")
         return "\n\n".join(lines) if lines else self.summary
@@ -305,6 +301,7 @@ class PipelineEngine:
         skip_on_error: bool = False,
         confirmed_indices: set[int] | None = None,
         completed_results: dict[int, StepResult] | None = None,
+        emit_started: bool = True,
     ) -> PipelineResult:
         """
         Führt eine validierte Step-Liste aus.
@@ -326,9 +323,21 @@ class PipelineEngine:
         from core.pipeline_events import emit_pipeline_event, PipelineEvent
 
         pipeline_id = pipeline_id or f"pipe_{uuid.uuid4().hex[:12]}"
+        event_tenant_id = tenant_id_from_session(session_id)
         start_time = time.monotonic()
         confirmed = set(confirmed_indices or set())
         step_results: dict[int, StepResult] = dict(completed_results or {})
+        if emit_started:
+            await emit_agent_event(
+                AgentEvent(
+                    type=AgentEventType.STARTED,
+                    tenant_id=event_tenant_id,
+                    session_id=session_id,
+                    run_id=pipeline_id,
+                    agent_id="pipeline",
+                    data={"step_count": len(steps)},
+                )
+            )
 
         # Pre-Flight Confirmation Gate: pausiere vor dem ersten NOCH NICHT bestätigten
         # requires_confirmation-Step. Jeder solche Step wird einzeln bestätigt
@@ -366,7 +375,6 @@ class PipelineEngine:
             session_id=session_id,
             step_count=len(steps),
         ))
-
         # Topologische Gruppen für parallele Ausführung
         groups = _build_execution_groups(steps)
         pause_before_idx = None
@@ -400,6 +408,7 @@ class PipelineEngine:
                     sr = await self._execute_step(
                         steps[idx], idx, step_results, session_id,
                         auto_confirm=auto_confirm or idx in confirmed,
+                        pipeline_id=pipeline_id,
                     )
                     step_results[idx] = sr
                     result.steps.append(sr)
@@ -412,6 +421,7 @@ class PipelineEngine:
                             self._execute_step(
                                 steps[i], i, step_results, session_id,
                                 auto_confirm=auto_confirm or i in confirmed,
+                                pipeline_id=pipeline_id,
                             )
                             for i in pending_group
                         ],
@@ -419,11 +429,16 @@ class PipelineEngine:
                     )
                     for i, raw_sr in zip(pending_group, raw_group_results, strict=False):
                         if isinstance(raw_sr, BaseException):
+                            status = (
+                                StepStatus.CANCELLED
+                                if isinstance(raw_sr, asyncio.CancelledError)
+                                else StepStatus.FAILED
+                            )
                             sr = StepResult(
                                 step_id=steps[i].step_id,
                                 step_index=i,
                                 module=steps[i].module,
-                                status=StepStatus.FAILED,
+                                status=status,
                                 error=str(raw_sr),
                             )
                             logger.error(
@@ -440,6 +455,14 @@ class PipelineEngine:
 
                 # Fehler-Propagation: Wenn Step fehlschlug und kein skip_on_error
                 last_group_results = [step_results[i] for i in pending_group]
+                cancelled = [
+                    sr for sr in last_group_results
+                    if sr.status == StepStatus.CANCELLED
+                ]
+                if cancelled:
+                    result.status = PipelineStatus.CANCELLED
+                    result.error = cancelled[0].error or "Abgebrochen"
+                    break
                 failed = [sr for sr in last_group_results if sr.status == StepStatus.FAILED]
                 if failed and not skip_on_error:
                     logger.warning(
@@ -455,7 +478,7 @@ class PipelineEngine:
             # Muss explizit behandelt werden, sonst bleibt die Pipeline
             # geisterhaft als RUNNING in Redis hängen.
             logger.info("Pipeline '%s' abgebrochen (Client-Disconnect/Cancel).", pipeline_id)
-            result.status = PipelineStatus.FAILED
+            result.status = PipelineStatus.CANCELLED
             result.error = "Abgebrochen"
             try:
                 await self._checkpoint(pipeline_id, session_id, result)
@@ -464,6 +487,16 @@ class PipelineEngine:
             await emit_pipeline_event(PipelineEvent.pipeline_failed(
                 pipeline_id=pipeline_id, session_id=session_id, error="cancelled",
             ))
+            await emit_agent_event(
+                AgentEvent(
+                    type=AgentEventType.CANCELLED,
+                    tenant_id=event_tenant_id,
+                    session_id=session_id,
+                    run_id=pipeline_id,
+                    agent_id="pipeline",
+                    data={"status": PipelineStatus.CANCELLED.value},
+                )
+            )
             raise
 
         except Exception as exc:
@@ -493,6 +526,27 @@ class PipelineEngine:
             if result.status in (PipelineStatus.COMPLETED, PipelineStatus.PARTIAL)
             else PipelineEvent.pipeline_failed(pipeline_id, session_id, result.error or "")
         )
+        terminal_event_type = (
+            AgentEventType.COMPLETED
+            if result.status == PipelineStatus.COMPLETED
+            else AgentEventType.CANCELLED
+            if result.status == PipelineStatus.CANCELLED
+            else AgentEventType.FAILED
+        )
+        await emit_agent_event(
+            AgentEvent(
+                type=terminal_event_type,
+                tenant_id=event_tenant_id,
+                session_id=session_id,
+                run_id=pipeline_id,
+                agent_id="pipeline",
+                data={
+                    "status": result.status.value,
+                    "duration_ms": result.total_duration_ms,
+                    "error": _safe_event_error(result.error),
+                },
+            )
+        )
 
         await self._checkpoint(pipeline_id, session_id, result)
         return result
@@ -505,6 +559,7 @@ class PipelineEngine:
         session_id: str,
         *,
         auto_confirm: bool = False,
+        pipeline_id: str,
     ) -> StepResult:
         """Führt einen einzelnen Step mit Retry-Logik aus."""
         from core.pipeline_events import emit_pipeline_event, PipelineEvent
@@ -523,6 +578,56 @@ class PipelineEngine:
             module=step.module,
             idx=idx,
         ))
+        step_run_id = f"{pipeline_id}:{step.step_id}"
+        event_tenant_id = tenant_id_from_session(session_id)
+        run_context_token = None
+        await emit_agent_event(
+            AgentEvent(
+                type=AgentEventType.STARTED,
+                tenant_id=event_tenant_id,
+                session_id=session_id,
+                run_id=step_run_id,
+                parent_run_id=pipeline_id,
+                agent_id=step.module,
+                data={"step_index": idx},
+            )
+        )
+
+        async def _emit_step_terminal(event_type: AgentEventType) -> None:
+            nonlocal run_context_token
+            try:
+                await emit_agent_event(
+                    AgentEvent(
+                        type=event_type,
+                        tenant_id=event_tenant_id,
+                        session_id=session_id,
+                        run_id=step_run_id,
+                        parent_run_id=pipeline_id,
+                        agent_id=step.module,
+                        data={
+                            "status": sr.status.value,
+                            "duration_ms": sr.duration_ms,
+                            "retries_used": sr.retries_used,
+                            "error": _safe_event_error(sr.error),
+                        },
+                    )
+                )
+            finally:
+                if run_context_token is not None:
+                    reset_agent_run_id(run_context_token)
+                    run_context_token = None
+
+        async def _emit_step_failure(event_type: AgentEventType) -> None:
+            """Emit both event formats while guaranteeing context cleanup."""
+            try:
+                await emit_pipeline_event(PipelineEvent.step_failed(
+                    step_id=step.step_id,
+                    session_id=session_id,
+                    module=step.module,
+                    error=sr.error or "",
+                ))
+            finally:
+                await _emit_step_terminal(event_type)
 
         # Task mit Kontext aus Abhängigkeiten anreichern
         full_task = self._build_task_with_context(step, idx, prior_results)
@@ -532,16 +637,23 @@ class PipelineEngine:
         if agent is None:
             sr.status = StepStatus.FAILED
             sr.error = f"Modul '{step.module}' nicht gefunden in der Registry."
-            await emit_pipeline_event(PipelineEvent.step_failed(
-                step_id=step.step_id,
-                session_id=session_id,
-                module=step.module,
-                error=sr.error,
-            ))
+            await _emit_step_failure(AgentEventType.FAILED)
             return sr
+        pipeline_agent = as_agent_protocol(
+            agent,
+            agent_id=step.module,
+            name=step.module,
+        )
+        run_context_token = set_agent_run_id(step_run_id)
 
         # Status-Message an UI
-        await status_bus.emit(session_id, f"Pipeline: {step.module} ({idx + 1})…")
+        try:
+            await status_bus.emit(session_id, f"Pipeline: {step.module} ({idx + 1})…")
+        except BaseException:
+            if run_context_token is not None:
+                reset_agent_run_id(run_context_token)
+                run_context_token = None
+            raise
 
         # Retry-Loop
         last_error: str | None = None
@@ -557,14 +669,25 @@ class PipelineEngine:
                     step.retry_policy.max_retries,
                     delay,
                 )
-                await asyncio.sleep(delay)
+                try:
+                    await asyncio.sleep(delay)
+                except asyncio.CancelledError:
+                    sr.status = StepStatus.CANCELLED
+                    sr.error = "Agent-Lauf wurde abgebrochen."
+                    sr.retries_used = attempt
+                    sr.duration_ms = (time.monotonic() - step_start) * 1000
+                    sr.completed_at = datetime.now(timezone.utc).isoformat()
+                    await _emit_step_failure(AgentEventType.CANCELLED)
+                    raise
 
             try:
-                response, _did_compact = await asyncio.wait_for(
-                    agent.invoke(
-                        message=full_task,
-                        session_id=session_id,
-                        confirmed=auto_confirm,
+                response = await asyncio.wait_for(
+                    pipeline_agent.run(
+                        AgentRequest(
+                            message=full_task,
+                            session_id=session_id,
+                            confirmed=auto_confirm,
+                        )
                     ),
                     timeout=step.timeout_s,
                 )
@@ -573,24 +696,37 @@ class PipelineEngine:
                 # interaktiven Resume-Pfad — der Sentinel würde sonst roh in den
                 # Output leaken und der pausierte Agent die Session ~300s blockieren.
                 # Daher: pausierten Zustand bereinigen und Step sauber abbrechen.
-                if _is_safeguard_sentinel(response):
-                    await _release_paused_subagent(session_id)
+                if response.finish_reason == AgentFinishReason.APPROVAL_REQUIRED:
+                    await discard_pending_approval(session_id)
                     sr.status = StepStatus.FAILED
-                    sr.error = (
-                        "Schritt benötigt eine Tool-Bestätigung, die in einer "
-                        "automatischen Pipeline nicht eingeholt werden kann. "
-                        "Führe die Aktion einzeln (nicht als Pipeline) aus."
-                    )
+                    sr.error = APPROVAL_REQUIRED_MESSAGE
                     sr.retries_used = attempt
                     sr.duration_ms = (time.monotonic() - step_start) * 1000
-                    await emit_pipeline_event(PipelineEvent.step_failed(
-                        step_id=step.step_id,
-                        session_id=session_id,
-                        module=step.module,
-                        error=sr.error,
-                    ))
+                    sr.completed_at = datetime.now(timezone.utc).isoformat()
+                    await _emit_step_failure(AgentEventType.APPROVAL_REQUIRED)
                     return sr
-                sr.result = str(response)
+                if response.finish_reason == AgentFinishReason.CANCELLED:
+                    sr.status = StepStatus.CANCELLED
+                    sr.error = response.text or "Agent-Lauf wurde abgebrochen."
+                    sr.retries_used = attempt
+                    sr.duration_ms = (time.monotonic() - step_start) * 1000
+                    sr.completed_at = datetime.now(timezone.utc).isoformat()
+                    await _emit_step_failure(AgentEventType.CANCELLED)
+                    return sr
+                if response.finish_reason != AgentFinishReason.COMPLETED:
+                    last_error = response.text or (
+                        f"Agent-Lauf beendet: {response.finish_reason.value}"
+                    )
+                    logger.warning(
+                        "Pipeline Step %d/%s Agent-Fehler (Versuch %d): %s",
+                        idx + 1,
+                        step.module,
+                        attempt + 1,
+                        _safe_event_error(last_error),
+                    )
+                    continue
+
+                sr.result = response.text
                 sr.status = StepStatus.COMPLETED
                 sr.retries_used = attempt
                 sr.duration_ms = (time.monotonic() - step_start) * 1000
@@ -598,8 +734,8 @@ class PipelineEngine:
                 # Compaction-Summary persistieren, sonst geht sie zwischen
                 # Pipeline-Steps verloren und der nächste Step sieht den
                 # ungekürzten Context → Token-Limit-Überschreitung.
-                if _did_compact and hasattr(agent, "get_last_compaction_summary"):
-                    _summary = agent.get_last_compaction_summary()
+                if response.did_compact:
+                    _summary = response.compaction_summary
                     if _summary:
                         try:
                             from core.redis_client import get_redis
@@ -620,6 +756,7 @@ class PipelineEngine:
                     module=step.module,
                     duration_ms=sr.duration_ms,
                 ))
+                await _emit_step_terminal(AgentEventType.COMPLETED)
                 return sr
 
             except asyncio.TimeoutError:
@@ -631,11 +768,23 @@ class PipelineEngine:
                 if not step.retry_policy.retry_on_timeout:
                     break
 
+            except asyncio.CancelledError:
+                sr.status = StepStatus.CANCELLED
+                sr.error = "Agent-Lauf wurde abgebrochen."
+                sr.retries_used = attempt
+                sr.duration_ms = (time.monotonic() - step_start) * 1000
+                sr.completed_at = datetime.now(timezone.utc).isoformat()
+                await _emit_step_failure(AgentEventType.CANCELLED)
+                raise
+
             except Exception as exc:
                 last_error = str(exc)
                 logger.warning(
                     "Pipeline Step %d/%s Fehler (Versuch %d): %s",
-                    idx + 1, step.module, attempt + 1, exc,
+                    idx + 1,
+                    step.module,
+                    attempt + 1,
+                    _safe_event_error(str(exc)),
                 )
 
         # Alle Versuche fehlgeschlagen
@@ -645,12 +794,7 @@ class PipelineEngine:
         sr.completed_at = datetime.now(timezone.utc).isoformat()
         sr.retries_used = step.retry_policy.max_retries
 
-        await emit_pipeline_event(PipelineEvent.step_failed(
-            step_id=step.step_id,
-            session_id=session_id,
-            module=step.module,
-            error=sr.error,
-        ))
+        await _emit_step_failure(AgentEventType.FAILED)
         return sr
 
     def _build_task_with_context(
@@ -797,6 +941,20 @@ class PipelineEngine:
             module=first_step.module,
             step_count=len(steps),
         ))
+        await emit_agent_event(
+            AgentEvent(
+                type=AgentEventType.APPROVAL_REQUIRED,
+                tenant_id=tenant_id_from_session(session_id),
+                session_id=session_id,
+                run_id=pipeline_id,
+                agent_id="pipeline",
+                data={
+                    "step_id": first_step.step_id,
+                    "step_index": step_idx,
+                    "module": first_step.module,
+                },
+            )
+        )
 
         logger.info(
             "Pipeline '%s' pausiert vor Step %d/%d (%s) – User-Bestätigung erforderlich.",
@@ -855,10 +1013,21 @@ class PipelineEngine:
                 completed_results[step_result.step_index] = step_result
 
         await emit_pipeline_event(PipelineEvent.pipeline_resumed(pipeline_id, session_id))
+        await emit_agent_event(
+            AgentEvent(
+                type=AgentEventType.STATUS,
+                tenant_id=tenant_id_from_session(session_id),
+                session_id=session_id,
+                run_id=pipeline_id,
+                agent_id="pipeline",
+                data={"status": "resumed"},
+            )
+        )
         return await self.execute(
             steps, session_id, pipeline_id=pipeline_id,
             auto_confirm=auto_confirm, confirmed_indices=confirmed,
             completed_results=completed_results,
+            emit_started=False,
         )
 
     # ── Validation-Hilfsmethoden ─────────────────────────────────────────────
