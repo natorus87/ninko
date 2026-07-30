@@ -14,6 +14,7 @@ und delegiert oder startet eigenständig.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from typing import TYPE_CHECKING
 
@@ -73,7 +74,7 @@ class TelegramWorker(ChannelWorker):
                 params={
                     "offset": self._offset,
                     "timeout": _LONG_POLL_TIMEOUT,
-                    "allowed_updates": ["message"],
+                    "allowed_updates": json.dumps(["message"]),
                 },
             )
             resp.raise_for_status()
