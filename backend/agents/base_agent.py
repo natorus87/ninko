@@ -11,6 +11,7 @@ import hashlib
 import json
 import logging
 import re
+import secrets
 import time
 from typing import Any, Sequence, TYPE_CHECKING
 
@@ -30,10 +31,17 @@ from core.llm_factory import get_llm, get_model_context_window, get_llm_generati
 from core.memory import get_memory
 from core.context_manager import get_context_manager
 from core import status_bus
+from core.agent_events import (
+    emit_agent_event,
+    get_agent_run_id,
+    tenant_id_from_session,
+)
+from core.agent_protocol import TOOL_APPROVAL_SENTINEL
 from core.events import ToolEvent, emit_tool_event
-from core.redaction import redact_text
+from core.redaction import mask_dict, redact_text
 from core.tool_error_handling import wrap_tools_with_sanitizer, sanitize_tool_output
 from core.tool_registry import get_tool_status_label, get_tool_registry
+from schemas.execution import AgentEvent, AgentEventType
 
 from agents.middleware import (
     MiddlewareRegistry,
@@ -171,6 +179,26 @@ class _StatusEmitter(AsyncCallbackHandler):
             oldest = next(iter(self._tool_args))
             self._cleanup_run(oldest)
 
+    def _is_readonly_tool(self, tool_name: str) -> bool:
+        registry_result = get_tool_registry().is_readonly(
+            tool_name,
+            self.agent_name,
+        )
+        if registry_result is not None:
+            return registry_result
+        readonly_prefixes = (
+            "get_", "list_", "search_", "fetch_", "check_", "load_",
+            "perform_web_search", "recall_memory", "get_available_languages",
+        )
+        return any(tool_name.startswith(prefix) for prefix in readonly_prefixes)
+
+    @staticmethod
+    def _safe_error(error: BaseException | str | None) -> str | None:
+        if error is None:
+            return None
+        sanitized = sanitize_tool_output(str(error))
+        return redact_text(str(sanitized), limit=400)
+
     async def on_tool_start(self, serialized: dict, input_str: str, **kwargs) -> None:  # type: ignore[override]
         tool_name = serialized.get("name", "")
         run_id = str(kwargs.get("run_id", ""))
@@ -189,7 +217,9 @@ class _StatusEmitter(AsyncCallbackHandler):
         label = get_tool_status_label(tool_name)
         # Args vor Emit sanitisieren (verhindert Secret-Leakage im Event-Stream)
         raw_args = self._tool_args.get(run_id, {})
-        safe_args = json.loads(sanitize_tool_output(json.dumps(raw_args)))
+        safe_args = mask_dict(
+            json.loads(sanitize_tool_output(json.dumps(raw_args)))
+        )
         await status_bus.emit_event(
             self.session_id,
             {
@@ -201,6 +231,26 @@ class _StatusEmitter(AsyncCallbackHandler):
                 "args": safe_args,
             },
         )
+        if run_id:
+            parent_run_id = (
+                get_agent_run_id()
+                or str(kwargs.get("parent_run_id", ""))
+                or None
+            )
+            await emit_agent_event(
+                AgentEvent(
+                    type=AgentEventType.TOOL_CALL,
+                    tenant_id=tenant_id_from_session(self.session_id),
+                    session_id=self.session_id,
+                    run_id=run_id,
+                    parent_run_id=parent_run_id,
+                    agent_id=self.agent_name,
+                    data={
+                        "tool_name": tool_name,
+                        "args": safe_args,
+                    },
+                )
+            )
 
     async def on_tool_end(self, output: Any, **kwargs) -> None:  # type: ignore[override]
         tool_name = kwargs.get("name", "")
@@ -227,32 +277,24 @@ class _StatusEmitter(AsyncCallbackHandler):
         result_preview = ""
         if result_str:
             result_preview = redact_text(result_str, limit=400)[:400]
+        safe_error = self._safe_error(error_str)
 
         # Args aus on_tool_start holen
         args = self._tool_args.pop(run_id, {})
         self._tool_start_times.pop(run_id, None)
-
-        # is_readonly: Registry bevorzugt, Heuristik als Fallback
-        registry_result = get_tool_registry().is_readonly(tool_name, self.agent_name)
-        if registry_result is not None:
-            is_readonly = registry_result
-        else:
-            _readonly_prefixes = (
-                "get_", "list_", "search_", "fetch_", "check_", "load_",
-                "perform_web_search", "recall_memory", "get_available_languages",
-            )
-            is_readonly = any(tool_name.startswith(p) for p in _readonly_prefixes)
+        safe_args = mask_dict(args)
+        is_readonly = self._is_readonly_tool(tool_name)
 
         # Event emittieren (non-blocking)
         try:
             event = ToolEvent(
                 agent_name=self.agent_name,
                 tool_name=tool_name,
-                args=args,
+                args=safe_args,
                 session_id=self.session_id,
                 duration_ms=round(duration_ms, 2),
                 result_size=result_size,
-                error=error_str,
+                error=safe_error,
                 is_readonly=is_readonly,
             )
             _evt_task = asyncio.create_task(emit_tool_event(event))
@@ -273,12 +315,96 @@ class _StatusEmitter(AsyncCallbackHandler):
                 "preview": result_preview,
             },
         )
+        if run_id:
+            parent_run_id = (
+                get_agent_run_id()
+                or str(kwargs.get("parent_run_id", ""))
+                or None
+            )
+            await emit_agent_event(
+                AgentEvent(
+                    type=AgentEventType.TOOL_RESULT,
+                    tenant_id=tenant_id_from_session(self.session_id),
+                    session_id=self.session_id,
+                    run_id=run_id,
+                    parent_run_id=parent_run_id,
+                    agent_id=self.agent_name,
+                    data={
+                        "tool_name": tool_name,
+                        "duration_ms": round(duration_ms, 2),
+                        "result_size": result_size,
+                        "error": safe_error,
+                        "preview": result_preview,
+                    },
+                )
+            )
 
     async def on_tool_error(self, error: BaseException, **kwargs) -> None:  # type: ignore[override]
-        """Räumt Tracking-Dicts auf wenn ein Tool fehlschlägt (verhindert Memory-Leak)."""
+        """Emit a sanitized terminal event and release per-tool tracking state."""
         run_id = str(kwargs.get("run_id", ""))
-        if run_id:
-            self._cleanup_run(run_id)
+        if not run_id:
+            return
+
+        tool_name = str(kwargs.get("name", ""))
+        start_time = self._tool_start_times.pop(run_id, None)
+        duration_ms = (
+            (time.monotonic() - start_time) * 1000
+            if start_time is not None
+            else 0.0
+        )
+        safe_args = mask_dict(self._tool_args.pop(run_id, {}))
+        safe_error = self._safe_error(error) or "Tool execution failed."
+        is_readonly = self._is_readonly_tool(tool_name)
+
+        try:
+            event = ToolEvent(
+                agent_name=self.agent_name,
+                tool_name=tool_name,
+                args=safe_args,
+                session_id=self.session_id,
+                duration_ms=round(duration_ms, 2),
+                error=safe_error,
+                is_readonly=is_readonly,
+            )
+            event_task = asyncio.create_task(emit_tool_event(event))
+            event_task.add_done_callback(_log_bg_task_exception)
+        except Exception as exc:
+            logger.debug("Audit-Fehler-Event fehlgeschlagen (non-critical): %s", exc)
+
+        await status_bus.emit_event(
+            self.session_id,
+            {
+                "type": "tool_end",
+                "tool_name": tool_name,
+                "run_id": run_id,
+                "agent": self.agent_name,
+                "duration_ms": round(duration_ms, 2),
+                "result_size": 0,
+                "error": True,
+                "preview": safe_error,
+            },
+        )
+        await emit_agent_event(
+            AgentEvent(
+                type=AgentEventType.TOOL_RESULT,
+                tenant_id=tenant_id_from_session(self.session_id),
+                session_id=self.session_id,
+                run_id=run_id,
+                parent_run_id=(
+                    get_agent_run_id()
+                    or str(kwargs.get("parent_run_id", ""))
+                    or None
+                ),
+                agent_id=self.agent_name,
+                data={
+                    "tool_name": tool_name,
+                    "duration_ms": round(duration_ms, 2),
+                    "result_size": 0,
+                    "error": safe_error,
+                    "preview": safe_error,
+                },
+            )
+        )
 
     async def on_llm_start(self, serialized: dict, messages: list, **kwargs) -> None:  # type: ignore[override]
         await status_bus.emit_trace(
@@ -444,7 +570,7 @@ _MEMORIZE_STOP_WORDS = {
 
 # ── Tool-level Safeguard (global, gesetzt von main.py via set_global_safeguard) ──
 # Sentinel-String der in routes_chat.py erkannt wird wenn ein Tool-Call Bestätigung braucht
-_TOOL_SAFEGUARD_SENTINEL = "__TOOL_SAFEGUARD__"
+_TOOL_SAFEGUARD_SENTINEL = TOOL_APPROVAL_SENTINEL
 
 # Paused safeguard agents: session_id → (sg_agent, thread_config)
 # Hält den unterbrochenen LangGraph-Agenten für den Resume-Aufruf am Leben.
@@ -472,6 +598,58 @@ _SAFEGUARD_OVERFLOW_LOCKS = 64
 _safeguard_overflow_locks: dict[int, asyncio.Lock] = {}
 
 _global_safeguard: "SafeguardMiddleware | None" = None
+
+
+async def discard_pending_safeguard(
+    session_id: str,
+    *,
+    redis: Any = None,
+    expected_approval_id: str | None = None,
+) -> bool:
+    """Discard paused safeguard state for a non-interactive execution path."""
+    if not session_id:
+        return False
+
+    if redis is None:
+        from core.redis_client import get_redis
+
+        redis = get_redis()
+
+    async with _paused_sg_agents_lock, _get_safeguard_session_lock(session_id):
+        pending_key = f"ninko:safeguard_tool_pending:{session_id}"
+        if expected_approval_id is not None:
+            try:
+                deleted = await redis.connection.eval(
+                    """
+                    local current = redis.call('GET', KEYS[1])
+                    if not current then return 0 end
+                    local ok, pending = pcall(cjson.decode, current)
+                    if not ok or pending['approval_id'] ~= ARGV[1] then
+                        return 0
+                    end
+                    return redis.call('DEL', KEYS[1])
+                    """,
+                    1,
+                    pending_key,
+                    expected_approval_id,
+                )
+            except _BASE_AGENT_RECOVERABLE_EXCEPTIONS:
+                return False
+            if not expected_approval_id or not deleted:
+                return False
+        else:
+            try:
+                await redis.connection.delete(pending_key)
+            except _BASE_AGENT_RECOVERABLE_EXCEPTIONS as exc:
+                logger.debug(
+                    "[Safeguard] Pending-Key Cleanup fehlgeschlagen (Session: %s): %s",
+                    session_id,
+                    exc,
+                )
+        _paused_sg_agents.pop(session_id, None)
+        _paused_sg_agents_ts.pop(session_id, None)
+        _authorized_sg_tool_calls.pop(session_id, None)
+    return True
 
 
 def _tool_call_signature(tool_name: str, tool_args: dict) -> str:
@@ -1143,6 +1321,7 @@ class BaseAgent:
             from core.redis_client import get_redis
 
             redis = get_redis()
+            approval_id = secrets.token_urlsafe(16)
             await redis.connection.setex(
                 f"ninko:safeguard_tool_pending:{session_id}",
                 300,
@@ -1152,6 +1331,7 @@ class BaseAgent:
                         "tool_args": tool_args,
                         "tool_args_preview": _tool_args_preview(tool_args),
                         "tool_signature": tool_signature,
+                        "approval_id": approval_id,
                         "agent": self.name,
                         "category": sg_result.category.value,
                         "rationale": sg_result.rationale,
@@ -1172,6 +1352,7 @@ class BaseAgent:
                     "tool_name": tool_name,
                     "tool_args_preview": _tool_args_preview(tool_args),
                     "tool_signature": tool_signature,
+                    "approval_id": approval_id,
                     "category": sg_result.category.value,
                     "rationale": sg_result.rationale,
                 }
@@ -1204,7 +1385,12 @@ class BaseAgent:
             confirmed=confirmed,
         )
 
-    async def resume_safeguard_tool(self, session_id: str) -> tuple[str, bool]:
+    async def resume_safeguard_tool(
+        self,
+        session_id: str,
+        *,
+        expected_approval_id: str | None = None,
+    ) -> tuple[str, bool]:
         """
         Setzt die Ausführung nach Safeguard-Bestätigung durch den User fort.
         Holt den pausierten Agenten aus _paused_sg_agents und resumiert den Graph.
@@ -1248,6 +1434,29 @@ class BaseAgent:
                     "Fehler: Kein ausstehender Tool-Aufruf für diese Session.",
                     "Error: No pending tool call for this session.",
                 ), False
+            if expected_approval_id is not None:
+                try:
+                    from core.redis_client import get_redis
+
+                    redis = get_redis()
+                    pending_raw = await redis.connection.get(
+                        f"ninko:safeguard_tool_pending:{session_id}"
+                    )
+                    pending = json.loads(pending_raw) if pending_raw else {}
+                except _BASE_AGENT_RECOVERABLE_EXCEPTIONS:
+                    pending = {}
+                if (
+                    not expected_approval_id
+                    or pending.get("approval_id") != expected_approval_id
+                ):
+                    logger.warning(
+                        "[Safeguard] Veraltete Tool-Bestätigung für Session '%s' abgelehnt.",
+                        session_id,
+                    )
+                    return _t(
+                        "Fehler: Diese Tool-Bestätigung ist nicht mehr gültig.",
+                        "Error: This tool confirmation is no longer valid.",
+                    ), False
             sg_agent, thread_config = paused
             try:
                 # Resume nach User-Bestätigung: alle Tool-Calls in dieser
