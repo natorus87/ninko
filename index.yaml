@@ -2,6 +2,32 @@ apiVersion: v1
 entries:
   ninko:
   - apiVersion: v2
+    appVersion: 1.6.0
+    created: "2026-07-30T09:09:41.626587154Z"
+    description: 'Ninko – Modular AI-powered IT Operations Platform. Deploys backend
+      (FastAPI), Redis, ChromaDB, and SearXNG with full RBAC, persistent storage,
+      and Traefik/Ingress support. '
+    digest: dc6955b14369bc4e2a139e45cec4f71e78167296041e33b2077f99caeda30c0e
+    home: https://github.com/natorus87/ninko
+    icon: https://raw.githubusercontent.com/natorus87/ninko/main/frontend/favicon.ico
+    keywords:
+    - ninko
+    - ai
+    - llm
+    - it-ops
+    - automation
+    - fastapi
+    maintainers:
+    - name: natorus87
+      url: https://github.com/natorus87
+    name: ninko
+    sources:
+    - https://github.com/natorus87/ninko
+    type: application
+    urls:
+    - https://github.com/natorus87/ninko/releases/download/ninko-0.8.0/ninko-0.8.0.tgz
+    version: 0.8.0
+  - apiVersion: v2
     appVersion: 1.5.5
     created: "2026-07-14T09:16:18.691321945Z"
     description: 'Ninko – Modular AI-powered IT Operations Platform. Deploys backend
@@ -313,4 +339,4 @@ entries:
     urls:
     - https://github.com/natorus87/ninko/releases/download/ninko-0.6.2/ninko-0.6.2.tgz
     version: 0.6.2
-generated: "2026-07-14T09:16:18.691368292Z"
+generated: "2026-07-30T09:09:41.626667864Z"
